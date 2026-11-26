@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
+import {Raycaster,Vector3,type Mesh,type MeshStandardMaterial} from 'three';
 import {createTerrainGrid,worldBounds} from '../tools/voxel-tavern/town-blockout/terrain';
 import {mountWestCraterRoad} from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
 import {orientedSupportBox,supportFootprintOverlaps,type OrientedSupportBox} from '../tools/voxel-tavern/town-blockout/town-a-r30-oriented-support';
@@ -7,6 +8,32 @@ test('rotated narrow-phase rejects a corner of the enclosing AABB',()=>{
  const box=orientedSupportBox(0,0,Math.PI/4,6,.2,0,2);
  assert.ok(supportFootprintOverlaps(0,0,box,.27));
  assert.ok(!supportFootprintOverlaps(1.8,-1.8,box,.27));
+});
+test('all six supply cabin panes are real wall apertures with closed narrow glass collision',()=>{
+ const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
+ const {supplyWindows,group,colliders}=road.mouthWorks;
+ assert.equal(supplyWindows.length,6);
+ group.updateMatrixWorld(true);
+ for(const p of supplyWindows){
+   const y=p.low+(p.high-p.low)*.67;
+   const c=Math.cos(p.yaw),s=Math.sin(p.yaw);
+   const tangent=p.sx>p.sz?new Vector3(c,0,-s):new Vector3(s,0,c);
+   const normal=p.sx>p.sz?new Vector3(s,0,c):new Vector3(c,0,-s);
+   const mid=new Vector3(p.east,y,-p.north).addScaledVector(tangent,.23);
+   // Shoot from the actual room side. A real exterior stair may sit
+   // behind the pane, but a residual wall in the opening must fail.
+   const cabin=road.mouthWorks.sites.find(s=>s.id==='supply-station')!;
+   const toward=new Vector3(cabin.east-mid.x,0,-cabin.north-mid.z);
+   const inside=normal.clone().multiplyScalar(toward.dot(normal)>0?1:-1);
+   const ray=new Raycaster(mid.clone().addScaledVector(inside,.50),inside.clone().negate(),0,.50);
+   const hit=ray.intersectObject(group,true)[0];
+   assert.ok(hit,JSON.stringify(p));
+   assert.equal(((hit.object as Mesh).material as MeshStandardMaterial).name,'A-R03-supply-real-glazing',JSON.stringify({p,d:hit.distance}));
+   assert.ok(Math.abs(hit.distance-.4725)<.002);
+   const bodies=colliders.filter(b=>b.min[1]<y&&b.max[1]>y&&supportFootprintOverlaps(mid.x,-mid.z,b,.001));
+   assert.equal(bodies.length,1);
+   assert.ok(Math.min(bodies[0]!.footprint!.halfX,bodies[0]!.footprint!.halfZ)<.03);
+ }
 });
 test('supply actual stairs lead up to the deck and back down with body and step rules',()=>{
  const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));

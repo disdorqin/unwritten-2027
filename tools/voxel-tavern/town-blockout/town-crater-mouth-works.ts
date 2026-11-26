@@ -143,6 +143,9 @@ export function buildCraterMouthWorks(road: CraterRoad) {
   const stone = pixelMaterial(palette.stone, palette.stoneDark, 41, palette.earth);
   const stoneDark = pixelMaterial(palette.stoneDark, palette.night, 87, palette.stone);
   const supplyPlanks = supplyWoodMaterial('supply-cabin-joined-timber', [0x795038, 0x4b3024, 0x876047]);
+  const supplyGlass=new MeshStandardMaterial({color:0xb9a684,emissive:0xffb767,emissiveIntensity:.16,roughness:.36,transparent:true,opacity:.52,depthWrite:false});
+  supplyGlass.name='A-R03-supply-real-glazing';
+  const supplyWindows:{east:number;north:number;low:number;high:number;sx:number;sz:number;yaw:number}[]=[];
   const supplyShingles = supplyWoodMaterial('supply-cabin-continuous-shingles', [0x493e33, 0x322b25, 0x5c4b3d], true);
   // Structural beams and signage share continuous metre-scaled wood;
   // the old high-contrast square noise obscured the near-field joinery.
@@ -404,47 +407,56 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     const c0 = fr.at(0, 0);
     box(stone, c0.east, g + foundH / 2 - .1, c0.north, W + .5, foundH, D + .5, fr.yaw);
     box(supplyPlanks,c0.east,g+foundH+.03,c0.north,W,.06,D,fr.yaw);
-    // Walls: front (crater side) carries the door gap and two warm windows;
-    // back and sides solid. Interior stays enterable through the open doorway.
-    const wallY = g + foundH + wallH / 2;
-    const front = fr.at(0, D / 2);
-    for (const dx of [-2.55, 2.55]) {
-      const seg = fr.at(dx, D / 2);
-      box(supplyPlanks, seg.east, wallY, seg.north, 2.3, wallH, .22, fr.yaw);
-    }
-    box(supplyPlanks, front.east, g + foundH + wallH - .35, front.north, 2.9, .7, .22, fr.yaw);
-    for (const dx of [-2.55, 2.55]) {
-      const wp = fr.at(dx, D / 2 + .13);
-      box(glow, wp.east, g + foundH + 1.65, wp.north, .92, 1.05, .06, fr.yaw);
-      for (const dy of [-.56, 0, .56]) {
-        const p = fr.at(dx, D / 2 + .18);
-        box(timber, p.east, g + foundH + 1.65 + dy, p.north, 1.08, .10, .10, fr.yaw);
-      }
-      for (const wx of [-.51, 0, .51]) {
-        const p = fr.at(dx + wx, D / 2 + .18);
-        box(timber, p.east, g + foundH + 1.65, p.north, .09, 1.18, .10, fr.yaw);
-      }
-    }
-    const back = fr.at(0, -D / 2);
-    box(supplyPlanks, back.east, wallY, back.north, W, wallH, .22, fr.yaw);
-    for (const s of [-1, 1]) {
-      const side = fr.at(s * W / 2, 0);
-      box(supplyPlanks, side.east, wallY, side.north, .22, wallH, D, fr.yaw);
-      // Warm, framed side windows make the reference's three-quarter view
-      // legible, without changing the existing side-wall collision envelope.
-      for (const dz of [-1.4, 1.15]) {
-        const pane = fr.at(s * (W / 2 + .13), dz);
-        box(glow, pane.east, g + foundH + 1.57, pane.north, .065, .88, .9, fr.yaw);
-        for (const dy of [-.49, 0, .49]) {
-          const trim = fr.at(s * (W / 2 + .18), dz);
-          box(timber, trim.east, g + foundH + 1.57 + dy, trim.north, .11, .09, 1.04, fr.yaw);
-        }
-        for (const z of [-.48, 0, .48]) {
-          const trim = fr.at(s * (W / 2 + .18), dz + z);
-          box(timber, trim.east, g + foundH + 1.57, trim.north, .11, 1.04, .09, fr.yaw);
+    // Real front and side window apertures. Solid wall panels stop at
+    // every jamb, sill and lintel; the closed translucent glazing carries
+    // its own narrow collision instead of hiding a full wall behind a lamp.
+    const wallY=g+foundH+wallH/2;
+    const wallBase=g+foundH;
+    type Aperture={center:number;width:number;low:number;high:number;door?:boolean};
+    const buildWall=(axis:'x'|'z',fixed:number,min:number,max:number,holes:readonly Aperture[])=>{
+      const at=(u:number)=>axis==='x'?fr.at(u,fixed):fr.at(fixed,u);
+      const piece=(mat:MeshStandardMaterial,u:number,w:number,t:number,lo:number,hi:number,solid=true)=>{
+        const p=at(u),sx=axis==='x'?w:t,sz=axis==='x'?t:w;
+        box(mat,p.east,wallBase+(lo+hi)/2,p.north,sx,hi-lo,sz,fr.yaw);
+        if(solid)colliders.push(orientedSupportBox(p.east,p.north,fr.yaw,sx,sz,wallBase+lo,wallBase+hi));
+      };
+      const cuts=[min,max,...holes.flatMap(o=>[o.center-o.width/2,o.center+o.width/2])].sort((a,b)=>a-b);
+      for(let i=1;i<cuts.length;i++){
+        const a=cuts[i-1]!,b=cuts[i]!,u=(a+b)/2;
+        const aperture=holes.find(o=>Math.abs(u-o.center)<o.width/2);
+        if(!aperture)piece(supplyPlanks,u,b-a,.22,0,wallH);
+        else{
+          if(aperture.low>0)piece(supplyPlanks,u,b-a,.22,0,aperture.low);
+          if(aperture.high<wallH)piece(supplyPlanks,u,b-a,.22,aperture.high,wallH);
         }
       }
-    }
+      for(const o of holes){
+        if(o.door)continue;
+        const p=at(o.center);
+        const sx=axis==='x'?o.width:.055,sz=axis==='x'?.055:o.width;
+        piece(supplyGlass,o.center,o.width,.055,o.low,o.high);
+        supplyWindows.push({...p,low:wallBase+o.low,high:wallBase+o.high,sx,sz,yaw:fr.yaw});
+        // Deep reveals, cross muntins and a projecting sill are visible
+        // from both the exterior and the interior.
+        for(const s of [-1,1]){
+          piece(timber,o.center+s*(o.width/2-.035),.09,.31,o.low-.065,o.high+.065,false);
+          const y=s<0?o.low:o.high;
+          piece(timberWarm,o.center,o.width+.14,.33,y-.055,y+.055,false);
+        }
+        piece(timber,o.center,.065,.20,o.low,o.high,false);
+        piece(timber,o.center,o.width,.20,(o.low+o.high)/2-.032,(o.low+o.high)/2+.032,false);
+      }
+    };
+    buildWall('x',D/2,-W/2,W/2,[
+      {center:-2.55,width:.92,low:1.125,high:2.175},
+      {center:0,width:2.8,low:0,high:2.0,door:true},
+      {center:2.55,width:.92,low:1.125,high:2.175},
+    ]);
+    buildWall('x',-D/2,-W/2,W/2,[]);
+    for(const s of [-1,1])buildWall('z',s*W/2,-D/2,D/2,[
+      {center:-1.4,width:.90,low:1.13,high:2.01},
+      {center:1.15,width:.90,low:1.13,high:2.01},
+    ]);
     // Framed open door and four corner posts; the pre-existing clear opening
     // is unchanged. These sit on the wall line, outside the doorway centre.
     for (const s of [-1, 1]) {
@@ -476,13 +488,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       supplyInteriorRoute.push({...p,height:top});
     }
     for(const z of [2.25,0,-.65])supplyInteriorRoute.push({...fr.at(0,z),height:g+foundH+.06});
-    for (const s of [-1, 1]) {
-      const seg = fr.at(s * 2.55, D / 2);
-      colliders.push(orientedSupportBox(seg.east,seg.north,fr.yaw,2.3,.22,g+foundH,g+foundH+wallH));
-      const sd=fr.at(s*W/2,0);
-      colliders.push(orientedSupportBox(sd.east,sd.north,fr.yaw,.22,D,g+foundH,g+foundH+wallH));
-    }
-    colliders.push(orientedSupportBox(back.east,back.north,fr.yaw,W,.22,g+foundH,g+foundH+wallH));
+    // The wall pieces above already own the exact solid collision.
     // A-4: replace the two huge glossy dark planes (solar-panel reading)
     // with short overlapping timber shingles, warm eaves and snow-frost ridge.
     // Keep the approved front half as an actual lookout deck.
@@ -602,7 +608,8 @@ export function buildCraterMouthWorks(road: CraterRoad) {
         guard(s*(W/2-.12),.38,.12,.76,deckY);
         guard(s*(W/2-.12),2.50,.12,.60,deckY);
       }
-      const pillar = fr.at(s * (W / 2 - .07), D / 4);
+      // Support the front deck on the solid jamb strip, not through glazing.
+      const pillar = fr.at(s * (W / 2 - .07), 2.12);
       box(timberWarm, pillar.east, wallY, pillar.north, .17, wallH, .17, fr.yaw);
     }
     // Exterior stair: 15 real treads, 0.245m rise / 0.56m run, supported
@@ -690,20 +697,31 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     doorLamp = lampLight(doorLight.east, g + foundH + 2.1, doorLight.north, 5, 8.5);
     // Entry treads above already provide the visible doorway support.
     // Interior: shelves with dry goods / rope / oil lamps, counter, hand-drawn map.
-    for (const s of [-1, 1]) {
-      const sh = fr.at(s * (W / 2 - .55), -.6);
-      // Occupied furniture now has a real body, without closing the aisle.
-      colliders.push(orientedSupportBox(sh.east,sh.north,fr.yaw,.54,3.4,g+foundH,g+foundH+2.05));
-      for(const z of [-2.28,1.08])for(const dx of [-.22,.22]){
-        const p=fr.at(s*(W/2-.55)+dx,z);
+    for(const s of [-1,1]){
+      // Lower side cabinets leave the real side panes unobstructed; the
+      // tall stock shelves move to the rear wall, outside the map and aisle.
+      const sh=fr.at(s*(W/2-.55),-.25);
+      box(supplyPlanks,sh.east,g+foundH+.43,sh.north,.50,.86,3.22,fr.yaw);
+      box(timberWarm,sh.east,g+foundH+.89,sh.north,.58,.08,3.28,fr.yaw);
+      colliders.push(orientedSupportBox(sh.east,sh.north,fr.yaw,.58,3.28,g+foundH,g+foundH+.93));
+      for(let j=0;j<4;j++){
+        const z=-1.45+j*.78,face=fr.at(s*(W/2-.84),z);
+        box(timberWarm,face.east,g+foundH+.45,face.north,.07,.65,.70,fr.yaw);
+        const handle=fr.at(s*(W/2-.885),z);
+        box(iron,handle.east,g+foundH+.66,handle.north,.08,.055,.22,fr.yaw);
+      }
+      const rack=fr.at(s*2.52,-2.35);
+      colliders.push(orientedSupportBox(rack.east,rack.north,fr.yaw,1.56,.49,g+foundH,g+foundH+2.05));
+      for(const x of [-.72,.72])for(const z of [-.19,.19]){
+        const p=fr.at(s*2.52+x,-2.35+z);
         box(timberWarm,p.east,g+foundH+1.025,p.north,.10,2.05,.10,fr.yaw);
       }
-      for (let lvl = 0; lvl < 3; lvl++) {
-        box(supplyPlanks,sh.east,g+foundH+.5+lvl*.62,sh.north,.5,.07,3.4,fr.yaw);
-        for (let j = 0; j < 4; j++) {
-          const gp = fr.at(s * (W / 2 - .55), -1.9 + j * .85);
-          if ((j + lvl) % 3 === 2) cyl(glow, gp.east, g + foundH + .68 + lvl * .62, gp.north, .07, .09, .22, 6);
-          else box(timberWarm, gp.east, g + foundH + .68 + lvl * .62, gp.north, .34, .3, .4, fr.yaw + j * .2);
+      for(let lvl=0;lvl<3;lvl++){
+        box(supplyPlanks,rack.east,g+foundH+.48+lvl*.62,rack.north,1.56,.08,.49,fr.yaw);
+        for(let j=0;j<3;j++){
+          const gp=fr.at(s*2.52-.49+j*.49,-2.35);
+          if((j+lvl)%3===2)cyl(glow,gp.east,g+foundH+.68+lvl*.62,gp.north,.07,.09,.22,6);
+          else box(timberWarm,gp.east,g+foundH+.68+lvl*.62,gp.north,.34,.30,.38,fr.yaw+j*.2);
         }
       }
     }
@@ -1123,6 +1141,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
   let night = true;
   let fireFed = false;
   function applyLighting() {
+    supplyGlass.emissiveIntensity=night?.32:.045;
     if (yardLight) yardLight.intensity = night ? 5.5 : 0;
     if (doorLamp) doorLamp.intensity = night ? 5 : 0;
     if (brazierLight) brazierLight.intensity = night ? (fireFed ? 10 : 6) : 0;
@@ -1143,7 +1162,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
 
   return {
     group, sites, debrisCount, rimRadius: meteorCraterRimRadius,
-    actions, actionAt, firewood, setNight, fencePosts: gateFencePosts,supplyDeckRoute,supplyInteriorRoute,guardShedRoutes,guardShedSeats,assemblyRoutes,
+    actions, actionAt, firewood, setNight, fencePosts: gateFencePosts,supplyDeckRoute,supplyInteriorRoute,supplyWindows,guardShedRoutes,guardShedSeats,assemblyRoutes,
     colliders, floors, ramps,
   };
 }
