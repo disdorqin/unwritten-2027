@@ -11,6 +11,7 @@ import { surveyZa31CraterWinch } from './town-za31-crater-winch';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import type { AcceptedUndergroundWaterSnapshot } from '../../../src/shared/town-c-water-snapshot-port.js';
 import type { UndergroundWater90OreVisual } from './town-c2-underground-water-minus90.js';
+import { resolveR30ShaftContract } from './town-c-r30-shaft-contract.js';
 
 type Road = ReturnType<typeof mountWestCraterRoad>;
 type Mine = ReturnType<typeof createUndergroundMineLayout>;
@@ -350,8 +351,22 @@ export function mountUndergroundDomainHost(options: Readonly<{
     ] as const;
     toWorldPoint = (local) => mounted.toWorld(local);
   }
+  // R30: publish the actual mounted shaft/room seam to B, C2 and A. This
+  // report does not open the well, grant movement, or replace entry authority.
+  const winch = surveyZa31CraterWinch(road);
+  const shaftContract = winch ? resolveR30ShaftContract({
+    registration, winch, mineYaw: road.anchor.yaw,
+    toWorld: local => mounted.toWorld(local),
+    supportsMineFoot: local => {
+      const p = mine.queryPassage(local[0],local[2],undergroundMineSpec.walker.radius,
+        undergroundMineSpec.walker.standingHeight,'closed');
+      return !!p && Math.abs(p.floor-local[1]) <= .01;
+    },
+    supportAt: (east,north) => road.heightAt(east,north),
+    lampRoom: road.lampRoom?.footprint,
+  }) : { kind: 'unregistered-shaft' as const };
   return {
-    kind: 'ready', registration, mounted, passageAt,
+    kind: 'ready', registration, mounted, passageAt, shaftContract,
     floorAt: (east: number, north: number) => passageAt(east, north)?.floor,
     toLocal: (world: Point) => toLocal?.(world),
     offeringsSnapshot: () => offerings?.snapshot(),
