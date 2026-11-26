@@ -21,6 +21,18 @@ test('missing floor or added blocker invalidates actual route',()=>{
  road.group.userData.colliders=[...old,{min:[p.east-.5,p.height,-p.north-.5],max:[p.east+.5,p.height+2,-p.north+.5]}];
  try{assert.throws(()=>surveyAR30InscriptionAccess(road,rail),/blocked/);}finally{road.group.userData.colliders=old;}
 });
+test('reject nonfinite foot/track and incomplete or reversed collision data',()=>{
+ const original=road.inscription.layout.useFoot;
+ const bad={...road,inscription:{...road.inscription,layout:{...road.inscription.layout,useFoot:{...original,height:NaN}}}};
+ assert.throws(()=>surveyAR30InscriptionAccess(bad,rail),/foot moved/);
+ const badRail={...rail,sidingSamples:[{...rail.sidingSamples[0]!,east:NaN},...rail.sidingSamples.slice(1)]};
+ assert.throws(()=>surveyAR30InscriptionAccess(road,badRail),/invalid actual three rails/);
+ const old=road.group.userData.colliders;
+ try{
+  road.group.userData.colliders=[];assert.throws(()=>surveyAR30InscriptionAccess(road,rail),/invalid actual floor/);
+  road.group.userData.colliders=[...old,{min:[1,2,3],max:[0,3,4]}];assert.throws(()=>surveyAR30InscriptionAccess(road,rail),/invalid actual floor/);
+ }finally{road.group.userData.colliders=old;}
+});
 test('public host rejects half-mounted B ground and incomplete attachment',()=>{
  assertAR30SurfaceLifecycle(road,undefined);
  const ground=road.group.getObjectByName('meteor-crater-walk-mesh')!;

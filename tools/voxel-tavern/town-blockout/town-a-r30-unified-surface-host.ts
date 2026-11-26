@@ -8,6 +8,8 @@ type Foot=Readonly<{east:number;north:number;height:number}>;
 type Track=readonly Readonly<{east:number;north:number}>[];
 type Route=Readonly<{id:string;points:readonly Foot[]}>;
 const dist=(a:Foot,b:Foot)=>Math.hypot(a.east-b.east,a.north-b.north);
+const finiteFoot=(p:Foot)=>!!p&&[p.east,p.north,p.height].every(Number.isFinite);
+const validBox=(b:OrientedSupportBox)=>Array.isArray(b.min)&&Array.isArray(b.max)&&b.min.length===3&&b.max.length===3&&b.min.every((v,i)=>Number.isFinite(v)&&Number.isFinite(b.max[i])&&v<=b.max[i]!)&&(!b.footprint||[b.footprint.yaw,b.footprint.halfX,b.footprint.halfZ].every(Number.isFinite)&&b.footprint.halfX>0&&b.footprint.halfZ>0);
 function segmentGap(e:number,n:number,a:{east:number;north:number},b:{east:number;north:number}){
  const de=b.east-a.east,dn=b.north-a.north,t=Math.max(0,Math.min(1,((e-a.east)*de+(n-a.north)*dn)/(de*de+dn*dn||1)));
  return Math.hypot(e-a.east-t*de,n-a.north-t*dn);
@@ -20,15 +22,17 @@ export function ar30HostTracks(rail:Rail){return [rail.samples,rail.narrowSample
  * four-point shortcut. Use the viewer's body/step/solid rules. */
 export function surveyAR30InscriptionAccess(road:Road,rail:Rail){
  const route=rail.stationWalkRoutes.find(r=>r.id==='inscription-access'),dock=rail.stationWalkRoutes.find(r=>r.id==='transfer-dock');
- if(!route||!dock||route.points.length<2)throw Error('Missing real dock or inscription support route');
+ if(!route||!dock||route.points.length<2||dock.points.length<2||!route.points.every(finiteFoot)||!dock.points.every(finiteFoot))throw Error('Missing or invalid real dock or inscription support route');
  const start=route.points[0]!,end=route.points.at(-1)!,foot=road.inscription.layout.useFoot;
- if(dist(end,foot)>.015||Math.abs(end.height-foot.height)>.02)throw Error('Inscription foot moved');
+ if(!finiteFoot(foot)||dist(end,foot)>.015||Math.abs(end.height-foot.height)>.02)throw Error('Inscription foot moved');
  if(!dock.points.slice(1).some((p,i)=>segmentGap(start.east,start.north,dock.points[i]!,p)<.02&&Math.abs(start.height-dock.points[i]!.height)<.03))throw Error('Transfer dock anchor moved');
  const tracks=ar30HostTracks(rail);
- if(tracks.some(t=>t.length<2))throw Error('Missing actual three rails');
+ if(tracks.some(t=>t.length<2||t.some(p=>![p.east,p.north].every(Number.isFinite))))throw Error('Missing or invalid actual three rails');
  const segments=tracks.flatMap(t=>t.slice(1).map((p,i)=>[t[i]!,p] as const));
- const floors=[...road.group.userData.floors,...rail.group.userData.floors] as OrientedSupportBox[];
- const solids=[...road.group.userData.colliders,...rail.group.userData.colliders] as OrientedSupportBox[];
+ const arrays=[road.group.userData.floors,rail.group.userData.floors,road.group.userData.colliders,rail.group.userData.colliders];
+ if(arrays.some(x=>!Array.isArray(x)||!x.length||!x.every(validBox)))throw Error('Missing or invalid actual floor/collision channels');
+ const floors=[...arrays[0],...arrays[1]] as OrientedSupportBox[];
+ const solids=[...arrays[2],...arrays[3]] as OrientedSupportBox[];
  let length=0,trackGap=Infinity,bodyGap=Infinity,steps=0,maxStep=0;
  for(let i=1;i<route.points.length;i++)length+=dist(route.points[i-1]!,route.points[i]!);
  for(const points of [route.points,[...route.points].reverse()]){
@@ -60,7 +64,7 @@ export function surveyAR30InscriptionAccess(road:Road,rail:Rail){
   }
   if(Math.abs(h-points.at(-1)!.height)>.03)throw Error('Inscription terminal support changed');
  }
- if(trackGap<1.30)throw Error('Inscription route intrudes railway');
+ if(![trackGap,bodyGap,length,maxStep,steps].every(Number.isFinite)||trackGap<1.30||bodyGap<.27||length<=0||steps<1)throw Error('Invalid or unsafe inscription route');
  return {points:route.points,length,steps,maxStep,bodyGap,trackGap,routeId:route.id};
 }
 /** Optional surface geometry port, not a gameplay/transport authority.

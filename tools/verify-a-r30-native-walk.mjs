@@ -563,6 +563,27 @@ try{
    await tilt(dy);
    await wallView(segment+'-elevation',heading);
    await tilt(-dy);
+ }else if(jointInscription&&jointManifest.paper){
+   // Candidate has real paper controls but no approved receipt provider.
+   // Aim with actual mouse input, hold longer than the real rule duration;
+   // it must not grant an entry, open a card, or fall back to snow.
+   const pose=await readPose(page),paper=jointManifest.paper;
+   await face(page,evidence,Math.atan2(paper.east-pose.east,paper.north-pose.north));
+   const angle=Math.atan2(paper.height-pose.height-1.65,Math.hypot(paper.east-pose.east,paper.north-pose.north));
+   const tilt=async(amount)=>{
+     let rest=amount;
+     while(Math.abs(rest)>.5){const dy=Math.round(Math.max(-height*.36,Math.min(height*.36,rest)));await page.mouse.move(dragX,dragY);await page.mouse.down();try{await page.mouse.move(dragX,dragY+dy,{steps:5});}finally{await page.mouse.up();}rest-=dy;}
+   };
+   const dy=Math.round(-angle/.003);await tilt(dy);
+   await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('长按拓印')&&document.querySelector('#world-action')?.textContent?.includes('暂不可用'),null,{timeout:8000});
+   await page.keyboard.down('e');try{await page.waitForTimeout(2700);}finally{await page.keyboard.up('e');}
+   const result=await readPose(page);
+   assert.ok(result.action.includes('长按拓印')&&result.action.includes('暂不可用'));
+   assert.equal(await page.locator('#place-card[open]').count(),0);
+   assert.ok(Math.hypot(result.east-pose.east,result.north-pose.north)<.1);
+   report.playback={scope:'actual candidate viewer; no authorized receipt provider',paperHeldMs:2700,before:pose,after:result,denied:true};
+   await picture(page,evidence,'inscription-authority-unavailable');
+   await tilt(-dy);
  }else if(joint){
    const last=path.at(-1),before=path.at(-2);
    await wallView('joint-historic-deck',Math.atan2(last.east-before.east,last.north-before.north));

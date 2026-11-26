@@ -215,6 +215,7 @@ export function bindPlay(c:ReturnType<typeof attachBR30CraterCompletion>,marker:
   const points=[...selected,...completion.historic.route.slice(1)];
   report.browserRoute={points,approach:rimAccess.points,trailKnots:selected.length,historic:completion.historic.route,mode:'unaccepted B narrow host API proposal + actual A support audit'};
   report.browserRoute.inscriptionPath=[...rail.stationWalkRoutes.find(r=>r.id==='transfer-dock').points.slice(0,5),...inscription.points];
+  report.browserRoute.paper=completion.paper.paper;
   const dir=join(dirname(out),browserSegment==='inscription-access'?'原生联合刻石':'原生联合栈道');
   mkdirSync(dir,{recursive:true});
   writeFileSync(join(dir,'joint-route.json'),JSON.stringify(report.browserRoute,null,2));
