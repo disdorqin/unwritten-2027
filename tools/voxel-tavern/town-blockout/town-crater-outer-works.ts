@@ -6,6 +6,7 @@ import {
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import { industrialBuilder, type IndustryPoint, type IndustryWindow } from './town-a-r30-industrial-shell';
+import { northFootwayPosts } from './town-a-r30-north-connector';
 
 type CraterRoad = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'heightAt'>;
 export type CraterTowerWalkPoint = Readonly<{east:number;north:number;height:number}>;
@@ -1016,6 +1017,19 @@ export function buildCraterOuterWorks(road: CraterRoad) {
           roadStone(e+.08*Math.sin(j+e),n,.65,.80,.014);
       }
     }
+  }
+
+  // North pedestrian shoulder markers belong to the actual west carrier,
+  // not to a separate road layer. Keep the 2m walking lane and rails clear.
+  for(const p of northFootwayPosts){
+    const g=heightAt(p.east,p.north);
+    if(g===undefined)continue;
+    box(workshopBrick,p.east,g+.10,p.north,.42,.36,.42);
+    box(workshopWood,p.east,g+.65,p.north,.16,.92,.16);
+    box(workshopSheet,p.east,g+1.03,p.north,.22,.12,.22);
+    box(cleanSnow,p.east,g+1.13,p.north,.23,.08,.23);
+    hitBox(colliders,p.east,p.north,0,.42,.42,g-.08,g+.28);
+    hitBox(colliders,p.east,p.north,0,.23,.23,g+.28,g+1.17);
   }
 
   // Gatehouse: enterable stone-and-timber hut on the town side of the gate, door to the road.

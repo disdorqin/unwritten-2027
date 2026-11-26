@@ -13,7 +13,7 @@ import { buildZa36CraterStoryDressing } from './town-za36-crater-story-dressing'
 import { buildCraterMouthWorks, type CraterActionSpot } from './town-crater-mouth-works';
 import { buildCraterOuterWorks, craterBeltTrackCorridor } from './town-crater-outer-works';
 import { createWestLandscape } from './town-a-r30-west-landscape';
-import { mountWestNorthConnector } from './town-a-r30-north-connector';
+import { mountWestNorthConnector, northFootwayWeight } from './town-a-r30-north-connector';
 import { buildZa36CraterEjecta } from './town-za36-crater-ejecta';
 import { buildZa36CraterMidground } from './town-za36-crater-midground';
 import { mountZa36RopeStay } from './town-za36-rope-stay';
@@ -209,6 +209,7 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
       tint.lerp(yardGravel,civil.yard*(.42+.06*Math.sin(e*.43+n*.27)));
       tint.lerp(packedSnow,civil.packed*(.66+.09*Math.cos(n*.91+e*.37)));
       tint.lerp(railGravel,civil.ballast*(.66+.07*Math.sin(e*.59-n*.52)));
+      tint.lerp(packedSnow,northFootwayWeight(e,n)*(.76+.04*Math.cos(n*.63+e*.72)));
       colors[k*3]=tint.r;colors[k*3+1]=tint.g;colors[k*3+2]=tint.b;
     }
     joined.setAttribute('color',new Float32BufferAttribute(colors,3));
