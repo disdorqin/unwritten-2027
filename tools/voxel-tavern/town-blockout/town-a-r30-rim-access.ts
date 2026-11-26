@@ -38,15 +38,17 @@ export function createAR30RimAccessSurvey(road:Road,rail:Rail,radius=.30){
  function step(e:number,n:number,prev:number):Foot|undefined{
   if(e<minE||e>maxE||n<minN||n>maxN||!road.terrainReadyAt(e,n))return;
   const ground=road.heightAt(e,n);if(ground===undefined)return;
+  const footRadius=.27;
   const q=bins.get(key(e,n)),fs=q?.floors??[],ws=q?.walls??[];
   let h=ground;
-  for(const b of fs)if(b.max[1]!<=prev+.43&&supportFootprintOverlaps(e,n,b,radius))h=Math.max(h,b.max[1]!);
-  for(const b of ws)if(b.max[1]!<=prev+.025&&supportFootprintOverlaps(e,n,b,radius))h=Math.max(h,b.max[1]!);
+  for(const b of fs)if(b.max[1]!<=prev+.43&&supportFootprintOverlaps(e,n,b,footRadius))h=Math.max(h,b.max[1]!);
+  for(const b of ws)if(b.max[1]!<=prev+.025&&supportFootprintOverlaps(e,n,b,footRadius))h=Math.max(h,b.max[1]!);
   if(Math.abs(h-prev)>.43001||road.fenceBlocks(e,n,h,radius))return;
-  if([...fs,...ws].some(b=>h+.025<b.max[1]!&&h+1.775>b.min[1]!&&supportFootprintOverlaps(e,n,b,radius)))return;
+  const collides=(b:OrientedSupportBox,r:number)=>h+.025<b.max[1]!&&h+1.775>b.min[1]!&&supportFootprintOverlaps(e,n,b,r);
+  if(fs.some(b=>collides(b,footRadius))||ws.some(b=>collides(b,radius)))return;
   // Restrict every near-rail traverse to the already built crossing
   // surface on that particular rail, not an arbitrary gap in sleepers.
-  for(const s of q?.tracks??[])if(segmentDistance(e,n,s.a,s.b)<1.3&&!crosses[s.track]!.some(c=>c.floors.some(f=>supportFootprintOverlaps(e,n,f,radius))))return;
+  for(const s of q?.tracks??[])if(segmentDistance(e,n,s.a,s.b)<1.3&&!crosses[s.track]!.some(c=>c.floors.some(f=>supportFootprintOverlaps(e,n,f,footRadius))))return;
   return {east:e,north:n,height:h};
  }
  function line(a:Foot,b:EN){

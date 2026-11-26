@@ -10,7 +10,7 @@ type Anchor=Readonly<{east:number;north:number}>;
 // rejoin the original yard crossing; no path passes through the flagpoles.
 // Safe three-rail approach measured on the full A/B surface candidate.
 // The trail wear stops at the shared crater apron; no new rail deck.
-export const rimPublicAccessFootway=[[-40,159],[-60.5,142.5],[-66,139.5],[-68.5,137],[-75,137],[-75.5,148.5],[-70,154],[-67,159]] as const;
+export const rimPublicAccessFootway=[[-40,159],[-60.5,142.5],[-66,139.5],[-68.5,137],[-75,137],[-75.5,137.5],[-68.5,157.5],[-67,159]] as const;
 export const smelterFootway=[[-43,159],[-67,136],[-91,129],[-106.94,125.4],[-117,124],[-122,116],[-125,112.65],[-144,105]] as const;
 export const coldFurnaceFootway=[[-144,105],[-151.5,112.5],[-158.5,112.5],[-171,121],[-172,125.5]] as const;
 export const waterTowerFootway=[[-36,145],[-38,145],[-44.5,145.5],[-44.5,147.5]] as const;
