@@ -1716,6 +1716,11 @@ for(const bench of ensureWestCraterRoad().outerWorks.gatehouseSeats)activitySpot
   available:()=>!homeReturn&&canStandAtActivity(bench.useEast,bench.useNorth,bench.height),
   run:()=>activityContext.sit({x:bench.east,n:bench.north,eyeY:bench.height+1.48,yaw:bench.yaw}),
 });
+for(const bench of ensureWestCraterRoad().mouthWorks.guardShedSeats)activitySpots.push({
+  x:bench.useEast,n:bench.useNorth,ground:bench.height,range:.65,label:'在哨棚长椅就座',
+  available:()=>!homeReturn&&canStandAtActivity(bench.useEast,bench.useNorth,bench.height),
+  run:()=>activityContext.sit({x:bench.east,n:bench.north,eyeY:bench.height+1.48,yaw:bench.yaw}),
+});
 activitySpots.push(personalFirecrackers.pickup(grid.heightAt(firecrackerStand.x, firecrackerStand.n)));
 function registerHomeDoors(doors: readonly TownHousePortal[]) {
   for (const door of doors) {

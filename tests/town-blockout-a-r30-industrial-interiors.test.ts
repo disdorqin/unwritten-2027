@@ -51,3 +51,16 @@ for(const id of ['transfer-dock','ore-yard-dock'])test(id+' is reachable and ret
  assert.ok(route);
  walk(id,route.points);walk(id,[...route.points].reverse());
 });
+for(const route of road.mouthWorks.guardShedRoutes)test(route.id+' actual deck approach and return',()=>{
+ walk(route.id,route.points);walk(route.id,[...route.points].reverse());
+});
+test('guard shed bench and brazier have distinct accessible interaction points',()=>{
+ const s=road.mouthWorks.guardShedSeats[0]!;
+ const fire=road.mouthWorks.guardShedRoutes.find(r=>r.id==='guard-firewood')!.points.at(-1)!;
+ assert.ok(boxes.some(b=>supportFootprintOverlaps(s.east,s.north,b,.27)&&Math.abs(b.max[1]-s.height-.50)<.01));
+ assert.equal(road.craterActions.actionAt(fire.east,fire.north,fire.height)?.id,'firewood');
+ assert.notEqual(road.craterActions.actionAt(s.useEast,s.useNorth,s.height)?.id,'firewood');
+ assert.notEqual(road.craterActions.actionAt(fire.east,fire.north,fire.height+2)?.id,'firewood');
+ assert.equal(road.craterActions.firewood(),true);
+ assert.equal(road.craterActions.firewood(),false);
+});

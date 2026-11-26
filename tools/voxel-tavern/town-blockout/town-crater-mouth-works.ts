@@ -253,6 +253,8 @@ export function buildCraterMouthWorks(road: CraterRoad) {
   const actions: CraterActionSpot[] = [];
   const supplyDeckRoute: {east:number;north:number;height:number}[]=[];
   const supplyInteriorRoute: {east:number;north:number;height:number}[]=[];
+  const guardShedRoutes:{id:string;points:{east:number;north:number;height:number}[]}[]=[];
+  const guardShedSeats:{east:number;north:number;height:number;useEast:number;useNorth:number;yaw:number}[]=[];
   /** Iron-fence main-gate segment posts, for the ejecta keep-out list. */
   const gateFencePosts: { bearing: number; radius: number }[] = [];
 
@@ -691,6 +693,19 @@ export function buildCraterMouthWorks(road: CraterRoad) {
   if (shed) {
     const fr = frame(shed, 358 + 180);
     const g = shed.height;
+    const deckY=g+.16;
+    const footHeights=[-2,0,2].flatMap(x=>[-1.5,0,1.5].map(z=>{
+      const p=fr.at(x,z);return heightAt(p.east,p.north)??g;
+    }));
+    const low=Math.min(...footHeights,g-.05)-.08;
+    box(stone,shed.east,(low+deckY-.08)/2,shed.north,4.0,deckY-.08-low,3.0,fr.yaw);
+    box(supplyPlanks,shed.east,deckY-.04,shed.north,4.0,.08,3.0,fr.yaw);
+    floors.push(orientedSupportBox(shed.east,shed.north,fr.yaw,4,3,low,deckY));
+    const point=(dx:number,dz:number,height:number)=>({...fr.at(dx,dz),height});
+    const solid=(dx:number,dz:number,w:number,d:number,bottom:number,top:number)=>{
+      const p=fr.at(dx,dz);
+      colliders.push(orientedSupportBox(p.east,p.north,fr.yaw,w,d,bottom,top));
+    };
     for (const [dx, dz] of [[-1.7, -1.2], [1.7, -1.2], [-1.7, 1.2], [1.7, 1.2]] as const) {
       const p = fr.at(dx, dz);
       box(timber, p.east, g + 1.25, p.north, .18, 2.5, .18, fr.yaw);
@@ -728,35 +743,62 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       const p = fr.at(dx, dz);
       hitBox(colliders, p.east, p.north, fr.yaw, .18, .18, g, g + 2.5);
     }
-    // Brazier with a real light — the warm chain's northernmost lamp.
-    const brz = fr.at(.7, .3);
-    cyl(iron, brz.east, g + .32, brz.north, .52, .34, .5, 9);
-    part(glow, new ConeGeometry(.34, .42, 7), brz.east, g + .68, brz.north);
-    brazierLight = lampLight(brz.east, g + .95, brz.north, 6, 9.5);
-    const brzH = heightAt(brz.east, brz.north);
-    if (brzH !== undefined) {
-      actions.push({ id: 'firewood', label: '给哨棚火盆添柴', east: brz.east, north: brz.north, height: brzH, range: 2.1 });
+    // Real iron brazier on a stone hearth, with its original local
+    // light control. Player stands on the clear deck, not in the flame.
+    const brz = fr.at(.85, .25);
+    box(stone,brz.east,deckY+.045,brz.north,1.13,.09,1.13,fr.yaw);
+    cyl(iron, brz.east, deckY + .34, brz.north, .49, .33, .42, 9);
+    cyl(rustIron,brz.east,deckY+.55,brz.north,.53,.53,.09,9);
+    cyl(stoneDark,brz.east,deckY+.60,brz.north,.40,.40,.035,9);
+    for(const s of [-1,1]){
+      const p=fr.at(.85+s*.32,.25);
+      box(iron,p.east,deckY+.13,p.north,.13,.26,.54,fr.yaw);
     }
-    for (let i = 0; i < 5; i++) {
-      const p = fr.at(-1.15 + (i % 3) * .24, .9 + Math.floor(i / 3) * .3);
-      box(timber, p.east, g + .12 + (i % 2) * .16, p.north, .16, .24 + (i % 2) * .2, .16, fr.yaw + i);
+    for(let i=0;i<4;i++){
+      const p=fr.at(.85+(i%2-.5)*.32,.25+(Math.floor(i/2)-.5)*.28);
+      box(timber,p.east,deckY+.64,p.north,.16,.13,.57,fr.yaw+i*.77);
+      part(glow,new ConeGeometry(.105+i*.018,.30-i*.025,5),p.east,deckY+.79,p.north);
     }
-    // Bench, small table, the half cup of tea.
-    const bench = fr.at(-.8, -.5);
-    box(timberWarm, bench.east, g + .48, bench.north, 1.7, .09, .42, fr.yaw);
-    for (const s of [-1, 1]) {
-      const p = fr.at(-.8 + s * .7, -.5);
-      box(timber, p.east, g + .22, p.north, .12, .44, .34, fr.yaw);
+    solid(.85,.25,1.06,1.06,deckY,deckY+.88);
+    brazierLight = lampLight(brz.east, deckY + .98, brz.north, 6, 9.5);
+    const fireStand=point(.15,1.15,deckY);
+    actions.push({ id:'firewood',label:'给哨棚火盆添柴',...fireStand,range:.68 });
+    // Bench has a real backrest and seated view; logs are racked beneath
+    // the bench rather than scattered across the approach aisle.
+    const bench = fr.at(-.95, -.70);
+    box(supplyPlanks,bench.east,deckY+.455,bench.north,1.45,.09,.43,fr.yaw);
+    solid(-.95,-.70,1.45,.43,deckY,deckY+.50);
+    const back=fr.at(-.95,-.94);
+    box(supplyPlanks,back.east,deckY+.79,back.north,1.45,.36,.11,fr.yaw);
+    solid(-.95,-.94,1.45,.11,deckY+.50,deckY+.97);
+    for(const s of [-1,1]){
+      const p=fr.at(-.95+s*.61,-.70);
+      box(timber,p.east,deckY+.24,p.north,.12,.44,.34,fr.yaw);
+      const q=fr.at(-.95+s*.61,-.94);
+      box(timber,q.east,deckY+.49,q.north,.11,.98,.11,fr.yaw);
     }
-    const table = fr.at(.9, -.7);
-    box(timberWarm, table.east, g + .62, table.north, .8, .07, .55, fr.yaw);
-    box(timber, table.east, g + .3, table.north, .09, .6, .09, fr.yaw);
-    cyl(paper, table.east, g + .74, table.north, .07, .055, .13, 8);
+    for(let i=0;i<4;i++){
+      const p=fr.at(-1.43+i*.27,-.70);
+      cyl(timberWarm,p.east,deckY+.12,p.north,.10,.10,.38,7,fr.yaw,Math.PI/2);
+    }
+    const seatStand=point(-.95,.10,deckY);
+    guardShedSeats.push({...bench,height:deckY,useEast:seatStand.east,useNorth:seatStand.north,yaw:fr.yaw+Math.PI});
+    const table = fr.at(.95, -.94);
+    box(supplyPlanks,table.east,deckY+.63,table.north,.76,.09,.50,fr.yaw);
+    for(const x of [-.28,.28])for(const z of [-.17,.17]){
+      const p=fr.at(.95+x,-.94+z);
+      box(timber,p.east,deckY+.30,p.north,.085,.6,.085,fr.yaw);
+    }
+    solid(.95,-.94,.76,.50,deckY,deckY+.675);
+    cyl(paper,table.east,deckY+.74,table.north,.07,.055,.13,8);
+    const approach=(x:number)=>{const p=fr.at(x,3.5);return {...p,height:heightAt(p.east,p.north)??g};};
+    guardShedRoutes.push({id:'guard-firewood',points:[approach(.15),fireStand]},
+      {id:'guard-seat',points:[approach(-.95),point(-.95,1.25,deckY),seatStand]});
     // Steam wisp over the half cup (§三.10): a still column of soft spheres.
     const steam = new MeshStandardMaterial({ color: 0xdfe8ee, transparent: true, opacity: .32, roughness: 1 });
     for (let i = 0; i < 6; i++) {
-      const p = fr.at(.9 + Math.sin(i * 1.2) * .05 + i * .02, -.7);
-      part(steam, new SphereGeometry(.035 + i * .012, 6, 5), p.east, g + .88 + i * .13, p.north);
+      const p = fr.at(.95 + Math.sin(i * 1.2) * .05 + i * .02, -.94);
+      part(steam, new SphereGeometry(.035 + i * .012, 6, 5), p.east, deckY + .88 + i * .13, p.north);
     }
     // Hanging paper lantern under the roof edge.
     const lant = fr.at(-1.5, 1.35);
@@ -995,7 +1037,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     let nearest: CraterActionSpot | undefined; let best = Infinity;
     for (const spot of actions) {
       const horizontal = Math.hypot(east - spot.east, north - spot.north);
-      const heightTolerance=spot.id==='telescope'||spot.id==='map'?.65:3.3;
+      const heightTolerance=spot.id==='telescope'||spot.id==='map'||spot.id==='firewood'?.65:3.3;
       if (horizontal > spot.range || Math.abs(height - spot.height) > heightTolerance || horizontal >= best) continue;
       best = horizontal; nearest = spot;
     }
@@ -1005,7 +1047,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
 
   return {
     group, sites, debrisCount, rimRadius: meteorCraterRimRadius,
-    actions, actionAt, firewood, setNight, fencePosts: gateFencePosts,supplyDeckRoute,supplyInteriorRoute,
+    actions, actionAt, firewood, setNight, fencePosts: gateFencePosts,supplyDeckRoute,supplyInteriorRoute,guardShedRoutes,guardShedSeats,
     colliders, floors, ramps,
   };
 }
