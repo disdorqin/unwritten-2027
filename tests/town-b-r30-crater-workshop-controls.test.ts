@@ -12,13 +12,14 @@ test('R30 physical subtargets forward existing rule actions without fabricating 
   const station=installCraterWorkshopWorld(road,buildCraterRailExtension(grid,road));
   const bellows=createBellows(),calibration=createCalibration(7),sorting=createSorting(),scale=createScale(),track=createTrackSwitch();
   let pose:Parameters<typeof station.aimControl>[0]&{heading:number;pitch:number;eyeHeight:number}|undefined;
-  let kg=0,held=false;
+  let kg=0,held=false,online=true,failRequest=false;
   const sent:BR30WorkshopIntent[]=[];
   const facts=():BR30WorkshopFacts=>({dayIndex:7,bellows:{...bellows.state(),stroke:0},
     calibration:{angles:calibration.angles() as [number,number,number],locked:calibration.locked() as [boolean,boolean,boolean]},
     sorting:sorting.state(),scale:{kg},track:{thrown:track.thrown()}});
   // Fixture uses the real existing rule leaves. Production dispatcher is A's.
-  const controls=createBR30WorkshopControls(station,{pose:()=>pose,facts,async request(intent){
+  const controls=createBR30WorkshopControls(station,{pose:()=>pose,facts:()=>online?facts():undefined,async request(intent){
+    if(failRequest)throw Error('fixture transport closed');
     sent.push(intent);
     switch(intent.kind){
       case 'pump-bellows':bellows.pump();break;
@@ -66,5 +67,24 @@ test('R30 physical subtargets forward existing rule actions without fabricating 
   for(let i=0;i<6;i++)assert.equal(station.group.getObjectByName('sort-fragment-0-'+i)!.visible,true);
   assert.equal(station.group.getObjectByName('sort-fragment-1-0')!.visible,false);
   assert.ok(sent.every(a=>!('lumpId' in a)));
+  kg=scale.weigh(57).kg;
+  assert.equal(kg,18);
+  controls.refresh();
+  assert.equal(projectBR30Workshop(facts()).weighingKg,18);
+  assert.equal(station.group.userData.bR30WorkshopSynced,true);
+  assert.ok(Math.abs(needle.rotation.z+1.25)<1e-9);
+  online=false;controls.refresh();
+  assert.equal(station.group.userData.bR30WorkshopSynced,false);
+  const sentBefore=sent.length;
+  aim('bellows');
+  assert.equal((await controls.interact()).accepted,false);
+  assert.equal(sent.length,sentBefore);
+  online=true;controls.refresh();
+  assert.equal(station.group.userData.bR30WorkshopSynced,true);
+  failRequest=true;
+  assert.deepEqual(await controls.interact(),{accepted:false,reason:'receipt-unavailable'});
+  assert.equal(station.group.userData.bR30WorkshopSynced,false);
+  failRequest=false;controls.refresh();
+  assert.equal(station.group.userData.bR30WorkshopSynced,true);
   station.dispose();
 });

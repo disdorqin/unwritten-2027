@@ -173,14 +173,27 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
   };
   let bellowsHandle:Group|undefined,bellowsGrip:Mesh|undefined, gauge:Group|undefined, weighNeedle:Group|undefined, lever:Group|undefined;
   let signal:MeshStandardMaterial|undefined;
-  function sign(g:Group,label:string,y:number,z:number,w:number,x=0){
+  let synced=false;
+  const statusPainters:((available:boolean)=>void)[]=[];
+  function sign(g:Group,label:string,y:number,z:number,w:number,x=0,showsStatus=false){
     const backing=new Mesh(unit,timber);backing.name='b-r30-label-'+label;backing.scale.set(w,.24,.045);backing.position.set(x,y,z);g.add(backing);
     if(typeof document==='undefined')return;
     const canvas=document.createElement('canvas');canvas.width=512;canvas.height=128;
     const c=canvas.getContext('2d');if(!c)return;
-    c.fillStyle='#4d3425';c.fillRect(0,0,512,128);c.strokeStyle='#967557';c.lineWidth=5;c.strokeRect(8,8,496,112);
-    c.fillStyle='#ede0be';c.textAlign='center';c.textBaseline='middle';c.font='bold 70px sans-serif';c.fillText(label,256,65,470);
     const tex=new CanvasTexture(canvas);tex.colorSpace=SRGBColorSpace;
+    tex.minFilter=tex.magFilter=NearestFilter;tex.generateMipmaps=false;
+    const paint=(available:boolean)=>{
+      c.fillStyle='#4d3425';c.fillRect(0,0,512,128);c.strokeStyle='#967557';c.lineWidth=5;c.strokeRect(8,8,496,112);
+      c.fillStyle='#ede0be';c.textAlign='center';c.textBaseline='middle';
+      c.font=showsStatus?'bold 55px sans-serif':'bold 70px sans-serif';
+      c.fillText(label,256,showsStatus?43:65,470);
+      if(showsStatus){
+        c.fillStyle=available?'#9ab89a':'#d6ad78';c.font='bold 32px sans-serif';
+        c.fillText(available?'状态已同步':'状态未同步',256,94,460);
+      }
+      tex.needsUpdate=true;
+    };
+    paint(synced);if(showsStatus)statusPainters.push(paint);
     const mesh=new Mesh(new PlaneGeometry(w-.06,.21),new MeshBasicMaterial({map:tex}));
     mesh.position.set(x,y,z+.03);g.add(mesh);
   }
@@ -239,7 +252,7 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
       }
       pressurePointer=needle(g,.53,1.48,-.15);pressurePointer.scale.set(.49,.49,.49);
       moving(pressureStatus,g,.53,1.68,-.19,.085,.045,.035);
-      sign(g,site.label,1.31,-.12,1.35);
+      sign(g,site.label,1.31,-.12,1.35,0,true);
     }else if(site.id==='calibration'){
       table(1.58,.76,.73);fixed(iron,0,1.22,-.22,1.48,.86,.15);
       for(const x of [-.43,0,.43]){
@@ -261,7 +274,7 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
         const knob=new Mesh(wheel,brass);knob.scale.set(.095,.07,.095);knob.rotation.x=Math.PI/2;knob.position.set(x,.89,.29);g.add(knob);dialKnobs.push(knob);
         moving(dark,knob,0,.56,0,.13,.40,.44);
       }
-      sign(g,site.label,1.63,-.12,1.3);
+      sign(g,site.label,1.63,-.12,1.3,0,true);
     }else if(site.id==='sorting'){
       table(1.95,.84,.72);
       for(let i=0;i<3;i++){
@@ -285,7 +298,7 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
         sign(g,['星尘','废料','碎石'][i],.79,.455,.49,x);
       }
       for(let i=0;i<3;i++)fixed(ores[i],(i-1)*.38,1.02,-.38,.17,.16,.12);
-      sign(g,site.label,1.34,-.31,1.66);
+      sign(g,site.label,1.34,-.31,1.66,0,true);
     }else if(site.id==='weighing'){
       fixed(stone,0,.09,0,1.36,.18,.95);
       fixed(iron,0,.26,0,1.24,.16,.86);
@@ -297,7 +310,7 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
       fixed(iron,0,1.08,-.30,.65,.36,.16);
       fixed(paper,0,1.08,-.205,.52,.28,.03);
       // The actual 0–18 kg mechanical arc and pointer share the same
-      // centre and angle. The accepted rule maximum is 17.9 kg.
+      // centre and angle. The existing one-decimal rounding can reach 18.0 kg.
       weighNeedle=needle(g,0,.99,-.166);weighNeedle.scale.set(.60,.60,.60);
       weighNeedle.name='b-r30-scale-needle';
       for(let i=0;i<=6;i++){
@@ -315,7 +328,7 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
           face.name='b-r30-scale-reading';face.position.set(0,1.08,-.187);g.add(face);
           let last='';
           paintWeight=(kg)=>{
-            const valid=typeof kg==='number'&&Number.isFinite(kg)&&kg>=0&&kg<=17.9;
+            const valid=typeof kg==='number'&&Number.isFinite(kg)&&kg>=0&&kg<=18;
             const reading=valid?kg.toFixed(1)+' kg':'— kg';if(reading===last)return;last=reading;
             ctx.fillStyle='#d4c49d';ctx.fillRect(0,0,512,278);
             ctx.strokeStyle='#665743';ctx.lineWidth=5;ctx.strokeRect(7,7,498,264);
@@ -331,7 +344,7 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
         }
       }
       fixed(rust,0,.62,-.25,.26,.07,.23);
-      sign(g,site.label,1.37,-.19,.62);
+      sign(g,site.label,1.37,-.19,.62,0,true);
     }else{
       fixed(stone,0,.12,0,.91,.24,.64);
       fixed(iron,0,.35,0,.61,.27,.42);fixed(rust,-.30,.72,0,.11,.73,.15);
@@ -345,7 +358,7 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
       fixed(iron,.43,.83,-.22,.10,1.6,.10);fixed(iron,.43,1.61,-.22,.26,.31,.25);
       signal=new MeshStandardMaterial({color:0xaa4c3f,emissive:0x68251b,emissiveIntensity:.23});
       moving(signal,g,.43,1.61,-.075,.13,.16,.055);
-      sign(g,site.label,1.20,-.16,.84);
+      sign(g,site.label,1.20,-.16,.84,0,true);
     }
     for(const [mat,parts] of batches){
       const joined=mergeGeometries(parts);for(const part of parts)part.dispose();
@@ -434,7 +447,22 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
     signal!.color.set(view.turnout==='branch'?0x78ac7d:0xaa4c3f);
     signal!.emissive.set(view.turnout==='branch'?0x294e2d:0x68251b);
   }
+  /** Do not move the last accepted mechanism when its host disappears.
+   * Mark the physical face stale and suppress actionable signal colors. */
+  function setAvailable(available:boolean){
+    if(synced!==available){synced=available;statusPainters.forEach(p=>p(available));}
+    root.userData.bR30WorkshopSynced=available;
+    if(!available){
+      signal!.color.set(0x5d5b55);signal!.emissive.set(0x000000);
+      pressureStatus.color.set(0x5d5b55);
+      dialStatus.forEach(m=>m.color.set(0x5d5b55));
+      dialMarks.forEach(m=>{m.visible=false;});
+      pressureSteps.forEach(m=>{m.material=pressureStepOff;});
+      paintWeight?.(undefined);
+    }
+  }
   show({bellowsStroke:0,gaugeNeedle:0,sortingFill:[0,0,0],weighingNeedle:0,turnout:'straight'});
+  setAvailable(false);
   function dispose(){
     root.removeFromParent();
     const geometries=new Set<import('three').BufferGeometry>();
@@ -442,7 +470,7 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
     for(const geo of geometries)geo.dispose();
     for(const mat of allMaterials){mat.map?.dispose();mat.dispose();}signal?.dispose();dialStatus.forEach(m=>m.dispose());pressureStatus.dispose();pressureStepMaterial.dispose();pressureStepOff.dispose();tallyOn.dispose();tallyOff.dispose();unit.dispose();wheel.dispose();oreGeometry.dispose();
   }
-  return {group:root,sites,colliders:sites.map(s=>s.footprint),aim,aimControl,targets,show,dispose};
+  return {group:root,sites,colliders:sites.map(s=>s.footprint),aim,aimControl,targets,show,setAvailable,dispose};
 }
 
 /** Production attachment for the A-window's sole viewer writer. Invoke once

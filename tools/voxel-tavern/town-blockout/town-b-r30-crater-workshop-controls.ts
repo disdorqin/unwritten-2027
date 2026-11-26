@@ -6,7 +6,7 @@ import type {
   CraterWorkstationView, installCraterWorkshopWorld,
 } from './town-b-r30-crater-workstations';
 
-type Model=Pick<ReturnType<typeof installCraterWorkshopWorld>,'aimControl'|'show'>;
+type Model=Pick<ReturnType<typeof installCraterWorkshopWorld>,'aimControl'|'show'|'setAvailable'>;
 type Pose=Readonly<{east:number;north:number;height:number;heading:number;pitch:number;eyeHeight:number}>;
 type Triple<T>=readonly [T,T,T];
 const oreKinds=['stardust','scrap','rubble'] as const;
@@ -57,14 +57,26 @@ export function projectBR30Workshop(f:BR30WorkshopFacts):CraterWorkstationView {
     calibrationTargets:dialTargets(f.dayIndex),
     sortingFill:oreKinds.map(k=>clamp(f.sorting.bins[k]/sortBasketCapacity)) as unknown as Triple<number>,
     weighingNeedle:clamp(f.scale.kg/18),
-    weighingKg:Number.isFinite(f.scale.kg)&&f.scale.kg>=0&&f.scale.kg<=17.9?f.scale.kg:undefined,
+    weighingKg:Number.isFinite(f.scale.kg)&&f.scale.kg>=0&&f.scale.kg<=18?f.scale.kg:undefined,
     turnout:f.track.thrown?'branch':'straight',
   };
 }
 export function createBR30WorkshopControls(model:Model,host:BR30WorkshopHost){
   let pending=false;
+  function acceptedFacts(){
+    const f=host.facts();
+    if(!f||!Number.isSafeInteger(f.dayIndex)||
+       ![f.bellows.pressure,f.bellows.heldMs,f.bellows.stroke,f.scale.kg,...f.calibration.angles,...oreKinds.map(k=>f.sorting.bins[k])].every(Number.isFinite)||
+       f.bellows.pressure<0||f.bellows.pressure>1||f.bellows.heldMs<0||
+       f.scale.kg<0||f.scale.kg>18||
+       f.calibration.angles.length!==3||f.calibration.locked.length!==3||
+       !f.calibration.locked.every(x=>typeof x==='boolean')||
+       oreKinds.some(k=>!Number.isInteger(f.sorting.bins[k])||f.sorting.bins[k]<0||f.sorting.bins[k]>sortBasketCapacity)||
+       typeof f.track.thrown!=='boolean')return undefined;
+    return f;
+  }
   function action(direction:-1|1=1):BR30WorkshopIntent|undefined{
-    if(pending||!host.facts()||(direction!==1&&direction!==-1))return;
+    if(pending||!acceptedFacts()||(direction!==1&&direction!==-1))return;
     const pose=host.pose();if(!pose)return;
     const hit=model.aimControl(pose,pose.heading,pose.pitch,pose.eyeHeight);
     if(!hit)return;
@@ -77,7 +89,9 @@ export function createBR30WorkshopControls(model:Model,host:BR30WorkshopHost){
     }
   }
   function refresh(){
-    const facts=host.facts();if(facts)model.show(projectBR30Workshop(facts));
+    const facts=acceptedFacts();
+    if(facts){model.show(projectBR30Workshop(facts));model.setAvailable(true);}
+    else model.setAvailable(false);
   }
   return {action,refresh,async interact(direction:-1|1=1){
     if(pending)return {accepted:false,reason:'pending'};
@@ -88,6 +102,11 @@ export function createBR30WorkshopControls(model:Model,host:BR30WorkshopHost){
       const result=await host.request(next);
       refresh(); // project only committed/read-back state
       return result;
+    }catch{
+      // A transport failure is not evidence of a server rejection. Never
+      // predict the mechanical result; mark the receipt as unavailable.
+      model.setAvailable(false);
+      return {accepted:false,reason:'receipt-unavailable'};
     }finally{pending=false;}
   }};
 }
