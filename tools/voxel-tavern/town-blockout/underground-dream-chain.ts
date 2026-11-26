@@ -59,14 +59,17 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
   let confirmedTransfer: { playerId: string; departure: AcceptedFoot; landing: AcceptedFoot } | undefined;
   let acceptedLanding: { tripId: number; foot: AcceptedFoot } | undefined;
   let lastTripId = 0;
-  let firstFallDeparture: AcceptedFoot | undefined;
+  let firstFall: {trip: DreamChainTrip; departure: AcceptedFoot} | undefined;
+  // Retain the most recent completed landing until the next departure. The
+  // cinematic can ask after the dock tick or retry after a lost response.
+  let lastLanding: {tripId:number;foot:Foot} | undefined;
   let activeTrip: UndergroundMineLiftTrip | undefined;
   let pendingRide: 'down' | 'up' | undefined;
-  const landingWaiters = new Map<number, (foot: Foot) => void>();
+  const landingWaiters = new Map<number, {promise:Promise<Foot|undefined>;resolve:(foot:Foot|undefined)=>void}>();
 
   const acceptedFoot = (): AcceptedFoot | undefined => {
     const foot = host.readLocalFoot();
-    if (!foot) return undefined;
+    if (!foot || ![foot.east,foot.north,foot.height].every(Number.isFinite)) return undefined;
     return { playerId, domainId: phase === 'mine' ? mineDomain : surfaceDomain, ...foot };
   };
   const nearShaft = (foot: Foot) =>
@@ -140,11 +143,21 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
   });
 
   function settleLanding(tripId: number, foot: Foot) {
+    lastLanding={tripId,foot:{...foot}};
     const waiter = landingWaiters.get(tripId);
     if (waiter) {
       landingWaiters.delete(tripId);
-      waiter(foot);
+      waiter.resolve({...foot});
     }
+  }
+
+  function waitForLanding(tripId:number):Promise<Foot|undefined>{
+    const existing=landingWaiters.get(tripId);
+    if(existing)return existing.promise;
+    let resolve!:(foot:Foot|undefined)=>void;
+    const promise=new Promise<Foot|undefined>(done=>{resolve=done});
+    landingWaiters.set(tripId,{promise,resolve});
+    return promise;
   }
 
   function departWithPlayer(direction: 'down' | 'up') {
@@ -152,6 +165,7 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
     const trip = lift.depart(playerId);
     if (!trip) return undefined;
     activeTrip = trip;
+    lastLanding=undefined;
     const chainTrip: DreamChainTrip = {
       id: trip.id, first: false, departedAt: trip.departedAt, travelMs: trip.travelMs, direction,
     };
@@ -178,7 +192,15 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
      */
     crankWinch(dtSeconds: number) {
       if (!bridge.sceneState().coverVisible) return { kind: 'already-open', progress: 1 } as const;
-      winchLeaf.tick(dtSeconds, { cranking: true, ropeHeld: host.readRopeHeld?.() ?? false });
+      const foot=acceptedFoot();
+      const reach=connection.winch;
+      if(!foot||foot.domainId!==surfaceDomain||Math.hypot(foot.east-reach.east,foot.north-reach.north)>reach.horizontalReach||Math.abs(foot.height-reach.height)>reach.verticalReach){
+        bridge.releaseWinch(playerId);
+        return {kind:'unreachable',progress:winchLeaf.progress} as const;
+      }
+      // The feel model may advance only from a reachable held frame; large
+      // resume deltas are not continuous cranking samples.
+      winchLeaf.tick(Math.min(dtSeconds,.3), { cranking: true, ropeHeld: host.readRopeHeld?.() ?? false });
       const result = bridge.holdWinchExternal(playerId);
       if (result.kind === 'opened') host.onEvent({ kind: 'well-opened' });
       return { ...result, progress: winchLeaf.progress } as const;
@@ -202,14 +224,16 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
 
     /** The opener walks from the handle into the open bore; this issues the fall order. */
     requestFirstFall() {
+      if(firstFall||activeTrip||pendingRide||phase!=='surface')return undefined;
       const foot = acceptedFoot();
       if (!foot) return undefined;
       const order = bridge.requestFirstFall(playerId);
       if (!order) return undefined;
-      firstFallDeparture = foot;
       const trip: DreamChainTrip = {
         id: ++lastTripId, first: true, departedAt: host.now(), travelMs: liftTravelMs, direction: 'down',
       };
+      firstFall={trip,departure:foot};
+      lastLanding=undefined;
       host.onEvent({ kind: 'trip-started', trip });
       return { order, trip };
     },
@@ -221,7 +245,7 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
      * trip-started event fires at the actual departure either way.
      */
     requestCageRide(direction: 'down' | 'up') {
-      if (activeTrip || pendingRide) return undefined;
+      if (firstFall || activeTrip || pendingRide) return undefined;
       const boardingStop = direction === 'down' ? 'crater-floor' : 'mine';
       if (dockedStop !== boardingStop) {
         const empty = lift.callEmptyCage(playerId, boardingStop);
@@ -239,21 +263,24 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
      * and the domain handoff has issued its wake cue.
      */
     requestLanding(tripId: number): Promise<Foot | undefined> {
-      if (firstFallDeparture && !activeTrip) {
+      if(lastLanding?.tripId===tripId)return Promise.resolve({...lastLanding.foot});
+      if (firstFall?.trip.id===tripId) {
+        const now=host.now();
+        if(!Number.isFinite(now)||now-firstFall.trip.departedAt<firstFall.trip.travelMs)return Promise.resolve(undefined);
         const landing: AcceptedFoot = { playerId, domainId: mineDomain, ...mineLanding };
-        confirmedTransfer = { playerId, departure: firstFallDeparture, landing };
+        confirmedTransfer = { playerId, departure: firstFall.departure, landing };
         const result = bridge.confirmFirstFall(playerId);
-        firstFallDeparture = undefined;
+        confirmedTransfer=undefined;
         if (result?.kind !== 'first-fall-landed') return Promise.resolve(undefined);
+        firstFall=undefined;
         // The fall moves the player, not the cage: the lift stays docked at
         // the crater floor until the empty cage is called down.
         phase = 'mine';
+        settleLanding(tripId,mineLanding);
         return Promise.resolve({ ...mineLanding });
       }
-      if (activeTrip?.id === tripId) {
-        return new Promise((resolve) => {
-          landingWaiters.set(tripId, (foot) => resolve(foot));
-        });
+      if (activeTrip?.id === tripId && activeTrip.riders.includes(playerId)) {
+        return waitForLanding(tripId);
       }
       return Promise.resolve(undefined);
     },
@@ -290,9 +317,16 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
       // crossing segment so the entry flips the player's mode (peace above
       // the depth line, survival below it) for the next boarding check.
       const originFoot = trip.origin === 'mine' ? mineLanding : shaftFoot;
-      bridge.confirmDepthCrossing(playerId, originFoot, {
+      const crossing=bridge.confirmDepthCrossing(playerId, originFoot, {
         east: wake.foot.east, north: wake.foot.north, height: wake.foot.height,
       });
+      if(!crossing){
+        // Never announce an unaccepted mode change. The cage is physically
+        // docked; report failure rather than leave an immortal pending promise.
+        activeTrip=undefined;dockedStop=trip.destination;acceptedLanding=undefined;
+        landingWaiters.get(trip.id)?.resolve(undefined);landingWaiters.delete(trip.id);
+        return;
+      }
       activeTrip = undefined;
       dockedStop = trip.destination;
       phase = toMine ? 'mine' : 'surface';
