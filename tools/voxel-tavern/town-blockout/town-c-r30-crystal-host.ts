@@ -1,4 +1,5 @@
 import {Group} from 'three';
+import {mountR30CrystalVestibule} from './town-c-r30-crystal-vestibule.js';
 import {mountUndergroundCrystalCavern,crystalCavernPlan,crystalCavernToWorld,type CrystalCavernFrame,type CrystalCavernPoint} from './underground-crystal-cavern.js';
 import {createUndergroundCrystalReturnSwitch} from './underground-crystal-gate.js';
 import {crystalRoutePassage,crystalLocal,crystalThreshold,mountR30CrystalSupport,r30CrystalReturnSwitch,r30CrystalDomain} from './town-c-r30-crystal-support.js';
@@ -28,11 +29,12 @@ export function createR30CrystalHost(options:Readonly<{
  let stage:UndergroundMineGateStage='closed',disposed=false,active=false,certified=false;
  let cavern:Extract<ReturnType<typeof mountUndergroundCrystalCavern>,{kind:'ready'}>|undefined;
  let support:ReturnType<typeof mountR30CrystalSupport>|undefined,handle:ReturnType<typeof createUndergroundCrystalReturnSwitch>|undefined;
+ let vestibule:ReturnType<typeof mountR30CrystalVestibule>|undefined;
  let budget=0;
  function supportsWorld(p:CrystalCavernPoint){
   if(!frame)return false;
   const l=crystalLocal(frame,p),q=crystalRoutePassage(l.east,l.north);
-  return !!q&&Math.abs(q.floor-l.height)<.02;
+  return !!q&&Math.abs(q.floor-l.height)<.02&&!vestibule?.blocks(l.east,l.north,q.floor,.27,1.8);
  }
  function clear(){stage='closed';budget=0;active=false;certified=false;if(cavern){cavern.group.visible=false;cavern.sync()}handle?.update('closed')}
  function sync(){
@@ -44,9 +46,10 @@ export function createR30CrystalHost(options:Readonly<{
     readLightBudget:()=>budget,r30Art:true});
    if(result.kind!=='ready'){clear();return false}
    support=mountR30CrystalSupport(result.group);
+   vestibule=mountR30CrystalVestibule(result.group);
    handle=createUndergroundCrystalReturnSwitch({position:[r30CrystalReturnSwitch.east,r30CrystalReturnSwitch.height,-r30CrystalReturnSwitch.north],yaw:0});
    result.group.add(handle.group);
-   if(!options.installMouth()){handle.dispose();support.dispose();result.dispose();handle=undefined;support=undefined;clear();return false}
+   if(!supportsWorld(crystal)||!options.installMouth()){handle.dispose();vestibule.dispose();support.dispose();result.dispose();handle=undefined;vestibule=undefined;support=undefined;clear();return false}
    cavern=result;
   }
   certified=true;
@@ -73,13 +76,13 @@ export function createR30CrystalHost(options:Readonly<{
     (side==='mine'?options.supportsMineThreshold():supportsWorld(foot));
   },
  }:undefined;
- return {sync,stage:()=>stage,contract,get mounted(){return cavern},
+ return {sync,stage:()=>stage,contract,get mounted(){return cavern},get vestibule(){return vestibule},
   passageAt(domainId:string,east:number,north:number,posture:'standing'|'crouching'='standing'){
    if(disposed||!active||!frame||domainId!==r30CrystalDomain)return;
    const l=crystalLocal(frame,{east,north,height:frame.height});
    const q=crystalRoutePassage(l.east,l.north,.27,posture==='crouching'?1.1:1.8);
-   if(q)return {...q,floor:q.floor+frame.height};
+   if(q&&!vestibule?.blocks(l.east,l.north,q.floor,.27,posture==='crouching'?1.1:1.8))return {...q,floor:q.floor+frame.height};
   },
-  dispose(){if(disposed)return;disposed=true;clear();handle?.dispose();support?.dispose();cavern?.dispose();cavern=undefined},
+  dispose(){if(disposed)return;disposed=true;clear();handle?.dispose();vestibule?.dispose();support?.dispose();cavern?.dispose();cavern=undefined},
  } as const;
 }
