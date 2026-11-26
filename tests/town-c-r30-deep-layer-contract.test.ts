@@ -44,6 +44,12 @@ test('both actual connector meshes have continuous support, original depth and s
   }
   const ribs=r30LinkRibs(link),half=link.width/2;
   assert.equal(m.ribCount,ribs.length);assert.equal(m.parts,ribs.length*13);
+  assert.equal(m.lanternCount,Math.ceil(ribs.length/2));assert.equal(m.wayfindingCount,m.lanternCount*2);
+  const lamps=m.group.getObjectByName('depth-link-lantern-glass')!;
+  const first=r30LinkPoint(link,ribs[0],half-.045)!;
+  assert.ok(new Raycaster(new Vector3(first.east,first.height+3,-first.north),new Vector3(0,-1,0),0,1).intersectObject(lamps,true).length);
+  const clear=r30LinkPoint(link,ribs[0],half-.46)!;
+  assert.ok(m.passageAt(clear.east,clear.north));
   for(const t of ribs){
    for(const side of [-1,1]){
     const post=r30LinkPoint(link,t,side*(half-.08))!,near=r30LinkPoint(link,t,side*(half-.32))!,clear=r30LinkPoint(link,t,side*(half-.46))!;

@@ -1,4 +1,4 @@
-import {BufferGeometry,BufferAttribute,DoubleSide,Group,Mesh,MeshLambertMaterial,BoxGeometry,InstancedMesh,Matrix4,Color,Vector3,Quaternion,RepeatWrapping} from 'three';
+import {BufferGeometry,BufferAttribute,DoubleSide,Group,Mesh,MeshLambertMaterial,MeshBasicMaterial,BoxGeometry,InstancedMesh,Matrix4,Color,Vector3,Quaternion,RepeatWrapping} from 'three';
 import {makeCampGrain} from './town-c-r30-camp-art.js';
 import {r30LinkPoint,r30LinkPassage,r30LinkRibs,r30RibProfile,type R30DepthLink} from './town-c-r30-deep-layer-contract.js';
 /** Continuous enclosed sloping tunnel from the C-owned receiving-foot
@@ -73,9 +73,44 @@ export function mountR30DepthCorridor(parent:Group,link:R30DepthLink,acceptsEndp
   parts.forEach((b,i)=>{mx.compose(new Vector3(...b.pos),q,new Vector3(...b.size));batch.setMatrixAt(i,mx);batch.setColorAt(i,color.setHex(b.color))});
   batch.computeBoundingSphere();group.add(batch);resources.push(()=>{batch.dispose();map.dispose();mat.dispose()});
  }
+ // Alternating caged signal lanterns sit within the already-reserved
+ // timber/strap footprint, not in the 3.4m passage. No extra PointLight:
+ // the single player light budget remains owned by the existing host.
+ const lanternRows:{pos:readonly [number,number,number];size:readonly [number,number,number];color:number;glow:boolean}[]=[];
+ const marks:number[]=[];
+ const stations=r30LinkRibs(link).filter((_,i)=>i%2===0);
+ const amber=link.to==='minus165'?0xf9b967:0x87d5dd;
+ for(const [i,t] of stations.entries()){
+  const side=i%2===0?1:-1,l=side*(half-.045);
+  const lamp=(lat:number,y:number,w:number,h:number,d:number,col:number,glow=false,dt=0)=>lanternRows.push({pos:p(t+dt,lat,y),size:[w,h,d],color:col,glow});
+  lamp(l,2.30,.19,.07,.30,0x715843);
+  lamp(l,2.64,.19,.09,.30,0x715843);
+  lamp(l,2.47,.17,.27,.23,amber,true);
+  for(const dt of [-.125,.125])lamp(l,2.47,.19,.27,.034,0x4c4035,false,dt);
+  lamp(l,2.78,.14,.19,.09,0x806245);
+  // Paired inlaid chevrons on the actual graded surface. This identifies
+  // the connector, not a one-way rule or a new walk surface.
+  for(const sign of [-1,1]){
+   const base=t+sign*.62,tip=base+sign*.29;
+   const strip=(a:number,b:number)=>marks.push(...p(base,a,.004),...p(tip,0,.004),...p(base,b,.004));
+   strip(-.43,-.25);strip(.25,.43);
+  }
+ }
+ for(const glow of [false,true]){
+  const items=lanternRows.filter(v=>v.glow===glow);
+  const map=glow?undefined:makeCampGrain('iron');
+  const mat=glow?new MeshBasicMaterial():new MeshLambertMaterial({map});
+  const batch=new InstancedMesh(box,mat,items.length);batch.name=glow?'depth-link-lantern-glass':'depth-link-lantern-cages';
+  items.forEach((b,i)=>{mx.compose(new Vector3(...b.pos),q,new Vector3(...b.size));batch.setMatrixAt(i,mx);batch.setColorAt(i,color.setHex(b.color))});
+  batch.computeBoundingSphere();group.add(batch);resources.push(()=>{batch.dispose();mat.dispose();map?.dispose()});
+ }
+ const inlay=new BufferGeometry();inlay.setAttribute('position',new BufferAttribute(Float32Array.from(marks),3));inlay.computeVertexNormals();
+ const ink=new MeshBasicMaterial({color:link.to==='minus165'?0xa88b58:0x63959d,side:DoubleSide});
+ const wayfinding=new Mesh(inlay,ink);wayfinding.name='depth-link-inlaid-wayfinding';group.add(wayfinding);
+ resources.push(()=>{inlay.dispose();ink.dispose()});
  group.position.set(link.start.east,link.start.height,-link.start.north);
  parent.add(group);let disposed=false;
  return {kind:'ready',group,link,passageAt:(east:number,north:number,radius=.27,height=1.8)=>disposed?undefined:r30LinkPassage(link,east,north,radius,height),
-  ribCount:r30LinkRibs(link).length,parts:braces.length,
+  ribCount:r30LinkRibs(link).length,parts:braces.length,lanternCount:stations.length,wayfindingCount:stations.length*2,
   dispose(){if(disposed)return;disposed=true;group.removeFromParent();resources.forEach(f=>f());box.dispose();group.clear();}} as const;
 }
