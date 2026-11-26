@@ -32,7 +32,9 @@ test('all six supply cabin panes are real wall apertures with closed narrow glas
    assert.ok(Math.abs(hit.distance-.4725)<.002);
    const bodies=colliders.filter(b=>b.min[1]<y&&b.max[1]>y&&supportFootprintOverlaps(mid.x,-mid.z,b,.001));
    assert.equal(bodies.length,1);
-   assert.ok(Math.min(bodies[0]!.footprint!.halfX,bodies[0]!.footprint!.halfZ)<.04);
+   const body=bodies[0] as OrientedSupportBox;
+   assert.ok(body.footprint);
+   assert.ok(Math.min(body.footprint.halfX,body.footprint.halfZ)<.04);
  }
 });
 test('supply actual stairs lead up to the deck and back down with body and step rules',()=>{
