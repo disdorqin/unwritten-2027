@@ -1,5 +1,5 @@
 # 3.0-R 窗C现役交接卡
-2026-11-26，owner GPT-C / lane-c，正式工作树 D:\computer learning\game_exe\kuanian\.worktrees\window-c，DevSpace ws_c5db0ef9a4。基线 integration f8380557，C当前实际候选 ae0ac6a8、a796f96c 均已推远端。未入干，未上线。仅本卡随本线推进更新；公共任务看板由总控登记。迁移后空 node_modules 已用本窗 .npm-cache 离线按锁恢复148依赖，未新建工作树；证据仅落本窗 .evidence/c-r30-camp/，不推缓存或证据堆。
+2026-11-26，owner GPT-C / lane-c，正式工作树 D:\computer learning\game_exe\kuanian\.worktrees\window-c，DevSpace ws_c5db0ef9a4。基线 integration f8380557，C当前实际候选 ae0ac6a8、a796f96c、64be686e、9b58826b、4a1f7a41 均已推远端。未入干，未上线。仅本卡随本线推进更新；公共任务看板由总控登记。迁移后空 node_modules 已用本窗 .npm-cache 离线按锁恢复148依赖，未新建工作树；证据仅落本窗 .evidence/c-r30-camp/，不推缓存或证据堆。
 
 ## C-R01 井口契约 · 第一独立包待审
 - ae0ac6a8：town-c-r30-shaft-contract.ts、underground-domain-host.ts、对应测试。现役 host.shaftContract 输出已登记入口/返程/保护区、深层接口；不替代进入或故事授权。定向12/12、check通过。现役宿主/旧坑基线实测，B新坑尚未核；变换不符时深接缝 blocked，不创建第二域变换。
@@ -12,6 +12,21 @@
 - 验证：根check过；营地/宿主定向29/29+新增实物1/1；实际宿主Chrome D3D11六机位（入口/火池/宿舍/食堂/纪念龛/出口）0 page errors，可信W通过2.7m，入口采样35 draws/70330 tris；手动抽看入口/火池图，当前岩面已非纯色平板，仍需配对美术审；预览相机照明不代表live光照，也不是正式设备FPS。复验 node tools/verify-town-c-r30-camp.mjs，图证 .evidence/c-r30-camp/。
 - R4/R5样板先过配对B/C2视觉核收再扩展，不报全一矿完成。
 
+## C-R02 入梦及升降笼 · 两独立候选待审（续建）
+- 64be686e：真实现役 dream-chain 修复首次坠落错 trip/重复请求/25秒前落地、重复乘笼到站早于黑场取回执、同trip多个等待者及回执重试、远离绞盘仍攒进度。空笼仍调用原 lift；没有新增权威。根check及29项专项通过。当前 client chain 仍为会话内合成，不宣称多人持久化；A/总控使用现有地下 entry-store、trip-id-store、well-bridge、mine-lift/handoff 作唯一服务端接线。
+- 9b58826b：实际宿主新增井壁、木铁笼、暖灯、半沉破笼残骸与本地碰撞；只在行程可见时启用笼内真光，不新增常驻光。根check、29项宿主/行程/实物专项过（随后最终形态定向1/1）；Chrome D3D11 上中深井/残骸4机位、0错误，实景抽看后补半沉断框，复验通过；.evidence/c-r30-lift/，node tools/verify-town-c-r30-camp.mjs lift。A的viewer单写接线：每帧读取 dreamChain.presentationTrip()；有trip且未黑场/未切域，调用 undergroundDomain.mounted.shaftRide?.sample(trip,now)，把返回 eye ENY 用同一正式camera呈现（不写玩家脚点/Presence）；无trip时 hide()。保留原黑场、实际受理落地、起身、控制锁。当前原viewer仍只晃地表相机，不能报已播真实下降；回程另侧空笼召唤站尚待实际接收锚/实体；原笼往返语义不改。B配对审，A公共相机接线。
+
+## C-R04 深层世界帧与实体衔接 · 4a1f7a41 待审
+C2等帧已优先交付。C方正式放置坐标契约 town-c-r30-deep-layer-contract.ts / 宿主 deepLayerContract，仅在已登记−140匹配时给出；frame c-certified 只签发放置坐标，不等同生产宿主已注册。原二矿不变；勇士城与原地宫壳本地入口实测可站。地宫原壳 archive/2026-11-25/baseline-d 的 blob 9ab161e8691ea32662f389527ebb57f1d3fe0947，仅测试用仓内快照复核，正式原壳须总控取回/C2接入，不生产引用fixture。
+|层|世界原点 ENH|yaw|局部入口 ENH|世界入口 ENH|
+|---|---|---|---|---|
+|-140|(5.528570,149.482468,-140)|4.504772121|(0,2,0)|(7.485619,149.070211,-140)|
+|-165|(327.463270,81.666183,-165)|6.075568447|(1,0,0)|(328.441795,81.460054,-165)|
+|-190|(619.552961,20.136818,-187.6)|4.504772121|(0,.5,0)|(620.042223,20.033754,-187.6)|
+二矿出口(197.319455,109.081277,-140)，城出口(502.619232,44.769177,-165)，地宫门前(722.983045,-1.650967,-190)，可站守位前脚(742.259986,-5.711699,-190)不是离域/开门。局部(0,105.7,-2.4)是门前过渡，不能当初始入口；(0,125.8,-2.4)实际被封库挡住，改可站125.4且止于锁闭。入口台阶从−187.6下降至−190。
+- **C2接口纠正请求**：已读 C2远端805f01e2；其 town-c2-r30-layer-seams.ts 的 resolveSeam 目前 north = offset - (x*sin - z*cos)，在yaw=0把北反向。必须改用 C方 r30LayerWorld，或 north=offset + east*sin(yaw) + north*cos(yaw)；Three输入z=-localNorth时，north=offset+x*sin-z*cos。入口/出口必须使用各自local.height，不能给地宫入口统一加−2.4。复核实际group.localToWorld，不要把C2的错误旧测试作为正典。frames/feet从C方只读消费，不再手填；C2继续挂真实各层模型。C2新装饰候选尚未入干，故本包接收脚核的是已有局部城与D原壳，不能假定C2最新版所有碰撞已核。
+- 两条实体围合斜廊 town-c-r30-depth-corridor.ts：134m/120m，落差25m/22.6m，坡度19.23%/19.48%，宽3.4m，名义顶3.5m、梁下净空3.24m；两端2m水平落脚，连续岩地/侧壁/顶/稀疏木铁支架。地面网格和 r30LinkPassage 共同取样，逐0.4m射线核对，6项专项+check通过；必须由真实端点 supports 接受后 mountR30DepthCorridor，不写移动/授权，尚未在生产默认路径挂载。房间建议城 origin(318,11,-178) 195×104×22；地宫 origin(613,-30,-202) 137×74×23，层间缓坡覆盖另需A/总控登记既有域切换及安全重连，不自行启动房间。
+- B已读最新交接：其井口保护r3.8/绞盘r1.4较C最低保护更宽，中心/高程一致；尚需共同实际支持、返程实走；未完成B四包独立配对审，不能签收。B↔C配对、C2消费核验、总控串行入干；无新主干提交，未自合。
+
 ## 下一件
-C-R02：复用现有 underground-dream-chain.ts/underground-descent.ts/underground-lift-*，修首次坠落与重复下矿、空笼返程；重点查当前会话内 firstFall 状态与断线重连权威消费，不能另造持久化。先完善本窗现役叶件，A接公共移动/Presence。C-R04等C2新模型的真实域侧接口，继续−165/−190正式注册及跨层受理；不提前开放封库或核心。
-本轮已读 Muse 新文件：现役全套及 f8380557 开工令、项目脑§7、第二轮整体建模/六窗重编/接口规程、40图册、第三轮地牢酒馆、全图贯穿线。实际可用六路只读并行；未运行独立子智能体。阻塞仅B新坑边界与配对审核，不阻塞C-R02/一矿样板迭代。
+继续 C-R04：在现役host接上−140实际场景/已接受水位与独立域生命周期，C2核新帧及接收脚；向总控/A交公共移动、Presence及现有服务端entry/lift持久化接线（不另造联机或生存）。首矿至二矿49m高差原垂直脚仍需正典物理交通，不瞬移。C-R03营地样板待美术审定后扩建主巷/晶洞；B新坑对位复核与原生返程待做；不开放封库/核心。本轮已读 Muse 新文件：无新增；最新现役看板f8380557、窗B/窗C2最新交接，实际六路只读并行，未运行独立子智能体。
