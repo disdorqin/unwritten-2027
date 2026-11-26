@@ -289,7 +289,7 @@ const rail=['kengkou','freight','shankou','transfer-dock','ore-yard-dock'].inclu
 const approach={
  outerclusters:[[-12,159],[-40,159],[-37,168],[-39,175],[-62,201],[-68,220]],
  'western-clusters':[[-12,159],[-40,159],[-37,168],[-39,175],[-62,201],[-68,220],[-83,235],[-98,243]],
- 'eastern-cluster':[[-12,159],[-12,200]],
+ 'eastern-cluster':[[-12,159],[-40,159]],
  'western-shoulders':[[-12,159],[-23,159],[-23,95],[-60,55]],
  outcrop:[[-12,159],[-23,159],[-23,95],[-60,55]],
  shankou:[[296,516],[296,512]],

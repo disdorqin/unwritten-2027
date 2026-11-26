@@ -16,7 +16,7 @@ export const oreYardFootway=[[-144,105],[-132,101],[-132,100],[-123,100]] as con
 // sightseeing footways, not new story or railway authority.
 export const outerLandscapeFootways=[
  {id:'western-clusters',points:[[-170,148],[-178,141],[-181,141],[-194,140],[-200,152],[-204,166],[-204,168],[-206,181],[-205,197],[-195,205],[-188,250],[-187,251],[-144,263],[-113,258],[-98,243]],views:[{index:2,site:'outer-cluster-1'},{index:6,site:'outer-cluster-2'},{index:9,site:'outer-cluster-3'},{index:11,site:'outer-cluster-4'},{index:12,site:'outer-cluster-5'}]},
- {id:'eastern-cluster',points:[[-12,208],[-12,218]],views:[{index:1,site:'outer-cluster-8'}]},
+ {id:'eastern-cluster',points:[[-40,159],[-25,165],[-23,167],[-22,179],[-22,207],[-24,210],[-26,219],[-27,225]],views:[{index:7,site:'outer-cluster-8'}]},
  {id:'western-shoulders',points:[[-60,55],[-198,98],[-205,105],[-218,172],[-218,253],[-216,255],[-170,295]],views:[{index:2,site:'shoulder-west'},{index:5,site:'shoulder-northwest'},{index:6,site:'shoulder-north'}]},
 ] as const;
 const unit=(x:number)=>Math.max(0,Math.min(1,x));
