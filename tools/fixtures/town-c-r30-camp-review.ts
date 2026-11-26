@@ -40,6 +40,11 @@ const eyes:Record<string,{eye:readonly [number,number,number];look:readonly [num
  pocketopen:{eye:[9.1,-91,59.6],look:[18.2,-89.6,59.6]},
  shortcutclosed:{eye:[-50,-91,67.7],look:[-50,-89.8,70.05]},
  shortcutopen:{eye:[-50,-91,69],look:[-50,-90,76]},
+ annexentry:{eye:[-3.5,-91,101.1],look:[-8.2,-90,101.1]},
+ annexbunk:{eye:[-8.1,-91,102.1],look:[-11.7,-89.7,102.1]},
+ annexmap:{eye:[-8.5,-91,102.1],look:[-8.5,-89.3,99.53]},
+ annexsupply:{eye:[-8.1,-91,106.7],look:[-11.7,-89.7,106.7]},
+ annexreturn:{eye:[-8.1,-91,107.9],look:[0,-90,107.9]},
 };
 let frames=0,walked=0,rejected=0,trustedW=0,view='entry',stamp=performance.now();
 const keys=new Set<string>(),direction=new Vector3();
@@ -96,4 +101,4 @@ addEventListener('keydown',e=>{if(e.key.toLowerCase()==='w'){keys.add('w');if(e.
 addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
 if(!setView('entry'))throw Error('camp entry blocked');
 function frame(){host.mounted.sync();render.render(scene,camera);frames++;requestAnimationFrame(frame)}requestAnimationFrame(frame);
-Object.assign(window,{campR30:{setView,step,reset:()=>{frames=0;stamp=performance.now()},inspect:()=>({view,frames,walked,rejected,trustedW,calls:render.info.render.calls,tris:render.info.render.triangles,fps:frames*1000/Math.max(1,performance.now()-stamp),roofParts:camp.r30Roof.parts.length,props:camp.props.length,interlayerParts:host.interlayerLift?.parts,galleryParts:host.mounted.galleryArt?.parts.length,workbayParts:host.mounted.workbay?.parts,retiredCarts:host.mounted.workbay?.cartCount,deepStatus:host.deepHost.status()})}});
+Object.assign(window,{campR30:{setView,step,reset:()=>{frames=0;stamp=performance.now()},inspect:()=>({view,frames,walked,rejected,trustedW,calls:render.info.render.calls,tris:render.info.render.triangles,fps:frames*1000/Math.max(1,performance.now()-stamp),roofParts:camp.r30Roof.parts.length,props:camp.props.length,interlayerParts:host.interlayerLift?.parts,galleryParts:host.mounted.galleryArt?.parts.length,workbayParts:host.mounted.workbay?.parts,annexParts:host.mounted.supportAnnex?.parts.length,retiredCarts:host.mounted.workbay?.cartCount,deepStatus:host.deepHost.status()})}});

@@ -31,7 +31,7 @@ export const undergroundMineSpec: UndergroundMineSpec = {
   shoreLength: 8,
   gallery: { length: 20, drop: 1, railGauge: 1, railWidth: .08 },
   collapse: { length: 3, width: 1.2, height: 1.3 },
-  camp: { length: 10, side: 'right', extension: 5, openBackForExpansion: true, crystalGate: true, thinWalls:true },
+  camp: { length: 10, side: 'right', extension: 5, openBackForExpansion: true, crystalGate: true, thinWalls:true,supportAnnex:true },
   walker: { radius: .27, standingHeight: 1.8, crouchingHeight: 1.1, maxGrade: .2 },
 };
 

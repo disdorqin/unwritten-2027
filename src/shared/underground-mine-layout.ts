@@ -13,7 +13,7 @@ export type UndergroundMineSpec = {
   shoreLength: number;
   gallery: { length: number; drop: number; railGauge: number; railWidth: number };
   collapse: { length: number; width: number; height: number };
-  camp: { length: number; side: 'left' | 'right'; extension: number; openBackForExpansion?: boolean; crystalGate?: boolean;thinWalls?:boolean };
+  camp: { length: number; side: 'left' | 'right'; extension: number; openBackForExpansion?: boolean; crystalGate?: boolean;thinWalls?:boolean;supportAnnex?:boolean };
   walker: { radius: number; standingHeight: number; crouchingHeight: number; maxGrade: number };
 };
 
@@ -112,7 +112,7 @@ export function createUndergroundMineLayout(spec: UndergroundMineSpec) {
   const expansion = campBackOpening && createUndergroundMineExpansionShell({
     ...campBackOpening,
     layerStartZ: poolSpan.start,
-    crystalGate: camp.crystalGate,thinWalls:camp.thinWalls,
+    crystalGate: camp.crystalGate,thinWalls:camp.thinWalls,supportAnnex:camp.supportAnnex,
   });
   const workfaces=expansion ? createFirstMineWorkfaces(expansion.bounds,campFloor).filter(a=>
     expansion.queryPassage(a.x,a.z,Math.min(a.depth,a.width)/2,a.height,'open') &&
