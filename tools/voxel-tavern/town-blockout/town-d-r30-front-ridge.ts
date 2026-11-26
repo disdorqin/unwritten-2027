@@ -117,7 +117,10 @@ export function mountFrontRidgeR30(field:FrontRidgeR30Field){
      const low=smooth((110-h)/86),patch=.3+.7*smooth((Math.sin(e*.061+n*.039)+Math.cos(n*.049-e*.024)+1.1)/2.4);
      tint.lerp(moss,low*patch*.46);
      const upper=smooth((h-238)/83),sheltered=smooth((norm[1]-.54)/.42);
-     tint.lerp(snow,upper*sheltered*(.28+.60*patch));
+     // Winter drifts lie on the gentler lower valley, with a stronger
+     // alpine snowline; the steepest faces still expose fractured stone.
+     const drift=smooth((norm[1]-.83)/.15)*smooth((patch-.48)/.50)*smooth((125-h)/90);
+     tint.lerp(snow,Math.max(drift*.46,upper*sheltered*(.38+.60*patch)));
      // Expose coherent broad drainage grooves and uphill wind pockets;
      // palette is the same existing rock/snow family.
      const shade=.91+.09*(.5+.5*Math.sin(e*.088+n*.023));
