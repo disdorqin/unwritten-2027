@@ -23,6 +23,7 @@ import {mountR30ReturnBay} from './town-c-r30-return-bay.js';
 import {mountR30MainlineHost,type R30MainlineBridge} from './town-c-r30-mainline-host.js';
 import type {UndergroundMiningTargetView} from '../../../src/shared/underground-mining.js';
 import {surveyR30Ore} from './town-c-r30-ore-survey.js';
+import {mountR30ShallowGallery} from './town-c-r30-shallow-gallery.js';
 import {surveyR30Encounters} from './town-c-r30-encounter-survey.js';
 import {mountR30EncounterArt,type R30EncounterBridge} from './town-c-r30-encounter-art.js';
 import {mountR30OreArt,type R30OreBridge} from './town-c-r30-ore-art.js';
@@ -363,6 +364,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
   const returnBay=mountR30ReturnBay(mounted.group,mine.hasReturnBay,worldOf);
   let openThinWalls:ReadonlySet<string>=new Set();
   let interlayerLift:ReturnType<typeof mountR30InterlayerLift>|undefined;
+  let shallowGallery:ReturnType<typeof mountR30ShallowGallery>|undefined;
   function queryMineClearance(east:number,north:number,radius:number,bodyHeight:number){
     if (!originW || !basisXW || !basisZW) return undefined;
     const dx = east - originW.east, dn = north - originW.north;
@@ -380,9 +382,11 @@ export function mountUndergroundDomainHost(options: Readonly<{
     if(passage&&thinWalls.blocks(localX,localZ,radius))return;
     if(passage&&mounted.workbay?.blocks(localX,localZ,passage.floor,radius,bodyHeight))return;
     if(passage&&mounted.galleryArt?.blocks(localX,localZ,passage.floor,radius,bodyHeight))return;
+    if(passage&&shallowGallery?.blocks(localX,localZ,passage.floor,radius,bodyHeight))return;
     if(passage&&interlayerLift?.blocks(undergroundMineLanding.domainId,{east,north,height:passage.floor}))return;
     return passage;
   }
+  shallowGallery=mountR30ShallowGallery(mounted.group,(x,z,r,h)=>{const p=worldOf([x,-91,z]),q=queryMineClearance(p.east,p.north,r,h);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01},mine.expansion?.deepWorks===true);
   const mainline=mine.expansion?.hasRunningMainline?mountR30MainlineHost({parent,worldOf,bridge:options.mainlineBridge,
     supports:(p,r,h)=>{const q=queryMineClearance(p.east,p.north,r,h);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01}}):undefined;
   function passageAt(east:number,north:number,posture:'standing'|'crouching'='standing'){
@@ -498,9 +502,9 @@ export function mountUndergroundDomainHost(options: Readonly<{
       const opened=lower&&mounted.installUpperLiftAperture();
       interlayerLift.present(options.interlayerRide.read(),options.interlayerRide.now(),opened);
     }
-  },dispose(){encounterArt?.dispose();oreArt?.dispose();if(mainline?.kind==='ready')mainline.dispose();returnBay.dispose();thinWalls.dispose();deepAssembly.dispose();crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
+  },dispose(){shallowGallery?.dispose();encounterArt?.dispose();oreArt?.dispose();if(mainline?.kind==='ready')mainline.dispose();returnBay.dispose();thinWalls.dispose();deepAssembly.dispose();crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
   return {
-    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,deepAssembly,thinWalls,returnBay,mainline,oreSurvey,oreArt,encounterSurvey,encounterArt,
+    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,deepAssembly,thinWalls,returnBay,mainline,oreSurvey,oreArt,encounterSurvey,encounterArt,shallowGallery,
     // Layout contract only. The actual city/palace receiving shells and
     // movement/presence host must approve before mounting or allowing travel.
     deepLayerContract:shaftContract.kind==='ready'&&shaftContract.deep.kind==='registered'
