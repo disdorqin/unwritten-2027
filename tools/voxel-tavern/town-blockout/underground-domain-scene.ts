@@ -18,6 +18,7 @@ import {mountFirstMineWorkfaces} from './town-c-first-mine-workfaces.js';
 import {mountFirstMineDeepWorks} from './town-c-first-mine-deep-works.js';
 import {applyR30CampRock} from './town-c-r30-camp-art.js';
 import {mountR30LiftPresentation,mountR30LiftWreck} from './town-c-r30-lift-presentation.js';
+import {cutR30UpperLiftFloor} from './town-c-r30-upper-aperture.js';
 import {
   mountTownC2UndergroundWaterMinus90,
   type UndergroundWater90OreVisual,
@@ -150,6 +151,8 @@ export function mountUndergroundMineDomain(host: Host) {
   };
   const geometries: BufferGeometry[] = [];
   let waterMesh: Mesh | undefined;
+  let rockMesh:Mesh|undefined;
+  let upperLiftAperture=false;
   let campRock:ReturnType<typeof applyR30CampRock>|undefined;
   for (const surface of ['rock', 'rail', 'water'] as const) {
     const vertices = mine.mesh[surface];
@@ -172,6 +175,7 @@ export function mountUndergroundMineDomain(host: Host) {
     mesh.name = 'underground-mine-' + surface;
     root.add(mesh);
     if (surface === 'water') waterMesh = mesh;
+    if(surface==='rock')rockMesh=mesh;
   }
 
   let staticCamp: ReturnType<typeof createUndergroundCampRemains> | undefined;
@@ -258,6 +262,24 @@ export function mountUndergroundMineDomain(host: Host) {
     deepWorks,
     wreck,
     shaftRide,
+    /** Called only after the C-owned actual seam and C2 ceiling are certified.
+     * The composed host must keep the physical hatch closed outside a ride. */
+    installUpperLiftAperture(){
+      if(disposed||!rockMesh)return false;
+      if(upperLiftAperture)return true;
+      const cut=cutR30UpperLiftFloor(mine.mesh.rock);
+      if(cut.kind!=='ready')return false;
+      const previous=rockMesh.geometry;
+      const g=new BufferGeometry();
+      g.setAttribute('position',new BufferAttribute(cut.vertices,3));g.computeVertexNormals();
+      const campStart=mine.route.at(-2)?.from[2];
+      const next=campStart!==undefined?applyR30CampRock(g,materials.rock,campStart,campStart+campSpec.length):undefined;
+      const index=geometries.indexOf(previous);if(index>=0)geometries[index]=g;else geometries.push(g);
+      rockMesh.geometry=g;rockMesh.material=next?.materials??materials.rock;
+      previous.dispose();campRock?.dispose();campRock=next;
+      upperLiftAperture=true;return true;
+    },
+    hasUpperLiftAperture:()=>upperLiftAperture,
     pumpHouse: pumpHouse?.kind === 'ready' ? pumpHouse : undefined,
     pumpHouseStatus: pumpHouse?.kind ?? 'unregistered',
     expedition,

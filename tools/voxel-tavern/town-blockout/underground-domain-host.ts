@@ -147,8 +147,9 @@ export function mountUndergroundDomainHost(options: Readonly<{
   parent: Group; road: Road; campBridge?: UndergroundCampBridge;
   /** Accepted movement/Presence foot only, never inferred from camera height. */
   readAcceptedDomainFoot?:()=> (Point&Readonly<{domainId:string}>)|undefined;
-  /** Only the existing transport host can certify both physical openings. */
-  interlayerRide?:Readonly<{read:()=>R30InterlayerRide|undefined;now:()=>number;openingsCertified:()=>boolean}>;
+  /** C2 certifies its actual roof opening; C certifies the upper mesh cut.
+   * The existing transport authority supplies the accepted trip and clock. */
+  interlayerRide?:Readonly<{read:()=>R30InterlayerRide|undefined;now:()=>number;lowerOpeningCertified:()=>boolean}>;
   /** Production water loop (batch 103, interface aligned to C2's fix
    * round): the mine presence room relays the single presence-side
    * tonight() snapshot; the host forwards the raw snapshot reader
@@ -390,7 +391,11 @@ export function mountUndergroundDomainHost(options: Readonly<{
   // entry point and lifecycle, even before A supplies accepted domain feet.
   const composed={...mounted,sync(){mounted.sync();deepHost.sync();
     interlayerLift?.showDomain(deepHost.status()==='ready'?'underground/mine-2':undefined);
-    if(options.interlayerRide)interlayerLift?.present(options.interlayerRide.read(),options.interlayerRide.now(),options.interlayerRide.openingsCertified());
+    if(options.interlayerRide&&interlayerLift){
+      const lower=options.interlayerRide.lowerOpeningCertified();
+      const opened=lower&&mounted.installUpperLiftAperture();
+      interlayerLift.present(options.interlayerRide.read(),options.interlayerRide.now(),opened);
+    }
   },dispose(){interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
   return {
     kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,

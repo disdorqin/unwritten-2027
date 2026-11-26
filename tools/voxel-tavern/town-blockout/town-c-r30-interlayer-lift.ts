@@ -92,7 +92,7 @@ function stationParts(isUpper:boolean){
  for(let i=0;i<9;i++)put('iron',-.96+i*.24,.65,closedZ,.05,1.25,.05,0x47494c);
  // A flush closed plate preserves the existing floor until both openings
  // and the accepted transport are installed.
- for(let i=0;i<7;i++)put('iron',(i-3)*.29,.006,0,.28,.012,2.06,i%2?0x4e4e4c:0x6b635a);
+ if(!isUpper)for(let i=0;i<7;i++)put('iron',(i-3)*.29,.006,0,.28,.012,2.06,i%2?0x4e4e4c:0x6b635a);
  for(const x of [-1.12,1.12]){
   put('glow',x,1.9,closedZ,.13,.16,.1,0xd8a15b);
   put('iron',x,1.70,closedZ,.24,.15,.18,0x80563d);
@@ -112,6 +112,14 @@ export function mountR30InterlayerLift(parent:Group){
  root.rotation.y=-parent.rotation.y;root.position.copy(parent.position).negate().applyAxisAngle(new Vector3(0,1,0),-parent.rotation.y);parent.add(root);
  const worldRoot=new Group();worldRoot.position.set(top.east,top.height,-top.north);worldRoot.rotation.y=yaw;root.add(worldRoot);
  const a=batch(worldRoot,'r30-lift-upper-station',stationParts(true));
+ const hatch=batch(a.group,'r30-upper-sealed-floor',[
+  {family:'iron',at:[0,-.025,0],size:[2.201,.05,2.201],color:0x5a5349},
+  ...Array.from({length:7},(_,i):Part=>({family:'iron',at:[(i-3)*.311,.006,0],size:[.30,.012,2.19],color:i%2?0x4e4e4c:0x6b635a}))
+ ]);
+ const guard=batch(a.group,'r30-upper-shaft-safety-gate',[
+  {family:'iron',at:[0,1.08,1.18],size:[2.28,.12,.09],color:0x80563d},
+  ...Array.from({length:9},(_,i):Part=>({family:'iron',at:[-.96+i*.24,.65,1.18],size:[.06,1.25,.06],color:0x47494c}))
+ ]);guard.group.visible=false;
  const b=batch(worldRoot,'r30-lift-lower-station',stationParts(false));b.group.position.y=-r30InterlayerLiftSite.depth;b.group.visible=false;
  const boreRows:Part[]=[];
  for(let d=.8;d<r30InterlayerLiftSite.depth-.5;d+=1.6){
@@ -133,24 +141,27 @@ export function mountR30InterlayerLift(parent:Group){
  for(let i=0;i<7;i++)cabinRows.push({family:'wood',at:[(i-3)*.24,2.24,0],size:[.23,.095,1.78],color:0x604735});
  cabinRows.push({family:'iron',at:[0,2.42,0],size:[.11,.28,.11],color:0x947346},{family:'glow',at:[.74,1.87,.74],size:[.14,.17,.14],color:0xe5a45d});
  const cabin=batch(worldRoot,'r30-lift-traveling-cage',cabinRows);cabin.group.visible=false;
- let disposed=false;
- return {root,upper:a.group,lower:b.group,bore:bore.group,cage:cabin.group,parts:a.count+b.count+bore.count+cabin.count,
+ let disposed=false,hatchOpen=false;
+ return {root,upper:a.group,lower:b.group,bore:bore.group,cage:cabin.group,hatch:hatch.group,guard:guard.group,parts:a.count+b.count+bore.count+cabin.count+hatch.count+guard.count,
   showDomain(domain:string|undefined){if(disposed)return;a.group.visible=domain!==lower;b.group.visible=domain===lower},
   blocks(domain:string,p:R30Point,radius=.27){
    if(disposed||![p.east,p.north,p.height,radius].every(Number.isFinite)||radius<=0)return false;
    if(domain!==upper&&domain!==lower)return false;
    const target=domain===upper?top:bottom;if(Math.abs(p.height-target.height)>.6)return false;
    const {x,z}=localAt(p),closed=domain===upper?-1.12:1.12;
+   if(domain===upper&&hatchOpen&&Math.abs(x)<1.1+radius&&Math.abs(z)<1.23+radius)return true;
    return (Math.abs(z)<1.31+radius&&Math.abs(Math.abs(x)-1.2)<.17+radius)||
     (Math.abs(x)<1.14+radius&&Math.abs(z-closed)<.06+radius);
   },
   present(ride:R30InterlayerRide|undefined,now:number,openingsCertified:boolean){
    if(disposed)return;
    const cue=openingsCertified&&ride?sampleR30InterlayerRide(ride,now):undefined;
-   bore.group.visible=cabin.group.visible=!!cue&&!cue.arrived;
+   hatchOpen=!!cue&&!cue.arrived;
+   hatch.group.visible=!hatchOpen;guard.group.visible=hatchOpen;
+   bore.group.visible=cabin.group.visible=hatchOpen;
    if(cue)cabin.group.position.y=cue.height-top.height;
    return cue;
   },
-  dispose(){if(disposed)return;disposed=true;a.dispose();b.dispose();bore.dispose();cabin.dispose();root.removeFromParent()},
+  dispose(){if(disposed)return;disposed=true;hatch.dispose();guard.dispose();a.dispose();b.dispose();bore.dispose();cabin.dispose();root.removeFromParent()},
  } as const;
 }
