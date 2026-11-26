@@ -45,6 +45,9 @@ const eyes:Record<string,{eye:readonly [number,number,number];look:readonly [num
  annexmap:{eye:[-8.5,-91,102.1],look:[-8.5,-89.3,99.53]},
  annexsupply:{eye:[-8.1,-91,106.7],look:[-11.7,-89.7,106.7]},
  annexreturn:{eye:[-8.1,-91,107.9],look:[0,-90,107.9]},
+ returnapproach:{eye:[0,-90.19,15.8],look:[-4.7,-89.05,15.8]},
+ returnstand:{eye:[-2.8,-90.19,15.8],look:[-4.7,-89.05,15.8]},
+ returnbell:{eye:[-3,-90.206,16.12],look:[-3,-88.95,16.95]},
 };
 let frames=0,walked=0,rejected=0,trustedW=0,view='entry',stamp=performance.now();
 const keys=new Set<string>(),direction=new Vector3();
@@ -101,4 +104,4 @@ addEventListener('keydown',e=>{if(e.key.toLowerCase()==='w'){keys.add('w');if(e.
 addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
 if(!setView('entry'))throw Error('camp entry blocked');
 function frame(){host.mounted.sync();render.render(scene,camera);frames++;requestAnimationFrame(frame)}requestAnimationFrame(frame);
-Object.assign(window,{campR30:{setView,step,reset:()=>{frames=0;stamp=performance.now()},inspect:()=>({view,frames,walked,rejected,trustedW,calls:render.info.render.calls,tris:render.info.render.triangles,fps:frames*1000/Math.max(1,performance.now()-stamp),roofParts:camp.r30Roof.parts.length,props:camp.props.length,interlayerParts:host.interlayerLift?.parts,galleryParts:host.mounted.galleryArt?.parts.length,workbayParts:host.mounted.workbay?.parts,annexParts:host.mounted.supportAnnex?.parts.length,retiredCarts:host.mounted.workbay?.cartCount,deepStatus:host.deepHost.status()})}});
+Object.assign(window,{campR30:{setView,step,reset:()=>{frames=0;stamp=performance.now()},inspect:()=>({view,frames,walked,rejected,trustedW,calls:render.info.render.calls,tris:render.info.render.triangles,fps:frames*1000/Math.max(1,performance.now()-stamp),roofParts:camp.r30Roof.parts.length,props:camp.props.length,interlayerParts:host.interlayerLift?.parts,galleryParts:host.mounted.galleryArt?.parts.length,workbayParts:host.mounted.workbay?.parts,annexParts:host.mounted.supportAnnex?.parts.length,returnBayParts:host.returnBay.parts.length,retiredCarts:host.mounted.workbay?.cartCount,deepStatus:host.deepHost.status()})}});

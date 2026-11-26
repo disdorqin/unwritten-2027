@@ -19,6 +19,7 @@ import {createR30CrystalHost,type R30CrystalBridge} from './town-c-r30-crystal-h
 import {makeR30CrystalFrame} from './town-c-r30-crystal-support.js';
 import {createR30DeepAssembly,type R30DeepAssemblyBridge,r30LinkDomain} from './town-c-r30-deep-assembly.js';
 import {mountR30ThinWallArt} from './town-c-r30-thin-wall-art.js';
+import {mountR30ReturnBay} from './town-c-r30-return-bay.js';
 import type {UndergroundMiningTargetView} from '../../../src/shared/underground-mining.js';
 
 type Road = ReturnType<typeof mountWestCraterRoad>;
@@ -31,7 +32,7 @@ export const undergroundMineSpec: UndergroundMineSpec = {
   shoreLength: 8,
   gallery: { length: 20, drop: 1, railGauge: 1, railWidth: .08 },
   collapse: { length: 3, width: 1.2, height: 1.3 },
-  camp: { length: 10, side: 'right', extension: 5, openBackForExpansion: true, crystalGate: true, thinWalls:true,supportAnnex:true },
+  camp: { length: 10, side: 'right', extension: 5, openBackForExpansion: true, crystalGate: true, thinWalls:true,supportAnnex:true,returnBay:true },
   walker: { radius: .27, standingHeight: 1.8, crouchingHeight: 1.1, maxGrade: .2 },
 };
 
@@ -351,6 +352,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
   const basisXW = mounted.toWorld([1, 0, 0]);
   const basisZW = mounted.toWorld([0, 0, 1]);
   const thinWalls=mountR30ThinWallArt(mounted.group,worldOf,mine.expansion?.hasThinWalls===true);
+  const returnBay=mountR30ReturnBay(mounted.group,mine.hasReturnBay,worldOf);
   let openThinWalls:ReadonlySet<string>=new Set();
   let interlayerLift:ReturnType<typeof mountR30InterlayerLift>|undefined;
   function passageAt(east: number, north: number, posture:'standing'|'crouching'='standing') {
@@ -476,9 +478,9 @@ export function mountUndergroundDomainHost(options: Readonly<{
       const opened=lower&&mounted.installUpperLiftAperture();
       interlayerLift.present(options.interlayerRide.read(),options.interlayerRide.now(),opened);
     }
-  },dispose(){thinWalls.dispose();deepAssembly.dispose();crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
+  },dispose(){returnBay.dispose();thinWalls.dispose();deepAssembly.dispose();crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
   return {
-    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,deepAssembly,thinWalls,
+    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,deepAssembly,thinWalls,returnBay,
     // Layout contract only. The actual city/palace receiving shells and
     // movement/presence host must approve before mounting or allowing travel.
     deepLayerContract:shaftContract.kind==='ready'&&shaftContract.deep.kind==='registered'
