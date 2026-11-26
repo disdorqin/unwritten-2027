@@ -31,6 +31,10 @@ const hostResult=mountUndergroundDomainHost({parent:root,road,waterBridge:{readW
 if(hostResult.kind!=='ready')throw Error(hostResult.reason);
 const host=hostResult;
 const camp=host.mounted.camp!;
+import {mountR30ReturnRelocationCandidate,r30ReturnRelocationCandidate as returnPlan} from '../voxel-tavern/town-blockout/town-c-r30-return-relocation-candidate.js';
+const relocationRoot=new Group();relocationRoot.visible=false;scene.add(relocationRoot);
+relocationRoot.position.copy(host.mounted.group.position);relocationRoot.quaternion.copy(host.mounted.group.quaternion);
+let relocation:ReturnType<typeof mountR30ReturnRelocationCandidate>|undefined;
 const camera=new PerspectiveCamera(70,innerWidth/innerHeight,.05,65);
 const torch=new PointLight(0xffd1a0,35,16,2);camera.add(torch);scene.add(camera);
 const render=new WebGLRenderer({antialias:false,powerPreference:'low-power'});render.setSize(innerWidth,innerHeight);document.body.append(render.domElement);
@@ -86,6 +90,20 @@ const eyes:Record<string,{eye:readonly [number,number,number];look:readonly [num
 let frames=0,walked=0,rejected=0,trustedW=0,view='entry',stamp=performance.now();
 const keys=new Set<string>(),direction=new Vector3();
 function setView(name:string){
+ root.visible=true;relocationRoot.visible=false;
+ if(name.startsWith('returnreloc-')){
+  relocation??=mountR30ReturnRelocationCandidate(relocationRoot);
+  root.visible=false;relocationRoot.visible=true;
+  const [x,y,z]=returnPlan.dock,turn=x+3;
+  const views:Record<string,{eye:[number,number];look:[number,number,number]}>={
+   'returnreloc-join':{eye:[-4.7,15.8],look:[turn,-89,15.8]},
+   'returnreloc-corridor':{eye:[turn,12],look:[turn,-89,4]},
+   'returnreloc-dock':{eye:[turn,z],look:[x,y+1,z]},
+  };
+  const v=views[name];if(!v)return false;
+  const p=relocation.passageAt(...v.eye);if(!p)return false;
+  camera.position.copy(vec([v.eye[0],p.floor+1.67,v.eye[1]]));camera.lookAt(vec(v.look));torch.intensity=22;view=name;return true;
+ }
  oreReview=[];oreCores=[];creatureReview=[];
  tutorialCartReview=undefined;reviewPickaxeClaimed=false;reviewCampFoot=interlayerSite.upper.foot;
  if(name.startsWith('tutorial-cart-')){
