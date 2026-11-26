@@ -66,7 +66,8 @@ function setView(name:string){
   const spawns=s.buildSpawns(g=>'review-room/'+g.id)!;
   const authority=createMineBestiaryEncounter(spawns,{hasSpawnSite:()=>true,moveAllowed:()=>false,seesPlayer:()=>false,hearsMining:()=>false,insideCampfire:()=>false});
   creatureReview=authority.snapshot();
-  const role=name.slice(9),g=s.groups.find(x=>x.id===role);if(!g)return false;
+  const action=name.endsWith('-action'),role=name.slice(9,action?-7:undefined),g=s.groups.find(x=>x.id===role);if(!g)return false;
+  if(action)creatureReview=creatureReview.map(a=>g.members.some(m=>m.id===a.id)?{...a,phase:g.species==='snow-clump'?'rebuild':g.species==='rock-snake'?'peek':'windup'}:a);
   const p=g.center,local=host.toLocal(p);if(!local)return false;
   const candidates=[[local[0],local[2]+2.2],[local[0]+2.2,local[2]],[local[0]-2.2,local[2]],[local[0],local[2]-2.2]];
   const eye=candidates.map(([x,z])=>host.mounted.toWorld([x,local[1],z])).find(q=>q&&host.passageAt(q.east,q.north));

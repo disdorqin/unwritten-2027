@@ -90,22 +90,47 @@ export function createR30MineCreatureFactory(){
    b('rock',0,.012,-.302,.19,.022,.023,0x343c3c,0,true);
   }
   head.position.y=headY;
-  const instances:InstancedMesh[]=[];
+  const instances:InstancedMesh[]=[],rigs:{mesh:InstancedMesh;rows:Part[];head:boolean}[]=[];
   for(const onHead of [false,true])for(const [i,f] of families.entries()){
    for(const eye of [false,true]){
     const rows=parts.filter(p=>p.head===onHead&&p.family===f&&p.eye===eye);if(!rows.length)continue;
     const mesh=new InstancedMesh(geo,eye?phosphor:materials[i].mat,rows.length),m=new Matrix4(),q=new Quaternion(),c=new Color();
     rows.forEach((p,k)=>{m.compose(new Vector3(...p.p),q.setFromAxisAngle(new Vector3(0,0,1),p.angle),new Vector3(...p.s));mesh.setMatrixAt(k,m);mesh.setColorAt(k,c.setHex(p.color))});
-    mesh.computeBoundingSphere();(onHead?head:body).add(mesh);instances.push(mesh);
+    mesh.computeBoundingSphere();(onHead?head:body).add(mesh);instances.push(mesh);rigs.push({mesh,rows,head:onHead});
    }
   }
-  function pose(phase:string,hits:number){
+  let poseKey='';
+  function pose(phase:string,hits:number,travel=0){
    root.visible=phase!=='defeated';
-   body.scale.set(1,1,1);head.position.y=headY;head.rotation.set(0,0,0);body.rotation.set(0,0,0);
-   if(species==='snow-clump'&&phase==='rebuild'){body.scale.set(1.12,.26,1.12);head.position.y=.12;head.rotation.z=.18}
+   const key=phase+'/'+hits+'/'+travel;if(key===poseKey)return;poseKey=key;
+   body.position.set(0,0,0);body.scale.set(1,1,1);head.position.y=headY;head.rotation.set(0,0,0);body.rotation.set(0,0,0);
+   const moving=['chase','retreat','orbit'].includes(phase);
+   if(species==='snow-clump'){
+    if(phase==='rebuild'){body.scale.set(1.12,.26,1.12);head.position.y=.12;head.rotation.z=.18}
+    else if(moving){body.rotation.x=-travel/.25;const c=new Vector3(0,.24,0);body.position.copy(c.clone().sub(c.applyQuaternion(body.quaternion)));head.rotation.z=.08*Math.sin(travel*7)}
+   }
    if(species==='skeleton-miner'&&hits===1){head.rotation.z=.17;body.rotation.z=-.07}
    if(species==='zombie-miner'){body.rotation.x=phase==='windup'?-.15:hits===1?.12:.05;head.rotation.z=hits<3?.13:0}
    if(species==='rock-snake'&&['peek','windup','chase'].includes(phase)){head.position.y=.43;head.rotation.x=.24}
+   // Drive limbs from accepted displacement and accepted action phase.
+   // This does not integrate movement or create any client attack/contact.
+   const stride=moving?Math.sin(travel*7)*.34:0;
+   const m=new Matrix4(),q=new Quaternion(),rot=new Quaternion(),p0=new Vector3(),pivot=new Vector3(),axis=new Vector3(1,0,0),zaxis=new Vector3(0,0,1);
+   for(const rig of rigs){
+    if(rig.head)continue;
+    for(const [i,p] of rig.rows.entries()){
+     p0.set(...p.p);q.setFromAxisAngle(zaxis,p.angle);
+     if(species==='skeleton-miner'||species==='zombie-miner'){
+      const [x,y]=p.p,sign=Math.sign(x),arm=Math.abs(x)>.22&&(y>.83||species==='skeleton-miner'&&Math.abs(x)>.285),leg=!arm&&y<.71&&Math.abs(x)>.07;
+      let angle=0;
+      if(arm){pivot.set(x,1.24,0);angle=phase==='windup'?(species==='skeleton-miner'&&x>0?1.35:species==='zombie-miner'?-.50:0):phase==='recover'?.28:-stride*sign*.70}
+      else if(leg){pivot.set(x,.75,0);angle=stride*sign}
+      if(angle){rot.setFromAxisAngle(axis,angle);p0.sub(pivot).applyQuaternion(rot).add(pivot);q.premultiply(rot)}
+     }else if(species==='rock-snake'&&moving){p0.x+=.065*Math.sin(p.p[2]*7-travel*8)}
+     m.compose(p0,q,new Vector3(...p.s));rig.mesh.setMatrixAt(i,m);
+    }
+    rig.mesh.instanceMatrix.needsUpdate=true;rig.mesh.computeBoundingSphere();
+   }
   }
   return {group:root,parts:parts.length,pose,dispose(){root.removeFromParent();instances.forEach(m=>m.dispose());root.clear()}};
  }

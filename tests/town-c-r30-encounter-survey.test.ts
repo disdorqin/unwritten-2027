@@ -33,11 +33,11 @@ test('sixteen actual groups and 28 renderable actors use existing bestiary autho
   let tick=0;
   const frame=(target:typeof snow,tool:'pickaxe'|'snowball')=>authority.advance({tick:tick++,mode:'survival',section:'mine',player:{room:target.room,at:target.at,action:'quiet',health:100,maxHealth:100},contact:{target:target.id,tool}});
   assert.equal(frame(snow,'pickaxe').hit,'wrong-tool');sync();assert.ok(art.models.get(snow.id)!.group.visible);
-  assert.equal(frame(snow,'snowball').hit,'defeated');sync();assert.equal(art.models.get(snow.id)!.group.visible,false);
+  assert.equal(frame(snow,'snowball').hit,'defeated');sync();assert.equal(art.models.get(snow.id)!.group.visible,false);assert.equal(art.fragments.mesh.count,8);sync();assert.equal(art.fragments.mesh.count,8);
   assert.equal(frame(skel,'pickaxe').hit,'damaged');sync();assert.equal(art.accepted().find(a=>a.id===skel.id)?.remainingHits,1);
   assert.equal(frame(skel,'pickaxe').hit,'defeated');sync();assert.equal(art.models.get(skel.id)!.group.visible,false);
   actors=actors.map(a=>({...a,room:'forged-room'}));h.mounted.sync();assert.equal(art.accepted().length,0);
-  sync();approved=false;h.mounted.sync();assert.ok([...art.models.values()].every(m=>!m.group.visible));
+  sync();approved=false;h.mounted.sync();assert.ok([...art.models.values()].every(m=>!m.group.visible));assert.equal(art.fragments.mesh.count,0);
  }finally{h.mounted.dispose()}
  assert.equal(parent.children.length,0);
 });
