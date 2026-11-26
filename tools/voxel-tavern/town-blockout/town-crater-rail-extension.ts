@@ -130,6 +130,8 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
   const colliders:OrientedSupportBox[]=[],floors:OrientedSupportBox[]=[];
   const stationWalkRoutes:{id:string;points:{east:number;north:number;height:number}[]}[]=[];
   const benchSeats:{id:string;east:number;north:number;height:number;useEast:number;useNorth:number;yaw:number}[]=[];
+  const shankouArrival={east:296,north:520,height:groundAt(296,520)};
+  const timetableReads:{east:number;north:number;height:number;title:string;description:string}[]=[];
   function push(mat: MeshStandardMaterial, g: BufferGeometry) {
     const batch = batches.get(mat) ?? [];
     batch.push(g);
@@ -430,14 +432,33 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
 
   // ---------- Shankou station (platform on the north side, at the pass node's foot) ----------
   shelter(296, 502, groundAt(296, 502), shankouY, 0, '山口站');
+  // A real, open arrival lane from the north. Four low wooden waymarkers
+  // sit beside the walking channel; each uses the actual carrier height.
+  for(const n of [513,518])for(const side of [-1,1]){
+    const e=296+side*1.8,g=groundAt(e,n);
+    box(stone,e,g+.08,n,.36,.28,.36);
+    box(timber,e,g+.49,n,.14,.78,.14);
+    box(snow,e,g+.92,n,.23,.09,.23);
+    colliders.push(orientedSupportBox(e,n,0,.36,.36,g-.06,g+.22));
+    colliders.push(orientedSupportBox(e,n,0,.14,.14,g+.10,g+.88));
+  }
   {
     // Timetable board: text landed per 《文本-山口站时刻牌-2026-11-21》
     // (two chalk columns; the northbound column keeps three blank cells —
     // blank is content, the branch has only just opened).
     const bx = 308, bn = 506;
     const g = groundAt(bx, bn);
-    for (const s of [-1, 1]) box(timber, bx + s * .8, g + 1.1, bn, .12, 2.2, .12);
-    sign(bx, g + 2.2, bn, 0, 2, 1.15, (c, w, h) => {
+    for(const s of [-1,1]){
+      const e=bx+s*.8,h=groundAt(e,bn);
+      box(stone,e,h+.07,bn,.35,.26,.35);
+      box(timber,e,(h+g+2.2)/2,bn,.14,g+2.2-h,.14);
+      colliders.push(orientedSupportBox(e,bn,0,.35,.35,h-.06,h+.2));
+      colliders.push(orientedSupportBox(e,bn,0,.14,.14,h,g+2.2));
+    }
+    // Face the north arrival shoulder rather than the track.
+    colliders.push(orientedSupportBox(bx,bn,0,2.18,.07,g+1.545,g+2.855));
+    timetableReads.push({east:bx,north:bn+2.1,height:groundAt(bx,bn+2.1),title:'山口站时刻牌',description:'环镇线：晨一班、午一班、暮一班、夜一班。北行 · 往坑口：晨一班，其余三格尚未填写。此为站牌记载，北延支线实际乘车服务尚未接通。'});
+    sign(bx, g + 2.2, bn, Math.PI, 2, 1.15, (c, w, h) => {
       c.fillStyle = '#35312b'; c.fillRect(0, 0, w, h);
       // Column heads + grid: header rule, vertical divider, four row rules.
       const gridTop = h * .26, gridBottom = h * .78;
@@ -681,5 +702,5 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
   };
   group.userData.colliders=colliders;
   group.userData.floors=floors;
-  return { group, alignment, samples: main.samples, narrowSamples: narrow.samples, stationWalkRoutes,benchSeats };
+  return { group, alignment, samples: main.samples, narrowSamples: narrow.samples, stationWalkRoutes,benchSeats,shankouArrival,timetableReads };
 }

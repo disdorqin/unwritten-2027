@@ -1311,6 +1311,7 @@ const points = new Map<string, number[]>([
   // 不取近似点）。旧点 (300,665) 离走廊线 43.8 m 且镇域无合法落脚点，
   // settleTownLanding 只能回落广场出生点（2026-11-21 live 实证）。
   ['山口', [290, 300]],
+  ['山口站', [railExtension.shankouArrival.east,railExtension.shankouArrival.north]],
 ]);
 const plotLabels = ['钟楼', '酒馆', '邮局', '纪念馆入口', '长殿', '木屋入口', '灯坊', '集市摊位', '暖房', '灯塔', '舞台', '镇公所'];
 layout.plots.forEach((plot, i) => {
@@ -1704,6 +1705,11 @@ for(const bench of railExtension.benchSeats)activitySpots.push({
   x:bench.useEast,n:bench.useNorth,ground:bench.height,range:1.05,label:'在站台长椅就座',
   available:()=>!homeReturn&&canStandAtActivity(bench.useEast,bench.useNorth,bench.height),
   run:()=>activityContext.sit({x:bench.east,n:bench.north,eyeY:bench.height+1.48,yaw:bench.yaw}),
+});
+for(const board of railExtension.timetableReads)activitySpots.push({
+  x:board.east,n:board.north,ground:board.height,range:1.3,label:'查看山口站时刻牌',
+  available:()=>!homeReturn&&canStandAtActivity(board.east,board.north,board.height),
+  run:()=>openPlace(board.title,board.description),
 });
 for(const bench of ensureWestCraterRoad().outerWorks.gatehouseSeats)activitySpots.push({
   x:bench.useEast,n:bench.useNorth,ground:bench.height,range:.95,label:'在门房长椅就座',
@@ -2908,7 +2914,7 @@ function landAtSelectedDestination() {
     '爆竹摊': [firecrackerStand.x, firecrackerStand.n],
     '东侧扩建步道': [456, 222], '北侧森林街区': [104, 415],
     '火车站': [526, 312], '环镇列车站': [478, 224],
-    '温泉浴场': [524, 158], '冰雪城堡': [460, 72], '山口': [526, 329],
+    '温泉浴场': [524, 158], '冰雪城堡': [460, 72], '山口': [526, 329], '山口站':[296,502],
     '雪团练习场': snowPracticeTarget, '南河岸': [303, 120], '北河岸': [246, 400],
   };
   const [east, north] = target?.door ?? destinations[selector.value] ?? [226, 223];
