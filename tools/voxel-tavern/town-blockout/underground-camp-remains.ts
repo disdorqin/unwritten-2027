@@ -3,6 +3,7 @@ import {
   Object3D, PlaneGeometry, SRGBColorSpace,
 } from 'three';
 import { undergroundCampDiningTables } from '../../../src/shared/underground-camp-pickaxe';
+import {makeCampGrain,mountR30CampRoof,mountR30CampHearthGlow} from './town-c-r30-camp-art.js';
 
 type Point = readonly [x: number, y: number, z: number];
 type Span = { from: Point; to: Point; zone: string };
@@ -281,6 +282,19 @@ export function createUndergroundCampRemains({ mine, camp, walker }: Options) {
     return { id, position: at(x, .166, z - .03), hasSpentLamp, lit: false };
   });
 
+  // A small stone hearth sits beside (not on) the certified standing fire
+  // anchor. This is only the physical hearth; healing remains U-13's job.
+  const hearthX=extension/2,hearthZ=3.7; // artStart is centred in the ten-metre camp section
+  solid('recovery/hearth',hearthX,0,hearthZ,1.02,.46,1.02);
+  box('recovery/hearth/base','#343940',hearthX,.004,hearthZ,1.01,.12,1.01);
+  for(let row=0;row<2;row++)for(let j=0;j<3;j++){
+    const off=(j-1)*.32;
+    for(const d of [-1,1]){
+      box('recovery/hearth/stone',row?'#505258':'#41454a',hearthX+off,.13+row*.15,hearthZ+d*.413,.305,.142,.17);
+      if(j===1)box('recovery/hearth/side',row?'#575958':'#3b4146',hearthX+d*.416,.135+row*.15,hearthZ,.165,.135,.638);
+    }
+  }
+  for(let i=0;i<3;i++)box('recovery/hearth/charred-log','#70543e',hearthX+(i-1)*.19,.132+i*.014,hearthZ,.15,.13,.55);
   /** The floor and roof are owned by mine; block any intervening solid prop in the standing footprint. */
   function queryPassage(x: number, z: number, playerRadius: number, bodyHeight: number) {
     if (![x, z, playerRadius, bodyHeight].every(Number.isFinite) || playerRadius < 0 || bodyHeight <= 0) return;
@@ -338,7 +352,9 @@ export function createUndergroundCampRemains({ mine, camp, walker }: Options) {
   ].map(({ id, foot: [x, y, z] }) =>
     lightMount({ id, position: [x, y + 2.35, z], radius: 4, tone: 'cool' } as const));
   const geometry = new BoxGeometry();
-  const material = new MeshLambertMaterial();
+  // Pixel wear on the original furnishings; geometry, anchors and collider IDs stay unchanged.
+  const furnishingGrain=makeCampGrain('neutral');
+  const material = new MeshLambertMaterial({map:furnishingGrain});
   const batch = new InstancedMesh(geometry, material, props.length);
   batch.name = 'camp-voxel-furnishings';
   const transform = new Object3D();
@@ -355,6 +371,8 @@ export function createUndergroundCampRemains({ mine, camp, walker }: Options) {
   batch.computeBoundingBox();
   batch.computeBoundingSphere();
   group.add(batch);
+  const r30Roof=mountR30CampRoof(group,{floor,start,length,extension,side});
+  const r30Hearth=mountR30CampHearthGlow(group,at(hearthX,0,hearthZ));
 
   const textMeshes = signs.flatMap(({ text, position, size, rotation, color }) => {
     if (typeof document === 'undefined') return [];
@@ -381,7 +399,7 @@ export function createUndergroundCampRemains({ mine, camp, walker }: Options) {
 
   let disposed = false;
   return {
-    group, props, colliders, rooms, route, recovery, queryPassage,
+    group, props, colliders, rooms, route, recovery, queryPassage, r30Roof, r30Hearth,
     lighting: { offeringAnchors, guideAnchors },
     dining: { tables, bowl: leftBowl, stoveLit: false, sign: undergroundCampInscriptions.canteen },
     memorial: { position: at(monumentX, 1.361, 9.572), approach: memorialApproach,
@@ -395,6 +413,9 @@ export function createUndergroundCampRemains({ mine, camp, walker }: Options) {
       batch.dispose();
       geometry.dispose();
       material.dispose();
+      furnishingGrain.dispose();
+      r30Roof.dispose();
+      r30Hearth.dispose();
       for (const mesh of textMeshes) {
         mesh.material.map?.dispose();
         mesh.material.dispose();

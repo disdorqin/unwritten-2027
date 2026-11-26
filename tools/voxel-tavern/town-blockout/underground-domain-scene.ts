@@ -16,6 +16,7 @@ import { mountUndergroundExpeditionCampScene } from './underground-expedition-ca
 import { mountUndergroundMainlineScene } from './underground-mainline-scene.js';
 import {mountFirstMineWorkfaces} from './town-c-first-mine-workfaces.js';
 import {mountFirstMineDeepWorks} from './town-c-first-mine-deep-works.js';
+import {applyR30CampRock} from './town-c-r30-camp-art.js';
 import {
   mountTownC2UndergroundWaterMinus90,
   type UndergroundWater90OreVisual,
@@ -148,10 +149,12 @@ export function mountUndergroundMineDomain(host: Host) {
   };
   const geometries: BufferGeometry[] = [];
   let waterMesh: Mesh | undefined;
+  let campRock:ReturnType<typeof applyR30CampRock>|undefined;
   for (const surface of ['rock', 'rail', 'water'] as const) {
     const vertices = mine.mesh[surface];
     if (!(vertices instanceof Float32Array) || vertices.length < 9 || vertices.length % 9 !== 0 ||
         !vertices.every(Number.isFinite)) {
+      campRock?.dispose();
       for (const geometry of geometries) geometry.dispose();
       for (const material of Object.values(materials)) material.dispose();
       throw new RangeError('Mine scene requires validated rock, rail and water triangles');
@@ -160,7 +163,11 @@ export function mountUndergroundMineDomain(host: Host) {
     geometry.setAttribute('position', new BufferAttribute(vertices, 3));
     geometry.computeVertexNormals();
     geometries.push(geometry);
-    const mesh = new Mesh(geometry, materials[surface]);
+    // Preserve the original rock geometry and use a second material only
+    // inside the sample camp. Other tunnels keep their prior visual style.
+    const campStart=mine.route.at(-2)?.from[2];
+    if(surface==='rock'&&campStart!==undefined)campRock=applyR30CampRock(geometry,materials.rock,campStart,campStart+campSpec.length);
+    const mesh = new Mesh(geometry, surface==='rock'&&campRock?campRock.materials:materials[surface]);
     mesh.name = 'underground-mine-' + surface;
     root.add(mesh);
     if (surface === 'water') waterMesh = mesh;
@@ -182,6 +189,7 @@ export function mountUndergroundMineDomain(host: Host) {
       staticCampLights.sync(new Set(), 0, 0);
     }
   } catch (error) {
+    campRock?.dispose();
     for (const geometry of geometries) geometry.dispose();
     for (const material of Object.values(materials)) material.dispose();
     throw error;
@@ -299,6 +307,7 @@ export function mountUndergroundMineDomain(host: Host) {
       staticCamp?.dispose();
       workfaces.dispose();
       deepWorks.dispose();
+      campRock?.dispose();
       for (const geometry of geometries) geometry.dispose();
       for (const material of Object.values(materials)) material.dispose();
     },

@@ -338,8 +338,13 @@ export function mountUndergroundDomainHost(options: Readonly<{
     const bzE = basisZW.east - originW.east, bzN = basisZW.north - originW.north;
     const localX = dx * bxE + dn * bxN;
     const localZ = dx * bzE + dn * bzN;
-    return mine.queryPassage(localX, localZ, undergroundMineSpec.walker.radius,
+    const passage=mine.queryPassage(localX, localZ, undergroundMineSpec.walker.radius,
       undergroundMineSpec.walker.standingHeight);
+    // The camp's real furnishings (including R30 hearth) own their collision
+    // locally. Keep the original passage metadata when the standing capsule fits.
+    if(passage?.zone==='camp'&&!mounted.camp?.queryPassage(localX,localZ,
+      undergroundMineSpec.walker.radius,undergroundMineSpec.walker.standingHeight))return;
+    return passage;
   }
   if (originW && basisXW && basisZW) {
     const bxE = basisXW.east - originW.east, bxN = basisXW.north - originW.north;
