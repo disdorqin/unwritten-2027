@@ -12,6 +12,13 @@ export const smelterFootway=[[-43,159],[-67,136],[-91,129],[-106.94,125.4],[-117
 export const coldFurnaceFootway=[[-144,105],[-151.5,112.5],[-158.5,112.5],[-171,121],[-172,125.5]] as const;
 export const waterTowerFootway=[[-36,145],[-38,145],[-44.5,145.5],[-44.5,147.5]] as const;
 export const oreYardFootway=[[-144,105],[-132,101],[-132,100],[-123,100]] as const;
+// Surveyed against the combined A collision index. These are optional
+// sightseeing footways, not new story or railway authority.
+export const outerLandscapeFootways=[
+ {id:'western-clusters',points:[[-170,148],[-178,141],[-181,141],[-194,140],[-200,152],[-204,166],[-204,168],[-206,181],[-205,197],[-195,205],[-188,250],[-187,251],[-144,263],[-113,258],[-98,243]],views:[{index:2,site:'outer-cluster-1'},{index:6,site:'outer-cluster-2'},{index:9,site:'outer-cluster-3'},{index:11,site:'outer-cluster-4'},{index:12,site:'outer-cluster-5'}]},
+ {id:'eastern-cluster',points:[[-12,208],[-12,218]],views:[{index:1,site:'outer-cluster-8'}]},
+ {id:'western-shoulders',points:[[-60,55],[-198,98],[-205,105],[-218,172],[-218,253],[-216,255],[-170,295]],views:[{index:2,site:'shoulder-west'},{index:5,site:'shoulder-northwest'},{index:6,site:'shoulder-north'}]},
+] as const;
 const unit=(x:number)=>Math.max(0,Math.min(1,x));
 const smooth=(x:number)=>{const u=unit(x);return u*u*(3-2*u)};
 const rad=(deg:number)=>deg*Math.PI/180;
@@ -148,6 +155,12 @@ export function createWestLandscape(anchor:Anchor,apronRadius:number,northLimit:
     for(const route of civilRoutes)for(let i=1;i<route.points.length;i++){
       const d=segmentDistance(e,n,route.points[i-1]!,route.points[i]!);
       packed=Math.max(packed,route.strength*(1-smooth((d-route.half*.68)/1.8)));
+    }
+    // The new trail is a light packed-snow trace only; it does not
+    // flatten the protected carrier or introduce a visual-only plane.
+    for(const route of outerLandscapeFootways)for(let i=1;i<route.points.length;i++){
+      const d=segmentDistance(e,n,route.points[i-1]!,route.points[i]!);
+      packed=Math.max(packed,.57*(1-smooth((d-.58)/1.18)));
     }
     for(let i=1;i<belt.length;i++){
       const d=segmentDistance(e,n,belt[i-1]!,belt[i]!);

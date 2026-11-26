@@ -13,13 +13,16 @@ function walk(id:string,path:readonly IndustryPoint[]){
  let h=path[0]!.height;
  for(let j=1;j<path.length;j++){
   const a=path[j-1]!,b=path[j]!,steps=Math.ceil(Math.hypot(b.east-a.east,b.north-a.north)/.025);
+  // Broad-phase only: exact 2.5cm sampling and original body rules unchanged.
+  const nearby=(q:OrientedSupportBox)=>q.min[0]<=Math.max(a.east,b.east)+.28&&q.max[0]>=Math.min(a.east,b.east)-.28&&q.min[2]<=-Math.min(a.north,b.north)+.28&&q.max[2]>=-Math.max(a.north,b.north)-.28;
+  const segmentFloors=floors.filter(nearby),segmentBoxes=boxes.filter(nearby),segmentAll=[...segmentBoxes,...segmentFloors];
   for(let i=1;i<=steps;i++){
    const t=i/steps,e=a.east+(b.east-a.east)*t,n=a.north+(b.north-a.north)*t;
    let v=road.heightAt(e,n)!;
    const overlap=(q:OrientedSupportBox)=>supportFootprintOverlaps(e,n,q,.27);
-   for(const f of floors)if(f.max[1]<=h+.43&&overlap(f))v=Math.max(v,f.max[1]);
-   for(const c of boxes)if(c.max[1]<=h+.025&&overlap(c))v=Math.max(v,c.max[1]);
-   const hit=[...boxes,...floors].find(q=>v+.025<q.max[1]&&v+1.8-.025>q.min[1]&&overlap(q));
+   for(const f of segmentFloors)if(f.max[1]<=h+.43&&overlap(f))v=Math.max(v,f.max[1]);
+   for(const c of segmentBoxes)if(c.max[1]<=h+.025&&overlap(c))v=Math.max(v,c.max[1]);
+   const hit=segmentAll.find(q=>v+.025<q.max[1]&&v+1.8-.025>q.min[1]&&overlap(q));
    assert.ok(!hit&&Math.abs(v-h)<=.43001,JSON.stringify({id,j,i,e,n,h,v,hit}));
    h=v;
   }
@@ -64,6 +67,9 @@ test('guard shed bench and brazier have distinct accessible interaction points',
  assert.notEqual(road.craterActions.actionAt(fire.east,fire.north,fire.height+2)?.id,'firewood');
  assert.equal(road.craterActions.firewood(),true);
  assert.equal(road.craterActions.firewood(),false);
+});
+for(const route of road.outerWorks.landscapeRoutes)test(route.id+' scenic ground walk and return through actual supports',()=>{
+ walk(route.id,route.points);walk(route.id,[...route.points].reverse());
 });
 test('assembly registration notice has a real unobstructed approach and return',()=>{
  const r=road.mouthWorks.assemblyRoutes[0]!;

@@ -7,7 +7,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import { industrialBuilder, type IndustryPoint, type IndustryWindow } from './town-a-r30-industrial-shell';
 import { orientedSupportBox, supportFootprintOverlaps } from './town-a-r30-oriented-support';
-import { oreYardFootway, coldFurnaceFootway, waterTowerFootway } from './town-a-r30-west-landscape';
+import { oreYardFootway, coldFurnaceFootway, waterTowerFootway, outerLandscapeFootways } from './town-a-r30-west-landscape';
 import { northFootwayPosts } from './town-a-r30-north-connector';
 import { createZa36StrataTexture } from './town-za36-crater-ejecta';
 
@@ -1747,15 +1747,42 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       const low=Math.min(...ys as number[])-.12,h=Math.max(...ys as number[]);
       const record=(kind:'rock'|'pine',q:CraterHitBox)=>outerClusterPieces.push({id:p.id,kind,east:e,north:n,support:q});
       if(!pine){
-        const rise=.62+hash(ci*19+j*23)*1.08;
-        box(shoulderRock,e,(low+h+.34)/2,n,w,h+.34-low,d);
-        hitBox(floors,e,n,0,w,d,low,h+.34);record('rock',floors.at(-1)!);
-        const x=e+.08*w,z=n-.10*d,tw=w*.72,td=d*.72;
-        box(shoulderRock,x,h+(.34+rise)/2,z,tw,rise-.34,td);
-        hitBox(floors,x,z,0,tw,td,h+.34,h+rise);
-        if((ci+j)%2===0){
-          box(cleanSnow,x,h+rise+.035,z,tw*.84,.07,td*.88);
-          hitBox(floors,x,z,0,tw*.84,td*.88,h+rise,h+rise+.07);
+        // Ref 13: eroded ochre beds below a cluster of dark jointed
+        // basalt columns. Build the geology inside the already surveyed
+        // rock envelope, not as a new obstacle across the trail.
+        const bed=h+.31;
+        box(shoulderRock,e,(low+bed)/2,n,w,bed-low,d);
+        hitBox(floors,e,n,0,w,d,low,bed);record('rock',floors.at(-1)!);
+        const rows=2,cols=w>2.45?3:2;
+        const cw=w/cols,cd=d/rows,seed=ci*103+j*31;
+        for(let ix=0;ix<cols;ix++)for(let iz=0;iz<rows;iz++){
+          const k=ix*rows+iz,phase=seed+k*19;
+          if(k===cols*rows-1&&(ci+j)%3===1)continue;
+          const x=e-w/2+cw*(ix+.5)+.05*cw*Math.sin(phase);
+          const z=n-d/2+cd*(iz+.5)+.05*cd*Math.cos(phase);
+          const ww=cw*(.82+.08*hash(phase)),dd=cd*(.80+.10*hash(phase+3));
+          const layerH=.22+.10*hash(phase+7);
+          const bandTop=bed+layerH;
+          const ashTop=bandTop+.10+.05*hash(phase+11);
+          const top=ashTop+.58+1.65*hash(phase+23)+(ix===1?.32:0);
+          const slab=(mat:MeshStandardMaterial,y0:number,y1:number,sx:number,sz:number,cx=x,cz=z)=>{
+            box(mat,cx,(y0+y1)/2,cz,sx,y1-y0,sz);
+            hitBox(floors,cx,cz,0,sx,sz,y0,y1);
+          };
+          slab(oreOchre,bed,bandTop,ww,dd);
+          slab(shoulderRock,bandTop,ashTop,ww*.96,dd*.96);
+          const broken=top-.18-.16*hash(phase+27);
+          slab(k%3===0?slag:ore,ashTop,broken,ww*.94,dd*.94);
+          slab(k%2===0?ore:slag,broken,top,ww*.80,dd*.82,x+ww*.045,z-dd*.035);
+          if((ci+j+k)%3===0)slab(cleanSnow,top,top+.055,ww*.66,dd*.68,x+ww*.045,z-dd*.035);
+        }
+        // Low angular chips at vacant edges; they remain inside the
+        // primary support and do not grow the original walking envelope.
+        for(let k=0;k<3;k++){
+          const x=e+(k-1)*w*.27,z=n-d*.43;
+          const ww=w*.15,dd=d*.10,top=bed+.08+.12*hash(seed+k);
+          box(k%2?oreOchre:slag,x,(bed+top)/2,z,ww,top-bed,dd);
+          hitBox(floors,x,z,0,ww,dd,bed,top);
         }
         rocks++;
       }else{
@@ -1826,6 +1853,10 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     }
   }
 
+  const landscapeRoutes=outerLandscapeFootways.map(route=>({
+    id:route.id,views:route.views,
+    points:route.points.map(([east,north])=>({east,north,height:heightAt(east,north)})),
+  })).filter(route=>route.points.every(p=>p.height!==undefined)) as {id:string;views:readonly {index:number;site:string}[];points:IndustryPoint[]}[];
   // ---------- merge batches ----------
   for (const [mat, geos] of batches) {
     const joined = mergeGeometries(geos.map(g => g.index ? g.toNonIndexed() : g));
@@ -1843,7 +1874,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   }
   setNight(true);
   return {
-    group, sites, fencePosts, setNight, towerRoutes,industrialRoutes,gatehouseSeats,shoulderStacks,approachRockSupports,outerClusterPieces,
+    group, sites, fencePosts, setNight, towerRoutes,industrialRoutes,gatehouseSeats,shoulderStacks,approachRockSupports,outerClusterPieces,landscapeRoutes,
     wallLine: { east: wallEast, northStart: 13, northEnd: 307 },
     colliders, floors, ramps,
   };
