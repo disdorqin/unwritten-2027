@@ -39,20 +39,20 @@ export function createR30CrystalHost(options:Readonly<{
  let cavern:Extract<ReturnType<typeof mountUndergroundCrystalCavern>,{kind:'ready'}>|undefined;
  let support:ReturnType<typeof mountR30CrystalSupport>|undefined,handle:ReturnType<typeof createUndergroundCrystalReturnSwitch>|undefined;
  let vestibule:ReturnType<typeof mountR30CrystalVestibule>|undefined;
- let budget=0;
+ let budget=0,lightFocus:CrystalCavernPoint|undefined;
  function supportsWorld(p:CrystalCavernPoint){
   if(!frame)return false;
   const l=crystalLocal(frame,p),q=crystalRoutePassage(l.east,l.north);
   return !!q&&Math.abs(q.floor-l.height)<.02&&!vestibule?.blocks(l.east,l.north,q.floor,.27,1.8);
  }
- function clear(){stage='closed';budget=0;active=false;certified=false;if(cavern){cavern.group.visible=false;cavern.sync()}handle?.update('closed')}
+ function clear(){stage='closed';budget=0;lightFocus=undefined;active=false;certified=false;if(cavern){cavern.group.visible=false;cavern.sync()}handle?.update('closed')}
  function sync(){
   if(disposed)return false;
   if(!frame||!room||!crystal||!options.bridge||!options.bridge.acceptsFrame(frame,room)||!options.supportsMineThreshold()||!supportsWorld(crystal)){clear();return false}
   if(!cavern){
    const result=mountUndergroundCrystalCavern({parent:options.parent,frame,acceptsCavern:f=>f===frame,
     supportsFoot:supportsWorld,acceptsCollider:b=>[...b.min,...b.max].every(Number.isFinite),
-    readLightBudget:()=>budget,r30Art:true});
+    readLightBudget:()=>budget,readLocalLightFocus:()=>lightFocus,r30Art:true});
    if(result.kind!=='ready'){clear();return false}
    support=mountR30CrystalSupport(result.group);
    vestibule=mountR30CrystalVestibule(result.group);
@@ -67,7 +67,9 @@ export function createR30CrystalHost(options:Readonly<{
   const foot=options.readAcceptedFoot?.(),l=foot&&crystalLocal(frame,foot);
   active=!!foot&&foot.domainId===r30CrystalDomain&&!!l&&[l.east,l.north,l.height].every(Number.isFinite)&&
     Math.abs(l.east)<=100&&l.north>=-12&&l.north<=113&&l.height>=-5&&l.height<=35;
-  budget=active?options.bridge.readLightBudget?.()??0:0;
+  lightFocus=active?l:undefined;
+  const residual=active?options.bridge.readLightBudget?.()??0:0;
+  budget=Number.isFinite(residual)?Math.min(4,Math.max(0,Math.floor(residual))):0;
   cavern.group.visible=active||stage==='open';
   cavern.sync();handle?.update(stage);
   return true;

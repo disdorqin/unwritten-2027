@@ -516,6 +516,8 @@ type Options=Readonly<{
   supportsFoot(point: CrystalCavernPoint): boolean;
   acceptsCollider(box: Readonly<{ name: string; min: Local; max: Local }>): boolean;
   readLightBudget(): number;
+  /** Current accepted listener in cavern-local ENY; no new light budget. */
+  readLocalLightFocus?(): CrystalCavernPoint | undefined;
   /** R30 production host opts in after its geometry has been certified. */
   r30Art?:boolean;
 }>;
@@ -610,7 +612,12 @@ export function mountUndergroundCrystalCavern(host: Options) {
     if(disposed)return false;
     const n=host.readLightBudget();
     const visible=Number.isFinite(n)?Math.max(0,Math.min(lights.length,Math.floor(n))):0;
-    lights.forEach((lamp,i)=>{lamp.visible=i<visible});
+    const focus=host.readLocalLightFocus?.();
+    const ranked=focus&&[focus.east,focus.north,focus.height].every(Number.isFinite)
+      ?lights.map((lamp,i)=>({lamp,i,d:Math.hypot(lamp.position.x-focus.east,lamp.position.y-focus.height,-lamp.position.z-focus.north)}))
+        .sort((a,b)=>a.d-b.d||a.i-b.i).map(row=>row.lamp):lights;
+    const selected=new Set(ranked.slice(0,visible));
+    lights.forEach(lamp=>{lamp.visible=selected.has(lamp)});
     return true;
   };
   sync();
