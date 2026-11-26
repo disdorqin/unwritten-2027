@@ -25,6 +25,9 @@ const live=new WeakSet<object>();
 export function attachBR30CraterCompletion(road:Road,rail:HostRail,tracks:readonly RailTrack[],mode:Mode,hostRoutes?:readonly HostRoute[]){
  const root=road.group,old=road.group.userData.colliders as Box[];
  if(!Array.isArray(old))throw Error('Missing final west collision list');
+ const ground=root.getObjectByName('meteor-crater-walk-mesh');
+ if(ground?.userData.bR30UnifiedRelief!==true)throw Error('B completion requires final unified R30 crater ground');
+ if(!Array.isArray(road.midgroundS5?.colliders))throw Error('B completion requires R30 relic collision metadata');
  if(live.has(root)||['b-r30-pit-workface','b-r30-crater-workstations','b-r30-melt-columns','b-r30-mound-planting','b-r30-east-historic-walkway','mound-old-work-flag','b-r30-rubbing-transfer'].some(n=>root.getObjectByName(n)))throw Error('B crater completion already attached or individually mounted');
  if(root.getObjectByName('za36-dressing-terrace:plate'))throw Error('Retire legacy terrace plates before B completion');
  if((mode==='host-candidate'?tracks.length!==3:tracks.length<2)||tracks.some(t=>t.length<2))throw Error('Missing real rail tracks for selected mode');

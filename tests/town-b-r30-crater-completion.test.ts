@@ -12,6 +12,11 @@ test('complete B crater candidate mounts six leaves exactly once and rolls back 
  const rail=buildCraterRailExtension(grid,road),tracks=[rail.samples,rail.narrowSamples],original=road.group.userData.colliders;
  const names=['b-r30-pit-workface','b-r30-crater-workstations','b-r30-melt-columns','b-r30-mound-planting','mound-old-work-flag','b-r30-east-historic-walkway','b-r30-rubbing-transfer'];
  const oldVisibility=road.midground.group.children.map(o=>o.visible);
+ const ground=road.group.getObjectByName('meteor-crater-walk-mesh')!;
+ ground.userData.bR30UnifiedRelief=false;
+ assert.throws(()=>attachBR30CraterCompletion(road,rail,tracks,'review'),/unified R30 crater ground/);
+ assert.equal(road.group.userData.colliders,original);
+ ground.userData.bR30UnifiedRelief=true;
  assert.throws(()=>attachBR30CraterCompletion(road,rail,tracks,'host-candidate'),/rail tracks/);
  const originalRail=rail.group.userData.colliders;rail.group.userData.colliders=[...(originalRail??[]),{min:[-88,-9,-192],max:[-86,-5,-190]}];
  assert.throws(()=>attachBR30CraterCompletion(road,rail,tracks,'review'),/overlaps existing solid/);
