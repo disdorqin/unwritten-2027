@@ -11,7 +11,8 @@ test('support annex furniture fits registered obstruction volumes and loop has c
   const annex=h.mounted.supportAnnex!;assert.ok(annex.parts.length>350);assert.equal(annex.fixtures.length,4);
   for(const p of annex.parts){
    if(!p.fixture){assert.ok(p.y-p.h/2>=-91+1.8);continue}
-   const a=r30SupportAnnexFixtures.find(f=>f.id===p.fixture)!;
+   const c=annex.rearStorage!;
+   const a=p.fixture==='rear-storage'?{x:c.x,z:c.z,width:c.w,depth:c.d,height:c.h}:r30SupportAnnexFixtures.find(f=>f.id===p.fixture)!;
    assert.ok(p.x-p.w/2>=a.x-a.width/2-1e-6&&p.x+p.w/2<=a.x+a.width/2+1e-6,'x '+p.fixture);
    assert.ok(p.z-p.d/2>=a.z-a.depth/2-1e-6&&p.z+p.d/2<=a.z+a.depth/2+1e-6,'z '+p.fixture);
    assert.ok(p.y-p.h/2>=-91-1e-6&&p.y+p.h/2<=-91+a.height+1e-6,'y '+p.fixture);
@@ -31,6 +32,7 @@ test('support annex furniture fits registered obstruction volumes and loop has c
    }
   }
   for(const a of r30SupportAnnexFixtures){const p=world(a.x,a.z);assert.equal(h.passageAt(p.east,p.north),undefined)}
+  const rear=world(annex.rearStorage!.x,annex.rearStorage!.z);assert.equal(h.passageAt(rear.east,rear.north),undefined);assert.equal(h.passageAt(rear.east,rear.north,'crouching'),undefined);
   const old=world(-1.85,104.5);assert.ok(h.passageAt(old.east,old.north));
  }finally{h.mounted.dispose()}
  assert.equal(parent.children.length,0);

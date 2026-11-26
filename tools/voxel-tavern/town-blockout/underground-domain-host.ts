@@ -382,6 +382,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
       radius,bodyHeight))return;
     if(passage&&thinWalls.blocks(localX,localZ,radius))return;
     if(passage&&mounted.workbay?.blocks(localX,localZ,passage.floor,radius,bodyHeight))return;
+    if(passage&&mounted.supportAnnex?.blocksRearStorage(localX,localZ,passage.floor,radius,bodyHeight))return;
     if(passage&&mounted.galleryArt?.blocks(localX,localZ,passage.floor,radius,bodyHeight))return;
     if(passage&&shallowGallery?.blocks(localX,localZ,passage.floor,radius,bodyHeight))return;
     if(passage&&interlayerLift?.blocks(undergroundMineLanding.domainId,{east,north,height:passage.floor}))return;

@@ -10,8 +10,23 @@ const floor=-91;
 export function mountR30SupportAnnex(parent:Group,enabled:boolean){
  const group=new Group();group.name='r30-old-support-annex';
  const parts:Part[]=[];
+ const rearStorage={x:-11.7,z:99.75,w:2.26,d:1.38,h:1.08};
  const add=(family:Family,x:number,y:number,z:number,w:number,h:number,d:number,color:number,fixture?:string)=>parts.push({family,x,y:floor+y,z,w,h,d,color,fixture});
  if(enabled){
+  // Closed low chest against the north wall in the dead space between
+  // the map and bunks. It is visible, physical storage, not an air wall.
+  const c=rearStorage;
+  add('wood',c.x,.43,c.z,c.w,.86,c.d,0x604735,'rear-storage');
+  for(let i=0;i<11;i++){
+   const x=c.x-c.w/2+.105+i*.205;
+   add('wood',x,.96,c.z,.202,.16,c.d,0x70543e,'rear-storage');
+   add('wood',x,.47,c.z+c.d/2-.035,.20,.73,.07,0x70543e,'rear-storage');
+  }
+  for(const x of [c.x-.80,c.x+.80]){
+   add('iron',x,.96,c.z,.075,.18,c.d,0x80563d,'rear-storage');
+   add('iron',x,.49,c.z+c.d/2-.025,.075,.84,.05,0x80563d,'rear-storage');
+  }
+  add('iron',c.x,.73,c.z+c.d/2-.025,.22,.15,.05,0x947346,'rear-storage');
   const bed='annex-bunks';
   for(const z of [101.15,103.05]){
    for(const x of [-12.57,-10.88])for(const n of [z-.55,z+.55]){
@@ -113,5 +128,10 @@ export function mountR30SupportAnnex(parent:Group,enabled:boolean){
   mesh.computeBoundingSphere();group.add(mesh);resources.push({mesh,mat,map});
  }
  parent.add(group);
- return {group,parts,fixtures:enabled?r30SupportAnnexFixtures:[],dispose(){group.removeFromParent();resources.forEach(r=>{r.mesh.dispose();r.mat.dispose();r.map.dispose()});geo.dispose()}};
+ return {group,parts,fixtures:enabled?r30SupportAnnexFixtures:[],
+  rearStorage:enabled?rearStorage:undefined,
+  blocksRearStorage(x:number,z:number,y:number,r:number,h:number){
+   const c=rearStorage;
+   return enabled&&floor+c.h>y+.025&&floor<y+h&&Math.hypot(Math.max(0,Math.abs(x-c.x)-c.w/2),Math.max(0,Math.abs(z-c.z)-c.d/2))<r;
+  },dispose(){group.removeFromParent();resources.forEach(r=>{r.mesh.dispose();r.mat.dispose();r.map.dispose()});geo.dispose()}};
 }

@@ -58,6 +58,7 @@ const eyes:Record<string,{eye:readonly [number,number,number];look:readonly [num
  annexentry:{eye:[-3.5,-91,101.1],look:[-8.2,-90,101.1]},
  annexbunk:{eye:[-8.1,-91,102.1],look:[-11.7,-89.7,102.1]},
  annexmap:{eye:[-8.5,-91,102.1],look:[-8.5,-89.3,99.53]},
+ annexrear:{eye:[-9.0,-91,101.1],look:[-11.7,-90.35,99.75]},
  annexsupply:{eye:[-8.1,-91,106.7],look:[-11.7,-89.7,106.7]},
  annexreturn:{eye:[-8.1,-91,107.9],look:[0,-90,107.9]},
  returnapproach:{eye:[0,-90.19,15.8],look:[-4.7,-89.05,15.8]},

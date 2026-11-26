@@ -91,6 +91,13 @@ export function mountR30Workbay(parent:Group,mine:Mine){
    put('iron',-14.8+d*.16,floor+1.46,80.45,.32,.065,.065,0x80563d);
    put('iron',-14.8,floor+1.46+d*.16,80.45,.065,.32,.065,0x80563d);
   }
+  // Close the inaccessible low strip behind the desk with its real
+  // braced timber backing. Crouching cannot reach through the tabletop.
+  for(let i=0;i<16;i++){
+   const x=-18.10+i*.25;
+   put('wood',x,floor+.50,80.66,.245,1.0,.14,0x604735);
+   if(i%4===0)for(const y of [.18,.78])put('iron',x,floor+y,80.57,.08,.09,.065,0x80563d);
+  }
   // Six closed scrap boxes, no collectible or mineral socket implied.
   for(let j=0;j<6;j++){
    const x=-12.8+j*.52;
