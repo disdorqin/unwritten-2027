@@ -54,6 +54,8 @@ const eyes:Record<string,{eye:readonly [number,number,number];look:readonly [num
  bankwater:{eye:[5.8,-91.12,118],look:[7.4,-89.8,119]},
  bankeast:{eye:[21,-91,131],look:[26,-89.9,135.7]},
  bankbypass:{eye:[45.3,-91,117.4],look:[47,-89.9,117.3]},
+ retreatwest:{eye:[-22,-91,131],look:[-20,-90.92,131]},
+ retreateast:{eye:[45.5,-91,122.1],look:[45.5,-90.92,120.1]},
  oldsupports:{eye:[0,-91,101],look:[0,-88.7,119]},
  deeptrack:{eye:[0,-91,121],look:[0,-89.7,138]},
  bayentry:{eye:[-5,-91,76],look:[-16,-90.2,74]},

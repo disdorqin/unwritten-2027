@@ -51,6 +51,11 @@ export function mountR30MainGallery(parent:Group,mine:Mine){
   for(const z of [13.2,17.8,22.4,27,30.4])arch(z,2,3.5);
   for(const z of [46.8])arch(z,2,3.5);
   for(const z of [67,83,87,103,115,119,123])arch(z,4.2,7.2);
+  // Extend the existing west post's stone foot to the wall-side strip
+  // near the retired siding. The 2.5cm survey found a disconnected
+  // capsule pocket between its old foot and the siding buffer.
+  add('rock',-4.03,-90.85,118.45,.31,.30,.55,0x53504b);
+  add('rock',-4.03,-90.62,118.53,.25,.16,.38,0x505258);
   // Crushed sill around the narrow opening. No model crosses the original
   // 1.2m slot; keep its exact 1.3m roof and crouching affordance.
   for(const z of [31.62,35.38])for(const side of [-1,1]){
