@@ -261,8 +261,19 @@ export function buildCraterMouthWorks(road: CraterRoad) {
   if (assembly) {
     const fr = frame(assembly, 168 + 180);
     const g = assembly.height;
-    // Levelled yard pad.
-    cyl(stoneDark, assembly.east, g + .09, assembly.north, 9.6, 10.4, .18, 18);
+    // Grounded rectangular assembly court with a clear central aisle.
+    // The old floating circular slab is replaced by a real low deck.
+    const pad=fr.at(0,0),padY=g+.18;
+    box(stoneDark,pad.east,g+.035,pad.north,16,.29,12,fr.yaw);
+    floors.push(orientedSupportBox(pad.east,pad.north,fr.yaw,16,12,g-.11,padY));
+    for(const side of [-1,1]){
+      const p=fr.at(side*7.8,0);
+      box(stone,p.east,g+.13,p.north,.32,.26,12,fr.yaw);
+      for(const z of [-5.7,5.7]){
+        const q=fr.at(side*5.5,z);
+        box(stone,q.east,g+.13,q.north,4.8,.26,.32,fr.yaw);
+      }
+    }
     // Flagpoles: town flag + survey pennant. The ZB-35 anchor ring sits at the main pole's foot.
     for (const [dx, tall] of [[-1.6, 7.2], [1.6, 5.6]] as const) {
       const p = fr.at(dx, 3.4);
@@ -684,11 +695,32 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       const p = fr.at(dx, dz);
       box(timber, p.east, g + 1.25, p.north, .18, 2.5, .18, fr.yaw);
     }
-    const roofC = fr.at(0, 0);
-    box(timber, roofC.east, g + 2.62, roofC.north, 4.3, .14, 3.3, fr.yaw, .1);
-    box(snow, roofC.east, g + 2.78, roofC.north, 4.1, .16, 3.1, fr.yaw, .1);
+    // Actual two-pitched roof with purlins and grounded pier foundations.
+    const run=2.15,rise=.92,slope=Math.atan2(rise,run),slant=Math.hypot(run,rise);
+    for(const side of [-1,1]){
+      const p=fr.at(side*run/2,0);
+      box(supplyShingles,p.east,g+2.58+rise/2,p.north,slant,.15,3.4,fr.yaw,0,side*slope);
+      box(snow,p.east,g+2.70+rise/2,p.north,slant-.12,.085,3.2,fr.yaw,0,side*slope);
+      const q=fr.at(side*1.7,0);
+      box(supplyPlanks,q.east,g+2.47,q.north,.22,.21,2.8,fr.yaw);
+      for(const z of [-1.2,0,1.2]){
+        const r=fr.at(side*run/2,z);
+        box(timber,r.east,g+2.46+rise/2,r.north,slant,.14,.16,fr.yaw,0,side*slope);
+      }
+    }
+    box(timberWarm,shed.east,g+3.59,shed.north,.24,.15,3.5,fr.yaw);
+    for(const z of [-1.2,1.2])for(const x of [-1.7,1.7]){
+      const p=fr.at(x,z),h=heightAt(p.east,p.north)??g;
+      box(stone,p.east,(h+g+.22)/2,p.north,.36,g+.22-h,.36,fr.yaw);
+      colliders.push(orientedSupportBox(p.east,p.north,fr.yaw,.36,.36,h,g+.22));
+    }
     const backW = fr.at(0, -1.25);
-    box(timber, backW.east, g + 1.1, backW.north, 3.6, 2.2, .14, fr.yaw);
+    box(supplyPlanks, backW.east, g + 1.1, backW.north, 3.6, 2.2, .14, fr.yaw);
+    for(const y of [.25,2.12])box(timberWarm,backW.east,g+y,backW.north,3.62,.15,.21,fr.yaw);
+    for(const x of [-1.65,0,1.65]){
+      const p=fr.at(x,-1.16);
+      box(timber,p.east,g+1.1,p.north,.13,2.2,.15,fr.yaw);
+    }
     // S-1 collision: back wall + the four corner posts; the shed is open on
     // the other three sides by design.
     hitBox(colliders, backW.east, backW.north, fr.yaw, 3.6, .14, g, g + 2.2);
