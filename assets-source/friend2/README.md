@@ -18,4 +18,7 @@
 
 ## FR-09 可读性 UI 样板
 
-- 交付与许可：待本包施工登记。
+- 交付：`tools/voxel-tavern/town-blockout/town-friend2-accessibility.ts`、`friend2-accessibility-preview.ts/.html`、`friend2-vite.fr09-preview.config.ts`。
+- 资产：雪夜/日间/高对比三主题、100%/115%/130%/150% 四档字号、44/52/60px 三档触控尺寸；全部为原创 CSS 变量与 DOM 演示。
+- 许可：仓库 MIT（Original-UI）。
+- 边界：只作用于独立演示面板，提供焦点环、键盘 Enter/Space 与即时重置；不改现有 HUD、公共输入、全局样式或主线手机适配。
