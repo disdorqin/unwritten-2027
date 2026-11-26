@@ -13,14 +13,19 @@ test('same original lift serves certified new axis; first fall remains original 
  const h=mountUndergroundDomainHost({parent,road});
  assert.equal(h.kind,'ready');if(h.kind!=='ready'||h.registration.kind!=='ready')assert.fail();
  const {connection:c}=h.registration;
- const lower=surveyR30ReturnRelocation(),axis={east:lower.world.east,north:lower.world.north,height:c.shaftFoot.height};
- const bend=road.winch!.survey.descentApproach[1],d=Math.hypot(bend.east-axis.east,bend.north-axis.north);
- const approach={east:axis.east+(bend.east-axis.east)*1.95/d,north:axis.north+(bend.north-axis.north)*1.95/d,height:axis.height};
- // This is a review input using the measured B axis and existing road
- // bend, not a production opening certificate. The remaining B survey
- // metrics and approval facts below are deliberately fixture inputs.
- const survey={axis,approach,yaw:firstMineConnectionDatum.yaw,apertureSide:2.2,roofSpan:0,dockHeight:lower.world.height,verticalSpan:axis.height-lower.world.height,
-  radius:2.35,routeGap:.5,grade:0,reservationGap:3,solidGap:3,productionReady:false as const};
+ const lower=surveyR30ReturnRelocation();
+ // Exact measured B sealed headframe survey from B's unchanged
+ // eac4b4e0 source at eba19280, rerun in its registered D-drive tree.
+ // It certifies the shared geometric contract, NOT an actual opening.
+ const axis={east:-124.5,north:177,height:-24.222694396972656};
+ const approach={east:-124.8922405728251,north:178.91014327552406,height:-24.222694396972656};
+ const survey={axis,approach,yaw:1.3631794670708894,apertureSide:2.2,roofSpan:.005188394161017129,
+  dockHeight:-89.35458276044781,verticalSpan:65.13188836347516,radius:2.35,
+  routeGap:.6410637054449796,grade:8.934161487632354e-14,reservationGap:2.6172508087167277,solidGap:3.3762456746660194,productionReady:false as const};
+ assert.equal(survey.yaw,firstMineConnectionDatum.yaw);
+ assert.ok(Math.abs(c.shaftFoot.height-axis.height)<.025);
+ assert.ok(Math.hypot(axis.east-lower.world.east,axis.north-lower.world.north)<1e-6);
+ assert.ok(Math.abs(survey.dockHeight-lower.world.height)<1e-6);
  const certificate:R30ReturnRideAcceptance={revision:'fixture-only',surfaceCut:true,mineRoofAndWestWallCut:true,oldStationRetired:true,continuousBore:true,
   physicalCageAndDock:true,existingAuthorityConnected:true,presentationConnected:true,approvedByTotalControl:true};
  let accepted:R30ReturnRideAcceptance|undefined,landingSupported=true;
