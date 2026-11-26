@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -307,6 +307,8 @@ const approach={
  'ore-yard-dock':[[-12,159],...smelterFootway,[-132,101],[-132,100],[-123,100]],
  'guard-shed':[[-12,159],[-40,159],[-37,168],[-39,175],[-62,201],[-68,220],[-83,235],[-98,243],[-110,244],[-119,245]],
  'assembly-registration':[[-12,159],...smelterFootway.slice(0,4)],
+ 'cold-furnace':[[-12,159],...smelterFootway.slice(0,-1)],
+ 'water-tower':[[-12,159],[-29,159]],
 };
 try{
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:graphicsArgs});
@@ -330,7 +332,7 @@ try{
    segment==='assembly-registration'?road.mouthWorks.assemblyRoutes[0].points:
    ['transfer-dock','ore-yard-dock'].includes(segment)?rail.stationWalkRoutes.find(t=>t.id===segment).points:
    ['kengkou','freight','shankou'].includes(segment)?rail.stationWalkRoutes.find(t=>t.id===(segment==='freight'?'freight-shed':segment+'-station')).points:
-   road.outerWorks.industrialRoutes.find(t=>t.id===(segment==='gatehouse'||segment==='ore-yard'?segment:segment+'-plant')).points;
+   road.outerWorks.industrialRoutes.find(t=>t.id===(['gatehouse','ore-yard','cold-furnace','water-tower'].includes(segment)?segment:segment+'-plant')).points;
  async function step(point,label){
    await walkTo(page,evidence,[point.east,point.north],label,['northwalk','outcrop','outerclusters'].includes(segment)?.46:.18);
    await page.waitForTimeout(140);
@@ -423,6 +425,19 @@ try{
    assert.equal(await page.locator('#place-title').textContent(),'坑区手绘图');
    await picture(page,evidence,'supplyinterior-map-open');
    await page.locator('#place-card .close-card').click();
+ }else if(segment==='cold-furnace'||segment==='water-tower'){
+   const target=segment==='cold-furnace'?[-177.3257912,115.4442406]:[-39.5933067,143.8173133];
+   const heading=Math.atan2(target[0]-top.east,target[1]-top.north);
+   await face(page,evidence,heading);
+   // Native upward drag includes the roof/tank, then return to walking view.
+   const dy=segment==='cold-furnace'?-110:-165;
+   const tilt=async(amount)=>{
+     await page.mouse.move(dragX,dragY);await page.mouse.down();
+     try{await page.mouse.move(dragX,dragY+amount,{steps:5});}finally{await page.mouse.up();}
+   };
+   await tilt(dy);
+   await wallView(segment+'-elevation',heading);
+   await tilt(-dy);
  }else if(segment==='transfer-dock'){
    await wallView('transfer-dock-narrow',-Math.PI/2);
    await wallView('transfer-dock-standard',Math.PI/2);
