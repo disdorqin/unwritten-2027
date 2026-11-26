@@ -5,6 +5,7 @@ import {buildCraterRailExtension} from './town-crater-rail-extension';
 import {createMeteorCrater,meteorCraterFixturePlan} from './meteor-crater';
 import {attachBR30PhysicalKit} from './town-b-r30-physical-kit';
 import {buildBR30ReturnHeadframe} from './town-b-r30-return-headframe';
+import {createBR30WorkshopReviewFixture} from './town-b-r30-workshop-review-fixture';
 import {stripBR30LegacyTerraceMesh} from './town-b-r30-retire-legacy-terraces';
 import {settleBR30StorySupports} from './town-b-r30-settle-story-supports';
 
@@ -56,18 +57,29 @@ for(const p of face.sites){
   if(h!==undefined)add(p.id,p.id,{east:e,north:n,height:h},{east:p.east,north:p.north,height:p.height+.8});
 }
 for(const p of machines.sites)add(p.id,p.label,p.foot,p.target);
+for(const t of machines.targets)if(t.index!==undefined){
+ const site=machines.sites.find(s=>s.id===t.station)!;
+ add(t.station+'-'+t.index,site.label+' '+(t.index+1),site.foot,t.point);
+}
 const select=document.querySelector<HTMLSelectElement>('#views')!,phase=document.querySelector<HTMLButtonElement>('#phase')!,hud=document.querySelector<HTMLElement>('#position')!;
 for(const v of views)select.add(new Option(v.label,v.id));
 let east=0,north=0,feet=0,yaw=0,pitch=0,night=false,frame=0,drag=false,last=performance.now();
 const keys=new Set<string>(),look=new Vector3();
+const fixtureMode=new URLSearchParams(location.search).has('workshop');
+const sample=document.querySelector<HTMLSelectElement>('#fixture-ore')!;
+const fixturePanel=document.querySelector<HTMLElement>('#fixture-panel')!,fixtureStatus=document.querySelector<HTMLElement>('#fixture-status')!;
+fixturePanel.hidden=!fixtureMode;
+const workshop=fixtureMode?createBR30WorkshopReviewFixture(machines,()=>({east,north,height:feet,heading:yaw,pitch,eyeHeight:1.65})):undefined;
+sample.addEventListener('change',()=>workshop?.setHeld(sample.value));
 function light(){const col=new Color(night?0x18263c:0xa8bfd1);scene.background=col;scene.fog=new Fog(col,65,290);
   sky.intensity=night?.78:1.75;sun.intensity=night?.24:2.1;sky.color.set(night?0x9cb7e2:0xc6d9f6);
   road.craterActions.setNight(night);phase.textContent=night?'雪夜':'白昼';}
 function choose(){
   const v=views.find(v=>v.id===select.value)!;
   ({east,north,height:feet}=v.foot);
-  const e=v.target.east-east,n=v.target.north-north;
-  yaw=Math.atan2(e,n);pitch=Math.atan2(v.target.height-feet-1.65,Math.hypot(e,n));
+  const target=machines.targets.find(t=>(t.index===undefined?t.station:t.station+'-'+t.index)===v.id)?.point??v.target;
+  const e=target.east-east,n=target.north-north;
+  yaw=Math.atan2(e,n);pitch=Math.atan2(target.height-feet-1.65,Math.hypot(e,n));
 }
 function blocked(e:number,n:number,h:number){
   return ([...road.group.userData.colliders,...returnHeadframe.worldBoxes] as {min:number[],max:number[]}[]).some(b=>{
@@ -77,7 +89,12 @@ function blocked(e:number,n:number,h:number){
 }
 function step(e:number,n:number){const h=road.heightAt(e,n);if(h===undefined||Math.abs(h-feet)>.43||blocked(e,n,h))return;east=e;north=n;feet=h;}
 function tick(now:number){
-  const dt=Math.min(.05,(now-last)/1000);last=now;
+  const elapsed=Math.max(0,now-last),dt=Math.min(.05,elapsed/1000);last=now;
+  if(workshop){
+   workshop.tick(Math.min(250,elapsed));
+   const w=workshop.state();sample.value=w.held;
+   fixtureStatus.textContent=w.last+'；'+(w.aim??'未瞄准')+'；受理 '+w.accepted+' / 拒绝 '+w.rejected;
+  }
   const f=Number(keys.has('KeyW'))-Number(keys.has('KeyS')),side=Number(keys.has('KeyD'))-Number(keys.has('KeyA'));
   if(f||side){const v=3.2*dt/Math.hypot(f,side);step(east+(Math.sin(yaw)*f+Math.cos(yaw)*side)*v,north+(Math.cos(yaw)*f-Math.sin(yaw)*side)*v);}
   camera.position.set(east,feet+1.65,-north);look.set(Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch)).add(camera.position);
@@ -86,11 +103,14 @@ function tick(now:number){
   requestAnimationFrame(tick);
 }
 function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
-addEventListener('resize',resize);addEventListener('keydown',e=>keys.add(e.code));addEventListener('keyup',e=>keys.delete(e.code));addEventListener('blur',()=>keys.clear());
+addEventListener('resize',resize);addEventListener('keydown',e=>{
+ keys.add(e.code);
+ if(workshop&&!e.repeat&&(e.code==='KeyE'||e.code==='KeyQ')){e.preventDefault();void workshop.press(e.code==='KeyQ'?-1:1);}
+});addEventListener('keyup',e=>keys.delete(e.code));addEventListener('blur',()=>keys.clear());
 renderer.domElement.addEventListener('pointerdown',e=>{drag=true;renderer.domElement.setPointerCapture(e.pointerId);});
 renderer.domElement.addEventListener('pointerup',()=>drag=false);
 renderer.domElement.addEventListener('pointermove',e=>{if(drag){yaw+=e.movementX*.003;pitch=Math.max(-1.3,Math.min(1.3,pitch-e.movementY*.003));}});
 select.addEventListener('change',choose);phase.addEventListener('click',()=>{night=!night;light();});
 resize();choose();light();
-Object.defineProperty(window,'__bR30Review',{value:()=>({frame,night,east,north,feet,yaw,pitch,view:select.value,views,retiredPlates,settledSupports:settledSupports.length,draws:renderer.info.render.calls,tris:renderer.info.render.triangles,aim:machines.aimControl({east,north,height:feet},yaw,pitch,1.65)?.station??null})});
+Object.defineProperty(window,'__bR30Review',{value:()=>({frame,night,east,north,feet,yaw,pitch,view:select.value,views,retiredPlates,settledSupports:settledSupports.length,draws:renderer.info.render.calls,tris:renderer.info.render.triangles,aim:machines.aimControl({east,north,height:feet},yaw,pitch,1.65)?.station??null,workshop:workshop?.state()})});
 requestAnimationFrame(tick);
