@@ -11,7 +11,10 @@
 
 ## FR-06 小镇导览手册
 
-- 交付与许可：待本包施工登记。
+- 交付：`tools/voxel-tavern/town-blockout/town-friend2-guide.ts`、`friend2-guide-preview.ts/.html`、`friend2-vite.fr06-preview.config.ts`。
+- 数据：17 条已稳定老镇地点、生活服务与基础操作说明；云海台/绝顶小屋明确标注“规划”，不作为当前可达。
+- 许可：仓库 MIT（Original-Text/UI）。
+- 边界：静态图文组件，数据与界面分离；不制作正式导航、剧情门、世界状态或存档；触控与键盘可搜索/分类/查看/返回。
 
 ## FR-09 可读性 UI 样板
 
