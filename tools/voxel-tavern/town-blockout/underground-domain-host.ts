@@ -17,6 +17,7 @@ import {createR30DeepHost} from './town-c-r30-deep-host.js';
 import {mountR30InterlayerLift,type R30InterlayerRide} from './town-c-r30-interlayer-lift.js';
 import {createR30CrystalHost,type R30CrystalBridge} from './town-c-r30-crystal-host.js';
 import {makeR30CrystalFrame} from './town-c-r30-crystal-support.js';
+import {createR30DeepAssembly,type R30DeepAssemblyBridge,r30LinkDomain} from './town-c-r30-deep-assembly.js';
 
 type Road = ReturnType<typeof mountWestCraterRoad>;
 type Mine = ReturnType<typeof createUndergroundMineLayout>;
@@ -150,6 +151,8 @@ export function mountUndergroundDomainHost(options: Readonly<{
   /** Accepted movement/Presence foot only, never inferred from camera height. */
   readAcceptedDomainFoot?:()=> (Point&Readonly<{domainId:string}>)|undefined;
   crystalBridge?:R30CrystalBridge;
+  /** C2 scene roots and A/total-control room/mouth acceptance. */
+  deepAssemblyBridge?:R30DeepAssemblyBridge;
   /** C2 certifies its actual roof opening; C certifies the upper mesh cut.
    * The existing transport authority supplies the accepted trip and clock. */
   interlayerRide?:Readonly<{read:()=>R30InterlayerRide|undefined;now:()=>number;lowerOpeningCertified:()=>boolean}>;
@@ -398,6 +401,9 @@ export function mountUndergroundDomainHost(options: Readonly<{
     readAcceptedWater:()=>options.waterBridge?.readWaterSnapshot?.(),
     readAcceptedFoot:options.readAcceptedDomainFoot,
     blocks:(domain,point,radius)=>interlayerLift?.blocks(domain,point,radius)===true});
+  const deepAssembly=createR30DeepAssembly({parent,seamRegistered:registeredSeam,
+    bridge:options.deepAssemblyBridge,readAcceptedFoot:options.readAcceptedDomainFoot,
+    supportsSecondMine:p=>deepHost.supportsArrival('underground/mine-2',p)});
   // Existing viewer already invokes mounted.sync()/dispose(). Preserve its
   // entry point and lifecycle, even before A supplies accepted domain feet.
   /** Swept local move for the single public movement owner. This returns a
@@ -417,22 +423,60 @@ export function mountUndergroundDomainHost(options: Readonly<{
     return {foot:{...to,height:previous.floor},posture,clearance:previous.clearance,
       eyeHeight:posture==='crouching'?1.0:1.67,requiresCrouch:previous.requiresCrouch};
   }
-  const composed={...mounted,sync(){crystalHost?.sync();mounted.sync();deepHost.sync();
+  /** A's single domain-indexed underground floor query. The accepted
+   * domain is the only selector; never infer a floor from elevation. */
+  function domainPassageAt(domain:string,east:number,north:number,posture:'standing'|'crouching'='standing'){
+    const foot=options.readAcceptedDomainFoot?.();
+    if(!foot||foot.domainId!==domain||![foot.east,foot.north,foot.height,east,north].every(Number.isFinite)||
+      (posture!=='standing'&&posture!=='crouching'))return;
+    if(domain===undergroundMineLanding.domainId)return passageAt(east,north,posture);
+    if(domain==='underground/crystal')return crystalHost?.passageAt(domain,east,north,posture);
+    if(domain==='underground/mine-2'){
+      const p=deepHost.passageAt(domain,east,north);
+      return p?{...p,clearance:1.8,requiresCrouch:false}:undefined;
+    }
+    const q=deepAssembly.passageAt(domain,east,north,undergroundMineSpec.walker.radius,
+      posture==='crouching'?undergroundMineSpec.walker.crouchingHeight:undergroundMineSpec.walker.standingHeight);
+    return q?{...q,requiresCrouch:q.clearance<undergroundMineSpec.walker.standingHeight}:undefined;
+  }
+  function resolveUndergroundStep(from:Point&Readonly<{domainId:string}>,to:Readonly<{east:number;north:number}>,posture:'standing'|'crouching'){
+    const accepted=options.readAcceptedDomainFoot?.();
+    if(!accepted||from.domainId!==accepted.domainId||![from.east,from.north,from.height,to.east,to.north].every(Number.isFinite)||
+       Math.hypot(from.east-accepted.east,from.north-accepted.north,from.height-accepted.height)>.025)return;
+    const distance=Math.hypot(to.east-from.east,to.north-from.north);
+    if(distance>3)return;
+    const initial=domainPassageAt(from.domainId,from.east,from.north,posture);
+    if(!initial||Math.abs(initial.floor-from.height)>.25)return;
+    const count=Math.max(1,Math.ceil(distance/.08));let previous=initial;
+    for(let i=1;i<=count;i++){
+      const p=domainPassageAt(from.domainId,from.east+(to.east-from.east)*i/count,from.north+(to.north-from.north)*i/count,posture);
+      if(!p||Math.abs(p.floor-previous.floor)>.22)return;
+      previous=p;
+    }
+    return {foot:{...to,height:previous.floor,domainId:from.domainId},posture,clearance:previous.clearance,
+      eyeHeight:posture==='crouching'?1:1.67,requiresCrouch:previous.requiresCrouch};
+  }
+  const composed={...mounted,sync(){crystalHost?.sync();mounted.sync();deepHost.sync();deepAssembly.sync();
+    // When the physically connected passage is active, retain the adjacent
+    // second-mine geometry without enabling its movement domain.
+    if(deepHost.mounted&&deepAssembly.activeDomain()===r30LinkDomain(r30DepthLinks[0])&&deepAssembly.openLinks().includes(r30DepthLinks[0].id))
+      deepHost.mounted.group.visible=true;
     interlayerLift?.showDomain(deepHost.status()==='ready'?'underground/mine-2':undefined);
     if(options.interlayerRide&&interlayerLift){
       const lower=options.interlayerRide.lowerOpeningCertified();
       const opened=lower&&mounted.installUpperLiftAperture();
       interlayerLift.present(options.interlayerRide.read(),options.interlayerRide.now(),opened);
     }
-  },dispose(){crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
+  },dispose(){deepAssembly.dispose();crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
   return {
-    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,
+    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,deepAssembly,
     // Layout contract only. The actual city/palace receiving shells and
     // movement/presence host must approve before mounting or allowing travel.
     deepLayerContract:shaftContract.kind==='ready'&&shaftContract.deep.kind==='registered'
       ?{frames:r30DeepFrames,localFeet:r30DeepLocalFeet,worldFeet:r30DeepWorldFeet,
         links:r30DepthLinks,roomProposals:r30DeepRoomProposals,productionReady:false as const}:undefined,
-    resolveMineStep,
+    resolveMineStep,domainPassageAt,resolveUndergroundStep,
+    canStandUpInDomain:(domain:string,east:number,north:number)=>domainPassageAt(domain,east,north,'standing')!==undefined,
     canStandUp:(east:number,north:number)=>passageAt(east,north,'standing')!==undefined,
     floorAt: (east: number, north: number,posture:'standing'|'crouching'='standing') => passageAt(east, north,posture)?.floor,
     toLocal: (world: Point) => toLocal?.(world),
