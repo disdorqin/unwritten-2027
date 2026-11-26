@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { execFile, spawn } from 'node:child_process';
 import { createReadStream, existsSync } from 'node:fs';
-import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { createServer, request } from 'node:http';
 import { createRequire } from 'node:module';
 import { connect } from 'node:net';
@@ -17,6 +17,32 @@ const repo = fileURLToPath(new URL('../', import.meta.url));
 const viewer = join(repo, 'tools', 'voxel-tavern');
 const output = resolve(evidencePath);
 await mkdir(output, { recursive: true });
+const source = (await run('git', ['rev-parse', 'HEAD'], { cwd: repo, windowsHide: true })).stdout.trim();
+const sourceTree = (await run('git', ['rev-parse', 'HEAD^{tree}'], { cwd: repo, windowsHide: true })).stdout.trim();
+const lock = join(output,'.native-run-lock');
+// A relay retry must not start a second production build. The evidence
+// directory identifies one execution; a genuine rerun uses a new path.
+try {
+  await mkdir(lock);
+} catch (error) {
+  if(error.code==='EEXIST')throw new Error('Native evidence path already locked; inspect existing process/report before retrying: '+output);
+  throw error;
+}
+try {
+  const [oldSource,oldTree,raw]=await Promise.all(['source-commit.txt','source-tree.txt','za22-live-walk.json'].map(n=>readFile(join(output,n),'utf8')));
+  const old=JSON.parse(raw);
+  if(oldSource.trim()===source&&oldTree.trim()===sourceTree&&old.segment===segment&&!old.failure&&old.errors===0&&old.traversal){
+    console.log(JSON.stringify({reusedCompletedEvidence:true,source,segment,output}));
+    await rm(lock,{recursive:true,force:true});
+    process.exit(0);
+  }
+} catch(error) {
+  if(error.code!=='ENOENT'&&!(error instanceof SyntaxError)){
+    await rm(lock,{recursive:true,force:true});
+    throw error;
+  }
+}
+await writeFile(join(lock,'pid.txt'),String(process.pid));
 const temporary = await mkdtemp(join(repo, '.za22-live-proof-'));
 const web = join(temporary, 'web');
 const compiled = join(temporary, 'server');
@@ -174,5 +200,6 @@ try {
   for (const child of [driver, presence]) if (child?.exitCode === null) child.kill();
   for (const socket of sockets) socket.destroy();
   frontend?.close();
-  await rm(temporary, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 });
+  try { await rm(temporary, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 }); }
+  finally { await rm(lock,{recursive:true,force:true}); }
 }

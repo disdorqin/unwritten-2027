@@ -372,6 +372,20 @@ try{
        const site=road.outerWorks.sites.find(s=>s.id===view.site);
        const target=site?[site.east,site.north]:shoulders[view.site];
        await wallView(view.site,Math.atan2(target[0]-point.east,target[1]-point.north));
+       if(segment==='western-shoulders'){
+         const id=view.site.replace('shoulder-','rest-');
+         const rest=road.outerWorks.landscapeRoutes.find(r=>r.id===id);
+         const seat=road.outerWorks.scenicSeats.find(s=>s.id===id);
+         assert.ok(rest&&seat);
+         for(const [j,p]of rest.points.entries())await step(p,id+'-approach-'+j);
+         await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('观景长椅'),null,{timeout:8000});
+         await page.keyboard.press('e');
+         await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('起身'),null,{timeout:8000});
+         await picture(page,evidence,id+'-seated');
+         await page.keyboard.press('e');
+         await page.waitForFunction(pattern=>new RegExp(pattern).test(document.querySelector('#position')?.textContent??''),positionPattern.source,{timeout:8000});
+         for(const [j,p]of [...rest.points].reverse().entries())await step(p,id+'-return-'+j);
+       }
      }
    }
    if(segment==='industrial-ruins'){
