@@ -15,7 +15,7 @@ function segmentGap(e:number,n:number,s:Segment){
  * plot/road approaches and current A tracks have zero weight. The ramp
  * is deliberately wide: it is a land reservation, not a cut permit.
  * D's field consumes this pure function and A's H0 once. */
-export function createAR30RidgeOwnership(options:{loop:readonly Readonly<{x:number;z:number}>[];branch:readonly EN[];feather?:number}){
+export function createAR30RidgeOwnership(options:{loop:readonly Readonly<{x:number;z:number}>[];branch:readonly EN[];feather?:number;cloudApron?:boolean}){
  const feather=options.feather??55;
  if(!Number.isFinite(feather)||feather<24||!options.loop.length||!options.branch.length)throw Error('Missing surveyed ridge ownership inputs');
  const routes:Segment[]=[];
@@ -63,5 +63,14 @@ export function createAR30RidgeOwnership(options:{loop:readonly Readonly<{x:numb
   const d=dRect(e,n,midRect.x0,midRect.n0,midRect.x1,midRect.n1);
   return padFeather+(feather-padFeather)*smooth(d/36);
  }
- return {weight:(e:number,n:number)=>Number.isFinite(e)&&Number.isFinite(n)?smooth(distance(e,n)/localFeather(e,n)):0,distance,feather,padFeather,localFeather,routeSegments:routes.length,protectedRectangles:rects.length};
+ function weight(e:number,n:number){
+  if(!Number.isFinite(e)||!Number.isFinite(n))return 0;
+  const d=distance(e,n),w=smooth(d/localFeather(e,n));
+  // D's reviewed local apron proposal, opt-in for exact-source joint
+  // candidates only. No change to the default production reservation.
+  if(!options.cloudApron||w<=0||d<=0)return w;
+  const local=1-smooth(dRect(e,n,284.5,651,354.5,669)/14);
+  return w+(Math.max(w,smooth(d/34))-w)*local;
+ }
+ return {weight,distance,feather,padFeather,localFeather,routeSegments:routes.length,protectedRectangles:rects.length};
 }
