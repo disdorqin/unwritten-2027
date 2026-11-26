@@ -1,14 +1,89 @@
 import {BoxGeometry,BufferGeometry,Float32BufferAttribute,Group,InstancedMesh,Mesh,MeshStandardMaterial,Matrix4,Quaternion,Vector3,PointLight,DataTexture,RGBAFormat,NearestFilter} from 'three';
 import {secondMineRooms,secondMineRoomAt,secondMineBed,secondMineAnchors,canStandSecondMine,secondMineFloor,type MineRiverState} from '../../../src/shared/underground-second-mine-layout.js';
 import {dressSecondMineDryWings} from './underground-second-mine-dry-dressing.js';
+import {c2R30DeepMouths} from './town-c2-r30-deep-mouths.js';
+import {createStaticFootIndex,type StaticBox} from './town-c-static-foot-index.js';
 type Part={x:number;n:number;y:number;w:number;d:number;h:number;rz:number};
-type Solid=Readonly<{x:number;n:number;w:number;d:number}>;
+type Solid=Readonly<{x:number;n:number;y:number;w:number;d:number;h:number}>;
+export type LiftApertureRect=Readonly<{minE:number;maxE:number;minN:number;maxN:number}>;
+export type SecondMineLiftApertureSite=Readonly<{lower:LiftApertureRect;height:number;ceiling:number}>;
+export type SecondMineLiftAperturePort=Readonly<{site:SecondMineLiftApertureSite;split:(rect:LiftApertureRect,hole:LiftApertureRect)=>readonly LiftApertureRect[];readOpen:()=>boolean}>;
+export type SecondMineSceneOptions=Readonly<{liftAperture?:SecondMineLiftAperturePort}>;
+type EntryRoom=Readonly<{x0:number;x1:number;n0:number;n1:number;ceiling:number}>;
 const colors={rock:0x555b62,basalt:0x353b44,iron:0x777b82,rust:0x815b44,wood:0x71553c,crystal:0x82c5d6,ember:0xe5a05a,gravel:0x66645d} as const;
 type Kind=keyof typeof colors;
+function isApertureRect(value:unknown):value is LiftApertureRect{
+  if(!value||typeof value!=='object')return false;
+  const r=value as Partial<LiftApertureRect>;
+  return typeof r.minE==='number'&&typeof r.maxE==='number'&&typeof r.minN==='number'&&typeof r.maxN==='number'&&
+    [r.minE,r.maxE,r.minN,r.maxN].every(Number.isFinite)&&r.minE<r.maxE&&r.minN<r.maxN;
+}
+function rectArea(r:LiftApertureRect){return (r.maxE-r.minE)*(r.maxN-r.minN);}
+function rectsOverlap(a:LiftApertureRect,b:LiftApertureRect){
+  return Math.min(a.maxE,b.maxE)>Math.max(a.minE,b.minE)&&Math.min(a.maxN,b.maxN)>Math.max(a.minN,b.minN);
+}
+const exitWall={north:198,depth:.68,halfWidth:1.7,lintelBottom:3.24,ceiling:5} as const;
+const geometryEpsilon=1e-9;
+type WallBox=Readonly<{x:number;n:number;y:number;w:number;d:number;h:number}>;
+function sameBox(a:WallBox,b:WallBox){
+  return [a.x,a.n,a.y,a.w,a.d,a.h].every((value,i)=>Math.abs(value-[b.x,b.n,b.y,b.w,b.d,b.h][i])<=geometryEpsilon);
+}
+/** Exact union coverage, so touching masonry rows cannot hide a gap. */
+function coversWallRange(boxes:readonly WallBox[],minE:number,maxE:number,minY:number,maxY:number){
+  const covering=boxes.filter(b=>Math.abs(b.n-exitWall.north)<=geometryEpsilon&&Math.abs(b.d-exitWall.depth)<=geometryEpsilon&&
+    b.x+b.w/2>minE+geometryEpsilon&&b.x-b.w/2<maxE-geometryEpsilon&&b.y+b.h/2>minY+geometryEpsilon&&b.y-b.h/2<maxY-geometryEpsilon);
+  const edges=[...new Set([minE,maxE,...covering.flatMap(b=>[Math.max(minE,b.x-b.w/2),Math.min(maxE,b.x+b.w/2)])])].sort((a,b)=>a-b);
+  for(let i=1;i<edges.length;i++){
+    const left=edges[i-1],right=edges[i];if(right-left<=geometryEpsilon)continue;
+    const mid=(left+right)/2,spans=covering.filter(b=>b.x-b.w/2<mid&&b.x+b.w/2>mid)
+      .map(b=>({minY:Math.max(minY,b.y-b.h/2),maxY:Math.min(maxY,b.y+b.h/2)})).filter(s=>s.maxY>s.minY).sort((a,b)=>a.minY-b.minY);
+    let cursor=minY;
+    for(const span of spans){if(span.minY>cursor+geometryEpsilon)return false;cursor=Math.max(cursor,span.maxY);if(cursor>=maxY-geometryEpsilon)break;}
+    if(cursor<maxY-geometryEpsilon)return false;
+  }
+  return edges.length>1;
+}
+function blocksDoorway(boxes:readonly WallBox[]){
+  const minN=exitWall.north-exitWall.depth/2,maxN=exitWall.north+exitWall.depth/2;
+  return boxes.some(b=>b.n+b.d/2>minN+geometryEpsilon&&b.n-b.d/2<maxN-geometryEpsilon&&b.x+b.w/2>-exitWall.halfWidth+geometryEpsilon&&
+    b.x-b.w/2<exitWall.halfWidth-geometryEpsilon&&b.y-b.h/2<exitWall.lintelBottom-geometryEpsilon&&b.y+b.h/2>geometryEpsilon);
+}
+function matchesExitMouth(value:unknown){
+  if(!value||typeof value!=='object')return false;
+  const expected=c2R30DeepMouths['minus140-to-minus165'].from,mouth=value as Record<string,unknown>;
+  return mouth.layer===expected.layer&&mouth.axis===expected.axis&&mouth.at===expected.at&&mouth.centre===expected.centre&&
+    mouth.width===expected.width&&mouth.height===expected.height;
+}
+/** Validate the host split as an exact, non-overlapping roof-minus-hole partition. */
+function prepareLiftAperture(port:SecondMineLiftAperturePort|undefined,entry:EntryRoom|undefined){
+  if(!port||!entry||typeof port.split!=='function'||typeof port.readOpen!=='function')return null;
+  const site=port.site as Partial<SecondMineLiftApertureSite>|undefined;
+  if(!site||!isApertureRect(site.lower)||typeof site.height!=='number'||!Number.isFinite(site.height)||site.height!==0||
+    typeof site.ceiling!=='number'||!Number.isFinite(site.ceiling)||site.ceiling!==entry.ceiling)return null;
+  const lower=site.lower;
+  if(lower.minE<entry.x0||lower.maxE>entry.x1||lower.minN<entry.n0||lower.maxN>entry.n1)return null;
+  const rect:LiftApertureRect={minE:entry.x0,maxE:entry.x1,minN:entry.n0,maxN:entry.n1};
+  let candidate:unknown;
+  try{candidate=port.split({...rect},{...lower});}catch{return null;}
+  if(!Array.isArray(candidate)||candidate.length<1||candidate.length>4)return null;
+  const pieces:LiftApertureRect[]=[];
+  for(const value of candidate){
+    if(!isApertureRect(value))return null;
+    const p={...value};
+    if(p.minE<rect.minE||p.maxE>rect.maxE||p.minN<rect.minN||p.maxN>rect.maxN||rectsOverlap(p,lower))return null;
+    if(pieces.some(other=>rectsOverlap(p,other)))return null;
+    pieces.push(p);
+  }
+  const expected=rectArea(rect)-rectArea(lower),actual=pieces.reduce((sum,p)=>sum+rectArea(p),0);
+  if(Math.abs(actual-expected)>1e-9*Math.max(1,expected))return null;
+  return {site:Object.freeze({lower:Object.freeze({...lower}),height:site.height,ceiling:site.ceiling}),
+    hole:Object.freeze({...lower}),pieces:Object.freeze(pieces.map(p=>Object.freeze({...p}))),readOpen:()=>port.readOpen()};
+}
 /** Physical local scene; the existing underground host must approve its placement and water state. */
-export function createSecondMineScene(){
+export function createSecondMineScene(options:SecondMineSceneOptions={}){
   const group=new Group();group.name='second-mine-local-candidate';
-  const parts=new Map<Kind,Part[]>(),solids:Solid[]=[];
+  const parts=new Map<Kind,Part[]>(),solids:Solid[]=[],exitWallParts:Part[]=[];
+  let disposed=false;
   const meshGeometry=new BoxGeometry();
   const material=new Map<Kind,MeshStandardMaterial>();
   const textures:DataTexture[]=[];
@@ -22,16 +97,35 @@ export function createSecondMineScene(){
     const t=new DataTexture(bytes,16,16,RGBAFormat);t.magFilter=NearestFilter;t.minFilter=NearestFilter;t.needsUpdate=true;textures.push(t);
     material.set(k,new MeshStandardMaterial({map:t,roughness:k==='iron'?.65:.94,metalness:k==='iron'?.45:0,...(k==='crystal'?{emissive:0x216070,emissiveIntensity:.8}:k==='ember'?{emissive:0xc57837,emissiveIntensity:1.4}:{})}));
   }
+  const entryRoom=secondMineRooms.find(r=>r.id==='entry'&&r.n0===0&&r.n1===24);
+  const exitRoom=secondMineRooms.find(r=>r.id==='exit'&&r.n0===182&&r.n1===198);
+  const entryRoofRect:LiftApertureRect|undefined=entryRoom&&{minE:entryRoom.x0,maxE:entryRoom.x1,minN:entryRoom.n0,maxN:entryRoom.n1};
+  const lift=prepareLiftAperture(options?.liftAperture,entryRoom);
+  const entryRoofPieces:readonly LiftApertureRect[]=lift?.pieces??(entryRoofRect?[entryRoofRect]:[]);
+  let liftPlate:Mesh|null=null,liftOpen=false;
   function box(k:Kind,x:number,n:number,y:number,w:number,d:number,h:number,rz=0,solid=false){
     const b={x,n,y,w,d,h,rz};const list=parts.get(k)??[];list.push(b);parts.set(k,list);
-    if(solid)solids.push({x,n,w,d});
+    if(solid)solids.push({x,n,y,w,d,h});
+  }
+  function exitWallBox(k:Kind,x:number,y:number,w:number,h:number){
+    box(k,x,exitWall.north,y,w,exitWall.depth,h,0,true);
+    exitWallParts.push(parts.get(k)![parts.get(k)!.length-1]);
   }
   const riverGeometries:BufferGeometry[]=[];
   // Rock chambers share exact floor and wall footprints with the passage query.
   for(const r of secondMineRooms){
     const w=r.x1-r.x0,d=r.n1-r.n0;
     if(!r.river)box('rock',(r.x0+r.x1)/2,(r.n0+r.n1)/2,-.4,w,d,.8);
-    box('basalt',(r.x0+r.x1)/2,(r.n0+r.n1)/2,r.ceiling+.5,w,d,1);
+    if(r===entryRoom){
+      for(const p of entryRoofPieces)box('basalt',(p.minE+p.maxE)/2,(p.minN+p.maxN)/2,r.ceiling+.5,p.maxE-p.minE,p.maxN-p.minN,1);
+      if(lift){
+        liftPlate=new Mesh(meshGeometry,material.get('iron'));liftPlate.name='second-mine-lift-closure';
+        liftPlate.position.set((lift.hole.minE+lift.hole.maxE)/2,r.ceiling+.12,-(lift.hole.minN+lift.hole.maxN)/2);
+        liftPlate.scale.set(lift.hole.maxE-lift.hole.minE,.24,lift.hole.maxN-lift.hole.minN);group.add(liftPlate);
+      }
+    }else{
+      box('basalt',(r.x0+r.x1)/2,(r.n0+r.n1)/2,r.ceiling+.5,w,d,1);
+    }
     for(const side of [-1,1]){
       const x=side===-1?r.x0:r.x1,n=side===-1?r.n0:r.n1;
       for(let p=r.n0;p<r.n1;p+=2){
@@ -39,7 +133,20 @@ export function createSecondMineScene(){
         if(secondMineRoomAt(x+side*.05,mid))continue;
         for(let y=0;y<r.ceiling;y+=1.4)box((Math.round(p+y)%3===0?'rock':'basalt'),x+side*.34,mid,y+.7,.68,len,1.4);
       }
-      for(let p=r.x0;p<r.x1;p+=2){
+      if(r===exitRoom&&side===1){
+        // C-R04's receiving mouth is on the N198 boundary. Replace only this
+        // wall: two full-height jambs and a lintel with an exact 3.4 x 3.24 hole.
+        for(const [minE,maxE] of [[r.x0,-exitWall.halfWidth],[exitWall.halfWidth,r.x1]] as const){
+          for(let y=0;y<exitWall.lintelBottom;y+=1.08){
+            const h=Math.min(1.08,exitWall.lintelBottom-y);
+            for(let e=minE;e<maxE;e+=2){
+              const w=Math.min(2,maxE-e),x=e+w/2;
+              exitWallBox(Math.round(e+y)%3===0?'rock':'basalt',x,y+h/2,w,h);
+            }
+          }
+        }
+        exitWallBox('basalt',0,(exitWall.lintelBottom+exitWall.ceiling)/2,exitWall.halfWidth*2,exitWall.ceiling-exitWall.lintelBottom);
+      }else for(let p=r.x0;p<r.x1;p+=2){
         const len=Math.min(2,r.x1-p),mid=p+len/2;
         if(secondMineRoomAt(mid,n+side*.05))continue;
         for(let y=0;y<r.ceiling;y+=1.4)box((Math.round(p+y)%3===0?'rock':'basalt'),mid,n+side*.34,y+.7,len,.68,1.4);
@@ -115,6 +222,13 @@ export function createSecondMineScene(){
     const light=new PointLight(0xffb277,24,16,2);light.position.set(camp.east,1.4,-camp.north);group.add(light);
   }
   dressSecondMineDryWings(box);
+  const overheadBoxes:StaticBox[]=[];
+  for(const items of parts.values())for(const part of items){
+    const bottom=part.y-part.h/2;
+    if(bottom<=0+geometryEpsilon)continue;
+    overheadBoxes.push({min:[part.x-part.w/2,bottom,-part.n-part.d/2],max:[part.x+part.w/2,part.y+part.h/2,-part.n+part.d/2]});
+  }
+  const overheadIndex=createStaticFootIndex(overheadBoxes);
   const dummy=new Matrix4(),q=new Quaternion(),v=new Vector3(),scale=new Vector3(),axis=new Vector3(0,0,1);
   for(const [kind,items] of parts){
     const m=new InstancedMesh(meshGeometry,material.get(kind),items.length);
@@ -128,12 +242,71 @@ export function createSecondMineScene(){
     state=next;water.visible=next!=='low';water.position.y=next==='high'?-.025:-.24;
     boat.visible=next==='middle';
   }
-  function canStand(e:number,n:number,r=.27){
-    if(!canStandSecondMine(e,n,state,r))return false;
-    return !solids.some(s=>Math.hypot(Math.max(0,Math.abs(e-s.x)-s.w/2),Math.max(0,Math.abs(n-s.n)-s.d/2))<r);
+  function syncLiftAperture(){
+    liftOpen=false;
+    if(lift){try{liftOpen=lift.readOpen()===true;}catch{liftOpen=false;}}
+    if(liftPlate)liftPlate.visible=!liftOpen;
+    return liftOpen;
   }
-  setRiverState('middle');
-  return {group,boat,water,solids,anchors:secondMineAnchors,setRiverState,canStand,floor:(e:number,n:number)=>secondMineFloor(e,n,state),
-    get riverState(){return state;},pieces:[...parts.values()].reduce((a,b)=>a+b.length,0)+boat.children.length+3,
-    dispose(){group.removeFromParent();meshGeometry.dispose();waterGeo.dispose();waterMat.dispose();riverGeometries.forEach(g=>g.dispose());material.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());}};
+  function solidDistance(s:Solid,e:number,n:number){
+    return Math.hypot(Math.max(0,Math.abs(e-s.x)-s.w/2),Math.max(0,Math.abs(n-s.n)-s.d/2));
+  }
+  /** Local floor and vertical headroom share the visible geometry; body-height
+   * collision remains restricted to the explicit solid set. */
+  function passageLocal(e:number,n:number,radius=.27,height=1.8){
+    if(disposed||![e,n,radius,height].every(Number.isFinite)||radius<0||height<=0)return;
+    const floor=secondMineFloor(e,n,state);
+    if(floor===undefined||!canStandSecondMine(e,n,state,radius))return;
+    if(liftOpen&&lift){
+      const de=Math.max(0,lift.hole.minE-e,e-lift.hole.maxE),dn=Math.max(0,lift.hole.minN-n,n-lift.hole.maxN);
+      if(Math.hypot(de,dn)<=radius)return;
+    }
+    for(const s of solids){
+      if(s.y+s.h/2<=floor+geometryEpsilon||s.y-s.h/2>=floor+height-geometryEpsilon)continue;
+      if(solidDistance(s,e,n)<radius)return;
+    }
+    let clearance=Infinity;
+    for(const box of overheadIndex.candidates(e,n,radius)){
+      const dx=Math.max(0,box.min[0]-e,e-box.max[0]),dz=Math.max(0,box.min[2]+n,-n-box.max[2]);
+      if(Math.hypot(dx,dz)<radius)clearance=Math.min(clearance,box.min[1]-floor);
+    }
+    if(lift&&liftPlate&&!liftOpen){
+      const de=Math.max(0,lift.hole.minE-e,e-lift.hole.maxE),dn=Math.max(0,lift.hole.minN-n,n-lift.hole.maxN);
+      if(Math.hypot(de,dn)<=radius)clearance=Math.min(clearance,lift.site.ceiling-floor);
+    }
+    return {floor,clearance};
+  }
+  function canStand(e:number,n:number,r=.27,height=1.8){
+    const passage=passageLocal(e,n,r,height);
+    return !!passage&&passage.clearance+geometryEpsilon>=height;
+  }
+  function acceptsMouth(mouth:unknown){
+    if(disposed||!matchesExitMouth(mouth))return false;
+    const northParts=[...parts.values()].flat().filter(p=>Math.abs(p.n-exitWall.north)<=geometryEpsilon);
+    if(northParts.length!==exitWallParts.length||northParts.some(p=>!exitWallParts.some(wall=>sameBox(p,wall))))return false;
+    const wallSolids:Solid[]=[];
+    for(const p of exitWallParts){
+      const solid=solids.find(s=>sameBox(p,s));
+      if(!solid)return false;
+      wallSolids.push(solid);
+    }
+    if(blocksDoorway(northParts)||blocksDoorway(solids))return false;
+    if(!coversWallRange(wallSolids,exitRoom?.x0??-6,-exitWall.halfWidth,0,exitWall.lintelBottom)||
+      !coversWallRange(wallSolids,exitWall.halfWidth,exitRoom?.x1??6,0,exitWall.lintelBottom))return false;
+    const lintels=wallSolids.filter(s=>s.x+s.w/2>-exitWall.halfWidth+geometryEpsilon&&s.x-s.w/2<exitWall.halfWidth-geometryEpsilon&&
+      s.y+s.h/2>exitWall.lintelBottom+geometryEpsilon);
+    if(!lintels.length||!coversWallRange(lintels,-exitWall.halfWidth,exitWall.halfWidth,exitWall.lintelBottom,exitWall.ceiling))return false;
+    if(Math.abs(Math.min(...lintels.map(s=>s.y-s.h/2))-exitWall.lintelBottom)>geometryEpsilon||
+      Math.abs(Math.max(...lintels.map(s=>s.y+s.h/2))-exitWall.ceiling)>geometryEpsilon)return false;
+    if(wallSolids.some(s=>s.y-s.h/2<-geometryEpsilon||s.y+s.h/2>exitWall.ceiling+geometryEpsilon))return false;
+    const expected=c2R30DeepMouths['minus140-to-minus165'].from;
+    const probeNorth=expected.at-.5;
+    const passage=passageLocal(expected.centre,probeNorth,.27,expected.height);
+    return !!passage&&passage.floor===0&&passage.clearance+geometryEpsilon>=expected.height&&canStand(expected.centre,probeNorth,.27,1.8);
+  }
+  setRiverState('middle');syncLiftAperture();
+  return {group,boat,water,solids,anchors:secondMineAnchors,setRiverState,canStand,passageLocal,acceptsMouth,floor:(e:number,n:number)=>secondMineFloor(e,n,state),
+    liftPlate,liftRoofPieces:entryRoofPieces,syncLiftAperture,get liftOpen(){return liftOpen;},
+    get riverState(){return state;},pieces:[...parts.values()].reduce((a,b)=>a+b.length,0)+boat.children.length+3+(liftPlate?1:0),
+    dispose(){if(disposed)return;disposed=true;group.removeFromParent();meshGeometry.dispose();waterGeo.dispose();waterMat.dispose();riverGeometries.forEach(g=>g.dispose());material.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());}};
 }

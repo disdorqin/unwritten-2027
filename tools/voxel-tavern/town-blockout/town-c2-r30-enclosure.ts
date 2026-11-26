@@ -9,6 +9,7 @@ import { secondMineDrySites } from '../../../src/shared/underground-second-mine-
 import {
   c2SecondMineBoxAllowed, c2SecondMineBounds, type C2SecondMineBox,
 } from './town-c2-second-mine-contract.js';
+import { c2R30DeepMouths, type C2R30DeepMouth } from './town-c2-r30-deep-mouths.js';
 
 export type C2R30EnclosureRole = 'floor' | 'wall' | 'ceiling' | 'rail' | 'post' | 'portal';
 export type C2R30EnclosureFamily =
@@ -37,6 +38,7 @@ export type C2R30EnclosureWall = Readonly<{
   end: number;
   ceiling: number;
   thickness: number;
+  bottom?: number;
 }>;
 
 export type C2R30EnclosureStats = Readonly<{
@@ -64,6 +66,7 @@ export type C2R30EnclosureScene = Readonly<{
   group: Group;
   boxes: readonly C2R30EnclosurePart[];
   colliders: readonly C2R30EnclosurePart[];
+  acceptsMouth(mouth: C2R30DeepMouth): boolean;
   stats(): C2R30EnclosureStats;
   dispose(): void;
 }>;
@@ -127,8 +130,13 @@ export const c2R30EnclosureWalls: readonly C2R30EnclosureWall[] = Object.freeze(
   { id: 'far-north-east', axis: 'n', fixed: 181.68, start: 6, end: 47, ceiling: 12, thickness: .64 },
   { id: 'exit-west', axis: 'x', fixed: -6.32, start: 182, end: 198, ceiling: 5, thickness: .64 },
   { id: 'exit-east', axis: 'x', fixed: 6.32, start: 182, end: 198, ceiling: 5, thickness: .64 },
-  { id: 'exit-mouth', axis: 'n', fixed: 197.68, start: -6, end: 6, ceiling: 5, thickness: .64 },
+  { id: 'exit-mouth-west', axis: 'n', fixed: 197.68, start: -6, end: -1.7, ceiling: 5, thickness: .64 },
+  { id: 'exit-mouth-east', axis: 'n', fixed: 197.68, start: 1.7, end: 6, ceiling: 5, thickness: .64 },
+  { id: 'exit-mouth-lintel', axis: 'n', fixed: 197.68, start: -1.7, end: 1.7,
+    bottom: 3.24, ceiling: 5.52, thickness: .64 },
 ]);
+
+export const c2R30EnclosureDeepMouth = c2R30DeepMouths['minus140-to-minus165'].from;
 
 export const c2R30EnclosureWestRailSegments = Object.freeze([
   Object.freeze({ id: 'bypass-west-north-rail', x: 49.05, n0: 114.6, n1: 127.6, postSpacing: 3.2 }),
@@ -329,7 +337,7 @@ export function buildTownC2R30Enclosure(): C2R30EnclosureScene {
       const n = wall.axis === 'x' ? middle : wall.fixed;
       const w = wall.axis === 'x' ? wall.thickness : length;
       const d = wall.axis === 'x' ? length : wall.thickness;
-      for (let bottom = 0, row = 0; bottom < wall.ceiling - 1e-9; bottom += 1, row++) {
+      for (let bottom = wall.bottom ?? 0, row = 0; bottom < wall.ceiling - 1e-9; bottom += 1, row++) {
         const h = Math.min(1.04, wall.ceiling - bottom);
         add(wall.id, 'wall', familyAt(x, n, 127 + row, 'wall'),
           x, n, bottom + h / 2, w, d, h);
@@ -424,8 +432,31 @@ export function buildTownC2R30Enclosure(): C2R30EnclosureScene {
     });
   }
   group.userData.stats = stats();
+  function acceptsMouth(mouth: C2R30DeepMouth) {
+    if (disposed || mouth.layer !== 'minus140' || mouth.axis !== 'north' ||
+        mouth.at !== c2R30EnclosureDeepMouth.at || mouth.centre !== c2R30EnclosureDeepMouth.centre ||
+        mouth.width !== c2R30EnclosureDeepMouth.width || mouth.height !== c2R30EnclosureDeepMouth.height) return false;
+    const half = mouth.width / 2;
+    for (let lateral = -half + .02; lateral < half; lateral += .1) {
+      for (const height of [.05, .9, 1.8, mouth.height - .05]) {
+        if (boxes.some(part => part.role === 'wall' &&
+          Math.abs(part.n - mouth.at) - part.d / 2 <= 1e-7 &&
+          Math.abs(part.x - mouth.centre - lateral) - part.w / 2 <= 1e-7 &&
+          part.y - part.h / 2 <= height && part.y + part.h / 2 >= height)) return false;
+      }
+    }
+    for (const side of [-1, 1]) {
+      const lateral = mouth.centre + side * (half + .2);
+      if (!boxes.some(part => part.role === 'wall' &&
+        Math.abs(part.n - mouth.at) - part.d / 2 <= .02 &&
+        Math.abs(part.x - lateral) - part.w / 2 <= .02 && part.y - part.h / 2 <= .9 &&
+        part.y + part.h / 2 >= .9)) return false;
+    }
+    return boxes.some(part => part.id.startsWith('exit-mouth-lintel/') &&
+      Math.abs(part.y - part.h / 2 - mouth.height) < 1e-7);
+  }
   return Object.freeze({
-    group, boxes, colliders, stats,
+    group, boxes, colliders, acceptsMouth, stats,
     dispose() {
       if (disposed) return;
       disposed = true;

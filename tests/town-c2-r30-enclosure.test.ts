@@ -10,8 +10,8 @@ import {
 import { secondMineDrySites } from '../src/shared/underground-second-mine-dry-wings.js';
 import { c2SecondMineBoxAllowed } from '../tools/voxel-tavern/town-blockout/town-c2-second-mine-contract.js';
 import {
-  buildTownC2R30Enclosure, c2R30EnclosureBoxAllowed, c2R30EnclosurePalette,
-  c2R30EnclosureRooms, c2R30EnclosureWalls, c2R30EnclosureWestRailSegments,
+  buildTownC2R30Enclosure, c2R30EnclosureBoxAllowed, c2R30EnclosureDeepMouth,
+  c2R30EnclosurePalette, c2R30EnclosureRooms, c2R30EnclosureWalls, c2R30EnclosureWestRailSegments,
   type C2R30EnclosureFamily, type C2R30EnclosurePart,
 } from '../tools/voxel-tavern/town-blockout/town-c2-r30-enclosure.js';
 
@@ -98,7 +98,7 @@ test('C2 R30 closes every surveyed roof and wall run without changing the room e
       for (let cursor = wall.start + .1; cursor < wall.end; cursor += .5) {
         const x = wall.axis === 'x' ? wall.fixed : cursor;
         const n = wall.axis === 'x' ? cursor : wall.fixed;
-        for (const y of [.6, Math.min(2.6, wall.ceiling - .2)]) {
+        for (const y of [(wall.bottom ?? 0) + .6, Math.min((wall.bottom ?? 0) + 2.6, wall.ceiling - .2)]) {
           assert.ok(scene.boxes.some(part => part.role === 'wall' &&
             containsXZ(part, x, n) && containsHeight(part, y)),
             `${wall.id} wall leak at ${x}/${n}/${y}`);
@@ -118,6 +118,33 @@ function overlapsRiver(part: C2R30EnclosurePart) {
     part.n + part.d / 2 > secondMineRiver.n0 &&
     part.n - part.d / 2 < secondMineRiver.n1;
 }
+
+test('C2 R30 opens the real N198 deep mouth at 3.4m by 3.24m without removing its wall', () => {
+  const scene = buildTownC2R30Enclosure();
+  try {
+    assert.equal(scene.acceptsMouth(c2R30EnclosureDeepMouth), true);
+    assert.equal(scene.acceptsMouth({ ...c2R30EnclosureDeepMouth, width: 4 }), false);
+    assert.equal(scene.acceptsMouth({ ...c2R30EnclosureDeepMouth, layer: 'minus165' }), false);
+    for (let x = -1.65; x <= 1.65; x += .05) {
+      for (const y of [.05, .9, 1.8, 3.19]) {
+        assert.equal(scene.colliders.some(part => part.role === 'wall' &&
+          Math.abs(part.x - x) <= part.w / 2 + 1e-7 &&
+          Math.abs(part.n - 198) <= part.d / 2 + 1e-7 &&
+          y >= part.y - part.h / 2 && y <= part.y + part.h / 2), false,
+          `mouth blocked at ${x}/${y}`);
+      }
+    }
+    for (const x of [-2, 2]) {
+      assert.ok(scene.colliders.some(part => part.role === 'wall' &&
+        Math.abs(part.x - x) <= part.w / 2 && Math.abs(part.n - 198) <= part.d / 2 &&
+        part.y - part.h / 2 <= .9 && part.y + part.h / 2 >= .9), `jamb missing at ${x}`);
+    }
+    assert.ok(scene.colliders.some(part => part.id.startsWith('exit-mouth-lintel/') &&
+      Math.abs(part.y - part.h / 2 - 3.24) < 1e-7));
+  } finally {
+    scene.dispose();
+  }
+});
 
 test('C2 R30 uses one frozen visible/collider source and every part passes the strengthened guard', () => {
   const scene = buildTownC2R30Enclosure();
