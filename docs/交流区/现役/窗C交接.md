@@ -135,5 +135,15 @@ C2等帧已优先交付。C方正式放置坐标契约 town-c-r30-deep-layer-con
 - b1dec16d：马石基座雕边、浮雕与受理出现时牌体碰撞，献灯后原拾取端不变；月光石末端18件矿石观察龛肩部，支线全程实体支撑，仍不把原视觉镜壁当真反射或奖励。两次月光支线回归各2451步、124.063m往返，真实地面射线通过。猴石原共鸣/马石献灯/营地事务保留。三件候选已推送；12次专项通过（11个不同测试，支线复跑），无全量构建。
 - 实浏览器 crystal-spur 8机位、gallery 5机位均passed，真实W各2.7m、拒绝0、页面错误0；机位draw分别8–53、68–164，tri分别106804–220116、99164–167632。均为独立宿主+评审相机灯，不是生产多人或手机性能，累计fps不作性能指标。原证据.evidence/c-r30-crystal-spur、.evidence/c-r30-gallery，脚本实际生成13截图，本会话未直接查看图像像素，不声称人工视觉审签。D盘原工作树复用，缓存/证据不入Git，无新工作树、独立子智能体。待B对上述三SHA配对审及总控串行合入；最新integration 479e2855确认7d92db10/2064368b已有B窄审，B eac4b4e0、C2 b7776c61。
 - 第一批本线独立实体施工收尾交候选，主路/分支/营地/矿车/纪念区已有实体及局部受理端，不意味着C-R03生产挂接全部完成。后续只对审回缺陷返工，不无依据反复添装饰；正式故事接线移第二批。首战/星尘/旧镐冲突仍待裁。
+## 2026-11-26 第二批 C-R02 原lift迁站/入梦落点接收端
+- 1551b9ba：新增C-owned town-c-r30-return-ride.ts，直接消费B surveyBR30ReturnHeadframe结构及C已有surveyR30ReturnRelocation，校验新轴E−124.5/N177、地表−24.2227、下站−89.35458276045、2.2m孔、原yaw、净空/坡率/保护测绘，原封闭候选不是开孔许可。createR30ReturnRidePort的ready只表示几何结构可用，revision()须A/B/C真实验收和总控批准均成立才允许原dreamChain的returnRide端口使用。首次跌落继续用原井E−120/N185及原池脚；重复乘笼同一原createUndergroundMineLift/WellBridge/DomainHandoff迁站。新路径呼叫脚与登笼脚分开：空笼到站后必须实际步入并主动登笼，旧池不再可召新笼；拒绝认证撤销/旧落点/异revision。复用原cage渲染，ridePath只迁移原笼，隐藏旧斜井衬砌，新井实际衬砌由批准后的原B/C实体提供。未传returnRide时原现役行为保持不变。
+- 2faeb111：入梦真实DOM增加黑屏落点状态及44px触屏重试按钮，失败才可重试，不自动重复提交，不提前解锁、同trip零伤受理才醒；dispose中止等待、清理界面和控制锁。定向严格tsc两组通过，9项原绞盘/首次下矿/空笼/原往返/新路径与模型回归 + 10项演出/重试/释放回归=19/19。新路测试使用B坐标及C实际旧宿主但认证字段/新口支持为评审fixture；没有宣称实际新井已开、网络联机或生产挂载通过。没有新工作树/独立子智能体。
+### 总控可审最小开孔与接入顺序（提交方案，不是授权）
+1. B/A核原坑底真实网格与protectedAt，保持原首坠口/绞盘/蛇石/灯房不动；复测B新头架及两端同轴，标出实际地表2.2m方孔，原封盖无许可不可拆。
+2. C复测折廊西壁旧站至新站315脚点、保留原池及原通道；只切实物连接西墙与新下站2.2m井顶，按坡顶高度接61.57688m实际衬砌，移走旧返程站的重复设施，保持新井双端防跌落且无笼时不开放站脚。
+3. A只接一个原dreamChain，传已校验port；readAcceptance提供同一明确revision及surfaceCut、mineRoofAndWestWallCut、oldStationRetired、continuousBore、physicalCageAndDock、existingAuthorityConnected、presentationConnected、approvedByTotalControl全部真实受理。supportsFoot按原movement/presence受理脚、实物支撑及trip落点判定；不以camera/客户端自报或fixture代替。调用原shaftRide.sample(acceptedTrip, now)时消费ridePath；A还应遵守descent AbortSignal，旧viewer上行失败/异步落点不能解锁成无效域。新站无水膜演出适配另在A接线时核对。证书永久变更中的在飞trip须同原权威处理恢复，不造第二套。独立port不能代替服务器多玩家权威。
+4. 总控许可后按B地表、C下站/衬砌、A原lift公共接入的最小差分串行合入；独立审B↔C，同区实走核验，首坠与往返两次均需在真实生产域和真实开口验收。未得许可之前不切任何生产网格。
+### C2接口再次明确（当前远端仍b7776c61）
+- C2旧卡仍称未发布−165/−190；实际C 4a1f7a41已发布r30DeepFrames/r30DeepLocalFeet/r30DeepWorldFeet，54331f32发布组装/实体连接。C2应直接消费该现役文件，勿重算：−140 E5.528570/N149.482468/H−140 yaw4.504772121；−165 E327.463270/N81.666183/H−165 yaw6.075568447；−190 E619.552961/N20.136818/H−187.6 yaw4.504772121。north=offset+east*sin(yaw)+north*cos(yaw)，旧C2 resolveSeam在north项错符号。地宫真正入脚local(0,.5,0)，前庭(0,105.7,−2.4)，终点(0,125.4,−2.4)，不是旧localEntry 105.7或封闭宝库125.8。二矿N198→勇士城E0，勇士城E180→地宫N0，四口净宽3.4m/净高3.24m；C2实物口/原壳及passageLocal、acceptsMouth交回C，A批准room及link。不得把C2旧canWireSeam仅有status当作生产许可。C2当前无新远端壳/桥，不抢写其在飞工作。
 ## 下一件
-第二批优先C-R02：基于B/A真实地表确认和旧站保护，提交最小开孔迁站接原lift方案供总控审，未批准不得切井；联A验收首次下矿→入梦→采矿→矿门→真实返程。并行C-R04：向C2核对已经发布的4a1f7a41/54331f32真实世界帧、接收脚、返程锚及真实洞厅口，消费正式C2预制及A域受理，不重建C2洞厅。第一批候选待独立审签及入干，正式生产回路和P-OPT未完，不发收工候选。
+第二批继续：C-R02候选交B/A/总控按上述方案联合确认，新井保持封闭；独立可做C-R03首坠→真实营地原故事/矿车→矿门贯穿受理链，消化正典冲突裁定后接A；C-R04消费C2实际新壳及开口。第一批三件候选仍待配审及总控入干，正式生产回路和P-OPT未完，不发收工候选。
