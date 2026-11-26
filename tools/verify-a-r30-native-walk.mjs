@@ -324,7 +324,13 @@ try{
    const p=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');
    return p&&Math.hypot(+p[1]-east,+p[2]-north)<1.2;
  },{pattern:positionPattern.source,east:segment==='shankou'?296:2,north:segment==='shankou'?520:159},{timeout:45000});
- for(const [i,target] of approach[segment].entries())await walkTo(page,evidence,target,segment+'-approach-'+i);
+ for(const [i,target] of approach[segment].entries()){
+   await walkTo(page,evidence,target,segment+'-approach-'+i);
+   if(segment==='supply'&&(i===2||i===3)){
+     const site=road.mouthWorks.sites.find(s=>s.id==='supply-station');
+     await wallView('supply-cabin-'+(i===2?'wide':'roofline'),Math.atan2(site.east-target[0],site.north-target[1]));
+   }
+ }
  const tower=road.outerWorks.towerRoutes.find(t=>t.id===segment+'-tower');
  const scenic=road.outerWorks.landscapeRoutes.find(r=>r.id===segment);
  const reverseScenic=segment==='western-clusters';
@@ -512,6 +518,9 @@ try{
    await wallView(segment+'-lookout',heading);
  }else await picture(page,evidence,segment+'-top');
  if(segment==='supply'){
+   const site=road.mouthWorks.sites.find(s=>s.id==='supply-station');
+   // Facing along the deck to show the telescope and the joined rear gable.
+   await wallView('supply-roof-lookout',Math.atan2(site.east-top.east,site.north-top.north));
    await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('屋顶望筒'),null,{timeout:5000});
    await page.keyboard.press('e');await page.waitForTimeout(600);
    await picture(page,evidence,'supply-scope');
