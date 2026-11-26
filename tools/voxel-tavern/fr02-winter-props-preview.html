@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<link rel="icon" href="data:," />
+<title>FR-02 冬日街景道具库 · 独立雪街展台</title>
+<style>
+  :root{
+    --bg:#0b1420; --panel:#0f1c2ad8; --line:#8fb3cf33; --ink:#e9f2f9; --dim:#9ab2c6;
+    --amber:#e3be7f;
+  }
+  html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--ink);
+    font:13.5px/1.5 "Segoe UI",system-ui,-apple-system,"Microsoft YaHei",sans-serif}
+  canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+  canvas:active{cursor:grabbing}
+  #hud{position:absolute;top:14px;left:14px;width:min(360px,calc(100vw - 28px));
+    max-height:calc(100vh - 28px);overflow:auto;padding:14px 16px;border:1px solid var(--line);
+    border-radius:14px;background:var(--panel);backdrop-filter:blur(12px);box-shadow:0 16px 44px #0006}
+  h1{font-size:15px;margin:0 0 2px;color:#fbe1b0}
+  .sub{font-size:11.5px;color:var(--dim);margin:0 0 10px}
+  .row{display:flex;gap:6px;flex-wrap:wrap;margin:7px 0}
+  button{border:1px solid #8aacc688;background:#1c3246c9;color:#eaf3fa;padding:5px 9px;
+    border-radius:8px;cursor:pointer;font:inherit;font-size:12px}
+  button:hover{background:#284661}
+  button.active{background:#b55b38;border-color:#e99c7f}
+  .list{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:10px 0}
+  .item{text-align:left;padding:6px 8px;font-size:12px;border-radius:7px;
+    border:1px solid #ffffff16;background:#0a141fb8;color:#d6e5f2}
+  .item.active{border-color:var(--amber);background:#2b2318cc;color:#ffe6ba}
+  .meta{margin-top:8px;padding:10px;border-radius:10px;background:#081019b0;border:1px solid #ffffff12;font-size:12px}
+  .meta b{color:var(--amber)}
+  .foot{position:absolute;right:14px;bottom:12px;font-size:11px;color:#8ba3b8;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="hud">
+  <h1>FR-02 冬日街景道具库（10 类）</h1>
+  <p class="sub">冬日雪街展台 · 绿色线框=阻挡，琥珀线框=可穿行雪堆</p>
+  <div class="row">
+    <button id="btn-overview" class="active">全览</button>
+    <button id="btn-front">近景</button>
+    <button id="btn-back">远景合批</button>
+  </div>
+  <div class="row">
+    <button id="btn-day">夜间 / 日间</button>
+    <button id="btn-lod">LOD: 高精度</button>
+    <button id="btn-col">净空线框: 关</button>
+  </div>
+  <div id="asset-list" class="list"></div>
+  <div id="meta-box" class="meta"></div>
+</div>
+<div class="foot">拖拽旋转 · 滚轮缩放 · 独立冬日展台未写正式地图</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import {
+  FriendMaterialLibrary,
+  applyAssetLod,
+  createDebugColliderWireframe,
+} from './town-blockout/town-friend-materials.ts';
+import {
+  FR02_WINTER_PROPS_CATALOG,
+  buildInstancedPropProxies,
+} from './town-blockout/town-friend-winter-props.ts';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x162436);
+scene.fog = new THREE.Fog(0x162436, 20, 56);
+
+const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 140);
+camera.position.set(8.2, 5.4, 11.2);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.target.set(0, 1.0, 0);
+
+const hemi = new THREE.HemisphereLight(0xc8def4, 0x2b3644, 0.92);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff1dc, 1.3);
+sun.position.set(9, 14, 10);
+sun.castShadow = true;
+sun.shadow.mapSize.set(1024, 1024);
+sun.shadow.camera.near = 1;
+sun.shadow.camera.far = 45;
+sun.shadow.camera.left = -12;
+sun.shadow.camera.right = 12;
+sun.shadow.camera.top = 12;
+sun.shadow.camera.bottom = -12;
+scene.add(sun);
+
+const lanternLight = new THREE.PointLight(0xffad4c, 0, 18, 1.4);
+lanternLight.position.set(0, 3.2, 2.0);
+scene.add(lanternLight);
+
+const libs = new FriendMaterialLibrary();
+
+// Snowy cobble street + snow shoulders (wide enough for distant instanced drifts)
+const street = new THREE.Mesh(new THREE.BoxGeometry(30, 0.2, 28), libs.get('snow'));
+street.position.set(0, -0.1, -2);
+street.receiveShadow = true;
+scene.add(street);
+
+const roadStrip = new THREE.Mesh(new THREE.BoxGeometry(20, 0.04, 3.4), libs.get('cobble'));
+roadStrip.position.set(0, 0.02, 0);
+roadStrip.receiveShadow = true;
+scene.add(roadStrip);
+
+// Distant instanced snowdrifts grounded on the back snow shoulder (far range batching demo)
+const distantDrifts = buildInstancedPropProxies(
+  [
+    { position: [-10, 0, -6.2], scale: [1.3, 1.1, 1.2] },
+    { position: [-4.5, 0, -6.8], scale: [1.1, 0.9, 1.0] },
+    { position: [3.2, 0, -6.4], scale: [1.4, 1.2, 1.1] },
+    { position: [9.5, 0, -6.0], scale: [1.2, 1.0, 1.3] },
+  ],
+  [1.4, 0.4, 1.0],
+  libs,
+  'snow',
+);
+scene.add(distantDrifts);
+
+const entries = [];
+const cols = 5;
+const spacingX = 3.2;
+const spacingZ = 4.6;
+
+FR02_WINTER_PROPS_CATALOG.forEach((entry, idx) => {
+  const col = idx % cols;
+  const row = Math.floor(idx / cols);
+  const px = (col - 2) * spacingX;
+  const pz = (row - 0.5) * spacingZ;
+
+  const asset = entry.build(libs);
+  asset.position.set(px, 0, pz);
+  scene.add(asset);
+
+  const colWire = createDebugColliderWireframe(entry.meta.colliders);
+  colWire.position.set(px, 0, pz);
+  colWire.visible = false;
+  scene.add(colWire);
+
+  entries.push({ entry, asset, colWire, pos: new THREE.Vector3(px, 1.0, pz) });
+});
+
+let selectedIndex = 0;
+let isNight = false;
+let lodLevel = 'high';
+let showColliders = false;
+
+const listEl = document.getElementById('asset-list');
+const metaEl = document.getElementById('meta-box');
+
+function renderMeta() {
+  const m = entries[selectedIndex].entry.meta;
+  metaEl.innerHTML =
+    `<b>${m.name}</b> (${m.id})<br>` +
+    `分类：${m.category} · 尺寸：${m.dimensions.join(' × ')} m<br>` +
+    `合批支持：${m.lod.instancingReady ? '支持 InstancedMesh' : '单体'}<br>` +
+    `净空说明：${m.clearanceNote}<br>` +
+    `授权：${m.license}`;
+}
+
+function selectAsset(idx, moveCam = true) {
+  selectedIndex = idx;
+  [...listEl.children].forEach((b, i) => b.classList.toggle('active', i === idx));
+  renderMeta();
+  if (moveCam) {
+    const t = entries[idx].pos;
+    controls.target.copy(t);
+    camera.position.set(t.x + 2.0, t.y + 1.2, t.z + 2.9);
+  }
+}
+
+entries.forEach(({ entry }, idx) => {
+  const btn = document.createElement('button');
+  btn.className = 'item' + (idx === 0 ? ' active' : '');
+  btn.textContent = `${idx + 1}. ${entry.meta.name}`;
+  btn.onclick = () => selectAsset(idx, true);
+  listEl.appendChild(btn);
+});
+renderMeta();
+
+document.getElementById('btn-overview').onclick = () => {
+  controls.target.set(0, 1.0, 0);
+  camera.position.set(8.2, 5.4, 11.2);
+};
+document.getElementById('btn-front').onclick = () => selectAsset(selectedIndex, true);
+document.getElementById('btn-back').onclick = () => {
+  controls.target.set(0, 0.8, -6);
+  camera.position.set(0, 7.5, 18.5);
+};
+document.getElementById('btn-day').onclick = (e) => {
+  isNight = !isNight;
+  e.currentTarget.classList.toggle('active', isNight);
+  if (isNight) {
+    scene.background.setHex(0x08101b);
+    scene.fog.color.setHex(0x08101b);
+    hemi.intensity = 0.24;
+    sun.intensity = 0.3;
+    lanternLight.intensity = 4.6;
+  } else {
+    scene.background.setHex(0x162436);
+    scene.fog.color.setHex(0x162436);
+    hemi.intensity = 0.92;
+    sun.intensity = 1.3;
+    lanternLight.intensity = 0;
+  }
+};
+document.getElementById('btn-lod').onclick = (e) => {
+  lodLevel = lodLevel === 'high' ? 'low' : 'high';
+  e.currentTarget.textContent = lodLevel === 'high' ? 'LOD: 高精度' : 'LOD: 远景代理';
+  e.currentTarget.classList.toggle('active', lodLevel === 'low');
+  entries.forEach(({ asset }) => applyAssetLod(asset, lodLevel));
+};
+document.getElementById('btn-col').onclick = (e) => {
+  showColliders = !showColliders;
+  e.currentTarget.textContent = showColliders ? '净空线框: 开' : '净空线框: 关';
+  e.currentTarget.classList.toggle('active', showColliders);
+  entries.forEach(({ colWire }) => { colWire.visible = showColliders; });
+};
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
