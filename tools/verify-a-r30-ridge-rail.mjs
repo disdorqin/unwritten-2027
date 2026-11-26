@@ -18,6 +18,7 @@ const report={a,d,scope:'joint candidate only; no live ridge replacement or rail
 try{
  cpSync(join(root,prefix),join(tmp,prefix),{recursive:true});
  cpSync(join(root,'src'),join(tmp,'src'),{recursive:true});
+ cpSync(join(root,'tools','fixtures'),join(tmp,'tools','fixtures'),{recursive:true});
  mkdirSync(join(tmp,'docs'),{recursive:true});cpSync(join(root,'docs','p0-layout-draft.json'),join(tmp,'docs','p0-layout-draft.json'));
  for(const p of files){
   writeFileSync(join(tmp,prefix,p),git('show',d+':'+prefix+p));report.files.push({path:prefix+p,blob:blob(d,p)});
