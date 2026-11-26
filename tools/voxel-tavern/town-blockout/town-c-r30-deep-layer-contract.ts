@@ -73,15 +73,26 @@ export function r30LinkPoint(link:R30DepthLink,along:number,lateral=0):R30Point|
  const e=(link.end.east-link.start.east)/link.length,n=(link.end.north-link.start.north)/link.length;
  return {east:link.start.east+e*along-n*lateral,north:link.start.north+n*along+e*lateral,height:h};
 }
+/** Shared timber stations for the real corridor mesh and capsule query. */
+export const r30RibProfile=Object.freeze({inset:.14,halfLength:.22,beamDepth:.26});
+export function r30LinkRibs(link:R30DepthLink){
+ const stations:number[]=[];
+ for(let t=4;t<link.length-3;t+=7)stations.push(t);
+ return stations;
+}
 /** Collision query is same geometric support as the visible ramp. No room
  * membership, unlock, water phase, or transition is granted by this function. */
 export function r30LinkPassage(link:R30DepthLink,east:number,north:number,radius=.27,height=1.8){
  // The overhead timber underside is .26m below the nominal roof.
- const clearance=link.clearance-.26;
+ const clearance=link.clearance-r30RibProfile.beamDepth;
  if(![east,north,radius,height].every(Number.isFinite)||radius<=0||height<=0||height>clearance)return;
  const e=(link.end.east-link.start.east)/link.length,n=(link.end.north-link.start.north)/link.length;
  const dx=east-link.start.east,dn=north-link.start.north,along=dx*e+dn*n,lateral=-dx*n+dn*e;
  if(along< -1e-6||along>link.length+1e-6||Math.abs(lateral)+radius>link.width/2)return;
+ // Timber feet and iron straps project 14cm into each side of the
+ // tunnel. Test the capsule against the same along/lateral footprint.
+ const sideGap=Math.max(0,link.width/2-r30RibProfile.inset-Math.abs(lateral));
+ if(sideGap<radius&&r30LinkRibs(link).some(t=>Math.hypot(sideGap,Math.max(0,Math.abs(along-t)-r30RibProfile.halfLength))<radius))return;
  const floor=r30LinkFloor(link,Math.max(0,Math.min(link.length,along)));
  return floor===undefined?undefined:{floor,clearance,along,lateral};
 }
