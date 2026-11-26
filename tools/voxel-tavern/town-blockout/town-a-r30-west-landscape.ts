@@ -15,6 +15,11 @@ export const ruinedShedFootway=[[-144,105],[-143,102],[-143.17252333055055,98.74
 export const sealedStorehouseFootway=[[-123,100],[-130.5,97.5],[-131,95.5]] as const;
 export const sortingShedFootway=[[-131,95.5],[-134.5,94.5],[-135,93],[-137.5,93]] as const;
 export const salvagePipeFootway=[[-144,105],[-142,96],[-143,91],[-147,90],[-152,88],[-150,89],[-152,92],[-153,96]] as const;
+// Ground part of the deck-aware inscription route. The old flat
+// 5f72153d survey brushed the raised transfer floor; actual player
+// support requires the front stair, deck and new rear stair first.
+// The final A-side snow wear fades to zero at the shared B apron.
+export const inscriptionAccessFootway=[[-55.3,176.65],[-64.63075545125356,183.25]] as const;
 export const oreYardFootway=[[-144,105],[-132,101],[-132,100],[-123,100]] as const;
 // Surveyed against the combined A collision index. These are optional
 // sightseeing footways, not new story or railway authority.
@@ -122,6 +127,7 @@ export function createWestLandscape(anchor:Anchor,apronRadius:number,northLimit:
     {points:sealedStorehouseFootway,half:.70,strength:.60},
     {points:sortingShedFootway,half:.70,strength:.60},
     {points:salvagePipeFootway,half:.70,strength:.55},
+    {points:inscriptionAccessFootway,half:.86,strength:.70},
     {points:coldFurnaceFootway,half:1.12,strength:.68},
     {points:waterTowerFootway,half:.92,strength:.62},
   ];

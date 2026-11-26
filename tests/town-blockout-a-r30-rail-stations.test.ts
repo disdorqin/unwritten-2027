@@ -32,6 +32,30 @@ test('sealed scenic portal has a real blocking wall and masonry piers',()=>{
   assert.ok(walls.some(b=>supportFootprintOverlaps(e,546.2,b,.27)&&b.min[1]<=g+.03&&b.max[1]>=g+1.8),JSON.stringify({e,g}));
  }
 });
+test('inscription access connects the real transfer approach and original rubbing foot without crossing any of the three rails',()=>{
+ const route=rail.stationWalkRoutes.find(r=>r.id==='inscription-access')!;
+ const transfer=rail.stationWalkRoutes.find(r=>r.id==='transfer-dock')!;
+ assert.ok(route&&transfer);
+ assert.deepEqual(route.points.at(-1),road.inscription.layout.useFoot);
+ const start=route.points[0]!,a=transfer.points[4]!,b=transfer.points[5]!;
+ const cross=(b.east-a.east)*(start.north-a.north)-(b.north-a.north)*(start.east-a.east);
+ assert.ok(Math.abs(cross)<.001);
+ const tracks=[rail.samples,rail.sidingSamples,rail.narrowSamples];
+ let min=Infinity;
+ for(let i=1;i<route.points.length;i++){
+  const a=route.points[i-1]!,b=route.points[i]!,count=Math.ceil(Math.hypot(b.east-a.east,b.north-a.north)/.08);
+  for(let j=0;j<=count;j++){
+   const t=j/count,e=a.east+t*(b.east-a.east),n=a.north+t*(b.north-a.north),h=a.height+t*(b.height-a.height);
+   for(const q of [...road.group.userData.colliders,...walls])assert.ok(!(h+.025<q.max[1]&&h+1.775>q.min[1]&&supportFootprintOverlaps(e,n,q,.40)));
+   for(const track of tracks)for(let k=1;k<track.length;k++){
+    const p=track[k-1]!,q=track[k]!,de=q.east-p.east,dn=q.north-p.north;
+    const s=Math.max(0,Math.min(1,((e-p.east)*de+(n-p.north)*dn)/(de*de+dn*dn)));
+    min=Math.min(min,Math.hypot(e-p.east-s*de,n-p.north-s*dn));
+   }
+  }
+ }
+ assert.ok(min>1.7);
+});
 for(const route of rail.stationWalkRoutes)test(route.id+' actual station floor and steps permit entry and return',()=>{
  const ground=(e:number,n:number)=>e<0?road.heightAt(e,n)!:grid.heightAt(e,n);
  for(const points of [route.points,[...route.points].reverse()]){

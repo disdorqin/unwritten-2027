@@ -13,9 +13,10 @@ import { railSections, buildRailStrip, buildTurnoutRailStrips, buildTurnoutBalla
 import { craterBranchControlLine, freightSidingControlLine, sampleRailCenterline } from './town-a-r30-rail-network';
 export { craterBranchControlLine } from './town-a-r30-rail-network';
 import { buildRailCrossings, mainPedestrianCrossings, freightPedestrianCrossings, narrowPedestrianCrossings } from './town-a-r30-rail-crossings';
+import { inscriptionAccessFootway } from './town-a-r30-west-landscape';
 
 type Terrain = ReturnType<typeof createTerrainGrid>;
-type CraterRoad = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'heightAt'>;
+type CraterRoad = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'heightAt' | 'inscription'>;
 
 export type RailExtensionAlignment = Readonly<{
   length: number;
@@ -895,15 +896,44 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad, loop?:
     box(iron,e-2.05,deck.top+3.24,n+1.55,.44,.34,.38);
     box(iron,e-2.05,deck.top+2.53,n+1.55,.055,1.05,.055);
     part(iron,new TorusGeometry(.18,.05,6,10),e-2.05,deck.top+1.92,n+1.55,0);
-    for(const x of [-.55,.55]){
+    // A real north exit, replacing the old closed transverse rail.
+    // Keep a central walking lane and place the rail posts at its sides.
+    for(const x of [-.82,.82]){
       box(timber,e+x,deck.top+.55,n+2.25,.14,1.10,.14);
       colliders.push(orientedSupportBox(e+x,n+2.25,0,.14,.14,deck.top,deck.top+1.1));
+      box(timberWarm,e+x,deck.top+1.02,n+1.92,.14,.14,.80);
+      colliders.push(orientedSupportBox(e+x,n+1.92,0,.14,.80,deck.top+.95,deck.top+1.09));
     }
-    box(timberWarm,e,deck.top+1.02,n+2.25,1.25,.14,.14);
+    const rear:{east:number;north:number;height:number}[]=[];
+    const count=4,run=.67,edge=n+d/2;
+    for(let i=0;i<count;i++){
+      const pn=edge+(i+.5)*run,soil=groundAt(e,pn);
+      const top=g+.90*(1-(i+1)/count),low=Math.min(top-.12,soil-.06);
+      box(stone,e,(low+top)/2,pn,1.65,top-low,run+.008);
+      floors.push(orientedSupportBox(e,pn,0,1.65,run+.008,low,top));
+      rear.push({east:e,north:pn,height:top});
+      if(i<count-1)for(const s of [-1,1]){
+        box(timber,e+s*.75,top+.43,pn,.10,.86,.12);
+        box(timberWarm,e+s*.75,top+.82,pn,.095,.12,run+.015,0,-Math.atan2(.225,run));
+        colliders.push(orientedSupportBox(e+s*.75,pn,0,.12,run+.015,top,top+.94));
+      }
+    }
     const start=freightRoute?.points[0];
     if(start){
       const approach=[[-58.7,148],[-58.3,153],[-57.8,159],[-56.3,163],[-55.3,165.4]].map(([east,north])=>({east,north,height:groundAt(east,north)}));
       stationWalkRoutes.push({id:'transfer-dock',points:[{...start},...approach,...deck.points]});
+      // Actual support heights, not the old ground-only survey. Start on
+      // the same existing transfer approach and end at the original foot.
+      const useFoot=road.inscription.layout.useFoot;
+      const end=inscriptionAccessFootway.at(-1)!;
+      const accessStart={east:-55.44285714285714,north:165.05714285714285,height:g};
+      if(Math.hypot(useFoot.east-end[0],useFoot.north-end[1])<.015&&
+         Math.abs(useFoot.height-groundAt(end[0],end[1]))<.02){
+        stationWalkRoutes.push({id:'inscription-access',points:[
+          accessStart,...deck.points,{east:e,north:173.18,height:deck.top},
+          ...rear,...inscriptionAccessFootway.map(([east,north])=>({east,north,height:groundAt(east,north)}))
+        ]});
+      }
     }
   }
   {

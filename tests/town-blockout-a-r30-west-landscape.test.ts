@@ -37,6 +37,8 @@ test('A-R02 civil materials preserve exact shared snow boundary and distinguish 
   }
   assert.ok(field.surfaceWeightsAt(-35,159).packed>.9);
   assert.ok(field.surfaceWeightsAt(-64,146).packed>.5);
+  assert.ok(field.surfaceWeightsAt(-55.3,176.65).packed>.55);
+  assert.equal(field.surfaceWeightsAt(-64.63075545125356,183.25).packed,0);
   const [b,r]=craterBeltTrackCorridor[3]!;
   const a=b*Math.PI/180;
   assert.ok(field.surfaceWeightsAt(road.anchor.east+r*Math.sin(a),road.anchor.north+r*Math.cos(a)).ballast>.8);
