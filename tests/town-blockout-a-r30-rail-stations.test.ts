@@ -15,6 +15,12 @@ test('both stations expose four real bench seats with unobstructed stand positio
   assert.ok(walls.some(q=>supportFootprintOverlaps(s.east,s.north,q,.27)&&Math.abs(q.max[1]-s.height-.50)<.001));
  }
 });
+test('sealed scenic portal has a real blocking wall and masonry piers',()=>{
+ const g=grid.heightAt(293,546);
+ for(const e of [290.1,292,293,294,295.9]){
+  assert.ok(walls.some(b=>supportFootprintOverlaps(e,546.2,b,.27)&&b.min[1]<=g+.03&&b.max[1]>=g+1.8),JSON.stringify({e,g}));
+ }
+});
 for(const route of rail.stationWalkRoutes)test(route.id+' actual station floor and steps permit entry and return',()=>{
  const ground=(e:number,n:number)=>e<0?road.heightAt(e,n)!:grid.heightAt(e,n);
  for(const points of [route.points,[...route.points].reverse()]){

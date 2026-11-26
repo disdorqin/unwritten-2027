@@ -2,7 +2,7 @@ import {
   BoxGeometry, BufferGeometry, CanvasTexture, Color, ConeGeometry, CylinderGeometry,
   DataTexture, DodecahedronGeometry, Group, Matrix4, Mesh, MeshBasicMaterial,
   MeshStandardMaterial, NearestFilter, PlaneGeometry, PointLight, Quaternion,
-  SRGBColorSpace, Vector3, CatmullRomCurve3,
+  RepeatWrapping, SRGBColorSpace, Vector3, CatmullRomCurve3,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { createTerrainGrid } from './terrain';
@@ -48,6 +48,37 @@ function pixelMaterial(base: string, shade: string, seed: number, accent = shade
   return new MeshStandardMaterial({ map, roughness: 1 });
 }
 
+// Continuous low-contrast construction material; preserve the existing
+// material count while replacing the stretched random-pixel surfaces.
+function railFinish(base:string,kind:'wood'|'stone'|'metal'|'snow'){
+  const value=Number.parseInt(base.slice(1),16),size=32,data=new Uint8Array(size*size*4);
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+    const row=Math.floor(y/8),bx=(x+(row%2)*8)%16;
+    const tone=kind==='wood'?(x%8===0?-19:((Math.floor(x/8)*7)%11-5)+(x*3+y/12|0)%5)
+      :kind==='stone'?(y%8===0||bx===0?-17:((row*7+Math.floor((x+(row%2)*8)/16)*13)%11-5))
+      :kind==='metal'?(x%8===0?-13:x%8===1?6:0):Math.round(3*Math.sin(x*.4+y*.25));
+    const c=(v:number)=>Math.max(0,Math.min(255,v+tone));
+    data.set([c(value>>16&255),c(value>>8&255),c(value&255),255],(y*size+x)*4);
+  }
+  const map=new DataTexture(data,size,size);
+  map.magFilter=map.minFilter=NearestFilter;map.wrapS=map.wrapT=RepeatWrapping;
+  map.colorSpace=SRGBColorSpace;map.needsUpdate=true;
+  const mat=new MeshStandardMaterial({map,roughness:1});
+  mat.userData.metricSpan=kind==='snow'?1.6:kind==='stone'?1.0:.84;
+  return mat;
+}
+function metricBox(mat:MeshStandardMaterial,sx:number,sy:number,sz:number){
+  const geo=new BoxGeometry(sx,sy,sz),span=mat.userData.metricSpan;
+  if(typeof span==='number'){
+    const uv=geo.getAttribute('uv'),normal=geo.getAttribute('normal');
+    for(let i=0;i<uv.count;i++){
+      const x=Math.abs(normal.getX(i))>.5,y=Math.abs(normal.getY(i))>.5;
+      uv.setXY(i,uv.getX(i)*(x?sz:sx)/span,uv.getY(i)*(y?sz:sy)/span);
+    }
+  }
+  return geo;
+}
+
 const up = new Vector3(0, 1, 0);
 const smooth01 = (t: number) => { const c = Math.max(0, Math.min(1, t)); return c * c * (3 - 2 * c); };
 
@@ -78,14 +109,14 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
   const group = new Group();
   group.name = 'crater-rail-extension';
 
-  const stone = pixelMaterial(palette.stone, palette.stoneDark, 47, palette.earth);
-  const stoneDark = pixelMaterial(palette.stoneDark, palette.night, 91, palette.stone);
-  const timber = pixelMaterial(palette.earth, palette.night, 33, palette.stone);
-  const timberWarm = pixelMaterial(palette.ochre, palette.earth, 71, palette.timberLight);
-  const slate = pixelMaterial(palette.slate, palette.night, 143, palette.stone);
-  const iron = pixelMaterial(palette.night, palette.rust, 161, palette.earth);
-  const rustIron = pixelMaterial(palette.rust, palette.night, 187, palette.earth);
-  const snow = pixelMaterial(palette.snow, palette.stone, 203);
+  const stone=railFinish(palette.stone,'stone');
+  const stoneDark=railFinish(palette.stoneDark,'stone');
+  const timber=railFinish(palette.earth,'wood');
+  const timberWarm=railFinish(palette.timberLight,'wood');
+  const slate=railFinish(palette.slate,'metal');
+  const iron=railFinish(palette.night,'metal');
+  const rustIron=railFinish(palette.rust,'metal');
+  const snow=railFinish(palette.snow,'snow');
   const paper = pixelMaterial(palette.paper, palette.ochre, 217, palette.stone);
   const steel = new MeshStandardMaterial({ color: 0x8e9eae, roughness: .45, metalness: .6 });
   const darkSteel = new MeshStandardMaterial({ color: 0x33323a, roughness: .8, metalness: .3 });
@@ -116,11 +147,11 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
   }
   function box(mat: MeshStandardMaterial, east: number, h: number, north: number,
     sx: number, sy: number, sz: number, yaw = 0, pitch = 0, roll = 0) {
-    part(mat, new BoxGeometry(sx, sy, sz), east, h, north, yaw, pitch, roll);
+    part(mat, metricBox(mat,sx,sy,sz), east, h, north, yaw, pitch, roll);
   }
   function segBox(mat: MeshStandardMaterial, center: Vector3, quat: Quaternion,
     lx: number, ly: number, lz: number, sx: number, sy: number, sz: number) {
-    const geo = new BoxGeometry(sx, sy, sz);
+    const geo = metricBox(mat,sx,sy,sz);
     geo.translate(lx, ly, lz);
     const g = geo.toNonIndexed();
     g.applyQuaternion(quat);
@@ -320,8 +351,19 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
         box(glow, lamp.east, topY + 2.08, lamp.north, .25, .30, .25, yaw);
       }
     } else {
-      box(slate, rc.east, topY + 2.45, rc.north, 6.4, .18, 4.6, yaw, .06);
-      box(snow, rc.east, topY + 2.62, rc.north, 6.2, .12, 4.4, yaw, .06);
+      // Two actual pitched leaves, ridge and end beams.
+      for(const side of [-1,1]){
+        const p=at(side*1.66,3);
+        box(slate,p.east,deckY+2.72,p.north,3.46,.18,4.85,rotation,0,-side*.22);
+        box(snow,p.east,deckY+2.84,p.north,3.30,.10,4.68,rotation,0,-side*.22);
+        const eave=at(side*3.28,3);
+        box(timber,eave.east,deckY+2.32,eave.north,.18,.23,4.94,rotation);
+      }
+      box(timber,rc.east,deckY+3.12,rc.north,.19,.22,5.04,rotation);
+      for(const z of [1.6,4.4]){
+        const p=at(0,z);
+        box(timber,p.east,deckY+2.35,p.north,5.05,.20,.22,rotation);
+      }
     }
     for(const side of [-1,1]){
       const bc=at(side*3.8,3.45);
@@ -331,11 +373,18 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
         box(timber,p.east,deckY+.19,p.north,.13,.38,.45,rotation);
       }
       colliders.push(orientedSupportBox(bc.east,bc.north,rotation,2.2,.52,deckY,deckY+.50));
+      const back=at(side*3.8,3.68);
+      box(timberWarm,back.east,deckY+.82,back.north,2.2,.44,.10,rotation);
+      colliders.push(orientedSupportBox(back.east,back.north,rotation,2.2,.10,deckY+.50,deckY+1.04));
+      for(const offset of [-.85,.85]){
+        const p=at(side*3.8+offset,3.68);
+        box(timber,p.east,deckY+.72,p.north,.11,.58,.12,rotation);
+      }
       const use=at(side*3.8,2.60);
       benchSeats.push({id:label+'-'+side,east:bc.east,north:bc.north,height:deckY,useEast:use.east,useNorth:use.north,yaw:yaw+Math.PI});
     }
     const sc = at(-4.6, 2.6);
-    stationSign(sc.east, topY + 1.7, sc.north, yaw, label);
+    stationSign(sc.east, topY + 1.7, sc.north, rotation, label);
     return at;
   }
 
@@ -362,7 +411,17 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
     for (const s of [-1, 1]) box(stone, 293 + s * 2.9, g + 3.4, 546.5, 1.3, 6.8, 1.6);
     box(stone, 293, g + 7.3, 546.5, 7.2, 1.5, 1.7);
     box(stoneDark, 293, g + 8.3, 546.5, 7.6, .6, 1.9);
-    box(dark, 293, g + 2.9, 546.2, 4.7, 5.8, .5);
+    // Scenic tunnel is an explicitly sealed portal, not an invisible
+    // walk-through black plane. Threshold, masonry and beam share colliders.
+    box(dark,293,g+2.9,546.2,4.7,5.8,.5);
+    colliders.push(orientedSupportBox(293,546.2,0,4.7,.5,g,g+5.8));
+    for(const side of [-1,1]){
+      colliders.push(orientedSupportBox(293+side*2.9,546.5,0,1.3,1.6,g,g+6.8));
+      for(const h of [1.15,3.0,4.85])box(stoneDark,293+side*2.9,g+h,545.65,1.40,.15,.13);
+    }
+    box(timber,293,g+4.75,545.88,4.66,.27,.22);
+    box(timber,293,g+1.25,545.88,4.66,.20,.22);
+    for(const x of [-1.7,0,1.7])box(timber,293+x,g+2.95,545.88,.20,5.4,.22);
     for (const [dx, dn, s] of [[-3.4, 3.4, 3.2], [3.6, 3, 2.7], [0, 4.6, 3.8], [-1.5, 2.6, 2.2]] as const) {
       part(stoneDark, new DodecahedronGeometry(s, 0), 293 + dx, g + s * .42, 546.5 + dn, dx * 1.3);
       part(snow, new DodecahedronGeometry(s * .82, 0), 293 + dx, g + s * .42 + s * .48, 546.5 + dn, dx * 1.3);
