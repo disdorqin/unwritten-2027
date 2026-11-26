@@ -4,6 +4,9 @@
  */
 type Point=readonly [number,number];
 type Anchor=Readonly<{east:number;north:number}>;
+/** Surveyed against the actual yard rubble, rail and fence. Both the
+ * physical route and the packed surface use this one sequence. */
+export const oreYardFootway=[[-144,105],[-132,101],[-132,100],[-123,100]] as const;
 const unit=(x:number)=>Math.max(0,Math.min(1,x));
 const smooth=(x:number)=>{const u=unit(x);return u*u*(3-2*u)};
 const rad=(deg:number)=>deg*Math.PI/180;
@@ -96,6 +99,7 @@ export function createWestLandscape(anchor:Anchor,apronRadius:number,northLimit:
     {points:[[-67,136],[-86.025,126.15357]],half:1.45,strength:.72},
     {points:[[-43,159],[-67,136],[-144,105],[-151.75,112.34]],half:1.75,strength:.7},
     {points:[[-57.9,146],[-59.25,146],[-64,146]],half:1.9,strength:.8},
+    {points:oreYardFootway,half:.72,strength:.83},
   ];
   // Four isolated fractured shoulders on the existing outer carrier.
   // Oriented lenses, not a ring of evenly spaced rocks.

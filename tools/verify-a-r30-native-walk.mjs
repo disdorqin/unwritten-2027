@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -301,6 +301,7 @@ const approach={
  freight:[[-12,159],[-43,159]],
  instrument:[[-12,159],[-29,159],[-36,145],[-38,145],[-48,143.5],[-54.5,140.5]],
  smelter:[[-12,159],[-43,159],[-67,136],[-144,105]],
+ 'ore-yard':[[-12,159],[-43,159],[-67,136],[-144,105]],
 };
 try{
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:graphicsArgs});
@@ -321,7 +322,7 @@ try{
    tower?[tower.entry,...tower.stairs]:segment==='supply'?road.mouthWorks.supplyDeckRoute:
    segment==='supplyinterior'?road.mouthWorks.supplyInteriorRoute:
    ['kengkou','freight','shankou'].includes(segment)?rail.stationWalkRoutes.find(t=>t.id===(segment==='freight'?'freight-shed':segment+'-station')).points:
-   road.outerWorks.industrialRoutes.find(t=>t.id===(segment==='gatehouse'?'gatehouse':segment+'-plant')).points;
+   road.outerWorks.industrialRoutes.find(t=>t.id===(segment==='gatehouse'||segment==='ore-yard'?segment:segment+'-plant')).points;
  async function step(point,label){
    await walkTo(page,evidence,[point.east,point.north],label,['northwalk','outcrop','outerclusters'].includes(segment)?.46:.18);
    await page.waitForTimeout(140);
@@ -347,6 +348,10 @@ try{
      await wallView('outerclusters-'+(i===1?7:6),Math.atan2(site.east-point.east,site.north-point.north));
    }
    if(segment==='outcrop'&&(i===1||i===2))await wallView('outcrop-'+(i===1?'approach':'strata'),Math.atan2(-164-point.east,51-point.north));
+   if(segment==='ore-yard'&&(i===1||i===path.length-1)){
+     const site=road.outerWorks.sites.find(s=>s.id==='ore-yard');
+     await wallView('ore-yard-'+i,Math.atan2(site.east-point.east,site.north-point.north));
+   }
    if(segment==='shankou'&&i===0)await wallView('shankou-arrival',Math.PI);
    if(segment==='northwalk'&&(i===1||i===2))await wallView('northwalk-'+(i===1?'seam':'mid'),0);
    if(segment==='wall'&&i===0)await wallView('wall-town-face',-Math.PI/2);

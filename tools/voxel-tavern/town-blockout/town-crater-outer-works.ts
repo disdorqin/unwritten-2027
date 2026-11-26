@@ -7,6 +7,7 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import { industrialBuilder, type IndustryPoint, type IndustryWindow } from './town-a-r30-industrial-shell';
 import { orientedSupportBox } from './town-a-r30-oriented-support';
+import { oreYardFootway } from './town-a-r30-west-landscape';
 import { northFootwayPosts } from './town-a-r30-north-connector';
 import { createZa36StrataTexture } from './town-za36-crater-ejecta';
 
@@ -789,6 +790,10 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       [-6, -2, 3.6, 2.6, ore], [-1, 3.5, 2.8, 2, oreOchre], [4.5, -3, 3.1, 2.2, oreGrey], [8, 2.5, 2.2, 1.5, ore],
     ];
     const yardStructure=industrialBuilder(fr,g,put,colliders,floors);
+    // Surveyed public approach, grounded against the same carrier that
+    // paints the packed snow. The sealed warehouse remains closed.
+    const route=oreYardFootway.map(([east,north])=>({east,north,height:heightAt(east,north)}));
+    if(route.every(p=>p.height!==undefined))industrialRoutes.push({id:'ore-yard',points:route as IndustryPoint[]});
     for(const [dx,dz,r,h,mat] of piles){
       if(mat===oreOchre){
         for(let layer=0;layer<4;layer++){
