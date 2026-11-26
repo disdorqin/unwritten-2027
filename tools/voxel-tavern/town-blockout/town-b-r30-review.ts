@@ -6,6 +6,8 @@ import {createMeteorCrater,meteorCraterFixturePlan} from './meteor-crater';
 import {attachBR30PhysicalKit} from './town-b-r30-physical-kit';
 import {buildBR30ReturnHeadframe} from './town-b-r30-return-headframe';
 import {installBR30MoundPlanting} from './town-b-r30-mound-planting';
+import {installBR30MoundWorkFlag,createBR30MoundControls} from './town-b-r30-mound-work-flag';
+import {createMound} from './town-crater-points-play';
 import {createBR30WorkshopReviewFixture} from './town-b-r30-workshop-review-fixture';
 import {stripBR30LegacyTerraceMesh} from './town-b-r30-retire-legacy-terraces';
 import {settleBR30StorySupports} from './town-b-r30-settle-story-supports';
@@ -18,6 +20,7 @@ const settledSupports=settleBR30StorySupports(road.group,road.heightAt);
 const rail=buildCraterRailExtension(grid,road);
 const {face,machines,markers}=attachBR30PhysicalKit(road,rail);
 const mound=installBR30MoundPlanting(road);
+const workFlag=installBR30MoundWorkFlag(road);
 // Only the independent review consumes the sealed return prefab; no
 // production terrain cut or new lift authority is introduced.
 const returnHeadframe=buildBR30ReturnHeadframe(road);
@@ -55,6 +58,7 @@ add('mound-foot','中央丘 · 矿道出口',mound.route[0],{...summit,height:su
 add('mound-east','中央丘 · 东侧坡',mound.route[5],{...summit,height:summit.height+1.3});
 const crownTree=mound.sites.find(s=>s.ring==='summit')!;
 add('mound-crown','中央丘 · 焦松与风旗',summit,{...crownTree,height:crownTree.height+1.7});
+add('mound-work-flag','中央丘 · 旧工旗',workFlag.foot,workFlag.target());
 const rt=returnHeadframe.survey;
 add('return-headframe','封闭返程井架候选',rt.approach,{...rt.axis,height:rt.axis.height+1.5});
 const back={east:rt.approach.east+(rt.bend.east-rt.approach.east)*.35,north:rt.approach.north+(rt.bend.north-rt.approach.north)*.35};
@@ -78,13 +82,31 @@ const fixturePanel=document.querySelector<HTMLElement>('#fixture-panel')!,fixtur
 fixturePanel.hidden=!fixtureMode;
 const workshop=fixtureMode?createBR30WorkshopReviewFixture(machines,()=>({east,north,height:feet,heading:yaw,pitch,eyeHeight:1.65})):undefined;
 sample.addEventListener('change',()=>workshop?.setHeld(sample.value));
+// Review fixture only. Deliberately isolated from actual profile/atlas
+// storage. A's production dispatcher must use its existing authority.
+const moundMode=new URLSearchParams(location.search).has('mound');
+const moundPanel=document.querySelector<HTMLElement>('#mound-fixture')!,moundStatus=document.querySelector<HTMLElement>('#mound-status')!;
+moundPanel.hidden=!moundMode;
+const fixtureKey='b-r30-mound-review-only-v1';
+let saved={flagStraight:false,overlookKnown:false};
+if(moundMode){try{const x=JSON.parse(localStorage.getItem(fixtureKey)??'null');if(x&&typeof x.flagStraight==='boolean'&&typeof x.overlookKnown==='boolean')saved=x;}catch{}}
+const moundRule=createMound(saved.flagStraight);let known=saved.overlookKnown;
+const persistMound=()=>{if(moundMode)localStorage.setItem(fixtureKey,JSON.stringify({flagStraight:moundRule.flagStraight,overlookKnown:known}));};
+const moundControls=moundMode?createBR30MoundControls(workFlag,{
+ pose:()=>({east,north,height:feet,heading:yaw,pitch,eyeHeight:1.65}),
+ facts:()=>({flagStraight:moundRule.flagStraight,overlookKnown:known}),
+ async request(intent){
+  if(intent.kind==='reach-overlook'){const r=moundRule.reachSummit();known=known||r.atlasFirstTime;persistMound();return {accepted:true};}
+  const r=moundRule.straightenFlag();if(r.persist)persistMound();return {accepted:r.changed};
+ }
+}):undefined;
 function light(){const col=new Color(night?0x18263c:0xa8bfd1);scene.background=col;scene.fog=new Fog(col,65,290);
   sky.intensity=night?.78:1.75;sun.intensity=night?.24:2.1;sky.color.set(night?0x9cb7e2:0xc6d9f6);
   road.craterActions.setNight(night);phase.textContent=night?'雪夜':'白昼';}
 function choose(){
   const v=views.find(v=>v.id===select.value)!;
   ({east,north,height:feet}=v.foot);
-  const target=machines.targets.find(t=>(t.index===undefined?t.station:t.station+'-'+t.index)===v.id)?.point??v.target;
+  const target=v.id==='mound-work-flag'?workFlag.target():machines.targets.find(t=>(t.index===undefined?t.station:t.station+'-'+t.index)===v.id)?.point??v.target;
   const e=target.east-east,n=target.north-north;
   yaw=Math.atan2(e,n);pitch=Math.atan2(target.height-feet-1.65,Math.hypot(e,n));
 }
@@ -104,6 +126,10 @@ function tick(now:number){
   }
   const f=Number(keys.has('KeyW'))-Number(keys.has('KeyS')),side=Number(keys.has('KeyD'))-Number(keys.has('KeyA'));
   if(f||side){const v=3.2*dt/Math.hypot(f,side);step(east+(Math.sin(yaw)*f+Math.cos(yaw)*side)*v,north+(Math.cos(yaw)*f-Math.sin(yaw)*side)*v);}
+  if(moundControls){
+   if(moundControls.action('reach-overlook'))void moundControls.interact('reach-overlook');
+   moundStatus.textContent=(known?'样例图鉴：坑底最高处已登记':'样例图鉴：尚未登顶')+'；'+(moundRule.flagStraight?'工旗已扶正':moundControls.action('straighten-flag')?'E 扶正旧工旗':'瞄准旧工旗');
+  }
   camera.position.set(east,feet+1.65,-north);look.set(Math.sin(yaw)*Math.cos(pitch),Math.sin(pitch),-Math.cos(yaw)*Math.cos(pitch)).add(camera.position);
   camera.lookAt(look);renderer.render(scene,camera);frame++;
   hud.textContent='E '+east.toFixed(2)+' / N '+north.toFixed(2)+' / H '+feet.toFixed(2);
@@ -112,12 +138,13 @@ function tick(now:number){
 function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();}
 addEventListener('resize',resize);addEventListener('keydown',e=>{
  keys.add(e.code);
- if(workshop&&!e.repeat&&(e.code==='KeyE'||e.code==='KeyQ')){e.preventDefault();void workshop.press(e.code==='KeyQ'?-1:1);}
+ if(!e.repeat&&e.code==='KeyE'&&moundControls?.action('straighten-flag')){e.preventDefault();void moundControls.interact('straighten-flag');}
+ else if(workshop&&!e.repeat&&(e.code==='KeyE'||e.code==='KeyQ')){e.preventDefault();void workshop.press(e.code==='KeyQ'?-1:1);}
 });addEventListener('keyup',e=>keys.delete(e.code));addEventListener('blur',()=>keys.clear());
 renderer.domElement.addEventListener('pointerdown',e=>{drag=true;renderer.domElement.setPointerCapture(e.pointerId);});
 renderer.domElement.addEventListener('pointerup',()=>drag=false);
 renderer.domElement.addEventListener('pointermove',e=>{if(drag){yaw+=e.movementX*.003;pitch=Math.max(-1.3,Math.min(1.3,pitch-e.movementY*.003));}});
 select.addEventListener('change',choose);phase.addEventListener('click',()=>{night=!night;light();});
 resize();choose();light();
-Object.defineProperty(window,'__bR30Review',{value:()=>({frame,night,east,north,feet,yaw,pitch,view:select.value,views,retiredPlates,settledSupports:settledSupports.length,draws:renderer.info.render.calls,tris:renderer.info.render.triangles,aim:machines.aimControl({east,north,height:feet},yaw,pitch,1.65)?.station??null,workshop:workshop?.state(),moundRoute:mound.route,moundAudit:mound.audit})});
+Object.defineProperty(window,'__bR30Review',{value:()=>({frame,night,east,north,feet,yaw,pitch,view:select.value,views,retiredPlates,settledSupports:settledSupports.length,draws:renderer.info.render.calls,tris:renderer.info.render.triangles,aim:machines.aimControl({east,north,height:feet},yaw,pitch,1.65)?.station??null,workshop:workshop?.state(),moundRoute:mound.route,moundAudit:mound.audit,workFlag:{at:workFlag.at,foot:workFlag.foot,target:workFlag.target(),straight:workFlag.straight,parts:workFlag.parts,fixture:moundMode?{known,flagStraight:moundRule.flagStraight,aim:!!moundControls?.action('straighten-flag')}:undefined}})});
 requestAnimationFrame(tick);
