@@ -87,7 +87,6 @@ export function buildFrontRidgeR30Field(heightBelow:GroundAt,ownership:Ownership
  const width=B.east-B.west+1,depth=B.north-B.south+1;
  const elevation=new Float32Array(width*depth);
  const weights=new Float32Array(elevation.length);
- const get=(e:number,n:number)=>elevation[(n-B.south)*width+e]!;
  for(let n=B.south;n<=B.north;n++)for(let e=B.west;e<=B.east;e++){
    const i=(n-B.south)*width+e,h0=heightBelow(e,n),allowed=ownership(e,n);
    if(!Number.isFinite(h0)||!Number.isFinite(allowed))throw new RangeError('D-R01 requires finite ground-only H0 and ownership');
@@ -99,6 +98,14 @@ export function buildFrontRidgeR30Field(heightBelow:GroundAt,ownership:Ownership
    weights[i]=weight;
    elevation[i]=mix(h0,h,weight);
  }
+ return createFrontRidgeR30FieldFromRaster(elevation,weights);
+}
+/** One raster authority for terrain mesh and support; engineering callers
+ * must preserve the outer boundary and supply their own protection check. */
+export function createFrontRidgeR30FieldFromRaster(elevation:Float32Array,weights:Float32Array){
+ const width=B.east-B.west+1,depth=B.north-B.south+1;
+ if(elevation.length!==width*depth||weights.length!==elevation.length)throw new RangeError('Invalid ridge raster');
+ const get=(e:number,n:number)=>elevation[(n-B.south)*width+e]!;
  function heightAt(e:number,n:number):number|undefined{
    if(!Number.isFinite(e)||!Number.isFinite(n)||e<B.west||e>B.east||n<B.south||n>B.north)return;
    const x=Math.min(Math.floor(e),B.east-1),z=Math.min(Math.floor(n),B.north-1),u=e-x,v=n-z;
@@ -146,11 +153,11 @@ export function ridgeFarIndices(cols:number,rows:number,step=4){
 }
 /** Spatial chunks share the same 1m vertices and cross-boundary normals.
  * No bottomless shell, doubled road surface or DoubleSide workaround. */
-export function mountFrontRidgeR30(field:FrontRidgeR30Field){
+export function mountFrontRidgeR30(field:FrontRidgeR30Field,roadAt?:(east:number,north:number)=>boolean){
  const group=new Group();group.name='town-d-r30-front-ridge';
  const texture=makeFrontRidgePixelTexture(),material=new MeshLambertMaterial({vertexColors:true,map:texture});
  const moss=new Color('#59694b'),snow=new Color('#e0e8ed');
- const shale=new Color('#78838b'),sandstone=new Color('#b09a7b'),rust=new Color('#88624a'),frost=new Color('#c9d9e3');
+ const shale=new Color('#78838b'),sandstone=new Color('#b09a7b'),rust=new Color('#88624a'),frost=new Color('#c9d9e3'),gravel=new Color('#b5a58f');
  const geometries:BufferGeometry[]=[];
  const lod:{mesh:Mesh;fine:BufferGeometry;far:BufferGeometry;east:number;north:number}[]=[];
  for(let n0=B.south;n0<B.north;n0+=B.chunk)for(let e0=B.west;e0<B.east;e0+=B.chunk){
@@ -190,7 +197,9 @@ export function mountFrontRidgeR30(field:FrontRidgeR30Field){
      tint.lerp(frost,Math.min(.78,snowWeight*1.25));
      tint.lerp(snow,smooth((snowWeight-.16)/.63));
      // broad-scale color continuity with a restrained small stone grain
-     tint.multiplyScalar(.93+.07*small);color.set([tint.r,tint.g,tint.b],i*3);
+     tint.multiplyScalar(.93+.07*small);
+     if(roadAt?.(e,n))tint.copy(gravel).multiplyScalar(.90+.10*small);
+     color.set([tint.r,tint.g,tint.b],i*3);
      uv.set([(e+h*.11)/2,(n*.72+h*.69)/2],i*2);
      if(e<e1&&n<n1)indices.push(i,i+1,i+cols,i+1,i+cols+1,i+cols);
    }
