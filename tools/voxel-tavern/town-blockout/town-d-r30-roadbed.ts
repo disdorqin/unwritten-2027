@@ -149,6 +149,7 @@ export function tryConstrainedLowerRoadbed(field:FrontRidgeR30Field,route:readon
   }
  }
  const elevation=draft.field.elevation.slice(),weights=field.weights.slice();
+ const shoulderSmoothing:{id:number;weight:number}[]=[];
  for(const [id,p]of core)elevation[id]=(p.lo+p.hi)/2;
  // Shoulders remain a solid blend to the original field; extend the
  // constrained grade from the nearest core vertex rather than the old
@@ -165,6 +166,18 @@ export function tryConstrainedLowerRoadbed(field:FrontRidgeR30Field,route:readon
   const t=Math.max(0,Math.min(1,(p.distance-half)/(shoulder-half))),w=1-t*t*(3-2*t);
   const old=field.vertexAt(e,n),v=old+(elevation[nearest]!-old)*w;
   elevation[id]=old+Math.max(-cap,Math.min(cap,v-old));
+  // Keep the entire walking raster, including its interpolation halo,
+  // fixed. Smooth only the outer shoulder to remove isolated cut spikes.
+  if(n>270&&allowed(e,n)&&p.distance>half+1.45&&p.distance<shoulder-.5)
+   shoulderSmoothing.push({id,weight:.48*Math.sin(Math.PI*(p.distance-half-1.45)/(shoulder-half-1.95))});
+ }
+ for(let pass=0;pass<4;pass++){
+  const previous=elevation.slice();
+  for(const {id,weight}of shoulderSmoothing){
+   const average=(previous[id-1]!+previous[id+1]!+previous[id-field.width]!+previous[id+field.width]!)/4;
+   const old=field.elevation[id]!,v=previous[id]!+(average-previous[id]!)*weight;
+   elevation[id]=old+Math.max(-cap,Math.min(cap,v-old));
+  }
  }
  const graded=createFrontRidgeR30FieldFromRaster(elevation,weights),audit=auditRidgeRoadSurface(graded,route);
  let cut=0,fill=0;

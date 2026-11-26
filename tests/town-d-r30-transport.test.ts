@@ -6,6 +6,7 @@ import {buildFrontRidgeR30Field} from '../tools/voxel-tavern/town-blockout/town-
 import {solveLowerRidgeRoad,tryConstrainedLowerRoadbed} from '../tools/voxel-tavern/town-blockout/town-d-r30-roadbed';
 import {auditRidgeRoadCrossings} from '../tools/voxel-tavern/town-blockout/town-d-r30-road-survey';
 import {mountRidgeRoadFurniture} from '../tools/voxel-tavern/town-blockout/town-d-r30-road-furniture';
+import {mountRidgeRetainingBanks} from '../tools/voxel-tavern/town-blockout/town-d-r30-retaining-banks';
 import {mountRidgeCableFacilities,externalCableDockSupport,auditRidgeCableSweep} from '../tools/voxel-tavern/town-blockout/town-d-r30-cable-facilities';
 
 test('lower road engineering fixture uses one graded field with actual net width and slope',()=>{
@@ -23,6 +24,17 @@ test('lower road engineering fixture uses one graded field with actual net width
  const furniture=mountRidgeRoadFurniture(result.field,route,()=>true);
  try{assert.ok(furniture.postCount>0);assert.ok(furniture.railCount>0);for(const p of route)assert.equal(furniture.blocked(p.east,p.north,result.field.heightAt(p.east,p.north)!),false)}
  finally{furniture.dispose()}
+ const banks=mountRidgeRetainingBanks(result.field,route,()=>true);
+ const forbidden=mountRidgeRetainingBanks(result.field,route,()=>false);
+ try{
+  assert.ok(banks.walls.length>0);
+  assert.equal(forbidden.walls.length,0);
+  banks.updateView(-2000,-2000);assert.ok(banks.visibleInstances()<banks.brickCount*.12);
+  const wall=banks.walls[0]!;const far=banks.visibleInstances();banks.updateView(wall.east,wall.north);assert.ok(banks.visibleInstances()>far);
+  for(const p of route)assert.equal(banks.blocked(p.east,p.north,result.field.heightAt(p.east,p.north)!),false);
+  for(const b of banks.walls){assert.ok(b.top-b.bottom<=3.20001);assert.ok(banks.blocked(b.east,b.north,b.bottom+.1))}
+  console.log('Retaining masonry:',banks.walls.length,banks.brickCount,banks.highest);
+ }finally{banks.dispose();forbidden.dispose()}
 });
 test('cable candidate preserves the protected railway datum and clocks both cabins from surveyed spans',()=>{
  const grid=createTerrainGrid(),field=buildFrontRidgeR30Field(grid.groundHeightAt,(e,n)=>{
