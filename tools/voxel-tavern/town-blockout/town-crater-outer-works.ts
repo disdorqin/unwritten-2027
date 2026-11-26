@@ -1513,14 +1513,37 @@ export function buildCraterOuterWorks(road: CraterRoad) {
         box(workshopWood,e,(low+h+.24)/2,n,.34,h+.24-low,1.02);
         hitBox(floors,e,n,0,1.02,.34,low,h+.24);
         hitBox(floors,e,n,0,.34,1.02,low,h+.24);
-        box(workshopWood,e,(low+h+trunkH)/2,n,stem,h+trunkH-low,stem);
-        hitBox(colliders,e,n,0,stem,stem,low,h+trunkH);record('pine',colliders.at(-1)!);
-        for(let k=0;k<4;k++){
-          const side=k%2?1:-1,y=h+2.35+k*.66,len=.65+hash(j*17+k*19)*.72;
-          box(workshopWood,e+side*len*.42,y,n,.10+len,.12,.15,0,0,side*.34);
-          box(cleanSnow,e+side*len*.42,y+.09,n,len*.68,.045,.11,0,0,side*.34);
+        // Taper the trunk above the walking envelope. Each section owns
+        // a matching solid; bark plates and jagged splinters are visible.
+        const joints=[{e,n,lo:low,hi:h+2.3,w:stem},
+          {e:e+.045,n:n-.025,lo:h+2.3,hi:h+trunkH*.72,w:stem*.82},
+          {e:e+.075,n:n-.055,lo:h+trunkH*.72,hi:h+trunkH,w:stem*.58}];
+        for(const [k,s] of joints.entries()){
+          box(workshopWood,s.e,(s.lo+s.hi)/2,s.n,s.w,s.hi-s.lo,s.w);
+          hitBox(colliders,s.e,s.n,0,s.w,s.w,s.lo,s.hi);
+          if(k===0)record('pine',colliders.at(-1)!);
         }
-        box(shoulderRock,e,h+trunkH+.07,n,stem*.8,.14,stem*.8);
+        for(const side of [-1,1]){
+          box(timber,e+side*stem*.47,h+.94,n,.05,1.38,stem*.62);
+          box(timber,e,h+1.24,n+side*stem*.47,stem*.52,1.74,.045);
+        }
+        const branchCount=3+((ci+j)%3);
+        for(let k=0;k<branchCount;k++){
+          const angle=ci*.89+j*.63+k*2.399963;
+          const y=h+2.55+k*(trunkH-2.85)/branchCount;
+          const len=(.78+hash(j*17+k*19+ci)*.88)*(1-k*.11);
+          const dx=Math.cos(angle),dn=Math.sin(angle),slope=.23+.42*hash(ci*11+j+k*7);
+          const bx=e+dx*len*.42,bn=n+dn*len*.42;
+          // Local X follows the branch azimuth; positive local X rises.
+          box(workshopWood,bx,y+len*.12,bn,len,.13,.16,angle,0,slope);
+          if((ci+j+k)%2===0)box(cleanSnow,bx,y+len*.12+.09,bn,len*.55,.045,.11,angle,0,slope);
+          const fx=e+dx*len*.79,fn=n+dn*len*.79;
+          box(timber,fx,y+len*.23+.19,fn,.09,.47,.10,angle,0,-.22);
+          if(k%2===0)box(timber,fx-dn*.15,y+len*.23+.12,fn+dx*.15,.37,.075,.08,angle+Math.PI/2,0,.45);
+        }
+        const crown=joints[2]!;
+        for(const [k,side]of [-1,1].entries())
+          box(workshopWood,crown.e+side*crown.w*.24,h+trunkH+.12+k*.08,crown.n,crown.w*.42,.24+k*.16,crown.w*.73);
         pines++;
       }
     }
