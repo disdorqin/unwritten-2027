@@ -2041,6 +2041,47 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     id:route.id,views:route.views,
     points:route.points.map(([east,north])=>({east,north,height:heightAt(east,north)})),
   })).filter(route=>route.points.every(p=>p.height!==undefined)) as {id:string;views:readonly {index:number;site:string}[];points:IndustryPoint[]}[];
+  // Three real rest points on the surveyed outer shoulders. Low stone
+  // footings follow the carrier, with a timber seat and weathered back.
+  // The benches face the exposed rock, not the player's access route.
+  const scenicSeats:{id:string;east:number;north:number;height:number;useEast:number;useNorth:number;yaw:number}[]=[];
+  const restPlans=[
+    {id:'rest-west',e:-210.6,n:108.3,target:[-208,105],from:[-205,105],via:[]},
+    {id:'rest-northwest',e:-217.6,n:256.9,target:[-216,265],from:[-216,255],via:[[-216,257.7]]},
+    {id:'rest-north',e:-167.5,n:295,target:[-170,304],from:[-170,295],via:[[-168.5,296.1]]},
+  ];
+  for(const plan of restPlans){
+    const g=heightAt(plan.e,plan.n);
+    if(g===undefined)continue;
+    const heading=Math.atan2(plan.target[0]!-plan.e,plan.target[1]!-plan.n);
+    const fr=frame({east:plan.e,north:plan.n,height:g},heading*180/Math.PI);
+    const center=fr.at(0,.38),stand=fr.at(0,.84);
+    const hs=[-1,0,1].flatMap(x=>[-1,0,1].map(z=>{
+      const p=fr.at(x*1.10,.38+z*.97);return heightAt(p.east,p.north)??g;
+    }));
+    const low=Math.min(...hs)-.08,deck=Math.max(...hs)+.05;
+    box(workshopBrick,center.east,(low+deck-.055)/2,center.north,2.20,deck-.055-low,1.94,fr.yaw);
+    floors.push(orientedSupportBox(center.east,center.north,fr.yaw,2.20,1.94,low,deck));
+    for(let i=0;i<4;i++){
+      const p=fr.at(-.825+i*.55,.38);
+      box(workshopWood,p.east,deck-.0275,p.north,.545,.055,1.94,fr.yaw);
+    }
+    const seat=fr.at(0,0);
+    box(workshopWood,seat.east,deck+.46,seat.north,1.54,.08,.44,fr.yaw);
+    colliders.push(orientedSupportBox(seat.east,seat.north,fr.yaw,1.54,.44,deck,deck+.50));
+    const back=fr.at(0,-.23);
+    box(workshopWood,back.east,deck+.79,back.north,1.54,.34,.11,fr.yaw);
+    colliders.push(orientedSupportBox(back.east,back.north,fr.yaw,1.54,.11,deck+.50,deck+.96));
+    for(const side of [-1,1]){
+      const p=fr.at(side*.62,0),q=fr.at(side*.62,-.23);
+      box(workshopRust,p.east,deck+.22,p.north,.12,.44,.34,fr.yaw);
+      box(workshopWood,q.east,deck+.48,q.north,.12,.96,.12,fr.yaw);
+      box(workshopRust,q.east,deck+.64,q.north,.17,.11,.14,fr.yaw);
+    }
+    scenicSeats.push({id:plan.id,...seat,height:deck,useEast:stand.east,useNorth:stand.north,yaw:-heading});
+    const points=[plan.from,...plan.via].map(([east,north])=>({east:east!,north:north!,height:heightAt(east!,north!)??g}));
+    landscapeRoutes.push({id:plan.id,views:[],points:[...points,{...stand,height:deck}]});
+  }
   // ---------- merge batches ----------
   for (const [mat, geos] of batches) {
     const joined = mergeGeometries(geos.map(g => g.index ? g.toNonIndexed() : g));
@@ -2058,7 +2099,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   }
   setNight(true);
   return {
-    group, sites, fencePosts, setNight, towerRoutes,industrialRoutes,gatehouseSeats,shoulderStacks,approachRockSupports,outerClusterPieces,landscapeRoutes,shoulderRibs,
+    group, sites, fencePosts, setNight, towerRoutes,industrialRoutes,gatehouseSeats,shoulderStacks,approachRockSupports,outerClusterPieces,landscapeRoutes,shoulderRibs,scenicSeats,
     wallLine: { east: wallEast, northStart: 13, northEnd: 307 },
     colliders, floors, ramps,
   };

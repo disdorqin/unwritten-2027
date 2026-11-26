@@ -71,6 +71,18 @@ test('guard shed bench and brazier have distinct accessible interaction points',
 for(const route of road.outerWorks.landscapeRoutes)test(route.id+' scenic ground walk and return through actual supports',()=>{
  walk(route.id,route.points);walk(route.id,[...route.points].reverse());
 });
+test('three outer shoulder rests expose real grounded seat surfaces and separate stand points',()=>{
+ assert.equal(road.outerWorks.scenicSeats.length,3);
+ for(const s of road.outerWorks.scenicSeats){
+  const route=road.outerWorks.landscapeRoutes.find(r=>r.id===s.id)!;
+  assert.ok(route);
+  const foot=route.points.at(-1)!;
+  assert.ok(Math.hypot(foot.east-s.useEast,foot.north-s.useNorth)<.001);
+  assert.ok(floors.some(b=>supportFootprintOverlaps(s.useEast,s.useNorth,b,.27)&&Math.abs(b.max[1]-s.height)<.001));
+  assert.ok(boxes.some(b=>supportFootprintOverlaps(s.east,s.north,b,.27)&&Math.abs(b.max[1]-s.height-.50)<.001));
+  assert.ok(Math.hypot(s.east-s.useEast,s.north-s.useNorth)>.75);
+ }
+});
 test('assembly registration notice has a real unobstructed approach and return',()=>{
  const r=road.mouthWorks.assemblyRoutes[0]!;
  walk(r.id,r.points);walk(r.id,[...r.points].reverse());
