@@ -386,7 +386,11 @@ try{
      await picture(page,evidence,segment+'-'+(lighting==='雪夜'?'night':'day'));
    }
  }else if(segment==='guard-shed'){
-   await wallView('guard-hearth',Math.PI);
+   await wallView('guard-hearth',-.72);
+   if((await page.locator('#lighting').textContent())!=='雪夜'){
+     await page.locator('#town-panel-toggle').click();await page.locator('#lighting').click();await page.locator('#town-settings-close').click();
+   }
+   await picture(page,evidence,'guard-before-feed');
    await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('添柴'),null,{timeout:8000});
    await page.keyboard.press('e');
    await page.waitForFunction(()=>document.querySelector('#town-activity-status')?.textContent?.includes('火盆亮了'),null,{timeout:8000});

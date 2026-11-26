@@ -331,7 +331,7 @@ export function buildCraterMouthWorks(road: CraterRoad) {
         c.beginPath(); c.moveTo(150, y); c.lineTo(150, y + 40); c.stroke();
       }
     });
-    const boardStand=point(-4.6,3.55,padY);
+    const boardStand=point(-4.6,4.25,padY);
     actions.push({id:'registration',label:'阅读入坑告示',...boardStand,range:1.05});
     const entry=fr.at(0,7.2);
     assemblyRoutes.push({id:'assembly-registration',points:[
