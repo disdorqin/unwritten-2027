@@ -410,9 +410,20 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     put(dark, -4, g + 2.2, 5.56, 3.4, 4.4, .18);
     const doorP = fr.at(-2.1, 5.75);
     box(iron, doorP.east, g + 2.1, doorP.north, 1.7, 4.2, .14, fr.yaw + .5);
-    // Tall brick chimney, cold.
-    put(rustIron, 10.5, g + 13.0, -2, 1.5, 18, 1.5);
-    put(stoneDark, 10.5, g + 22.25, -2, 1.9, .5, 1.9);
+    // Cold chimney: restrained masonry courses and a recessed dark flue.
+    // All projecting detail is above the roof or within the existing stack.
+    put(workshopBrick, 10.5, g + 13.0, -2, 1.5, 18, 1.5);
+    for(const h of [19.0,20.15,21.3]){
+      put(workshopRust,10.5,g+h,-2,1.59,.13,1.59);
+      for(const x of [-.58,.58])for(const s of [-1,1])
+        put(workshopSheet,10.5+x,g+h,-2+s*.80,.08,.08,.06);
+    }
+    put(stoneDark,10.5,g+22.10,-2,1.9,.20,1.9);
+    for(const s of [-1,1]){
+      put(workshopBrick,10.5+s*.78,g+22.36,-2,.34,.32,1.9);
+      put(workshopBrick,10.5,g+22.36,-2+s*.78,1.22,.32,.34);
+    }
+    put(dark,10.5,g+22.215,-2,1.22,.025,1.22);
     // Ingot stacks and crates left where the last shift dropped them.
     // Actual staggered billets on pallets rather than coincident meshes.
     // Preserve the center service lane.
@@ -439,8 +450,19 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     }
     // Blast-furnace tower, independent at the west end: tapered iron stack, cold mouth.
     const bf = fr.at(-19.5, 0);
-    cyl(rustIron, bf.east, g + 5, bf.north, 1.9, 2.7, 10, 12);
-    cyl(iron, bf.east, g + 10.3, bf.north, 2.15, 2.15, .6, 12);
+    cyl(workshopRust, bf.east, g + 5, bf.north, 1.9, 2.7, 10, 12);
+    // Tapered load-bearing shell, restrained hoop reinforcement and riveted
+    // seams. Bands stay inside the original 5.4m solid collision envelope.
+    for(const h of [1.5,3.3,5.2,7.1,8.9]){
+      const r=2.7-.08*h;
+      cyl(workshopSheet,bf.east,g+h,bf.north,r+.06,r+.06,.18,12);
+      for(let i=0;i<12;i++){
+        const theta=i*Math.PI/6;
+        const x=-19.5+Math.sin(theta)*(r+.03),z=Math.cos(theta)*(r+.03);
+        put(workshopSheet,x,g+h,z,.12,.09,.12);
+      }
+    }
+    cyl(workshopSheet, bf.east, g + 10.3, bf.north, 2.15, 2.15, .6, 12);
     const bfDoor = fr.at(-19.5, 2.55);
     box(dark, bfDoor.east, g + 1.1, bfDoor.north, 1.6, 2.2, .2, fr.yaw);
     cone(slag, fr.at(-19.5, 6.5).east, g + 1.1, fr.at(-19.5, 6.5).north, 3.4, 2.2, 10);
