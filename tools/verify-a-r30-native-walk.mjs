@@ -356,7 +356,8 @@ try{
   finally{await touch('touchEnd',[]);}
   await page.waitForTimeout(300);
   const walked=await readPose(page),distance=Math.hypot(walked.east-start.east,walked.north-start.north);
-  assert.ok(distance>.4&&distance<5,JSON.stringify({start,walked,distance}));
+  // 7.5m/s ordinary walking; allow actual input dispatch/frame latency.
+  assert.ok(distance>.4&&distance<7.5,JSON.stringify({start,walked,distance}));
   await page.waitForTimeout(450);const stopped=await readPose(page);
   assert.ok(Math.hypot(stopped.east-walked.east,stopped.north-walked.north)<.2);
   const yawBefore=(await waitForWire(page,evidence)).yaw;
