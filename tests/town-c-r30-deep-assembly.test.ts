@@ -55,11 +55,16 @@ test('registered deep assembly mounts real local source geometry, joins graded l
    const domain=r30LinkDomain(link),contract=a.contracts.find(c=>c.id===link.id)!;
    foot={...contract.entry};host.mounted.sync();
    assert.equal(a.resolveHandoff({...foot,east:foot.east+10},domain),undefined);
+   linkRooms=false;assert.equal(a.resolveHandoff(foot,domain),undefined,'revoked room before sync');linkRooms=true;
+   mouths=false;assert.equal(a.resolveHandoff(foot,domain),undefined,'revoked physical mouth before sync');mouths=true;
    const handoff=a.resolveHandoff(foot,domain);assert.deepEqual(handoff?.to,contract.intoLinkFromStart);
    assert.equal(a.passageAt(domain,foot.east,foot.north),undefined,'render/arrival preflight never switches domain');
    foot={...handoff!.to};host.mounted.sync();assert.equal(a.activeDomain(),domain);
    const start=r30LinkPoint(link,0)!,next=r30LinkPoint(link,.5)!;
    assert.ok(host.domainPassageAt(domain,start.east,start.north));
+   linkRooms=false;assert.equal(a.supportsArrival(domain,start),false);assert.equal(host.domainPassageAt(domain,start.east,start.north),undefined);linkRooms=true;
+   mouths=false;assert.equal(host.domainPassageAt(domain,start.east,start.north),undefined);mouths=true;
+   const oldFoot=foot;foot={...contract.entry};assert.equal(host.domainPassageAt(domain,start.east,start.north),undefined);foot=oldFoot;
    assert.equal(host.domainPassageAt(r30DeepDomains.minus140,start.east,start.north),undefined);
    const move=host.resolveUndergroundStep(foot,next,'standing');
    assert.ok(move&&Math.abs(move.foot.height-next.height)<1e-6&&move.foot.domainId===domain);
@@ -80,7 +85,10 @@ test('registered deep assembly mounts real local source geometry, joins graded l
    assert.equal(a.passageAt(contract.exit.domainId,foot.east,foot.north)?.floor,foot.height);
   }
   assert.equal(a.supportsArrival(r30DeepDomains.minus190,r30DeepWorldFeet.minus190.exit),true);
-  const first=a.contracts[0];foot={...first.intoLinkFromStart};host.mounted.sync();waterAvailable=false;host.mounted.sync();
+  accepted=false;assert.equal(a.supportsArrival(r30DeepDomains.minus190,r30DeepWorldFeet.minus190.exit),false);assert.equal(a.passageAt(foot.domainId,foot.east,foot.north),undefined);accepted=true;
+  const first=a.contracts[0];foot={...first.intoLinkFromStart};host.mounted.sync();waterAvailable=false;
+  assert.equal(a.passageAt(first.domainId,foot.east,foot.north),undefined,'lost water rejects before sync');assert.equal(a.resolveHandoff(foot,first.entry.domainId),undefined);
+  host.mounted.sync();
   assert.equal(a.openLinks().includes(first.id),false);assert.equal(a.passageAt(first.domainId,foot.east,foot.north),undefined);
   accepted=false;host.mounted.sync();assert.deepEqual(a.availableLayers(),[]);assert.deepEqual(a.openLinks(),[]);
   assert.equal(city.group.visible,false);assert.equal(palace.group.visible,false);assert.equal(mounts,2);

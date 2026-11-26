@@ -14,8 +14,9 @@ test('actual first host prepares second mine from the same accepted water and on
  readAcceptedDomainFoot:()=>({domainId:domain,...foot})});
  assert.equal(h.kind,'ready');if(h.kind!=='ready')assert.fail();
  try{
+  const initialChildren=[...parent.children];
   h.mounted.sync();assert.equal(h.deepHost.status(),'awaiting-water');
-  assert.equal(parent.children.length,1);
+  assert.equal(h.deepHost.mounted,undefined);assert.deepEqual(parent.children,initialChildren);
   connected=true;h.mounted.sync();assert.equal(h.deepHost.status(),'awaiting-domain');
   const second=h.deepHost.mounted!;
   assert.ok(second&&!second.group.visible);
@@ -26,9 +27,14 @@ test('actual first host prepares second mine from the same accepted water and on
   assert.equal(h.deepHost.passageAt('underground/mine',foot.east,foot.north),undefined);
   const river=secondMineToWorld({east:0,north:137,height:0});
   assert.equal(h.deepHost.passageAt(domain,river.east,river.north),undefined);
-  now=2*townDayMs;h.mounted.sync();assert.equal(second.getRiverState(),'low');
+  now=2*townDayMs;
+  assert.equal(h.deepHost.supportsArrival(domain,foot),false,'new water receipt must update physical support first');
+  assert.equal(h.deepHost.passageAt(domain,foot.east,foot.north),undefined);
+  h.mounted.sync();assert.equal(second.getRiverState(),'low');
   assert.equal(h.deepHost.passageAt(domain,river.east,river.north)?.floor,-140.7);
-  connected=false;h.mounted.sync();assert.equal(h.deepHost.status(),'awaiting-water');assert.equal(second.group.visible,false);
+  domain='underground/mine';assert.equal(h.deepHost.passageAt(secondMineDomainId,foot.east,foot.north),undefined);domain=secondMineDomainId;
+  connected=false;assert.equal(h.deepHost.supportsArrival(domain,foot),false);assert.equal(h.deepHost.passageAt(domain,river.east,river.north),undefined);
+  h.mounted.sync();assert.equal(h.deepHost.status(),'awaiting-water');assert.equal(second.group.visible,false);
   assert.equal(h.deepHost.supportsArrival(domain,foot),false);
   connected=true;h.mounted.sync();assert.equal(h.deepHost.mounted,second,'reuse scene after reconnect');
   foot={...foot,height:-90};h.mounted.sync();assert.equal(h.deepHost.status(),'awaiting-domain');

@@ -23,6 +23,17 @@ export function createR30DeepHost(options:HostOptions){
  let status:'unregistered-seam'|'awaiting-water'|'awaiting-domain'|'ready'|'disposed'=
    options.seamRegistered?'awaiting-water':'unregistered-seam';
  const clear=()=>{active=false;if(second)second.group.visible=false};
+ // A new effective water level must first update the real river mesh and its
+ // collision. Reject queries in the interval between network receipt and sync.
+ let presented:ReturnType<typeof readUndergroundWaterPresentation>;
+ function waterCurrent(){
+  const latest=readUndergroundWaterPresentation(options.readAcceptedWater);
+  return !!latest&&!!presented&&latest.nightOrdinal===presented.nightOrdinal&&latest.level===presented.level;
+ }
+ function acceptedDomainNow(){
+  const f=options.readAcceptedFoot?.();
+  return !!f&&f.domainId===secondMineDomainId&&isSecondMinePresenceFoot(f.east,f.north,f.height);
+ }
  function sync(){
   if(disposed)return false;
   if(!options.seamRegistered){status='unregistered-seam';clear();return false}
@@ -31,15 +42,15 @@ export function createR30DeepHost(options:HostOptions){
   const raw=options.readAcceptedWater();
   const water=readUndergroundWaterPresentation(()=>raw);
   if(!water){status='awaiting-water';clear();return false}
-  snapshot=raw;
+  snapshot=raw?{...raw}:undefined;
   if(!second){
    const m=mountRegisteredSecondMineDomain({parent:options.parent,readAcceptedWater:()=>snapshot});
    if(m.kind!=='ready'){status='awaiting-water';clear();return false}
    second=m;
   }
   if(!second.sync()){status='awaiting-water';clear();return false}
-  const p=options.readAcceptedFoot?.();
-  active=!!p&&p.domainId===secondMineDomainId&&isSecondMinePresenceFoot(p.east,p.north,p.height);
+  presented=water;
+  active=acceptedDomainNow();
   second.group.visible=active;
   status=active?'ready':'awaiting-domain';
   return active;
@@ -49,13 +60,13 @@ export function createR30DeepHost(options:HostOptions){
   sync,status:()=>status,
   /** Preflight support for the sole transfer authority; no domain switch. */
   supportsArrival(domainId:string,foot:R30Point){
-   if(disposed||!options.seamRegistered||!second||status==='awaiting-water'||domainId!==secondMineDomainId||
+   if(disposed||!options.seamRegistered||!second||status==='awaiting-water'||!waterCurrent()||domainId!==secondMineDomainId||
     !isSecondMinePresenceFoot(foot.east,foot.north,foot.height))return false;
    const p=second.passageAt(foot.east,foot.north);
    return p!==undefined&&Math.abs(p.floor-foot.height)<.02&&!options.blocks?.(domainId,foot,.27);
   },
   passageAt(domainId:string,east:number,north:number,radius=.27){
-   if(disposed||!active||domainId!==secondMineDomainId)return;
+   if(disposed||!active||!waterCurrent()||!acceptedDomainNow()||domainId!==secondMineDomainId)return;
    const p=second?.passageAt(east,north,radius);
    if(p&&options.blocks?.(domainId,{east,north,height:p.floor},radius))return;
    return p;

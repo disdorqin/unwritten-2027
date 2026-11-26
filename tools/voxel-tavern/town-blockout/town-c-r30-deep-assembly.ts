@@ -77,9 +77,20 @@ export function createR30DeepAssembly(options:Readonly<{
  const scenes=new Map<Layer,ScenePort>(),corridors=new Map<string,MountedCorridor>();
  const available=new Set<Layer>(),openLinks=new Set<string>();
  let activeDomain:string|undefined,acceptedFoot:Foot|undefined,disposed=false;
+ function layerCurrent(layer:Layer){
+  return available.has(layer)&&options.bridge?.acceptsLayer(layer,r30DeepFrames[layer],r30DeepRoomProposals[layer])===true;
+ }
+ function linkCurrent(link:R30DepthLink){
+  const bridge=options.bridge,socket=r30DeepMouths[link.id as LinkId];
+  if(!bridge||!openLinks.has(link.id)||!bridge.acceptsLink(link,r30LinkRoom(link)))return false;
+  const from=link.from==='minus140'?options.supportsSecondMine(link.start)&&bridge.acceptsSecondMineMouth(socket.from):
+    link.from==='minus165'&&layerCurrent('minus165')&&scenes.get('minus165')?.acceptsMouth(socket.from);
+  const target=link.to==='minus165'?'minus165':'minus190';
+  return !!from&&layerCurrent(target)&&scenes.get(target)?.acceptsMouth(socket.to)===true;
+ }
  function localPass(layer:Layer,p:R30Point,radius=.27,height=1.8){
   const s=scenes.get(layer),frame=r30DeepFrames[layer];
-  if(!s||!available.has(layer)||!includes(r30DeepRoomProposals[layer],p))return;
+  if(!s||!layerCurrent(layer)||!includes(r30DeepRoomProposals[layer],p))return;
   const l=r30LayerLocal(frame,p),q=s.passageLocal(l.east,l.north,radius,height);
   if(q&&[q.floor,q.clearance].every(Number.isFinite)&&q.clearance>=height)
    return {floor:q.floor+frame.worldOffset.height,clearance:q.clearance};
@@ -147,7 +158,7 @@ export function createR30DeepAssembly(options:Readonly<{
  function preflight(domain:string,p:R30Point){
   if(disposed)return false;
   for(const layer of available)if(domain===r30DeepDomains[layer])return supportsLayer(layer,p);
-  for(const link of r30DepthLinks)if(openLinks.has(link.id)&&domain===r30LinkDomain(link)&&includes(r30LinkRoom(link),p)){
+  for(const link of r30DepthLinks)if(domain===r30LinkDomain(link)&&linkCurrent(link)&&includes(r30LinkRoom(link),p)){
    const q=corridors.get(link.id)?.passageAt(p.east,p.north);return !!q&&Math.abs(q.floor-p.height)<.02;
   }
   return false;
@@ -156,22 +167,25 @@ export function createR30DeepAssembly(options:Readonly<{
   availableLayers:()=>[...available],openLinks:()=>[...openLinks],
   supportsArrival:preflight,
   passageAt(domain:string,east:number,north:number,radius=.27,height=1.8){
-   if(disposed||activeDomain!==domain||![east,north,radius,height].every(Number.isFinite)||radius<=0||height<=0)return;
+   const foot=options.readAcceptedFoot?.();
+   if(disposed||activeDomain!==domain||foot?.domainId!==domain||![foot.east,foot.north,foot.height,east,north,radius,height].every(Number.isFinite)||radius<=0||height<=0)return;
    for(const layer of available)if(domain===r30DeepDomains[layer]){
     // The frame height is a room datum, not a floor guess; passageLocal
     // returns the actual support height. Horizontal bounds are sufficient.
     return localPass(layer,{east,north,height:r30DeepFrames[layer].worldOffset.height},radius,height);
    }
-   for(const link of r30DepthLinks)if(openLinks.has(link.id)&&domain===r30LinkDomain(link)){
+   for(const link of r30DepthLinks)if(domain===r30LinkDomain(link)&&linkCurrent(link)){
     return corridors.get(link.id)?.passageAt(east,north,radius,height);
    }
   },
   /** Validate one of the physically shared socket pairs. The actual
    * authenticated transition/room switch belongs to the existing owner. */
   resolveHandoff(from:Foot,toDomain:string){
-   if(disposed||!acceptedFoot||from.domainId!==acceptedFoot.domainId||!near(from,acceptedFoot,.02))return;
+   const latest=options.readAcceptedFoot?.();
+   if(disposed||!acceptedFoot||!latest||from.domainId!==acceptedFoot.domainId||from.domainId!==latest.domainId||!near(from,latest,.02))return;
    for(const c of r30DeepTransitContracts){
-    if(!openLinks.has(c.id))continue;
+    const link=r30DepthLinks.find(l=>l.id===c.id);
+    if(!link||!linkCurrent(link))continue;
     for(const [a,b] of [[c.entry,c.intoLinkFromStart],[c.exit,c.intoLinkFromEnd],[c.intoLinkFromStart,c.entry],[c.intoLinkFromEnd,c.exit]] as const){
      if(from.domainId!==a.domainId||toDomain!==b.domainId||!near(from,a,.45))continue;
      const supported=b.domainId===secondMineDomainId?options.supportsSecondMine(b):preflight(b.domainId,b);
