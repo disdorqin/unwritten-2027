@@ -52,6 +52,7 @@ export function createR30CrystalHost(options:Readonly<{
   const l=crystalLocal(frame,p),q=crystalRoutePassage(l.east,l.north);
   return !!q&&Math.abs(q.floor-l.height)<.02&&!vestibule?.blocks(l.east,l.north,q.floor,.27,1.8)&&!grove?.blocks(l.east,l.north,q.floor,.27,1.8)&&!endcaps?.blocks(l.east,l.north,q.floor,.27,1.8)&&!monkey?.blocks(l.east,l.north,q.floor,.27,1.8)&&!sideArt?.blocks(l.east,l.north,q.floor,.27,1.8);
  }
+ function frameAcceptedNow(){return !disposed&&certified&&!!frame&&!!room&&options.bridge?.acceptsFrame(frame,room)===true}
  function clear(){stage='closed';budget=0;lightFocus=undefined;active=false;certified=false;if(cavern){cavern.group.visible=false;cavern.sync()}handle?.update('closed');monkey?.sync()}
  function sync(){
   if(disposed)return false;
@@ -96,14 +97,14 @@ export function createR30CrystalHost(options:Readonly<{
   },
   supportsLanding(side:'mine'|'crystal',foot:Foot){
    const p=side==='mine'?mine:crystal;
-   return certified&&!!cavern&&foot.domainId===p.domainId&&Math.hypot(foot.east-p.east,foot.north-p.north,foot.height-p.height)<.01&&
+   return frameAcceptedNow()&&!!cavern&&foot.domainId===p.domainId&&Math.hypot(foot.east-p.east,foot.north-p.north,foot.height-p.height)<.01&&
     (side==='mine'?options.supportsMineThreshold():supportsWorld(foot));
   },
  }:undefined;
  function prompt(){
   const port=options.bridge?.interaction,f=options.readAcceptedFoot?.(),id=port?.readPlayerId();
   if(disposed||!certified||!contract||!port||!id?.trim()||!f||![f.east,f.north,f.height].every(Number.isFinite))return;
-  if(!options.bridge?.acceptsFrame(contract.frame,contract.room))return;
+  if(!frameAcceptedNow())return;
   const side=f.domainId===mine.domainId?'mine':f.domainId===r30CrystalDomain?'crystal':undefined;
   if(!side||!(side==='mine'?options.supportsMineInteractionFoot?.(f):supportsWorld(f)))return;
   if(stage==='open'&&contract.isAtThreshold(side,f))return {id:'crystal-gate/traverse',action:'traverse' as const,label:side==='mine'?'进入晶洞':'返回矿道',playerId:id};
@@ -119,9 +120,9 @@ export function createR30CrystalHost(options:Readonly<{
   if(!p||p.id!==expectedId)return false;
   options.bridge!.interaction!.dispatch(p.playerId,p.action);return true;
  }
- return {sync,stage:()=>stage,contract,prompt,press,get mounted(){return cavern},get vestibule(){return vestibule},get grove(){return grove},get endcaps(){return endcaps},get monkey(){return monkey},get sideArt(){return sideArt},
+ return {sync,stage:()=>frameAcceptedNow()?stage:'closed' as const,contract,prompt,press,get mounted(){return cavern},get vestibule(){return vestibule},get grove(){return grove},get endcaps(){return endcaps},get monkey(){return monkey},get sideArt(){return sideArt},
   passageAt(domainId:string,east:number,north:number,posture:'standing'|'crouching'='standing'){
-   if(disposed||!active||!frame||domainId!==r30CrystalDomain||options.readAcceptedFoot?.()?.domainId!==domainId)return;
+   if(!frameAcceptedNow()||!active||!frame||domainId!==r30CrystalDomain||options.readAcceptedFoot?.()?.domainId!==domainId)return;
    const l=crystalLocal(frame,{east,north,height:frame.height});
    const q=crystalRoutePassage(l.east,l.north,.27,posture==='crouching'?1.1:1.8);
    if(q&&!vestibule?.blocks(l.east,l.north,q.floor,.27,posture==='crouching'?1.1:1.8)&&!grove?.blocks(l.east,l.north,q.floor,.27,posture==='crouching'?1.1:1.8)&&!endcaps?.blocks(l.east,l.north,q.floor,.27,posture==='crouching'?1.1:1.8)&&!monkey?.blocks(l.east,l.north,q.floor,.27,posture==='crouching'?1.1:1.8)&&!sideArt?.blocks(l.east,l.north,q.floor,.27,posture==='crouching'?1.1:1.8))return {...q,floor:q.floor+frame.height};

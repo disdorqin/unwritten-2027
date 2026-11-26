@@ -48,7 +48,11 @@ test('real gate levers reject occupied mesh and submit only existing authority a
   assert.equal(ch.prompt()?.id,'crystal-gate/open-crystal');assert.ok(ch.press('crystal-gate/open-crystal'));assert.equal(result,'ajar');
   now=2002;h.mounted.sync();walk(c.crystal);
   assert.equal(ch.prompt()?.id,'crystal-gate/traverse');
+  // No stale gate crossing or collision permission during the interval
+  // between a revoked registration and the next render sync.
   accepted=false;assert.equal(ch.press('crystal-gate/traverse'),false);
+  assert.equal(ch.stage(),'closed');assert.equal(gate.resolveTraversal('p'),undefined);
+  assert.equal(ch.passageAt(c.crystal.domainId,c.crystal.east,c.crystal.north),undefined);
   accepted=true;assert.ok(ch.press('crystal-gate/traverse'));assert.equal(gate.resolveTraversal('p')?.landing.domainId,c.mine.domainId);
   assert.deepEqual(actions,['open-mine','open-mine','traverse','open-crystal','traverse']);
  }finally{h.mounted.dispose()}
