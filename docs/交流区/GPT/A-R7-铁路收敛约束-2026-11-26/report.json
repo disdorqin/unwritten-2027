@@ -1,0 +1,102 @@
+{
+  "source": "42c55a7e516a6d1ed6d77b3f28e74037eeee459d",
+  "scope": "actual A line profile; necessary mathematical lower bound, no new ground or service approval",
+  "limit": 0.12,
+  "minClearance": 0.5,
+  "oldMaximum": 2.6,
+  "fullViolations": 46,
+  "removedViolations": 14,
+  "activeViolations": 32,
+  "closedHead": {
+    "index": 35,
+    "removedLength": 59.42333525528141,
+    "east": 470.90714373704503,
+    "north": 370.928502156438,
+    "y": 36.21722670685221,
+    "box": {
+      "min": [
+        469.59130009432414,
+        35.91722670685221,
+        -371.27944312832454
+      ],
+      "max": [
+        472.2229873797659,
+        37.337226706852206,
+        -370.5775611845515
+      ],
+      "footprint": {
+        "yaw": -3.047642749184439,
+        "halfX": 1.3,
+        "halfZ": 0.23
+      }
+    },
+    "reason": "unapproved stock rail junction"
+  },
+  "east": {
+    "changed": 30,
+    "minClearance": 1.3402320725659216,
+    "maxClearance": 2.5999990000000004,
+    "maxGrade": 0.11999000000000043
+  },
+  "north": {
+    "changed": 13,
+    "minClearance": 0.6960491260705339,
+    "maxClearance": 2.3028461412696153,
+    "maxGrade": 0.11999000000000191
+  },
+  "infeasible": [
+    {
+      "first": 203,
+      "last": 247,
+      "minimumPossibleMaximumClearance": 3.551443179077069,
+      "oldMaximum": 2.6,
+      "excess": 0.951443179077069,
+      "feasibleUnderOldMaximum": false,
+      "witness": {
+        "index": 220,
+        "east": 238.78973676246684,
+        "north": 511.7132877150667,
+        "ground": 3.1804961178961855,
+        "requiredY": 6.7319392969732545
+      },
+      "capBlocked": "ground-envelope",
+      "remainingOverslope": 0
+    },
+    {
+      "first": 53,
+      "last": 85,
+      "minimumPossibleMaximumClearance": 9.827700485757084,
+      "oldMaximum": 2.6,
+      "excess": 7.227700485757085,
+      "feasibleUnderOldMaximum": false,
+      "witness": {
+        "index": 85,
+        "east": 449.34240109105406,
+        "north": 452.3958792932756,
+        "ground": 14.42340285358626,
+        "requiredY": 24.251103339343345
+      },
+      "capBlocked": "fixed-endpoint",
+      "remainingOverslope": 32
+    },
+    {
+      "first": 35,
+      "last": 599,
+      "minimumPossibleMaximumClearance": 11.49021666940681,
+      "oldMaximum": 2.6,
+      "excess": 8.89021666940681,
+      "feasibleUnderOldMaximum": false,
+      "witness": {
+        "index": 112,
+        "east": 416.7216421273921,
+        "north": 484.04475676841423,
+        "ground": 8.842672384415188,
+        "requiredY": 20.332889053821997
+      },
+      "capBlocked": "fixed-endpoint",
+      "remainingOverslope": 32
+    }
+  ],
+  "serviceGeometryReady": false,
+  "decision": "Either approve structural bridge/earthworks where needed or approve surveyed rerouting; unchanged terrain, grade, and clearance cannot all hold."
+}

@@ -1,0 +1,294 @@
+{
+  "a": "589dcbde3b11264bd1067f2f3d93eaee725afae8",
+  "d": "a8c9f8a4fc4dfaed68df430ad096e755dc264b64",
+  "scope": "exact-source candidate only",
+  "files": [
+    {
+      "path": "town-d-r30-front-ridge.ts",
+      "blob": "69e6cf3eb10570b14c18651625c5e39985839b15"
+    },
+    {
+      "path": "town-d-r30-forest.ts",
+      "blob": "86011a103924307cb720055b7004d29eebc6e1bb"
+    },
+    {
+      "path": "town-d-r30-road-survey.ts",
+      "blob": "c4e771de2db41c73e29c3a860257718c22bed715"
+    },
+    {
+      "path": "town-d-r30-roadbed.ts",
+      "blob": "5ba32b2b7ea01a6deec70b98fe235dd2468ab4ce"
+    },
+    {
+      "path": "town-d-r30-cable-facilities.ts",
+      "blob": "a83b51dff34c595d2ff3f50435b28b14ba56e16f"
+    },
+    {
+      "path": "town-d-r30-cloud-terrace.ts",
+      "blob": "9babe6c9bd15c6be7f4a8cf7ff0ee1a22e3a8522"
+    },
+    {
+      "path": "town-d-r30-protected-approach.ts",
+      "blob": "cf64e6a1590c749824cc58a984a1a7f44b795862"
+    }
+  ],
+  "success": true,
+  "mask": {
+    "changed": 1323,
+    "zero": 81991,
+    "maxFrozen": 0,
+    "maxProposal": 0,
+    "outside": 0,
+    "mid": 0
+  },
+  "routes": [
+    {
+      "east": 336,
+      "north": 640,
+      "height": 347,
+      "points": 1,
+      "supported": true
+    },
+    {
+      "east": 320,
+      "north": 634,
+      "height": 347,
+      "points": 217,
+      "supported": true
+    },
+    {
+      "east": 350,
+      "north": 650,
+      "height": 347,
+      "points": 115,
+      "supported": true
+    },
+    {
+      "east": 291,
+      "north": 660,
+      "height": 347,
+      "points": 255,
+      "supported": true
+    },
+    {
+      "east": 300,
+      "north": 662,
+      "height": 347,
+      "points": 227,
+      "supported": true
+    },
+    {
+      "east": 324,
+      "north": 655,
+      "height": 347,
+      "points": 103,
+      "supported": true
+    },
+    {
+      "east": 310.5,
+      "north": 662,
+      "height": 347,
+      "points": 185,
+      "supported": true
+    },
+    {
+      "east": 351.5,
+      "north": 662,
+      "height": 347,
+      "points": 145,
+      "supported": true
+    },
+    {
+      "east": 300,
+      "north": 665,
+      "height": 347,
+      "points": 239,
+      "supported": true
+    }
+  ],
+  "gateSupported": false,
+  "sweep": {
+    "samples": 29068,
+    "minMoving": 1.3353895709201993,
+    "minDock": 0,
+    "groundHits": 0,
+    "obstacleHits": 0,
+    "externalSurveyed": true,
+    "candidateEnvelopeClear": true,
+    "productionReady": false,
+    "scope": "conservative actual station+ring+branch AABB",
+    "indexedBoxes": 2636,
+    "maxTower": 69.82792854309088
+  },
+  "dockWalk": {
+    "steps": 614,
+    "maxStep": 0.15353141784667912,
+    "minGround": 20.520612716674805,
+    "end": 26,
+    "path": [
+      {
+        "east": 526,
+        "north": 305,
+        "height": 25.28801155090332,
+        "h0": 25.28801155090332
+      },
+      {
+        "east": 526,
+        "north": 307,
+        "height": 25.758363723754883,
+        "h0": 25.758363723754883
+      },
+      {
+        "east": 526,
+        "north": 309,
+        "height": 25.855018615722656,
+        "h0": 25.855018615722656
+      },
+      {
+        "east": 526,
+        "north": 311,
+        "height": 25.95167350769043,
+        "h0": 25.95167350769043
+      },
+      {
+        "east": 526,
+        "north": 313,
+        "height": 26.14,
+        "h0": 26
+      },
+      {
+        "east": 526,
+        "north": 315,
+        "height": 26.14,
+        "h0": 26
+      },
+      {
+        "east": 526,
+        "north": 317,
+        "height": 26.14,
+        "h0": 26
+      },
+      {
+        "east": 526,
+        "north": 319,
+        "height": 26.14,
+        "h0": 26
+      },
+      {
+        "east": 526,
+        "north": 321,
+        "height": 26.14,
+        "h0": 26
+      },
+      {
+        "east": 526,
+        "north": 323,
+        "height": 26.14,
+        "h0": 26
+      },
+      {
+        "east": 526,
+        "north": 325,
+        "height": 26.14,
+        "h0": 26
+      },
+      {
+        "east": 526,
+        "north": 327,
+        "height": 26.14,
+        "h0": 26
+      },
+      {
+        "east": 526,
+        "north": 329,
+        "height": 26.14,
+        "h0": 26
+      },
+      {
+        "east": 526,
+        "north": 331,
+        "height": 26.14,
+        "h0": 26
+      },
+      {
+        "east": 526,
+        "north": 333,
+        "height": 26.14,
+        "h0": 26
+      },
+      {
+        "east": 526,
+        "north": 335,
+        "height": 26.14,
+        "h0": 26
+      },
+      {
+        "east": 526,
+        "north": 337,
+        "height": 26.14,
+        "h0": 26
+      },
+      {
+        "east": 526,
+        "north": 339,
+        "height": 26.14,
+        "h0": 26
+      },
+      {
+        "east": 526,
+        "north": 341,
+        "height": 26.14,
+        "h0": 26
+      },
+      {
+        "east": 526,
+        "north": 343,
+        "height": 26.14,
+        "h0": 26
+      },
+      {
+        "east": 526,
+        "north": 345,
+        "height": 26.14,
+        "h0": 26
+      },
+      {
+        "east": 526,
+        "north": 347,
+        "height": 26,
+        "h0": 25.871198654174805,
+        "support": 26
+      },
+      {
+        "east": 526,
+        "north": 349,
+        "height": 26,
+        "h0": 24.954975128173828,
+        "support": 26
+      },
+      {
+        "east": 526,
+        "north": 351,
+        "height": 26,
+        "h0": 23.405174255371094,
+        "support": 26
+      },
+      {
+        "east": 526,
+        "north": 353,
+        "height": 26,
+        "h0": 21.508516311645508,
+        "support": 26
+      },
+      {
+        "east": 526,
+        "north": 354,
+        "height": 26,
+        "h0": 20.520612716674805,
+        "support": 26
+      }
+    ],
+    "passed": true,
+    "scope": "exact physical station floor/collision plus D deck; not native player or boarding permission"
+  }
+}

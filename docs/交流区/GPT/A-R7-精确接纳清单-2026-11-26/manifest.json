@@ -1,6 +1,6 @@
 {
   "base": "f83805571fce5354e83463dabc261aabc364f792",
-  "source": "bff75cd75552d3bddc376c2c830c2e07640459aa",
+  "source": "589dcbde3b11264bd1067f2f3d93eaee725afae8",
   "integration": "479e285538df33849d8ba97ed040e133ec659ee5",
   "scope": "R7 exact blob intake; no branch merge or service approval",
   "conflicts": [],
@@ -56,7 +56,7 @@
           "path": "tools/voxel-tavern/town-blockout/town-a-r30-rail-strip.ts",
           "base": null,
           "integration": null,
-          "candidate": "144bdd1dfb11854c57b60f9b9e693fdc33e3171a"
+          "candidate": "ff762b4e13bfc0e9ea4d8c49dd6d944f1307efb0"
         },
         {
           "path": "tools/voxel-tavern/town-blockout/town-a-r30-static-batches.ts",
@@ -113,7 +113,7 @@
           "path": "tests/town-blockout-a-r30-rail-strips.test.ts",
           "base": null,
           "integration": null,
-          "candidate": "9e7d1464c6691e3e784261fad0e36ee199154a9a"
+          "candidate": "45a828f3e266ec4301a271d06e099f37c61d3f25"
         },
         {
           "path": "tests/town-blockout-a-r30-supply-deck.test.ts",
@@ -185,7 +185,7 @@
           "path": "tools/voxel-tavern/town-blockout/town-crater-rail-extension.ts",
           "base": "016da419d5f3574625fe95153969e02985a51b37",
           "integration": "016da419d5f3574625fe95153969e02985a51b37",
-          "candidate": "11511614afda99f7070d43bc32098dacd08113b5"
+          "candidate": "a1dc95ec2407c1a9a518db0c79fd3754fdcd4371"
         },
         {
           "path": "tools/voxel-tavern/town-blockout/town-za22-crater-road.ts",
@@ -313,7 +313,7 @@
           "path": "tools/verify-a-r30-joint-surface.mjs",
           "base": null,
           "integration": null,
-          "candidate": "a3c5a6eedf19370a51822d209c0f154a62393533"
+          "candidate": "f22c758f63754ef2776668683c07e1129ba5f2f3"
         },
         {
           "path": "tools/verify-a-r30-native-local.mjs",
@@ -325,7 +325,7 @@
           "path": "tools/verify-a-r30-native-walk.mjs",
           "base": null,
           "integration": null,
-          "candidate": "a112127a43c8c9da0c0f9fdb2405003ca0e05bc5"
+          "candidate": "90753a51b622ecad1458e490ed81889071071f56"
         },
         {
           "path": "tools/verify-a-r30-performance.mjs",
@@ -337,13 +337,19 @@
           "path": "tools/verify-a-r30-ridge-apron.mjs",
           "base": null,
           "integration": null,
-          "candidate": "de7217cf7b8cf9d299f5187413bc59ebc30cab05"
+          "candidate": "3b47966ad6fb690d0194f1e55822ecd878d30a14"
         },
         {
           "path": "tools/verify-a-r30-ridge-rail.mjs",
           "base": null,
           "integration": null,
           "candidate": "d9a44fdcab59f60745ffcc1f51fb414b37ec334b"
+        },
+        {
+          "path": "tools/verify-a-r30-rail-convergence.mjs",
+          "base": null,
+          "integration": null,
+          "candidate": "210ceefc3d46d968a09ed0004c14676a8b1a1537"
         }
       ]
     }
