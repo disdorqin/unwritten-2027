@@ -3,14 +3,11 @@ import {createTerrainGrid,worldBounds} from './terrain';
 import {mountWestCraterRoad} from './town-za22-crater-road';
 import {buildCraterRailExtension} from './town-crater-rail-extension';
 import {createMeteorCrater,meteorCraterFixturePlan} from './meteor-crater';
-import {attachBR30PhysicalKit} from './town-b-r30-physical-kit';
+import {attachBR30CraterCompletion} from './town-b-r30-crater-completion';
 import {buildBR30ReturnHeadframe} from './town-b-r30-return-headframe';
-import {installBR30MoundPlanting} from './town-b-r30-mound-planting';
-import {installBR30MeltColumns} from './town-b-r30-melt-columns';
-import {installBR30HistoricEastWall} from './town-b-r30-historic-walkway-site';
-import {installBR30MoundWorkFlag,createBR30MoundControls} from './town-b-r30-mound-work-flag';
+import {createBR30MoundControls} from './town-b-r30-mound-work-flag';
 import {createMound} from './town-crater-points-play';
-import {installBR30RubbingPaper,createBR30RubbingControls} from './town-b-r30-inscription-rubbing';
+import {createBR30RubbingControls} from './town-b-r30-inscription-rubbing';
 import {createCarvedStoneRubbing} from './town-carved-stone-rubbing';
 import {bR30InscriptionApproachPlan} from './town-b-r30-inscription-approach';
 import {createBR30WorkshopReviewFixture} from './town-b-r30-workshop-review-fixture';
@@ -23,12 +20,8 @@ const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>gri
 const retiredPlates=stripBR30LegacyTerraceMesh(road.group);
 const settledSupports=settleBR30StorySupports(road.group,road.heightAt);
 const rail=buildCraterRailExtension(grid,road);
-const {face,machines,markers}=attachBR30PhysicalKit(road,rail);
-const melt=installBR30MeltColumns(road);
-const mound=installBR30MoundPlanting(road);
-const workFlag=installBR30MoundWorkFlag(road);
-const historic=installBR30HistoricEastWall(road,[rail.samples,rail.narrowSamples],rail.group.userData.colliders??[]);
-const rubbingPaper=installBR30RubbingPaper(road.inscription);
+const completion=attachBR30CraterCompletion(road,rail,[rail.samples,rail.narrowSamples],'review');
+const {kit:{face,machines,markers},melt,mound,flag:workFlag,historic,paper:rubbingPaper}=completion;
 // Only the independent review consumes the sealed return prefab; no
 // production terrain cut or new lift authority is introduced.
 const returnHeadframe=buildBR30ReturnHeadframe(road);
