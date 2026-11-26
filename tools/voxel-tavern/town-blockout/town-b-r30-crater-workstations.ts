@@ -35,7 +35,7 @@ const plans = [
   {id:'calibration',label:'校准台',parentSite:'instrument-plant',east:-64,north:139,yaw:-Math.PI/2,w:1.70,d:.85,h:1.75,targetY:.89,targetZ:.29},
   {id:'sorting',label:'分拣台',parentSite:'ore-yard',east:-141.5,north:100.5,yaw:-Math.PI/2,w:2.1,d:.95,h:1.45,targetY:.99,targetZ:.13},
   {id:'weighing',label:'过秤',parentSite:'kengkou-freight-shed',east:-60,north:150.25,yaw:Math.PI,w:1.50,d:1.1,h:1.70,targetY:.40,targetZ:.20},
-  {id:'turnout',label:'道岔扳杆',parentSite:'kengkou-station',east:-48,north:179,yaw:Math.PI,w:1.15,d:.80,h:1.9,targetY:1.26,targetZ:.06},
+  {id:'turnout',label:'道岔扳杆',parentSite:'kengkou-station',east:-37,north:165.5,yaw:Math.PI,w:1.15,d:.80,h:1.9,targetY:1.26,targetZ:.06},
 ] as const;
 
 function gap(e:number,n:number,box:Box) {
