@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>FR-14 未写镇交通与高山音效 · 独立试听</title>
+  <link rel="stylesheet" href="./friend3-audio-preview.css">
+</head>
+<body>
+  <main class="f3-audio">
+    <header class="f3-audio-header">
+      <div>
+        <p class="f3-audio-kicker">UNWRITTEN 2027 · FR-14 独立预览</p>
+        <h1>交通与高山音效</h1>
+        <p class="f3-audio-sub">轨轮、索道滑轮、绞盘、铁锤、高山风口与冰裂六类原创 WebAudio 合成。复用 FR-07 的首次手势启动、试听/停止、循环、音量与静音管理，不自动播放，不接公共音频或 C 域音场。</p>
+      </div>
+      <div class="f3-audio-master">
+        <label for="volume">主音量 <output id="volume-value" for="volume">70</output></label>
+        <input id="volume" type="range" min="0" max="100" step="1" value="70">
+        <div class="f3-master-actions">
+          <button id="mute" type="button" aria-pressed="false">静音</button>
+          <button id="stop-all" type="button">停止全部</button>
+        </div>
+      </div>
+    </header>
+    <p id="audio-status" class="f3-audio-status" role="status" aria-live="polite">选择一件音效开始试听。</p>
+    <section id="sound-list" class="f3-sound-list" aria-label="交通与高山音效试听列表"></section>
+    <footer class="f3-audio-footer">原创 WebAudio 合成 · MIT · 不接全局音频、C 域音场、HUD、存档或多人权威</footer>
+  </main>
+  <script type="module" src="./friend3-travel-audio-preview.ts"></script>
+</body>
+</html>

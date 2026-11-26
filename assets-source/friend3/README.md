@@ -24,9 +24,17 @@
 - 许可：仓库 MIT（Original-Procedural）。
 - 边界：仅局部本地状态，支持选择/放置/撤回/全部撤回/重置视角；不写公共地形、存档、星石、收集经济或多人权威。
 
+## FR-14 交通与高山音效
+
+- 交付：`tools/voxel-tavern/town-blockout/town-friend3-travel-audio.ts`、`friend3-travel-audio-preview.ts`、`friend3-travel-audio-preview.html`、`friend3-vite.fr14-preview.config.ts`。
+- 资产：轨轮、索道滑轮、绞盘、铁锤、高山风口、冰裂，共 6 类；全部由 WebAudio 振荡器、噪声缓冲、滤波器与包络实时合成，无外部采样或录音。
+- 许可：仓库 MIT（Original-WebAudio）。
+- 边界：复用 FR-07 的首次手势启动、试听/停止、循环、主音量、静音与停止全部架构；不重复旧风铃/火炉/脚步，不接公共音频、C 域音场、HUD、存档或多人权威。
+
 ## 独立验收入口
 
 - FR-05：`friend3-vite.fr05-preview.config.ts`（dist-fr05 / 5205）
 - FR-07：`friend3-vite.fr07-preview.config.ts`（dist-fr07 / 5207）
 - FR-08：`friend3-vite.fr08-preview.config.ts`（dist-fr08 / 5208）
+- FR-14：`friend3-vite.fr14-preview.config.ts`（dist-fr14 / 5214）
 - 三套配置不修改共享 `tools/voxel-tavern/vite.config.ts`。
