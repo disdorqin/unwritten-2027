@@ -1,6 +1,7 @@
 import {Group} from 'three';
 import {mountR30CrystalVestibule} from './town-c-r30-crystal-vestibule.js';
 import {mountR30CrystalGrove} from './town-c-r30-crystal-grove.js';
+import {mountR30CrystalEndcaps} from './town-c-r30-crystal-endcaps.js';
 import {mountUndergroundCrystalCavern,crystalCavernPlan,crystalCavernToWorld,type CrystalCavernFrame,type CrystalCavernPoint} from './underground-crystal-cavern.js';
 import {createUndergroundCrystalReturnSwitch} from './underground-crystal-gate.js';
 import {crystalRoutePassage,crystalLocal,crystalThreshold,mountR30CrystalSupport,r30CrystalReturnSwitch,r30CrystalDomain} from './town-c-r30-crystal-support.js';
@@ -40,11 +41,12 @@ export function createR30CrystalHost(options:Readonly<{
  let cavern:Extract<ReturnType<typeof mountUndergroundCrystalCavern>,{kind:'ready'}>|undefined;
  let support:ReturnType<typeof mountR30CrystalSupport>|undefined,handle:ReturnType<typeof createUndergroundCrystalReturnSwitch>|undefined;
  let vestibule:ReturnType<typeof mountR30CrystalVestibule>|undefined,grove:ReturnType<typeof mountR30CrystalGrove>|undefined;
+ let endcaps:ReturnType<typeof mountR30CrystalEndcaps>|undefined;
  let budget=0,lightFocus:CrystalCavernPoint|undefined;
  function supportsWorld(p:CrystalCavernPoint){
   if(!frame)return false;
   const l=crystalLocal(frame,p),q=crystalRoutePassage(l.east,l.north);
-  return !!q&&Math.abs(q.floor-l.height)<.02&&!vestibule?.blocks(l.east,l.north,q.floor,.27,1.8)&&!grove?.blocks(l.east,l.north,q.floor,.27,1.8);
+  return !!q&&Math.abs(q.floor-l.height)<.02&&!vestibule?.blocks(l.east,l.north,q.floor,.27,1.8)&&!grove?.blocks(l.east,l.north,q.floor,.27,1.8)&&!endcaps?.blocks(l.east,l.north,q.floor,.27,1.8);
  }
  function clear(){stage='closed';budget=0;lightFocus=undefined;active=false;certified=false;if(cavern){cavern.group.visible=false;cavern.sync()}handle?.update('closed')}
  function sync(){
@@ -58,9 +60,10 @@ export function createR30CrystalHost(options:Readonly<{
    support=mountR30CrystalSupport(result.group);
    vestibule=mountR30CrystalVestibule(result.group);
    grove=mountR30CrystalGrove(result.group,vestibule.blocks);
+   endcaps=mountR30CrystalEndcaps(result.group);
    handle=createUndergroundCrystalReturnSwitch({position:[r30CrystalReturnSwitch.east,r30CrystalReturnSwitch.height,-r30CrystalReturnSwitch.north],yaw:0});
    result.group.add(handle.group);
-   if(!supportsWorld(crystal)||!options.installMouth()){handle.dispose();grove.dispose();vestibule.dispose();support.dispose();result.dispose();handle=undefined;grove=undefined;vestibule=undefined;support=undefined;clear();return false}
+   if(!supportsWorld(crystal)||!options.installMouth()){handle.dispose();endcaps.dispose();endcaps=undefined;grove.dispose();vestibule.dispose();support.dispose();result.dispose();handle=undefined;grove=undefined;vestibule=undefined;support=undefined;clear();return false}
    cavern=result;
   }
   certified=true;
@@ -108,13 +111,13 @@ export function createR30CrystalHost(options:Readonly<{
   if(!p||p.id!==expectedId)return false;
   options.bridge!.interaction!.dispatch(p.playerId,p.action);return true;
  }
- return {sync,stage:()=>stage,contract,prompt,press,get mounted(){return cavern},get vestibule(){return vestibule},get grove(){return grove},
+ return {sync,stage:()=>stage,contract,prompt,press,get mounted(){return cavern},get vestibule(){return vestibule},get grove(){return grove},get endcaps(){return endcaps},
   passageAt(domainId:string,east:number,north:number,posture:'standing'|'crouching'='standing'){
    if(disposed||!active||!frame||domainId!==r30CrystalDomain||options.readAcceptedFoot?.()?.domainId!==domainId)return;
    const l=crystalLocal(frame,{east,north,height:frame.height});
    const q=crystalRoutePassage(l.east,l.north,.27,posture==='crouching'?1.1:1.8);
-   if(q&&!vestibule?.blocks(l.east,l.north,q.floor,.27,posture==='crouching'?1.1:1.8)&&!grove?.blocks(l.east,l.north,q.floor,.27,posture==='crouching'?1.1:1.8))return {...q,floor:q.floor+frame.height};
+   if(q&&!vestibule?.blocks(l.east,l.north,q.floor,.27,posture==='crouching'?1.1:1.8)&&!grove?.blocks(l.east,l.north,q.floor,.27,posture==='crouching'?1.1:1.8)&&!endcaps?.blocks(l.east,l.north,q.floor,.27,posture==='crouching'?1.1:1.8))return {...q,floor:q.floor+frame.height};
   },
-  dispose(){if(disposed)return;disposed=true;clear();handle?.dispose();grove?.dispose();vestibule?.dispose();support?.dispose();cavern?.dispose();cavern=undefined},
+  dispose(){if(disposed)return;disposed=true;clear();handle?.dispose();endcaps?.dispose();grove?.dispose();vestibule?.dispose();support?.dispose();cavern?.dispose();cavern=undefined},
  } as const;
 }
