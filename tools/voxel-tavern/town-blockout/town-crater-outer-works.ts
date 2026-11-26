@@ -1418,17 +1418,38 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     const layers=[{e,n,w,d,low:base,high:ground+.32},
       {e:e+w*.07,n:n-d*.09,w:w*.81,d:d*.75,low:ground+.32,high:ground+stackHeight*.78},
       {e:e+w*.16,n:n-d*.13,w:w*.53,d:d*.54,low:ground+stackHeight*.78,high:ground+stackHeight}];
-    for(const l of layers){
-      if(l.high<=l.low)continue;
-      box(shoulderRock,l.e,(l.low+l.high)/2,l.n,l.w,l.high-l.low,l.d);
-      hitBox(floors,l.e,l.n,0,l.w,l.d,l.low,l.high);
-      shoulderStacks.push({east:l.e,north:l.n,bottom:l.low,top:l.high,width:l.w,depth:l.d});
+    // Stagger actual rectangular fragments instead of stacking three
+    // identical slabs. Each visible fragment has its own matching support.
+    function fragment(east:number,north:number,width:number,depth:number,bottom:number,top:number,snowCap=false){
+      if(top<=bottom)return;
+      box(shoulderRock,east,(bottom+top)/2,north,width,top-bottom,depth);
+      hitBox(floors,east,north,0,width,depth,bottom,top);
+      shoulderStacks.push({east,north,bottom,top,width,depth});
+      if(snowCap){
+        box(cleanSnow,east,top+.025,north,width*.83,.05,depth*.87);
+        hitBox(floors,east,north,0,width*.83,depth*.87,top,top+.05);
+      }
     }
-    // Thin snow caps on only selected lee-side fragments.
-    if((ci+i)%3===0){
-      const l=layers[2]!;
-      box(cleanSnow,l.e,l.high+.025,l.n,l.w*.84,.05,l.d*.86);
-      hitBox(floors,l.e,l.n,0,l.w*.84,l.d*.86,l.high,l.high+.05);
+    for(const [li,l]of layers.entries()){
+      const seam=.065+.04*hash(ci*17+i*29+li*11);
+      const split=.34+.30*hash(ci*43+i*19+li*23);
+      const left=l.w*split-seam/2,right=l.w*(1-split)-seam/2;
+      // Different break lines and depths on every layer; keep top pieces
+      // seated inside the lower slab's bounds rather than hanging over air.
+      fragment(l.e-l.w/2+left/2,l.n-.035*l.d,left,l.d*.94,l.low,l.high,li===2&&(ci+i)%3===0);
+      fragment(l.e+l.w/2-right/2,l.n+.055*l.d,right,l.d*.83,l.low,l.high,li===2&&(ci+i)%4===1);
+    }
+    // Small detached chips, sunk into the carrier on the outer flank.
+    const sign=n>=51?1:-1;
+    for(let k=0;k<3;k++){
+      const re=e+(k-1)*.64,rn=n+sign*(d*.65+.5+k*.31);
+      const rw=.28+hash(ci*41+i*7+k*17)*.28,rd=.24+hash(ci*23+i*9+k*31)*.31;
+      const heights=[-1,1].flatMap(x=>[-1,1].map(z=>heightAt(re+x*rw/2,rn+z*rd/2)));
+      if(heights.some(h=>h===undefined))continue;
+      const low=Math.min(...heights as number[])-.06,high=Math.max(...heights as number[])+.10+.13*hash(k+i*13+ci*19);
+      if(Math.abs(rn-51)<2.8&&re>-175&&re<-150)continue;
+      if(colliders.some(b=>b.min[0]<re+rw/2&&b.max[0]>re-rw/2&&b.min[2]<-rn+rd/2&&b.max[2]>-rn-rd/2&&b.max[1]>low&&b.min[1]<high))continue;
+      fragment(re,rn,rw,rd,low,high,(k+ci+i)%4===0);
     }
   }
   // ---------- outer-band mid-ground clusters (north/west band + approach) ----------
