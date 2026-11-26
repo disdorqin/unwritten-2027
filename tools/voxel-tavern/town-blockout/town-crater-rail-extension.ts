@@ -128,6 +128,8 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
 
   const batches = new Map<MeshStandardMaterial, BufferGeometry[]>();
   const colliders:OrientedSupportBox[]=[],floors:OrientedSupportBox[]=[];
+  const railBearings:{east:number;north:number;low:number;high:number;cornerMinimum:number;slope:number}[]=[];
+  let stringerSegments=0;
   const stationWalkRoutes:{id:string;points:{east:number;north:number;height:number}[]}[]=[];
   const benchSeats:{id:string;east:number;north:number;height:number;useEast:number;useNorth:number;yaw:number}[]=[];
   const shankouArrival={east:296,north:520,height:groundAt(296,520)};
@@ -234,6 +236,7 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
       if(bed)push(stoneDark,bed);
     }else push(stoneDark,buildRailStrip(sections,0,opts.ballastWidth,-.63,-.37,1));
     const orientation = new Matrix4();
+    let stringerStart=-1;
     for (let i = 0; i < samples.length - 1; i++) {
       const a = samples[i], b = samples[i + 1];
       const va = new Vector3(a.east, a.y, -a.north);
@@ -245,22 +248,43 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
         const extra=Math.min(opts.sleeperWidth,Math.max(0,distanceToRail(opts.stock,center.x,-center.z)-.01));
         if(extra>.04)segBox(timber,center,quat,-opts.sleeperWidth/2+extra/2,-.32,0,extra,.15,.36);
       }else segBox(timber, center, quat, 0, -.32, 0, opts.sleeperWidth, .15, .36);
-      // Physical bearing below the existing rail bed, including the many
-      // 1–2m rises that the former >2.2m pier threshold left floating.
-      // Keep the surveyed alignment; a future grade redesign can reuse these
-      // foundations. Short spans are stone plinths, taller ones masonry piers.
+      // The bearing head follows the actual longitudinal bed plane; its
+      // footing is buried at the lowest sampled corner, not the centre soil.
+      // Elevated segments also receive a continuous load-bearing stringer.
       const e=center.x,n=-center.z,soil=groundAt(e,n),underside=center.y-.63;
-      if(underside>soil+.12){
-        const yaw=Math.atan2(vb.x-va.x,vb.z-va.z);
+      const horizontal=Math.hypot(b.east-a.east,b.north-a.north);
+      const yaw=Math.atan2(vb.x-va.x,vb.z-va.z);
+      const slope=(b.y-a.y)/horizontal;
+      if(underside>soil+.12&&(!opts.stock||distanceToRail(opts.stock,e,n)>opts.ballastWidth)){
         if(i%3===0||underside-soil<.85&&i%2===0){
-          const length=underside-soil<.85?Math.min(segLen*1.85,3.1):1.35;
+          const length=underside-soil<.85?Math.min(horizontal*1.85,3.1):1.35;
           const width=opts.ballastWidth-.24;
-          const low=soil-.12;
-          box(stone,e,(low+underside)/2,n,width,underside-low,length,yaw);
-          colliders.push(orientedSupportBox(e,n,yaw,width,length,low,underside));
+          const c=Math.cos(yaw),s=Math.sin(yaw);
+          const cornerHeights=[-1,0,1].flatMap(x=>[-1,0,1].map(z=>groundAt(e+c*x*width/2+s*z*length/2,n+s*x*width/2-c*z*length/2)));
+          const low=Math.min(...cornerHeights,underside-Math.abs(slope)*length/2-.09)-.10;
+          const top=underside+.018,high=top+Math.abs(slope)*length/2;
+          const pier=metricBox(stone,width,1,length),pos=pier.getAttribute('position');
+          for(let k=0;k<pos.count;k++)pos.setY(k,pos.getY(k)>0?top+slope*pos.getZ(k)-low:0);
+          pier.computeVertexNormals();
+          part(stone,pier,e,low,n,yaw);
+          const collider=orientedSupportBox(e,n,yaw,width,length,low,high);
+          colliders.push(collider);
+          railBearings.push({east:e,north:n,low,high,cornerMinimum:Math.min(...cornerHeights),slope});
         }
       }
+      if(!opts.stock&&underside-soil>.85&&a.y-.63-groundAt(a.east,a.north)>.55&&b.y-.63-groundAt(b.east,b.north)>.55){
+        // No duplicate coplanar tops: the stringer sits below the ballast
+        // and runs across the entire section between the actual pier heads.
+        const width=opts.ballastWidth*.54;
+        if(stringerStart<0)stringerStart=i;
+        colliders.push(orientedSupportBox(e,n,yaw,width,horizontal,Math.min(a.y,b.y)-.89,Math.max(a.y,b.y)-.625));
+        stringerSegments++;
+      }else if(stringerStart>=0){
+        push(iron,buildRailStrip(sections.slice(stringerStart,i+1),0,opts.ballastWidth*.54,-.89,-.625));
+        stringerStart=-1;
+      }
     }
+    if(stringerStart>=0)push(iron,buildRailStrip(sections.slice(stringerStart),0,opts.ballastWidth*.54,-.89,-.625));
     let minRadius = Infinity;
     for (let i = 1; i < samples.length - 1; i++) {
       const a = samples[i - 1], b = samples[i], c = samples[i + 1];
@@ -871,5 +895,5 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
   group.userData.colliders=colliders;
   group.userData.floors=floors;
   return { group, alignment, samples: main.samples, narrowSamples: narrow.samples, sidingSamples:siding.samples,
-    verticalSurvey:surveyRailGrade(main.samples),sidingMinRadius:siding.minRadius,crossings,stationWalkRoutes,benchSeats,shankouArrival,timetableReads };
+    verticalSurvey:surveyRailGrade(main.samples),sidingMinRadius:siding.minRadius,railBearings,stringerSegments,crossings,stationWalkRoutes,benchSeats,shankouArrival,timetableReads };
 }

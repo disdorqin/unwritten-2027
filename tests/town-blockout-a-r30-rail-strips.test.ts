@@ -65,6 +65,15 @@ test('grade survey measures violations and computes a genuinely feasible fill-on
     assert.ok(Math.abs(report.minimum[i]!-report.minimum[i-1]!)<=.12*Math.hypot(b.east-a.east,b.north-a.north)+1e-8);
   }
 });
+test('inclined masonry bearings are grounded at the lowest surveyed corner and have structural stringers',()=>{
+  assert.ok(rail.railBearings.length>0);
+  assert.ok(rail.stringerSegments>0);
+  assert.ok(rail.railBearings.some(p=>Math.abs(p.slope)>.03));
+  for(const p of rail.railBearings){
+    assert.ok(p.low<=p.cornerMinimum-.09);
+    assert.ok(p.high>p.low);
+  }
+});
 test('all seven public railway crossings have stepped physical support at rail height',()=>{
   assert.equal(rail.crossings.length,7);
   for(const c of rail.crossings){
