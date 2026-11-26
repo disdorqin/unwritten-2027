@@ -326,6 +326,14 @@ try{
  },{pattern:positionPattern.source,east:segment==='shankou'?296:2,north:segment==='shankou'?520:159},{timeout:45000});
  for(const [i,target] of approach[segment].entries()){
    await walkTo(page,evidence,target,segment+'-approach-'+i);
+   if(segment==='water-tower'&&i===1){
+     const heading=Math.atan2(-39.5933067-target[0],143.8173133-target[1]);
+     await face(page,evidence,heading);
+     const tilt=async(dy)=>{await page.mouse.move(dragX,dragY);await page.mouse.down();try{await page.mouse.move(dragX,dragY+dy,{steps:4});}finally{await page.mouse.up();}};
+     await tilt(-65);
+     await wallView('water-tower-wide',heading);
+     await tilt(65);
+   }
    if(segment==='supply'&&(i===2||i===3)){
      const site=road.mouthWorks.sites.find(s=>s.id==='supply-station');
      await wallView('supply-cabin-'+(i===2?'wide':'roofline'),Math.atan2(site.east-target[0],site.north-target[1]));
