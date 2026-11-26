@@ -14,7 +14,14 @@ test('B physical kit attaches once to actual west road and removes only its own 
  assert.equal(kit.face.sites.length,3);assert.equal(kit.machines.sites.length,5);
  assert.equal(kit.addedRelicBoxes,road.midgroundS5.colliders.length);
  assert.equal(kit.addedLampBoxes,18);
- assert.equal(road.group.userData.colliders.length,before.length+kit.addedRelicBoxes+kit.addedLampBoxes+8);
+ assert.equal(kit.markers.sites.length,4);
+ assert.equal(kit.markers.boxes.length,12);
+ assert.equal(road.group.userData.colliders.length,before.length+kit.addedRelicBoxes+kit.addedLampBoxes+8+kit.markers.boxes.length);
+ for(const s of kit.markers.sites){
+   assert.ok(s.clearance>=1.27&&s.sight>=.25);
+   assert.ok(Math.abs(Math.cos(s.yaw)-s.direction.east)<1e-9&&Math.abs(Math.sin(s.yaw)-s.direction.north)<1e-9);
+ }
+
  const lamps=surveyBR30FloorLampBoxes(road.group),a=road.anchor;
  const c=Math.cos(a.yaw),s=Math.sin(a.yaw);
  for(const [i,p] of craterFloorWorklightSites.entries()){

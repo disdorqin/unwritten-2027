@@ -4,6 +4,7 @@ import type {mountWestCraterRoad} from './town-za22-crater-road';
 import type {buildCraterRailExtension} from './town-crater-rail-extension';
 import {installBR30Workface,surveyBR30Workface} from './town-b-r30-crater-workface';
 import {installCraterWorkshopWorld,surveyCraterWorkstations} from './town-b-r30-crater-workstations';
+import {installBR30RouteMarkers} from './town-b-r30-route-markers';
 
 type Road=ReturnType<typeof mountWestCraterRoad>;
 type Rail=ReturnType<typeof buildCraterRailExtension>;
@@ -12,6 +13,7 @@ type Mounted={
   readonly machines:ReturnType<typeof installCraterWorkshopWorld>;
   readonly addedRelicBoxes:number;
   readonly addedLampBoxes:number;
+  readonly markers:ReturnType<typeof installBR30RouteMarkers>;
   dispose():void;
 };
 const mounted=new WeakMap<Group,Mounted>();
@@ -49,24 +51,25 @@ export function attachBR30PhysicalKit(road:Road,rail:Rail):Mounted{
   const relic=road.midgroundS5.colliders.filter(b=>!old.includes(b));
   const lamp=surveyBR30FloorLampBoxes(group);
   const extra=[...relic,...lamp];
-  let face:Mounted['face']|undefined,machines:Mounted['machines']|undefined;
+  let face:Mounted['face']|undefined,machines:Mounted['machines']|undefined,markers:Mounted['markers']|undefined;
   try{
     group.userData.colliders=[...old,...extra];
     surveyBR30Workface(road);
     surveyCraterWorkstations(road,rail);
     face=installBR30Workface(road);
     machines=installCraterWorkshopWorld(road,rail);
-    const f=face,m=machines;
-    const kit:Mounted={face:f,machines:m,addedRelicBoxes:relic.length,addedLampBoxes:lamp.length,dispose(){
+    markers=installBR30RouteMarkers(road);
+    const f=face,m=machines,signs=markers;
+    const kit:Mounted={face:f,machines:m,markers:signs,addedRelicBoxes:relic.length,addedLampBoxes:lamp.length,dispose(){
       if(mounted.get(group)!==kit)return;
       mounted.delete(group);
-      m.dispose();f.dispose();
+      signs.dispose();m.dispose();f.dispose();
       group.userData.colliders=(group.userData.colliders as Box[]).filter(b=>!extra.includes(b));
     }};
     mounted.set(group,kit);
     return kit;
   }catch(error){
-    machines?.dispose();face?.dispose();
+    markers?.dispose();machines?.dispose();face?.dispose();
     group.userData.colliders=old;
     throw error;
   }

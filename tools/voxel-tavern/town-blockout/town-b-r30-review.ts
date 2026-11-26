@@ -13,7 +13,7 @@ const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>gri
 const retiredPlates=stripBR30LegacyTerraceMesh(road.group);
 const settledSupports=settleBR30StorySupports(road.group,road.heightAt);
 const rail=buildCraterRailExtension(grid,road);
-const {face,machines}=attachBR30PhysicalKit(road,rail);
+const {face,machines,markers}=attachBR30PhysicalKit(road,rail);
 const scene=new Scene();scene.add(road.group,rail.group);
 const sky=new HemisphereLight(0xc6d9f6,0x776650,1.75),sun=new DirectionalLight(0xffe7c7,2.1);
 sun.position.set(-30,75,45);scene.add(sky,sun);
@@ -39,6 +39,9 @@ const trestleView=road.midgroundS5.trestleView;
 if(trestleView)add('broken-trestle','断栈道遗址',trestleView.foot,trestleView.target);
 const approach=fixture.mainTrailPoint(.99);
 add('bottom','矿道末段向井口',world(approach.east,approach.north),{east:a.east,north:a.north,height:a.rimHeight-33.9});
+for(const site of markers.sites){
+  for(const [i,foot] of site.viewFeet.entries())add(site.id+'-'+i,'矿道导向 '+site.id+(i?' 返程':' 下行'),foot,{...site.post,height:site.post.height+1.45});
+}
 for(const p of face.sites){
   const n=p.north-2.65,e=p.east,h=road.heightAt(e,n);
   if(h!==undefined)add(p.id,p.id,{east:e,north:n,height:h},{east:p.east,north:p.north,height:p.height+.8});
