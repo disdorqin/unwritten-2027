@@ -800,66 +800,43 @@ export function buildCraterMouthWorks(road: CraterRoad) {
   const fenceR = 90;
   {
     const gateB = 165;
-    const segStart = 146, segEnd = 184, step = 3.4;
-    const arcLen = d2r(segEnd - segStart) * fenceR;
-    const panels = Math.floor(arcLen / step);
-    for (let i = 0; i <= panels; i++) {
-      const bDeg = segStart + (segEnd - segStart) * (i / panels);
-      if (Math.abs(bDeg - gateB) < 3.4) continue;
-      const b = d2r(bDeg);
-      const east = anchor.east + fenceR * Math.sin(b);
-      const north = anchor.north + fenceR * Math.cos(b);
-      const h = heightAt(east, north);
-      if (h === undefined) continue;
-      gateFencePosts.push({ bearing: bDeg, radius: fenceR });
-      const yaw = -b;
-      box(rustIron, east, h + 2.35, north, .14, 4.7, .14, yaw);
-      part(rustIron, new ConeGeometry(.11, .42, 5), east, h + 4.9, north, yaw);
-      if (i < panels) {
-        const mid = d2r(segStart + (segEnd - segStart) * ((i + .5) / panels));
-        if (Math.abs(segStart + (segEnd - segStart) * ((i + .5) / panels) - gateB) >= 3.4) {
-          const me = anchor.east + fenceR * Math.sin(mid);
-          const mn = anchor.north + fenceR * Math.cos(mid);
-          const mh = heightAt(me, mn);
-          if (mh !== undefined) {
-            for (const ry of [1.15, 2.6, 4.05]) box(rustIron, me, mh + ry, mn, step + .1, .12, .07, -mid);
-            for (let bar = 0; bar < 5; bar++) {
-              const bb = d2r(segStart + (segEnd - segStart) * ((i + .18 + bar * .16) / panels));
-              const be = anchor.east + fenceR * Math.sin(bb);
-              const bn = anchor.north + fenceR * Math.cos(bb);
-              const bh = heightAt(be, bn);
-              if (bh !== undefined) box(rustIron, be, bh + 2.3, bn, .07, 4.4, .07, -bb);
-            }
-          }
-        }
+    const segStart=146,segEnd=184;
+    const gb=d2r(gateB),gEast=anchor.east+fenceR*Math.sin(gb),gNorth=anchor.north+fenceR*Math.cos(gb);
+    const gH=heightAt(gEast,gNorth);
+    const survey=(bearing:number)=>{
+      const b=d2r(bearing),e=anchor.east+fenceR*Math.sin(b),n=anchor.north+fenceR*Math.cos(b);
+      const h=heightAt(e,n);return h===undefined?undefined:{e,n,h,bearing};
+    };
+    const bearings=[...Array.from({length:20},(_,i)=>segStart+i*2).filter(b=>Math.abs(b-gateB)>2.6),gateB-2.6,gateB+2.6].sort((a,b)=>a-b);
+    const posts=bearings.map(survey);
+    const panel=(a:{e:number;n:number;h:number},b:{e:number;n:number;h:number},gate:boolean)=>{
+      const de=b.e-a.e,dn=b.n-a.n,dh=b.h-a.h,run=Math.hypot(de,dn);
+      const yaw=Math.atan2(dn,de),roll=Math.atan2(dh,run),length=Math.hypot(run,dh)+.08;
+      const material=gate?iron:rustIron,e=(a.e+b.e)/2,n=(a.n+b.n)/2,h=(a.h+b.h)/2;
+      for(const y of gate?[.70,2.3,3.9]:[1.15,2.6,4.05])box(material,e,h+y,n,length,gate?.16:.12,.09,yaw,0,roll);
+      const count=Math.ceil(run/.52);
+      for(let i=1;i<count;i++){
+        const t=i/count,pe=a.e+t*de,pn=a.n+t*dn,ph=a.h+t*dh;
+        box(material,pe,ph+2.25,pn,.08,4.3,.08,yaw);
       }
+      if(gate)box(material,e,h+2.3,n,Math.hypot(run,3.2),.12,.12,yaw,0,Math.atan2(dh+3.2,run));
+    };
+    for(let i=0;i<posts.length;i++){
+      const p=posts[i];if(!p)continue;
+      const gatePost=Math.abs(Math.abs(p.bearing-gateB)-2.6)<.01;
+      gateFencePosts.push({bearing:p.bearing,radius:fenceR});
+      box(gatePost?iron:rustIron,p.e,p.h+(gatePost?2.5:2.35),p.n,gatePost?.30:.14,gatePost?5:4.7,gatePost?.30:.14,-d2r(p.bearing));
+      if(!gatePost)part(rustIron,new ConeGeometry(.11,.42,5),p.e,p.h+4.9,p.n,-d2r(p.bearing));
+      const q=posts[i+1];
+      if(q&&!(p.bearing<gateB&&q.bearing>gateB))panel(p,q,false);
     }
-    // Double gate at the assembly bearing: two framed leaves, chain and padlock.
-    const gb = d2r(gateB);
-    const gEast = anchor.east + fenceR * Math.sin(gb);
-    const gNorth = anchor.north + fenceR * Math.cos(gb);
-    const gH = heightAt(gEast, gNorth);
-    if (gH !== undefined) {
-      sites.push({ id: 'fence-main-gate', east: gEast, north: gNorth, height: gH, radius: 3.2 });
-      for (const s of [-1, 1]) {
-        const postB = d2r(gateB + s * 2.6);
-        const pe = anchor.east + fenceR * Math.sin(postB);
-        const pn = anchor.north + fenceR * Math.cos(postB);
-        const ph = heightAt(pe, pn) ?? gH;
-        box(iron, pe, ph + 2.5, pn, .3, 5, .3, -postB);
-        const leafC = d2r(gateB + s * 1.3);
-        const le = anchor.east + fenceR * Math.sin(leafC);
-        const ln = anchor.north + fenceR * Math.cos(leafC);
-        const lh = heightAt(le, ln) ?? gH;
-        for (const ry of [.7, 2.3, 3.9]) box(iron, le, lh + ry, ln, 2.9, .16, .09, -leafC);
-        for (let bar = 0; bar < 6; bar++) {
-          const bb = d2r(gateB + s * (.35 + bar * .38));
-          const be = anchor.east + fenceR * Math.sin(bb);
-          const bn = anchor.north + fenceR * Math.cos(bb);
-          const bh = heightAt(be, bn) ?? gH;
-          box(iron, be, bh + 2.3, bn, .08, 4.3, .08, -bb);
-        }
-      }
+    if(gH!==undefined){
+      sites.push({id:'fence-main-gate',east:gEast,north:gNorth,height:gH,radius:3.2});
+      const center={e:gEast,n:gNorth,h:gH};
+      const left=survey(gateB-2.6),right=survey(gateB+2.6);
+      if(left)panel(left,center,true);
+      if(right)panel(center,right,true);
+      box(iron,gEast,gH+2.25,gNorth,.15,4.4,.15,-gb);
       box(iron, gEast, gH + 2.2, gNorth, .34, .42, .14, -gb);
       part(iron, new TorusGeometry(.3, .05, 5, 10), gEast, gH + 2.55, gNorth, -gb);
       // Rusted iron warning plate on the right leaf, seen from the approach
