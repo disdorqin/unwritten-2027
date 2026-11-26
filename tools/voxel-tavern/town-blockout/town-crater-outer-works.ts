@@ -6,7 +6,7 @@ import {
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import { industrialBuilder, type IndustryPoint, type IndustryWindow } from './town-a-r30-industrial-shell';
-import { orientedSupportBox } from './town-a-r30-oriented-support';
+import { orientedSupportBox, supportFootprintOverlaps } from './town-a-r30-oriented-support';
 import { oreYardFootway } from './town-a-r30-west-landscape';
 import { northFootwayPosts } from './town-a-r30-north-connector';
 import { createZa36StrataTexture } from './town-za36-crater-ejecta';
@@ -860,11 +860,21 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     const hook = fr.at(7, -6);
     box(iron, hook.east, g + 3.9, hook.north, .1, 1.1, .1, fr.yaw);
     part(iron, new TorusGeometry(.3, .06, 5, 10), hook.east, g + 3.2, hook.north, fr.yaw);
-    // Loose ore chunks scattered at the pile feet.
-    for (let i = 0; i < 14; i++) {
-      const p = fr.at(-8 + hash(i * 13 + 1) * 17, -5 + hash(i * 7 + 3) * 10);
-      const s = .3 + hash(i * 5) * .5;
-      part(ore, new DodecahedronGeometry(s, 0), p.east, g + s * .4, p.north, hash(i) * 3);
+    // Grounded fragments avoid the surveyed public footway and existing
+    // physical structures. Every exposed chip has a real support top.
+    const routeGap=(e:number,n:number)=>Math.min(...oreYardFootway.slice(1).map((b,i)=>{
+      const a=oreYardFootway[i]!,de=b[0]-a[0],dn=b[1]-a[1];
+      const t=Math.max(0,Math.min(1,((e-a[0])*de+(n-a[1])*dn)/(de*de+dn*dn)));
+      return Math.hypot(e-a[0]-t*de,n-a[1]-t*dn);
+    }));
+    let scatterCount=0;
+    for(let i=0;i<70&&scatterCount<22;i++){
+      const p=fr.at(-9+hash(i*13+1)*18,-5+hash(i*7+3)*10),h=heightAt(p.east,p.north);
+      const w=.18+.25*hash(i*5),d=.16+.22*hash(i*17),top=.10+.23*hash(i*11),yaw=hash(i)*Math.PI;
+      if(h===undefined||routeGap(p.east,p.north)<1.15||colliders.some(b=>h+.02<b.max[1]&&h+top>b.min[1]&&supportFootprintOverlaps(p.east,p.north,b,.38)))continue;
+      box(i%4===0?oreGrey:ore,p.east,h+top/2,p.north,w,top,d,yaw);
+      floors.push(orientedSupportBox(p.east,p.north,yaw,w,d,h,h+top));
+      scatterCount++;
     }
     // K-16 (总表）: shed plate on the sorting shed's roof fascia, yard side.
     const shedPlateP = fr.at(-8, -3.14);
@@ -880,14 +890,17 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     const faceYard = (east: number, north: number) => Math.atan2(yard.east - east, -(yard.north - north));
     const pileSigns: [string, string, number, number][] = [
       ['ore-pile-ore-sign', '矿料', -1.8, -2.0],
-      ['ore-pile-timber-sign', '木料', -1, 0.1],
+      ['ore-pile-timber-sign', '木料', -1, .95],
       ['ore-pile-slag-sign', '渣料', 8.2, -3.0],
     ];
     for (const [id, word, dx, dz] of pileSigns) {
       const p = fr.at(dx, dz);
-      put(timber, dx, g + .55, dz, .12, 1.1, .12);
+      const h=heightAt(p.east,p.north)??g;
+      box(workshopWood,p.east,h+.55,p.north,.12,1.1,.12,fr.yaw);
+      box(workshopRust,p.east,h+.07,p.north,.20,.14,.20,fr.yaw);
+      colliders.push(orientedSupportBox(p.east,p.north,fr.yaw,.12,.12,h,h+1.1));
       siteAt(id, p.east, p.north, 1);
-      sign(p.east, g + .95, p.north, faceYard(p.east, p.north), .8, .35, timber, (c, w, h) => {
+      sign(p.east, h + .95, p.north, faceYard(p.east, p.north), .8, .35, timber, (c, w, h) => {
         c.fillStyle = '#5d4630'; c.fillRect(0, 0, w, h);
         c.font = 'bold 56px "Noto Sans SC", sans-serif';
         c.fillStyle = '#e8e0cc'; c.textAlign = 'center'; c.textBaseline = 'middle';
