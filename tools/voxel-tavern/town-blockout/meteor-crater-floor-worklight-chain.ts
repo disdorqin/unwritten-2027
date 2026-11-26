@@ -139,6 +139,21 @@ export function mountCraterFloorWorklightChain(owner:Group,
   const data={...craterFloorWorklightGeometry,posts,pieces:fittedPieces};
   const group=new Group();
   group.name='c2-physical-worklights-authority-free';
+  // Physical envelopes are extracted from the fitted visible parts, not
+  // the broad rock-exclusion circle. A's existing west index consumes
+  // these via the B physical-kit adapter after the final host transform.
+  const solids=posts.flatMap(post=>{
+    const own=fittedPieces.filter(p=>p.id.startsWith(post.id+'/'));
+    const level=(p:Piece)=>p.position[1]+p.size[1]/2<=post.footHeight+.45?'base':
+      p.position[1]-p.size[1]/2>=post.footHeight+2.1?'hood':'shaft';
+    return (['base','shaft','hood'] as const).map(role=>{
+      const members=own.filter(p=>level(p)===role);
+      return {id:post.id+'/'+role,
+        min:[0,1,2].map(i=>Math.min(...members.map(p=>p.position[i]-p.size[i]/2))),
+        max:[0,1,2].map(i=>Math.max(...members.map(p=>p.position[i]+p.size[i]/2)))};
+    });
+  });
+  group.userData.bR30PhysicalSolids=solids;
   const geometry=new BoxGeometry(1,1,1);
   const materialMaps=new Map<Material,Piece[]>();
   for(const piece of fittedPieces){
