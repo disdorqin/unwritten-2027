@@ -50,3 +50,14 @@ test('grade survey measures violations and computes a genuinely feasible fill-on
     assert.ok(Math.abs(report.minimum[i]!-report.minimum[i-1]!)<=.12*Math.hypot(b.east-a.east,b.north-a.north)+1e-8);
   }
 });
+test('all six public railway crossings have stepped physical support at rail height',()=>{
+  assert.equal(rail.crossings.length,6);
+  for(const c of rail.crossings){
+    assert.ok(c.span>7);
+    const ground=road.heightAt(c.east,c.north)!;
+    assert.ok(Math.abs(c.top-ground-.675)<.02);
+    const heights=[...new Set(c.floors.map(f=>Math.round((f.max[1]-ground)*1000)))].sort((a,b)=>a-b);
+    assert.deepEqual(heights,[230,450,675]);
+    assert.ok(c.floors.every(f=>f.max[1]>f.min[1]&&f.footprint));
+  }
+});

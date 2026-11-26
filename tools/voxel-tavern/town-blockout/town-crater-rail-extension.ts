@@ -8,8 +8,9 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { createTerrainGrid } from './terrain';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import { craterBeltTrackCorridor } from './town-crater-outer-works';
-import { orientedSupportBox, type OrientedSupportBox } from './town-a-r30-oriented-support';
+import { orientedSupportBox, supportFootprintOverlaps, type OrientedSupportBox } from './town-a-r30-oriented-support';
 import { railSections, buildRailStrip, surveyRailGrade } from './town-a-r30-rail-strip';
+import { buildRailCrossings, mainPedestrianCrossings, freightPedestrianCrossings, narrowPedestrianCrossings } from './town-a-r30-rail-crossings';
 
 type Terrain = ReturnType<typeof createTerrainGrid>;
 type CraterRoad = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'heightAt'>;
@@ -586,7 +587,9 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
     light.position.set(lx, g + 3.15, -ln);
     group.add(light);
   }
-  const siding = buildTrackway([[-50, 184], [-54, 158], [-57, 134]], {
+  // Stop the freight siding beyond the cargo shed, before the instrument
+  // plant stair. The former extra 9m passed through its front approach.
+  const siding = buildTrackway([[-50, 184], [-54, 158], [-56.15, 142.4]], {
     gauge: 1.66, sleeperWidth: 2.5, ballastWidth: 2.9, railH: .18,
   });
   {
@@ -723,6 +726,21 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
     box(iron, end.east, end.y + .6, end.north, 1.5, .5, .12, eyaw);
   }
 
+  // True crossing decks use the same rail samples and register walk floors.
+  const crossings=[
+    ...buildRailCrossings(main.samples,mainPedestrianCrossings,1.66,2.9,g=>push(timberWarm,g),g=>push(stone,g),floors),
+    ...buildRailCrossings(siding.samples,freightPedestrianCrossings,1.66,2.9,g=>push(timberWarm,g),g=>push(stone,g),floors),
+    ...buildRailCrossings(narrow.samples,narrowPedestrianCrossings,.9,2,g=>push(timberWarm,g),g=>push(stone,g),floors),
+  ];
+  // The freight aisle now joins the real step at the edge of the grade
+  // crossing. Export the visible support, rather than the former snow Y.
+  const freightRoute=stationWalkRoutes.find(r=>r.id==='freight-shed');
+  if(freightRoute){
+    const entry=freightRoute.points[0]!;
+    entry.height=Math.max(entry.height,...crossings.flatMap(c=>c.floors)
+      .filter(f=>supportFootprintOverlaps(entry.east,entry.north,f,.27)).map(f=>f.max[1]));
+  }
+
   // ---------- merge batches ----------
   for (const [mat, geos] of batches) {
     const joined = mergeGeometries(geos.map(g => g.index ? g.toNonIndexed() : g));
@@ -750,5 +768,5 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
   group.userData.colliders=colliders;
   group.userData.floors=floors;
   return { group, alignment, samples: main.samples, narrowSamples: narrow.samples, sidingSamples:siding.samples,
-    verticalSurvey:surveyRailGrade(main.samples),stationWalkRoutes,benchSeats,shankouArrival,timetableReads };
+    verticalSurvey:surveyRailGrade(main.samples),crossings,stationWalkRoutes,benchSeats,shankouArrival,timetableReads };
 }
