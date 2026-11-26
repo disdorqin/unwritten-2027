@@ -66,6 +66,54 @@ test('D2-R02 tread follows surveyed heights while shoulders meet R30 terrain', c
   assert.equal(support.stats().surveyedPoints, 4);
 });
 
+type Contact = {
+  east: number; north: number; pierTop: number; beamBottom: number;
+  beamTop: number; treadTop: number; pierBottom: number;
+};
+
+function bridgeContacts(support: Support, groundAt: (east: number, north: number) => number = () => 460): Contact[] {
+  const bridges = support.group.children.find(mesh => mesh.name.includes('piers')) as Mesh | undefined;
+  const tread = support.group.children.find(mesh => mesh.name.includes('tread')) as Mesh;
+  assert.ok(bridges && tread, 'bridged sections need beams, piers and tread');
+  const bp = bridges.geometry.getAttribute('position');
+  const tp = tread.geometry.getAttribute('position');
+  const contacts: Contact[] = [];
+  // Each section packs two 8-vertex piers followed by one 8-vertex beam.
+  assert.equal(bp.count, support.stats().bridgedSections * 24);
+  for (let base = 0; base < bp.count; base += 24) {
+    const centreX = (bp.getX(base + 16) + bp.getX(base + 18)) / 2;
+    const centreZ = (bp.getZ(base + 16) + bp.getZ(base + 18)) / 2;
+    let treadTop = Infinity;
+    for (let index = 0; index < tp.count; index += 2) {
+      if (Math.abs((tp.getX(index) + tp.getX(index + 1)) / 2 - centreX) < 1e-5 &&
+          Math.abs((tp.getZ(index) + tp.getZ(index + 1)) / 2 - centreZ) < 1e-5) {
+        treadTop = tp.getY(index);
+        break;
+      }
+    }
+    contacts.push({
+      east: centreX, north: -centreZ,
+      pierTop: bp.getY(base), beamBottom: bp.getY(base + 20),
+      beamTop: bp.getY(base + 16), treadTop,
+      pierBottom: bp.getY(base + 4),
+    });
+    // Check all four top/bottom corners of both piers and the bearing beam.
+    for (const offset of [0, 8]) {
+      for (let corner = 0; corner < 4; corner++) {
+        assert.equal(bp.getY(base + offset + corner), bp.getY(base + 20 + corner),
+          `pier ${base / 24} must land exactly on beam underside`);
+        assert.equal(bp.getY(base + offset + corner + 4),
+          groundAt(centreX, -centreZ), `pier ${base / 24} must reach sampled ground`);
+      }
+    }
+    for (let corner = 0; corner < 4; corner++) {
+      assert.equal(bp.getY(base + 16 + corner), treadTop,
+        `beam ${base / 24} top must meet, not cross, the canonical tread`);
+    }
+  }
+  return contacts;
+}
+
 test('D2-R02 deep gullies receive solid piers that reach R30 ground', context => {
   const trailPoints = [
     { east: -50, north: 300, height: 500 },
@@ -79,16 +127,47 @@ test('D2-R02 deep gullies receive solid piers that reach R30 ground', context =>
   const stats = support.stats();
   assert.ok(stats.maxGap > 30, JSON.stringify(stats));
   assert.ok(stats.bridgedSections > 0);
-  const piers = support.group.children.find(mesh => mesh.name.includes('piers')) as Mesh | undefined;
-  assert.ok(piers, 'bridged gully must produce solid pier geometry');
-  const pp = piers!.geometry.getAttribute('position');
-  let minY = Infinity, maxY = -Infinity;
-  for (let index = 0; index < pp.count; index++) {
-    minY = Math.min(minY, pp.getY(index));
-    maxY = Math.max(maxY, pp.getY(index));
-  }
-  assert.ok(minY <= 460 + .01, `pier base ${minY} must reach R30 ground 460`);
-  assert.ok(maxY > 480, `pier top ${maxY} must climb toward the tread`);
+  assert.equal(stats.pierQuads, stats.bridgedSections * 10);
+  assert.equal(stats.beamQuads, stats.bridgedSections * 6);
+  const contacts = bridgeContacts(support, east => east > -30 && east < 20 ? 460 : 500);
+  assert.equal(contacts.length, stats.bridgedSections);
+  assert.ok(contacts.every(contact => contact.pierTop === contact.beamBottom &&
+    contact.beamBottom < contact.beamTop && contact.beamTop === contact.treadTop));
+});
+
+test('D2-R02 bridge contact is independent of outbound/return section order', context => {
+  const outbound = [
+    { east: -30, north: 100, height: 500 },
+    { east: -10, north: 120, height: 505 },
+    { east: 10, north: 140, height: 510 },
+    { east: 30, north: 160, height: 515 },
+  ];
+  const make = (trailPoints: typeof outbound) => createTownD2R30TrailSupport({
+    trailPoints, sectionStep: 1, heightAt: () => 460,
+  });
+  const forward = cleanup(context, make(outbound));
+  const returning = cleanup(context, make([...outbound].reverse()));
+  assert.deepEqual(returning.stats(), forward.stats());
+  const bySection = (support: Support) => bridgeContacts(support)
+    .map(contact => [contact.east, contact.north, contact.pierTop, contact.beamBottom,
+      contact.beamTop, contact.treadTop, contact.pierBottom])
+    .sort((a, b) => a[0]! - b[0]! || a[1]! - b[1]!);
+  assert.deepEqual(bySection(returning), bySection(forward));
+});
+
+test('D2-R02 non-bridged sections create neither beams nor piers', context => {
+  const support = cleanup(context, createTownD2R30TrailSupport({
+    trailPoints: [
+      { east: 0, north: 0, height: 400 },
+      { east: 20, north: 20, height: 401 },
+      { east: 40, north: 40, height: 402 },
+    ],
+    sectionStep: 1, heightAt: () => 410,
+  }));
+  assert.equal(support.stats().bridgedSections, 0);
+  assert.equal(support.stats().pierQuads, 0);
+  assert.equal(support.stats().beamQuads, 0);
+  assert.equal(support.group.children.some(mesh => mesh.name.includes('piers')), false);
 });
 
 test('D2-R02 trail support toggles night, validates inputs and disposes once', context => {

@@ -1,5 +1,5 @@
 import { mainSummitBounds } from './main-summit-block';
-import { sampleTownD2R30Height, townD2R30GridAxis } from './town-d2-r30-domain';
+import { sampleTownD2R30Height, townD2R30GridAxis, townD2R30Spec } from './town-d2-r30-domain';
 
 export type TownD2R30CollisionOptions = Readonly<{
   spacing?: number;
@@ -40,7 +40,6 @@ export type TownD2R30Collision = Readonly<{
   dispose(): void;
 }>;
 
-const DEFAULT_SPACING = 16;
 const DEFAULT_ARRIVAL_HEIGHT = 347;
 const DEFAULT_FOOT_RADIUS = .27;
 const FOOT_SAMPLES = 16;
@@ -71,7 +70,7 @@ function axisLocation(axis: readonly number[], value: number) {
 
 /** Cached height-field collision using the same two triangles per cell as the massif mesh. */
 export function createTownD2R30Collision(options: TownD2R30CollisionOptions = {}): TownD2R30Collision {
-  const spacing = options.spacing ?? DEFAULT_SPACING;
+  const spacing = options.spacing ?? townD2R30Spec.collisionSpacing;
   const arrivalHeight = options.arrivalHeight ?? DEFAULT_ARRIVAL_HEIGHT;
   if (!Number.isFinite(spacing) || spacing <= 0) throw new RangeError('Invalid D2-R30 collision spacing.');
   if (!Number.isFinite(arrivalHeight)) throw new RangeError('Invalid D2-R30 arrival height.');
@@ -83,7 +82,9 @@ export function createTownD2R30Collision(options: TownD2R30CollisionOptions = {}
   const eastVertices = eastAxis.length, northVertices = northAxis.length;
   const vertexCount = eastVertices * northVertices;
   const triangleCount = (eastVertices - 1) * (northVertices - 1) * 2;
-  const heights = new Float64Array(vertexCount);
+  // Match the visible mesh's Float32 positions exactly. Collision therefore
+  // interpolates the rendered triangles, not a separate higher-frequency field.
+  const heights = new Float32Array(vertexCount);
   let heightSamples = 0;
   for (let row = 0; row < northVertices; row++) {
     for (let column = 0; column < eastVertices; column++) {

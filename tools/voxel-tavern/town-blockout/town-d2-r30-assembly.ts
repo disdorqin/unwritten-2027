@@ -101,6 +101,28 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   // visual terrain and the walking surface can never drift apart.
   const heightAt = (east: number, north: number) => sampleTownD2R30Height(east, north, arrivalHeight);
 
+  // Cloud/forest exclusions and night lamps share one canonical P-3 survey.
+  // Skip it entirely when neither consumer is mounted, and always release the
+  // temporary P-1 block that supplies the surveyed ground.
+  let trailPoints: ReturnType<typeof createMainSummitTrail>['points'] | undefined;
+  let trailSurveyStats: Readonly<{
+    pointCount: number;
+    metrics: ReturnType<typeof createMainSummitTrail>['metrics'];
+  }> | undefined;
+  if (includeCloudTerrace || includeNightLights) {
+    const block = createMainSummitBlock(mainSummitLayout, arrivalHeight, 100);
+    try {
+      const trail = createMainSummitTrail(block.heightAt, arrivalHeight);
+      trailPoints = trail.points;
+      trailSurveyStats = Object.freeze({
+        pointCount: trail.points.length,
+        metrics: Object.freeze({ ...trail.metrics }),
+      });
+    } finally {
+      block.dispose();
+    }
+  }
+
   let terrainStats: () => unknown;
   let updateLod: ((east: number, north: number) => void) | undefined;
   let updateRopeway: ((nowMs: number) => void) | undefined;
@@ -136,7 +158,11 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   }
 
   if (includeCloudTerrace) {
-    const cloud = createTownD2R30CloudTerraceHost({ heightAt, arrivalHeight });
+    const cloud = createTownD2R30CloudTerraceHost({
+      heightAt,
+      arrivalHeight,
+      trailPoints: trailPoints!,
+    });
     children.push(cloud.group);
     disposers.push(() => cloud.dispose());
     nightHooks.push(value => cloud.setNight(value));
@@ -181,19 +207,11 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   }
 
   if (includeNightLights) {
-    // The lamp chain follows the canonical walkway, so it is surveyed against
-    // the P-1 reference block exactly like the bell posts and the trail
-    // markers, and the lamps stand on the D2-R02 roadbed.
-    const block = createMainSummitBlock(mainSummitLayout, arrivalHeight, 100);
-    let trailPoints: ReturnType<typeof createMainSummitTrail>['points'] = [];
-    try {
-      trailPoints = createMainSummitTrail(block.heightAt, arrivalHeight).points;
-    } finally {
-      block.dispose();
-    }
+    // The lamp chain follows the same canonical walkway survey used by the
+    // cloud/forest exclusions, and the lamps stand on the D2-R02 roadbed.
     const lights = createTownD2R30NightLights({
       hostGroup: nightLightsHost,
-      trailPoints,
+      trailPoints: trailPoints!,
     });
     children.push(lights.group);
     disposers.push(() => lights.dispose());
@@ -283,6 +301,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
         terrainMode,
         arrivalHeight,
         terrain: terrainStats(),
+        trailSurvey: trailSurveyStats,
         subPackages: Object.freeze(children.map(child => child.name)),
         budget: Object.freeze({
           meshes,

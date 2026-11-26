@@ -85,7 +85,7 @@ function finishGeometry(geometry: BufferGeometry, name: string) {
 
 /** A top-only, indexed terrain tile in east/height/-north coordinates. */
 export function buildTownD2R30ChunkGeometry(
-  chunk: TownD2R30Chunk, spacing: number = townD2R30Spec.middleSpacing, arrivalHeight: number = 347,
+  chunk: TownD2R30Chunk, spacing: number = townD2R30Spec.canonicalSpacing, arrivalHeight: number = 347,
 ): BufferGeometry {
   if (!Number.isFinite(arrivalHeight)) throw new RangeError('Invalid D2-R01 arrival height.');
   const eastAxis = townD2R30GridAxis(chunk.west, chunk.east, spacing);
@@ -170,6 +170,7 @@ function buildFloorGeometry(ring: readonly (readonly [number, number])[]) {
 
 export type TownD2R30MassifOptions = Readonly<{ arrivalHeight?: number; spacing?: number }>;
 export type TownD2R30MassifStats = Readonly<{
+  spacing: number;
   vertices: number; triangles: number; meshes: number; draws: number;
   minHeight: number; maxHeight: number; minTopHeight: number;
 }>;
@@ -177,7 +178,7 @@ export type TownD2R30MassifStats = Readonly<{
 /** Builds every top tile plus an outward-facing perimeter wall and bottom cap. */
 export function createTownD2R30Massif(options: TownD2R30MassifOptions = {}) {
   const arrivalHeight = options.arrivalHeight ?? 347;
-  const spacing = options.spacing ?? townD2R30Spec.middleSpacing;
+  const spacing = options.spacing ?? townD2R30Spec.canonicalSpacing;
   if (!Number.isFinite(arrivalHeight)) throw new RangeError('Invalid D2-R30 arrival height.');
   // Validate before allocating the 72 chunk meshes.
   townD2R30GridAxis(-townD2R30Spec.width / 2, townD2R30Spec.width / 2, spacing);
@@ -208,6 +209,7 @@ export function createTownD2R30Massif(options: TownD2R30MassifOptions = {}) {
   addMesh(buildSkirtGeometry(perimeter, arrivalHeight));
   addMesh(buildFloorGeometry(perimeter));
   const stats: TownD2R30MassifStats = Object.freeze({
+    spacing,
     vertices, triangles, meshes: group.children.length, draws: group.children.length,
     minHeight, maxHeight, minTopHeight,
   });

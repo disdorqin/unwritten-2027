@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
 import test, { type TestContext } from 'node:test';
-import { Group, Mesh } from 'three';
+import { Group, InstancedMesh, Matrix4, Mesh, Object3D, Vector3 } from 'three';
 import {
   createTownD2R30Assembly,
 } from '../tools/voxel-tavern/town-blockout/town-d2-r30-assembly';
 import {
   sampleTownD2R30Height, townD2R30Anchors, townD2R30Spec,
 } from '../tools/voxel-tavern/town-blockout/town-d2-r30-domain';
+import { createMainSummitBlock, mainSummitLayout } from '../tools/voxel-tavern/town-blockout/main-summit-block';
+import { createMainSummitTrail } from '../tools/voxel-tavern/town-blockout/main-summit-trail';
 
 type Assembly = ReturnType<typeof createTownD2R30Assembly>;
 
@@ -19,6 +21,29 @@ function meshesOf(assembly: Assembly) {
   const meshes: Mesh[] = [];
   assembly.group.traverse(object => { if (object instanceof Mesh) meshes.push(object); });
   return meshes;
+}
+
+function distanceToTrail(trail: readonly Readonly<{ east: number; north: number }>[], east: number, north: number) {
+  let distance = Infinity;
+  for (let index = 1; index < trail.length; index++) {
+    const from = trail[index - 1]!, to = trail[index]!;
+    const dx = to.east - from.east, dn = to.north - from.north;
+    const lengthSquared = dx * dx + dn * dn;
+    const along = lengthSquared > 0
+      ? Math.max(0, Math.min(1, ((east - from.east) * dx + (north - from.north) * dn) / lengthSquared))
+      : 0;
+    distance = Math.min(distance, Math.hypot(east - from.east - along * dx, north - from.north - along * dn));
+  }
+  return distance;
+}
+
+function eachInstance(mesh: InstancedMesh, visit: (position: Vector3, scale: Vector3, index: number) => void) {
+  const matrix = new Matrix4(), position = new Vector3(), scale = new Vector3(), rotation = new Object3D();
+  for (let index = 0; index < mesh.count; index++) {
+    mesh.getMatrixAt(index, matrix);
+    matrix.decompose(position, rotation.quaternion, scale);
+    visit(position, scale, index);
+  }
 }
 
 test('D2-R30 assembly mounts a complete four-side massif with shared height and collision', context => {
@@ -70,6 +95,82 @@ test('D2-R30 assembly streaming mode streams chunks and exposes the same height 
   assert.ok(before.terrain.rebuilds >= 0);
   assert.equal(assembly.heightAt(0, 0), sampleTownD2R30Height(0, 0));
   assert.throws(() => assembly.update(NaN, 0), /finite/);
+});
+
+test('D2-R30 cloud terrace consumes the canonical trail and keeps cloud and forest 15 m clear', () => {
+  const arrivalHeight = 347;
+  const canonical = (() => {
+    const block = createMainSummitBlock(mainSummitLayout, arrivalHeight, 100);
+    try {
+      return createMainSummitTrail(block.heightAt, arrivalHeight);
+    } finally {
+      block.dispose();
+    }
+  })();
+  assert.ok(canonical.points.length > 5_400);
+
+  for (const terrainMode of ['static', 'streaming'] as const) {
+    const assembly = createTownD2R30Assembly({
+      terrainMode,
+      includeSnowRock: false,
+      includeStrata: false,
+      includeCloudTerrace: true,
+    });
+    try {
+      const stats = assembly.stats() as {
+        terrainMode: string;
+        trailSurvey?: Readonly<{
+          pointCount: number;
+          metrics: ReturnType<typeof createMainSummitTrail>['metrics'];
+        }>;
+      };
+      assert.equal(stats.terrainMode, terrainMode);
+      assert.deepEqual(stats.trailSurvey, {
+        pointCount: canonical.points.length,
+        metrics: canonical.metrics,
+      });
+
+      const host = assembly.group.getObjectByName('town-d2-r30-cloud-terrace-host');
+      assert.ok(host, `${terrainMode} must mount the cloud terrace host`);
+      const hostStats = host.userData as {
+        cloud: {
+          instances: number;
+          minTrailClearance: number;
+          familyCounts: Readonly<{ 'cloud-wall': number }>;
+        };
+        forest: {
+          instances: number;
+          trailClearance: number;
+        };
+      };
+      // Cloud-wall lobes are generated only from non-empty trail anchors.
+      assert.ok(hostStats.cloud.familyCounts['cloud-wall'] > 0, 'cloud host needs canonical cloud-band anchors');
+      assert.ok(hostStats.cloud.instances > 0 && hostStats.forest.instances > 0);
+      assert.ok(hostStats.cloud.minTrailClearance >= 15 - 1e-9);
+      assert.equal(hostStats.forest.trailClearance, 15);
+
+      const placementMeshes: InstancedMesh[] = [];
+      host.traverse(object => {
+        if (object instanceof InstancedMesh &&
+          (object.name === 'town-d2-main-summit-cloud-lobes' || object.name.startsWith('town-d2-r30-lowland-'))) {
+          placementMeshes.push(object);
+        }
+      });
+      assert.ok(placementMeshes.length >= 3, 'cloud and both forest batches must be observable');
+      for (const mesh of placementMeshes) {
+        eachInstance(mesh, (position, scale, index) => {
+          const radius = mesh.name === 'town-d2-main-summit-cloud-lobes'
+            ? Math.max(scale.x, scale.z)
+            : Math.hypot(scale.x, scale.z) * .5;
+          const clearance = distanceToTrail(canonical.points, position.x, -position.z) - radius;
+          assert.ok(clearance >= 15 - 1e-7,
+            `${terrainMode} ${mesh.name} ${index} leaves only ${clearance.toFixed(6)} m`);
+        });
+      }
+    } finally {
+      assembly.dispose();
+    }
+  }
 });
 
 test('D2-R30 assembly toggles night on every layer and disposes exactly once', context => {
@@ -138,12 +239,14 @@ test('D2-R30 assembly can include D2-R03 facility and sled support', context => 
   assert.ok(sledGroup.children.length > 0);
 });
 
-test('D2-R30 assembly supports minimal composition without supplements', context => {
+test('D2-R30 assembly skips cloud terrace and canonical trail survey without consumers', context => {
   const assembly = cleanup(context, createTownD2R30Assembly({
     includeStrata: false, includeSnowRock: false, includeCloudTerrace: false,
   }));
-  const stats = assembly.stats() as { subPackages: readonly string[] };
+  const stats = assembly.stats() as { subPackages: readonly string[]; trailSurvey?: unknown };
   assert.deepEqual([...stats.subPackages], ['town-d2-r30-massif']);
+  assert.equal(stats.trailSurvey, undefined);
+  assert.equal(assembly.group.getObjectByName('town-d2-r30-cloud-terrace-host'), undefined);
   assert.ok(meshesOf(assembly).length > 0);
   assert.throws(() => createTownD2R30Assembly({ terrainMode: 'fly' as never }), /terrainMode/);
   assert.throws(() => createTownD2R30Assembly({ includeStrata: 'yes' as never }), /booleans/);

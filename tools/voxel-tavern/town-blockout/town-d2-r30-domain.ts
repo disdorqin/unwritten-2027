@@ -1,5 +1,8 @@
 import { mainSummitBounds, mainSummitLayout, mainSummitSpec } from './main-summit-block';
 
+/** Static massif, streaming near LOD and collision all consume this exact grid. */
+export const townD2R30CanonicalSpacing = 8;
+
 export const townD2R30Spec = Object.freeze({
   width: mainSummitSpec.width,
   depth: mainSummitSpec.depth,
@@ -9,8 +12,9 @@ export const townD2R30Spec = Object.freeze({
   cloudBand: Object.freeze([mainSummitSpec.cloudBand[0], mainSummitSpec.cloudBand[1]] as const),
   macroCell: 64,
   renderChunk: 256,
-  collisionSpacing: 8,
-  nearSpacing: 8,
+  canonicalSpacing: townD2R30CanonicalSpacing,
+  collisionSpacing: townD2R30CanonicalSpacing,
+  nearSpacing: townD2R30CanonicalSpacing,
   middleSpacing: 16,
   farSpacing: 32,
   horizonSpacing: 64,

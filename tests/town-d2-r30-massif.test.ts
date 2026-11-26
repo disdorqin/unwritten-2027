@@ -5,14 +5,33 @@ import {
   buildTownD2R30ChunkGeometry, createTownD2R30Massif,
 } from '../tools/voxel-tavern/town-blockout/town-d2-r30-massif';
 import {
-  sampleTownD2R30Height, townD2R30ChunkList, townD2R30GridAxis, townD2R30Spec,
+  sampleTownD2R30Height, townD2R30Anchors, townD2R30ChunkList, townD2R30GridAxis, townD2R30Spec,
 } from '../tools/voxel-tavern/town-blockout/town-d2-r30-domain';
+import { createTownD2R30Collision } from '../tools/voxel-tavern/town-blockout/town-d2-r30-collision';
 
 const finiteArray = (geometry: BufferGeometry, attribute: string) => {
   const array = geometry.getAttribute(attribute)?.array;
   assert.ok(array, `missing ${attribute}`);
   assert.ok(array.every(Number.isFinite), `${attribute} contains a non-finite value`);
 };
+
+const canonicalCellFractions = [[0, 0], [1, 0], [0, 1], [.2, .3], [.7, .6]] as const;
+
+function visibleTriangleHeight(
+  geometry: BufferGeometry, eastAxis: readonly number[], northAxis: readonly number[], east: number, north: number,
+) {
+  let column = 0, row = 0;
+  while (column < eastAxis.length - 2 && east > eastAxis[column + 1]!) column++;
+  while (row < northAxis.length - 2 && north > northAxis[row + 1]!) row++;
+  const west = eastAxis[column]!, eastEdge = eastAxis[column + 1]!;
+  const south = northAxis[row]!, northEdge = northAxis[row + 1]!;
+  const u = (east - west) / (eastEdge - west), v = (north - south) / (northEdge - south);
+  const position = geometry.getAttribute('position');
+  const vertex = row * eastAxis.length + column;
+  const a = position.getY(vertex), b = position.getY(vertex + 1);
+  const c = position.getY(vertex + eastAxis.length), d = position.getY(vertex + eastAxis.length + 1);
+  return u + v <= 1 ? a + (b - a) * u + (c - a) * v : (1 - v) * b + (u + v - 1) * d + (1 - u) * c;
+}
 
 test('D2-R30 chunk geometry is a complete upward indexed grid with finite colors and normals', () => {
   const chunk = townD2R30ChunkList[0]!;
@@ -97,6 +116,7 @@ test('D2-R30 default mesh is watertight, colored by bands and reports indexed st
   const massif = createTownD2R30Massif();
   const { group, stats } = massif;
   const statsValue = stats();
+  assert.equal(statsValue.spacing, 8);
   assert.equal(statsValue.meshes, townD2R30ChunkList.length + 2);
   assert.equal(statsValue.draws, statsValue.meshes);
   let vertices = 0, triangles = 0;
@@ -145,7 +165,9 @@ test('D2-R30 default mesh is watertight, colored by bands and reports indexed st
   }
   assert.equal(statsValue.vertices, vertices);
   assert.equal(statsValue.triangles, triangles);
-  assert.equal(triangles, 32_694);
+  assert.equal(vertices, 69_173);
+  assert.equal(triangles, 126_750);
+  assert.equal(triangles, (2_200 / 8) * (1_800 / 8) * 2 + 6 * (2_200 / 8 + 1_800 / 8));
   assert.ok(colors.size > 1_000, 'surface needs varied band and relief colors');
   assert.ok(ochreSamples > 0 && iceSamples > 0 && forestSamples > 0, 'ochre, ice and forest bands must be visible');
   for (const [key, edge] of edges) {
@@ -153,6 +175,73 @@ test('D2-R30 default mesh is watertight, colored by bands and reports indexed st
     assert.equal(edge.direction, 0, `inconsistent winding at edge ${key}`);
   }
   massif.dispose();
+});
+
+test('D2-R30 visible canonical triangles and collision agree across the full 8m domain', () => {
+  const massif = createTownD2R30Massif();
+  const collision = createTownD2R30Collision();
+  try {
+    assert.equal(massif.stats().spacing, 8);
+    assert.equal(collision.stats().spacing, 8);
+    const topMeshes = massif.group.children.filter(child => child.name.startsWith('town-d2-r30-top-'));
+    let maxDifference = 0, sampleCount = 0;
+    for (const child of topMeshes) {
+      const mesh = child as Mesh;
+      const chunk = townD2R30ChunkList.find(candidate => candidate.key === mesh.name.slice('town-d2-r30-top-'.length))!;
+      const eastAxis = townD2R30GridAxis(chunk.west, chunk.east, 8);
+      const northAxis = townD2R30GridAxis(chunk.south, chunk.north, 8);
+      for (let row = 0; row + 1 < northAxis.length; row++) {
+        for (let column = 0; column + 1 < eastAxis.length; column++) {
+          const west = eastAxis[column]!, south = northAxis[row]!;
+          const width = eastAxis[column + 1]! - west, depth = northAxis[row + 1]! - south;
+          for (const [u, v] of canonicalCellFractions) {
+            const east = west + width * u, north = south + depth * v;
+            const visible = visibleTriangleHeight(mesh.geometry, eastAxis, northAxis, east, north);
+            const support = collision.surfaceAt(east, north);
+            assert.ok(Number.isFinite(visible) && support !== undefined, `${east},${north} must have both surfaces`);
+            maxDifference = Math.max(maxDifference, Math.abs(visible - support!));
+            sampleCount++;
+          }
+        }
+      }
+    }
+
+    const requiredProbes = [
+      { name: 'gate', east: 0, north: 0 },
+      { name: 'summit-platform', east: 50, north: 1_000 },
+      ...townD2R30Anchors.shoulders.map((shoulder, index) => ({ name: `shoulder-${index + 1}`, ...shoulder })),
+      ...townD2R30Anchors.valleys.map(valley => ({ name: valley.id, east: valley.east, north: valley.north })),
+      { name: 'west-edge', east: -1_100, north: 900 },
+      { name: 'east-edge', east: 1_100, north: 900 },
+      { name: 'south-edge', east: 900, north: -10 },
+      { name: 'north-edge', east: 900, north: 1_790 },
+    ];
+    const probeDifferences = new Map<string, number>();
+    for (const probe of requiredProbes) {
+      const chunk = townD2R30ChunkList.find(candidate =>
+        probe.east >= candidate.west && probe.east <= candidate.east &&
+        probe.north >= candidate.south && probe.north <= candidate.north)!;
+      const mesh = topMeshes.find(child => child.name === `town-d2-r30-top-${chunk.key}`) as Mesh;
+      const visible = visibleTriangleHeight(
+        mesh.geometry,
+        townD2R30GridAxis(chunk.west, chunk.east, 8),
+        townD2R30GridAxis(chunk.south, chunk.north, 8),
+        probe.east, probe.north,
+      );
+      const support = collision.surfaceAt(probe.east, probe.north);
+      assert.ok(support !== undefined, `${probe.name} must have collision support`);
+      probeDifferences.set(probe.name, Math.abs(visible - support!));
+    }
+    assert.equal(probeDifferences.size, requiredProbes.length);
+    assert.ok(maxDifference <= 1e-6, `maximum visible/collision difference ${maxDifference} m`);
+    console.log(
+      `D2-R30 canonical8 maxDifference=${maxDifference.toFixed(12)}m samples=${sampleCount} ` +
+      `massifTriangles=${massif.stats().triangles} collisionTriangles=${collision.stats().triangleCount}`,
+    );
+  } finally {
+    collision.dispose();
+    massif.dispose();
+  }
 });
 
 function materialIsShared(mesh: Mesh, group: Group) {

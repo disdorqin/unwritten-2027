@@ -2,14 +2,25 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { mainSummitBounds } from '../tools/voxel-tavern/town-blockout/main-summit-block';
 import {
-  sampleTownD2R30Height, sampleTownD2R30Normal, townD2R30Anchors, townD2R30ChunkList,
-  townD2R30LocalPoint, townD2R30LodSpacing, townD2R30Spec, townD2R30SurfaceBand, townD2R30WorldPoint,
+  sampleTownD2R30Height, sampleTownD2R30Normal, townD2R30Anchors, townD2R30CanonicalSpacing,
+  townD2R30ChunkList, townD2R30LocalPoint, townD2R30LodSpacing, townD2R30Spec,
+  townD2R30SurfaceBand, townD2R30WorldPoint,
 } from '../tools/voxel-tavern/town-blockout/town-d2-r30-domain';
 
 test('D2-R01 contract preserves canonical domain, plateau, shoulders and gate', () => {
   assert.equal(townD2R30Spec.width, 2_200);
   assert.equal(townD2R30Spec.depth, 1_800);
   assert.equal(townD2R30Spec.summitHeight, 800);
+  assert.equal(townD2R30CanonicalSpacing, 8);
+  assert.equal(townD2R30Spec.canonicalSpacing, townD2R30CanonicalSpacing);
+  assert.equal(townD2R30Spec.collisionSpacing, townD2R30CanonicalSpacing);
+  assert.equal(townD2R30Spec.nearSpacing, townD2R30CanonicalSpacing);
+  assert.equal(townD2R30Spec.width % townD2R30CanonicalSpacing, 0);
+  assert.equal(townD2R30Spec.depth % townD2R30CanonicalSpacing, 0);
+  assert.deepEqual(
+    [townD2R30Spec.middleSpacing, townD2R30Spec.farSpacing, townD2R30Spec.horizonSpacing],
+    [16, 32, 64],
+  );
   assert.equal(sampleTownD2R30Height(50, 1_000), 800);
   assert.equal(sampleTownD2R30Height(-550, 900), 560);
   assert.equal(sampleTownD2R30Height(590, 1_080), 610);

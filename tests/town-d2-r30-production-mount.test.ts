@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test, { type TestContext } from 'node:test';
 import { Group, type Object3D } from 'three';
 import { mountMainSummitAssembly } from '../tools/voxel-tavern/town-blockout/main-summit-assembly';
+import { mountMainSummitExtras } from '../tools/voxel-tavern/town-blockout/main-summit-extras';
 import { createMainSummitTrail } from '../tools/voxel-tavern/town-blockout/main-summit-trail';
 
 function visibleInHierarchy(object: Object3D) {
@@ -19,7 +20,14 @@ function named(root: Group, name: string) {
   return matches;
 }
 
-test('D2-R07 production mount uses R30 terrain, tread and ropeway without double-drawing the legacy shell', context => {
+const duplicateFacilityNames = [
+  'main-summit-paint', 'main-summit-banner-cloud', 'main-summit-icefall', 'main-summit-rock-towers',
+  'main-summit-survey-stations', 'main-summit-hut-furnishings', 'main-summit-wing-rack',
+  'main-summit-wind-ground', 'sky-watch-relic', 'main-summit-trail-markers', 'main-summit-bell-posts',
+  'main-summit-glide-rings', 'main-summit-glide-ring-entities',
+] as const;
+
+test('D2-R07 production mount uses R30 terrain, tread, ropeway, towers and facilities', context => {
   const parent = new Group();
   const assembly = mountMainSummitAssembly(parent, 0);
   context.after(() => { if (assembly.group.parent) assembly.dispose(); });
@@ -27,6 +35,12 @@ test('D2-R07 production mount uses R30 terrain, tread and ropeway without double
   assert.equal(assembly.r30Mounted, true);
   assert.ok(assembly.r30);
   assert.equal(assembly.r30.group.parent, assembly.group);
+  const subPackages = assembly.r30.group.userData.subPackages as readonly string[];
+  assert.ok(subPackages.includes('town-d2-r30-cable-towers'));
+  assert.ok(subPackages.includes('town-d2-r30-summit-facilities'));
+  assert.deepEqual(assembly.r30.stats().subPackages, subPackages);
+  assert.ok(assembly.group.getObjectByName('town-d2-r30-cable-towers'));
+  assert.ok(assembly.group.getObjectByName('town-d2-r30-summit-facilities'));
   assert.deepEqual(assembly.mountedParts(), ['P-1', 'P-2', 'P-3', 'P-4', 'P-7', 'P-8', 'P-9']);
   assert.equal(assembly.block.coarse.visible, false);
   assert.equal(assembly.clouds.group.visible, false);
@@ -42,6 +56,48 @@ test('D2-R07 production mount uses R30 terrain, tread and ropeway without double
   assert.equal(stations.filter(visibleInHierarchy).length, 1);
   assert.equal(assembly.cable, assembly.r30.ropeway!.cable);
   assert.equal(assembly.stations, assembly.r30.ropeway!.stations);
+});
+
+test('D2-R07 production extras hide duplicate facilities and retain additive scenery', context => {
+  const assembly = mountMainSummitAssembly(new Group(), 0);
+  const extras = mountMainSummitExtras(assembly);
+  context.after(() => {
+    extras.dispose();
+    if (assembly.group.parent) assembly.dispose();
+  });
+
+  const facilities = assembly.group.getObjectByName('town-d2-r30-summit-facilities')!;
+  assert.ok(facilities);
+  for (const name of duplicateFacilityNames) {
+    const copies = named(assembly.group, name);
+    assert.equal(copies.length, 2, `${name} should have one R30 and one legacy root`);
+    assert.equal(copies.filter(visibleInHierarchy).length, 1, `${name} should have one visible root`);
+    const canonical = facilities.getObjectByName(name);
+    assert.ok(canonical, `${name} should be mounted by R30`);
+    assert.equal(visibleInHierarchy(canonical), true);
+    assert.equal(visibleInHierarchy(copies.find(copy => copy !== canonical)!), false);
+  }
+
+  const additive = [
+    extras.signs.group, extras.posts.group, extras.wishLock.group, extras.cloudTerraceArt.group,
+    extras.shelterMid.group, extras.shelterIce.group, extras.machineRoom.group, extras.terraceEdge.group,
+  ];
+  for (const object of additive) assert.equal(visibleInHierarchy(object), true, object.name);
+
+  extras.setNight(true);
+  extras.update(1234);
+  assert.equal((assembly.r30!.stats() as { night: boolean }).night, true);
+  assert.equal(visibleInHierarchy(named(assembly.group, 'cloud-glow-band')[0]!), true);
+  for (const name of duplicateFacilityNames) {
+    assert.equal(named(assembly.group, name).filter(visibleInHierarchy).length, 1,
+      `${name} must stay single-visible after night/update`);
+  }
+  extras.setNight(false);
+  extras.update(5678);
+  assert.equal((assembly.r30!.stats() as { night: boolean }).night, false);
+  extras.dispose();
+  extras.dispose();
+  assert.equal(extras.signs.group.parent, null);
 });
 
 test('D2-R07 production mount exposes R30 collision without changing the walkway-only query contract', context => {
@@ -93,10 +149,19 @@ test('D2-R07 canonical trail remains traversable in both directions on the produ
 
 test('D2-R07 legacy mount remains available for isolated canonical reviews', context => {
   const assembly = mountMainSummitAssembly(new Group(), 0, undefined, { r30: false });
-  context.after(() => { if (assembly.group.parent) assembly.dispose(); });
+  const extras = mountMainSummitExtras(assembly);
+  context.after(() => {
+    extras.dispose();
+    if (assembly.group.parent) assembly.dispose();
+  });
   assert.equal(assembly.r30Mounted, false);
   assert.equal(assembly.r30, undefined);
   assert.equal(assembly.block.coarse.visible, true);
   assert.equal(assembly.clouds.group.visible, true);
   assert.equal(assembly.group.getObjectByName('main-summit-walkway')!.visible, true);
+  for (const name of duplicateFacilityNames) {
+    const copies = named(assembly.group, name);
+    assert.equal(copies.length, 1, `${name} should only have its legacy root`);
+    assert.equal(visibleInHierarchy(copies[0]!), true, `${name} should remain visible in legacy mode`);
+  }
 });

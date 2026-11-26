@@ -7,6 +7,7 @@ import {
 } from '../tools/voxel-tavern/town-blockout/town-d2-r30-domain';
 import type { TownD2R30Chunk } from '../tools/voxel-tavern/town-blockout/town-d2-r30-domain';
 import { createTownD2R30ChunkLod } from '../tools/voxel-tavern/town-blockout/town-d2-r30-chunk-lod';
+import { createTownD2R30Collision } from '../tools/voxel-tavern/town-blockout/town-d2-r30-collision';
 
 type GeometryCall = {
   chunk: TownD2R30Chunk;
@@ -100,7 +101,8 @@ test('D2-R30 chunk LOD is lazy and streams gate, summit and edge views with one 
     }
     visibleCounts.push(stats.visibleChunks);
   }
-  assert.ok(visibleCounts[0]! < townD2R30ChunkList.length, 'gate view must not build the full map');
+  assert.ok(visibleCounts[0]! > 0 && visibleCounts[0]! < townD2R30ChunkList.length,
+    'gate view must build only the resident part of the compact massif');
   assert.equal(visibleCounts[1], townD2R30ChunkList.length, 'summit view covers the compact massif');
   assert.notEqual(visibleCounts[1], visibleCounts[2]);
   assert.ok(fixture.calls.length < townD2R30ChunkList.length * views.length);
@@ -162,6 +164,34 @@ test('D2-R30 chunk LOD retains through unload hysteresis, then releases geometry
   assert.equal(lod.stats().cachedChunks, residentKeys(target.east + radius + .01, target.south).length);
   assert.equal(lod.stats().draws, lod.stats().visibleChunks);
   lod.dispose();
+});
+
+test('D2-R30 streaming near chunk uses the same canonical vertices as collision', () => {
+  const target = townD2R30ChunkList.find(chunk =>
+    chunk.west <= townD2R30Anchors.summit.east && chunk.east >= townD2R30Anchors.summit.east &&
+    chunk.south <= townD2R30Anchors.summit.north && chunk.north >= townD2R30Anchors.summit.north)!;
+  const lod = createTownD2R30ChunkLod();
+  const collision = createTownD2R30Collision();
+  try {
+    lod.update(target.centreEast, target.centreNorth);
+    const mesh = lod.group.children.find(child => child.userData.chunkKey === target.key) as Mesh<BufferGeometry, MeshLambertMaterial>;
+    assert.equal(mesh.userData.spacing, 8);
+    assert.equal(collision.stats().spacing, 8);
+    const position = mesh.geometry.getAttribute('position');
+    assert.equal(position.count, (256 / 8 + 1) ** 2);
+    assert.equal(mesh.geometry.getIndex()!.count, (256 / 8) * (256 / 8) * 6);
+    let maxDifference = 0;
+    for (let vertex = 0; vertex < position.count; vertex++) {
+      const support = collision.surfaceAt(position.getX(vertex), -position.getZ(vertex));
+      assert.ok(support !== undefined);
+      maxDifference = Math.max(maxDifference, Math.abs(position.getY(vertex) - support!));
+    }
+    assert.ok(maxDifference <= 1e-6);
+    console.log(`D2-R30 streamingNear maxDifference=${maxDifference.toFixed(12)}m triangles=2048 vertices=${position.count}`);
+  } finally {
+    collision.dispose();
+    lod.dispose();
+  }
 });
 
 test('D2-R30 chunk LOD reports fixture triangles and disposes every geometry and material once', () => {

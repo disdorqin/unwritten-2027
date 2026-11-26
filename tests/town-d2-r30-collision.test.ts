@@ -27,7 +27,7 @@ test('D2-R30 collision caches grid axes and returns exact sampled vertices', () 
     assert.equal(calls, expectedCalls);
     for (const east of eastAxis) {
       for (const north of northAxis) {
-        assert.equal(collision.surfaceAt(east, north), 11 + east * .013 - north * .021);
+        assert.equal(collision.surfaceAt(east, north), Math.fround(11 + east * .013 - north * .021));
       }
     }
     collision.normalAt(17, 23);
@@ -47,10 +47,10 @@ test('D2-R30 collision interpolates the massif triangle orientation inside a cel
   });
   try {
     const west = mainSummitBounds.west, south = mainSummitBounds.south;
-    const a = 10 + west * 2 + south * 3 + west * south * .01;
-    const b = 10 + (west + 100) * 2 + south * 3 + (west + 100) * south * .01;
-    const c = 10 + west * 2 + (south + 100) * 3 + west * (south + 100) * .01;
-    const d = 10 + (west + 100) * 2 + (south + 100) * 3 + (west + 100) * (south + 100) * .01;
+    const a = Math.fround(10 + west * 2 + south * 3 + west * south * .01);
+    const b = Math.fround(10 + (west + 100) * 2 + south * 3 + (west + 100) * south * .01);
+    const c = Math.fround(10 + west * 2 + (south + 100) * 3 + west * (south + 100) * .01);
+    const d = Math.fround(10 + (west + 100) * 2 + (south + 100) * 3 + (west + 100) * (south + 100) * .01);
     closeTo(collision.surfaceAt(west + 50, south + 20)!, a + (b - a) * .5 + (c - a) * .2);
     closeTo(collision.surfaceAt(west + 50, south + 70)!, (1 - .7) * b + (.5 + .7 - 1) * d + (1 - .5) * c);
     closeTo(collision.surfaceAt(west + 50, south + 50)!, (b + c) / 2);
@@ -85,15 +85,16 @@ test('D2-R30 surface queries reject missing heights and every out-of-bounds side
 });
 
 test('D2-R30 normals are unit vectors and slopes are radians from the triangle plane', () => {
-  const collision = createTownD2R30Collision({ spacing: 100, heightAt: (east, north) => 2 * east + 3 * north });
+  const collision = createTownD2R30Collision({ spacing: 100, heightAt: (east, north) => east / 8 + north / 4 });
   try {
+    const length = Math.hypot(1 / 8, 1, 1 / 4);
     for (const [east, north] of [[-1_050, 10], [-1_050, 60], [50, 1_000]]) {
       const normal = collision.normalAt(east, north)!;
       closeTo(Math.hypot(...normal), 1);
-      closeTo(normal[0], -2 / Math.sqrt(14));
-      closeTo(normal[1], 1 / Math.sqrt(14));
-      closeTo(normal[2], -3 / Math.sqrt(14));
-      closeTo(collision.slopeAt(east, north)!, Math.atan(Math.sqrt(13)));
+      closeTo(normal[0], -(1 / 8) / length);
+      closeTo(normal[1], 1 / length);
+      closeTo(normal[2], -(1 / 4) / length);
+      closeTo(collision.slopeAt(east, north)!, Math.atan(Math.hypot(1 / 8, 1 / 4)));
     }
   } finally {
     collision.dispose();
@@ -164,16 +165,40 @@ test('D2-R30 sweep checks continuous footing and blocks a boundary crossing', ()
   }
 });
 
+test('D2-R30 canonical collision supports continuous gate and summit walks in both directions', () => {
+  const collision = createTownD2R30Collision();
+  try {
+    const routes = [
+      { name: 'gate', height: 347, points: [{ east: -20, north: 5 }, { east: 20, north: 35 }] },
+      { name: 'summit', height: 800, points: [{ east: 25, north: 1_000 }, { east: 75, north: 1_000 }] },
+    ] as const;
+    for (const route of routes) {
+      for (const points of [route.points, [...route.points].reverse()]) {
+        const from = points[0]!, to = points[1]!;
+        assert.equal(collision.supportsFoot(from.east, from.north), true, `${route.name} departure footing`);
+        assert.equal(collision.supportsFoot(to.east, to.north), true, `${route.name} arrival footing`);
+        const result = collision.sweep(from, to, .27, 1.8);
+        assert.equal(result.safe, true, `${route.name} must remain continuously walkable`);
+        if (!result.safe) assert.fail(`${route.name} sweep must be safe`);
+        closeTo(result.height, route.height);
+        closeTo(collision.surfaceAt(to.east, to.north)!, route.height);
+      }
+    }
+  } finally {
+    collision.dispose();
+  }
+});
+
 test('D2-R30 stats describe the cached grid and dispose is idempotent', () => {
   const collision = createTownD2R30Collision();
   try {
     assert.deepEqual(collision.stats(), {
-      spacing: 16,
-      eastVertices: Math.ceil(2_200 / 16) + 1,
-      northVertices: Math.ceil(1_800 / 16) + 1,
-      vertexCount: (Math.ceil(2_200 / 16) + 1) * (Math.ceil(1_800 / 16) + 1),
-      triangleCount: Math.ceil(2_200 / 16) * Math.ceil(1_800 / 16) * 2,
-      heightSamples: (Math.ceil(2_200 / 16) + 1) * (Math.ceil(1_800 / 16) + 1),
+      spacing: 8,
+      eastVertices: 2_200 / 8 + 1,
+      northVertices: 1_800 / 8 + 1,
+      vertexCount: (2_200 / 8 + 1) * (1_800 / 8 + 1),
+      triangleCount: (2_200 / 8) * (1_800 / 8) * 2,
+      heightSamples: (2_200 / 8 + 1) * (1_800 / 8 + 1),
       disposed: false,
     });
     assert.equal(collision.surfaceAt(50, 1_000), sampleTownD2R30Height(50, 1_000));

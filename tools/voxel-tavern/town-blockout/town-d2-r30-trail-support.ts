@@ -29,6 +29,8 @@ export type TownD2R30TrailSupportStats = Readonly<{
   treadTriangles: number;
   earthworkTriangles: number;
   pierQuads: number;
+  /** Six-sided bearing beams, one per bridged section. */
+  beamQuads: number;
   maxGap: number;
   maxBury: number;
   supportedSections: number;
@@ -45,6 +47,8 @@ const DEFAULTS = Object.freeze({
   pierDrop: .6,
   treadLift: .07,
   shoulderLift: .05,
+  beamDepth: .35,
+  pierRadius: .9,
   bridgeColor: '#8d9598',
   cutColor: '#6a6f63',
   fillColor: '#7a6a54',
@@ -138,6 +142,7 @@ export function createTownD2R30TrailSupport(options: TownD2R30TrailSupportOption
     const treadPos: number[] = [], treadIdx: number[] = [];
     const earthPos: number[] = [], earthCol: number[] = [], earthIdx: number[] = [];
     const pierPos: number[] = [], pierIdx: number[] = [];
+    let pierQuads = 0, beamQuads = 0;
     const cut = new Color(DEFAULTS.cutColor), fill = new Color(DEFAULTS.fillColor);
     const tint = new Color();
 
@@ -163,20 +168,41 @@ export function createTownD2R30TrailSupport(options: TownD2R30TrailSupportOption
 
       const gap = height - ground;
       if (gap > DEFAULTS.pierDrop) {
-        const pier = pierPos.length / 3;
-        const top = ground + gap * .55, bottom = ground - .5, r = .9;
+        const r = DEFAULTS.pierRadius;
+        // The visible tread is a zero-thickness surface. Put the bearing beam
+        // directly below that plane, then land every pier on its underside.
+        const beamTop = y, beamBottom = y - DEFAULTS.beamDepth;
         for (const [px, pz] of [[sx, sz], [lx, lz]]) {
+          const pier = pierPos.length / 3;
           pierPos.push(
-            px - r, top, pz - r, px + r, top, pz - r,
-            px + r, top, pz + r, px - r, top, pz + r,
-            px - r, bottom, pz - r, px + r, bottom, pz - r,
-            px + r, bottom, pz + r, px - r, bottom, pz + r,
+            px - r, beamBottom, pz - r, px + r, beamBottom, pz - r,
+            px + r, beamBottom, pz + r, px - r, beamBottom, pz + r,
+            px - r, ground, pz - r, px + r, ground, pz - r,
+            px + r, ground, pz + r, px - r, ground, pz + r,
           );
           for (const [a, b] of [[0, 1], [1, 2], [2, 3], [3, 0]]) {
             pierIdx.push(pier + a, pier + b, pier + a + 4, pier + b, pier + b + 4, pier + a + 4);
           }
           pierIdx.push(pier, pier + 2, pier + 1, pier, pier + 3, pier + 2);
+          pierQuads += 5;
         }
+        const beam = pierPos.length / 3;
+        const minX = Math.min(lx, sx) - r, maxX = Math.max(lx, sx) + r;
+        const minZ = Math.min(lz, sz) - r, maxZ = Math.max(lz, sz) + r;
+        pierPos.push(
+          minX, beamTop, minZ, maxX, beamTop, minZ,
+          maxX, beamTop, maxZ, minX, beamTop, maxZ,
+          minX, beamBottom, minZ, maxX, beamBottom, minZ,
+          maxX, beamBottom, maxZ, minX, beamBottom, maxZ,
+        );
+        for (const [a, b] of [[0, 1], [1, 2], [2, 3], [3, 0]]) {
+          pierIdx.push(beam + a, beam + b, beam + a + 4, beam + b, beam + b + 4, beam + a + 4);
+        }
+        pierIdx.push(
+          beam, beam + 1, beam + 2, beam, beam + 2, beam + 3,
+          beam + 4, beam + 6, beam + 5, beam + 4, beam + 7, beam + 6,
+        );
+        beamQuads += 6;
       }
     }
 
@@ -198,6 +224,13 @@ export function createTownD2R30TrailSupport(options: TownD2R30TrailSupportOption
     const tread = makeGeometry(treadOnly, treadIndices, 'town-d2-r30-trail-tread', DEFAULTS.treadColor);
     const earth = makeGeometry(earthOnly, earthIndices, 'town-d2-r30-trail-earthwork', '#ffffff', earthCol);
     const piers = pierPos.length ? makeGeometry(pierPos, pierIdx, 'town-d2-r30-trail-piers', DEFAULTS.bridgeColor) : undefined;
+    if (piers) {
+      // Beam tops coincide with the canonical tread plane; bias the support
+      // backwards in depth so the walking surface wins without a visible gap.
+      piers.material.polygonOffset = true;
+      piers.material.polygonOffsetFactor = 1;
+      piers.material.polygonOffsetUnits = 1;
+    }
 
     const group = new Group();
     group.name = 'town-d2-r30-trail-support';
@@ -221,7 +254,8 @@ export function createTownD2R30TrailSupport(options: TownD2R30TrailSupportOption
       span,
       treadTriangles: tri(tread),
       earthworkTriangles: tri(earth),
-      pierQuads: piers ? piers.geometry.getIndex()!.count / 6 : 0,
+      pierQuads,
+      beamQuads,
       maxGap,
       maxBury,
       supportedSections: supported,

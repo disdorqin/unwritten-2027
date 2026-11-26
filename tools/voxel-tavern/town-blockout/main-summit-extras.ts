@@ -102,7 +102,6 @@ export function mountMainSummitExtras(assembly: Assembly) {
   const cloud = assembly.clouds;
 
   const paint = buildMainSummitPaint(assembly.block.heightAt);
-  paint.mesh.visible = !assembly.r30Mounted;
   group.add(paint.mesh);
   const bannerCloud = createMainSummitBannerCloud();
   group.add(bannerCloud.group);
@@ -190,6 +189,18 @@ export function mountMainSummitExtras(assembly: Assembly) {
   let glowNight = false;
   const coarseMaterial = assembly.block.coarse.material;
   const coarseDayColor = coarseMaterial.color.getHex();
+
+  // R30 mounts these canonical facility bodies against its solid massif. Keep
+  // the legacy objects and APIs alive, but suppress only their visual roots so
+  // the production host never draws the same facility twice. Additive extras
+  // (approach signs/posts, wish lock, terrace art/edge, shelters, machine room
+  // and glow band) deliberately remain outside this list.
+  const legacyFacilityVisuals = [
+    paint.mesh, bannerCloud.group, icefall.group, rockTowers.group, surveyStations.group,
+    hutFurnishings.group, wingRack.group, windGround.group, skyWatch.group, trailMarkers.group,
+    bellPosts.group, glideVisuals.group, glideEntities.group,
+  ];
+  for (const visual of legacyFacilityVisuals) visual.visible = !assembly.r30Mounted;
 
   let disposed = false;
   return {
