@@ -937,13 +937,49 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       const p = fr.at(dx, dz);
       box(mat, p.east, h, p.north, sx, sy, sz, fr.yaw, pitch, roll);
     };
-    put(corrugated, 0, g + 1.3, -2.4, 5.4, 2.6, .14);
-    put(corrugated, -2.65, g + 1.3, 0, .14, 2.6, 4.8);
-    put(corrugated, 2.65, g + 1.05, 0, .14, 2.1, 4.8);
-    // Roof half-collapsed: one end still on the walls, the other on the ground.
-    put(corrugated, 0, g + 2.1, .4, 5.8, .16, 5.6, .62);
-    put(timberWarm, -1, g + .6, .5, 1.3, 1.2, 1.3, 0, .2);
-    put(timber, 1.2, g + .5, -.8, 1.1, 1, 1.1);
+    // Keep the three ruined walls, but expose their timber frames and
+    // individual distorted metal sheets rather than one featureless slab.
+    put(workshopSheet,0,g+1.3,-2.4,5.4,2.6,.14);
+    put(workshopSheet,-2.65,g+1.3,0,.14,2.6,4.8);
+    put(workshopSheet,2.65,g+1.05,0,.14,2.1,4.8);
+    for(const x of [-2.48,-.82,.82,2.48]){
+      put(workshopWood,x,g+1.3,-2.28,.18,2.6,.18);
+      put(workshopRust,x,g+.22,-2.28,.22,.17,.20);
+    }
+    for(const s of [-1,1])for(const z of [-2.2,-.65,.95,2.2]){
+      const h=s<0?2.6:2.1;
+      put(workshopWood,s*2.55,g+h/2,z,.18,h,.17);
+    }
+    // Collapsed roof follows a continuous slope down to the old floor.
+    // Visible narrow panels, split rafters and broken ends; omit the right
+    // front panels to retain the original open approach.
+    const roofRun=4.65,rise=2.38,pitch=Math.atan2(rise,roofRun);
+    for(let i=0;i<7;i++){
+      const x=-2.35+i*.77;
+      const run=i>3?2.05:roofRun;
+      const mid=-2.3+run/2;
+      const top=2.63-rise*run/(2*roofRun);
+      put(i%3===0?workshopRust:workshopSheet,x,g+top,mid,.74,.13,run/Math.cos(pitch),pitch);
+      put(workshopWood,x-.31,g+top-.12,mid,.12,.14,run/Math.cos(pitch),pitch);
+      for(let j=0;j<Math.floor(run/.75);j++){
+        const z=-2.3+(j+.5)*.75,y=2.63-rise*(z+2.3)/roofRun;
+        put(workshopRust,x,g+y+.07,z,.70,.045,.10,pitch);
+      }
+    }
+    // Original interior debris now has actual obstruction bounds.
+    const ruin=industrialBuilder(fr,g,put,colliders,floors);
+    ruin.piece(workshopWood,-1,.5,1.3,1.3,0,1.2);
+    ruin.piece(workshopWood,1.2,-.8,1.1,1.1,0,1);
+    // Low fallen roof strips occupy the same existing ruin footprint.
+    for(let i=0;i<7;i++){
+      const run=i>3?2.05:roofRun,segments=Math.ceil(run/.72),step=run/segments;
+      for(let j=0;j<segments;j++){
+        const x=-2.35+i*.77,z=-2.3+(j+.5)*step;
+        const y=2.63-rise*(z+2.3)/roofRun;
+        const p=fr.at(x,z),dy=rise*step/(2*roofRun);
+        hitBox(colliders,p.east,p.north,fr.yaw,.74,step,g+y-dy-.18,g+y+dy+.07);
+      }
+    }
     // S-1 collision: the ruin's three standing walls (front is collapsed
     // open where the roof came down).
     for (const [dx, dz, sx, sz] of [[0, -2.4, 5.4, .14], [-2.65, 0, .14, 4.8], [2.65, 0, .14, 4.8]] as const) {
@@ -955,7 +991,16 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   for (let i = 0; i < 3; i++) {
     const p = site(`pipe-section-${i + 1}`, 198 + i * 2.2, 97 + (i % 2) * 3, 3);
     if (!p) continue;
-    cyl(rustIron, p.east, p.height + (i === 1 ? .35 : .8), p.north, .85, .85, 5.2, 12, d2r(198 + i * 2.2) + Math.PI / 2, 0, Math.PI / 2);
+    const yaw=d2r(198+i*2.2)+Math.PI/2,y=p.height+(i===1?.35:.8);
+    // Open-ended pipe with genuine inner bore and rolled flanges.
+    part(workshopRust,new CylinderGeometry(.85,.85,5.2,12,1,true),p.east,y,p.north,yaw,0,Math.PI/2);
+    const inner=new CylinderGeometry(.73,.73,5.2,12,1,true);inner.scale(-1,1,1);inner.computeVertexNormals();
+    part(workshopSheet,inner,p.east,y,p.north,yaw,0,Math.PI/2);
+    for(const t of [-2.58,-.9,.9,2.58]){
+      const e=p.east+Math.cos(yaw)*t,n=p.north+Math.sin(yaw)*t;
+      part(workshopRust,new TorusGeometry(.79,.075,6,12),e,y,n,yaw+Math.PI/2);
+    }
+    hitBox(colliders,p.east,p.north,yaw,5.2,1.7,Math.max(p.height,y-.85),y+.85);
   }
   // Concrete foundation stubs along the belt's outer edge.
   for (let i = 0; i < 6; i++) {
