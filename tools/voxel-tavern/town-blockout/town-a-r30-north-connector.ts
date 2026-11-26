@@ -31,7 +31,7 @@ export function mountWestNorthConnector(northLimit:number,heightAt:(e:number,n:n
   for(let n0=south;n0<top;n0+=64){
     const n1=Math.min(top,n0+64);
     const vertices:number[]=[],indices:number[]=[],colors:number[]=[];
-    for(let n=n0;n<=n1;n++)for(let e=west;e<=east;e++){
+    for(let n=n0;n<=n1;n++)for(let e:number=west;e<=east;e++){
       vertices.push(e,heightAt(e,n),-n);
       tint.copy(snow).lerp(packed,northFootwayWeight(e,n)*(.76+.04*Math.cos(n*.63+e*.72)));
       colors.push(tint.r,tint.g,tint.b);
