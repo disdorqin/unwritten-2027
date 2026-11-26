@@ -1718,7 +1718,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     [[-23,159],[-23,95],[-60,55],[-164,51]],
     [[-46,158],[-41,196],[-38,248],[-36,318]],
   ];
-  const distanceTo=(e:number,n:number,a:number[],b:number[])=>{
+  const distanceTo=(e:number,n:number,a:readonly number[],b:readonly number[])=>{
     const dx=b[0]-a[0],dn=b[1]-a[1],t=Math.max(0,Math.min(1,((e-a[0])*dx+(n-a[1])*dn)/(dx*dx+dn*dn||1)));
     return Math.hypot(e-a[0]-dx*t,n-a[1]-dn*t);
   };
@@ -1829,6 +1829,57 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       }
     }
   });
+  // Reference 15: individual exposed beds on four real outlying slopes.
+  // Coherent local strikes and dipping faces, rather than isolated cubes.
+  const shoulderRibs:{id:string;east:number;north:number;support:CraterHitBox}[]=[];
+  const exposures=[
+    {id:'shoulder-west',e:-208,n:105,yaw:.62},
+    {id:'shoulder-northwest',e:-216,n:265,yaw:-.48},
+    {id:'shoulder-north',e:-170,n:304,yaw:.30},
+    {id:'shoulder-south',e:-164,n:51,yaw:-.68},
+  ];
+  for(const [ci,c]of exposures.entries()){
+    const along=(u:number,v:number)=>({east:c.e+u*Math.cos(c.yaw)-v*Math.sin(c.yaw),north:c.n+u*Math.sin(c.yaw)+v*Math.cos(c.yaw)});
+    // Two discontinuous bands on opposite flanks, with common bedding
+    // strike but independently fractured silhouettes.
+    for(const side of [-1,1])for(let i=0;i<7;i++){
+      const u=(i-3)*2.85,seed=ci*71+(side+1)*17+i*13;
+      const v=side*(4.65+.75*Math.sin(i*.8+ci));
+      const p=along(u,v),yaw=c.yaw+.12*Math.sin(seed);
+      const w=2.25+.64*hash(seed),d=1.15+.55*hash(seed+3);
+      const ww=Math.abs(Math.cos(yaw))*w+Math.abs(Math.sin(yaw))*d;
+      const dd=Math.abs(Math.sin(yaw))*w+Math.abs(Math.cos(yaw))*d;
+      if(!clearCluster(p.east,p.north,ww,dd))continue;
+      const clearance=Math.hypot(w,d)/2+1.55;
+      if(outerLandscapeFootways.some(r=>r.points.slice(1).some((b,j)=>distanceTo(p.east,p.north,r.points[j]!,b)<clearance)))continue;
+      if(ci===3&&Math.abs(p.north-51)<dd/2+2.8)continue;
+      const samples=[-.5,0,.5].flatMap(x=>[-.5,0,.5].map(z=>
+        heightAt(p.east+x*ww,p.north+z*dd)));
+      if(samples.some(h=>h===undefined))continue;
+      const low=Math.min(...samples as number[])-.13,g=Math.max(...samples as number[]);
+      const piece=(mat:MeshStandardMaterial,x:number,n:number,sx:number,sz:number,bottom:number,top:number)=>{
+        if(top<=bottom)return;
+        box(mat,x,(bottom+top)/2,n,sx,top-bottom,sz,yaw);
+        const support=orientedSupportBox(x,n,yaw,sx,sz,bottom,top);
+        floors.push(support);
+        shoulderRibs.push({id:c.id,east:x,north:n,support});
+      };
+      // The base follows actual slope corner samples. Lower ochre bed,
+      // charcoal ash seam, thicker dark rock and fragmented snow cap.
+      const lower=g+.23,ochreTop=lower+.26+.18*hash(seed+5),ashTop=ochreTop+.095;
+      piece(shoulderRock,p.east,p.north,w,d,low,lower);
+      piece(oreOchre,p.east,p.north,w*.96,d*.94,lower,ochreTop);
+      piece(slag,p.east,p.north,w*.94,d*.91,ochreTop,ashTop);
+      for(let k=0;k<3;k++){
+        const a=(k-1)*w*.30;
+        const x=p.east+a*Math.cos(yaw),n=p.north+a*Math.sin(yaw);
+        const h=ashTop+.42+.76*hash(seed+k*31)+(k===1?.28:0);
+        const width=w*.28,depth=d*(.78+.12*hash(seed+k*13));
+        piece(k%2?ore:slag,x,n,width,depth,ashTop,h);
+        if((i+k+ci)%3===0)piece(cleanSnow,x,n,width*.82,depth*.83,h,h+.05);
+      }
+    }
+  }
   // Rebuild the two old decorative approach clusters as low, grounded
   // fractured shelves. Both stay between the town seam and the E-12
   // north walking lane, with the existing site anchors unchanged.
@@ -1874,7 +1925,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   }
   setNight(true);
   return {
-    group, sites, fencePosts, setNight, towerRoutes,industrialRoutes,gatehouseSeats,shoulderStacks,approachRockSupports,outerClusterPieces,landscapeRoutes,
+    group, sites, fencePosts, setNight, towerRoutes,industrialRoutes,gatehouseSeats,shoulderStacks,approachRockSupports,outerClusterPieces,landscapeRoutes,shoulderRibs,
     wallLine: { east: wallEast, northStart: 13, northEnd: 307 },
     colliders, floors, ramps,
   };

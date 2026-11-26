@@ -68,6 +68,15 @@ test('fractured shoulder slabs are physically supported and keep the south trave
    if(s.east>=-175&&s.east<=-150&&s.north>=40&&s.north<=60)assert.ok(Math.abs(s.north-51)>2.4);
  }
 });
+test('four outer shoulders expose layered, collision-bearing strata on the actual carrier',()=>{
+ const ribs=road.outerWorks.shoulderRibs;
+ for(const id of ['shoulder-west','shoulder-northwest','shoulder-north','shoulder-south']){
+   const group=ribs.filter(r=>r.id===id);
+   assert.ok(group.length>=6,JSON.stringify({id,count:group.length}));
+   assert.ok(group.some(r=>r.support.min[1]<road.heightAt(r.east,r.north)!&&r.support.max[1]>road.heightAt(r.east,r.north)!));
+   for(const r of group)assert.ok(road.outerWorks.floors.includes(r.support));
+ }
+});
 test('old approach rocks are replaced by grounded supports outside the north footway',()=>{
  const pieces=road.outerWorks.approachRockSupports;
  assert.equal(pieces.length,16);
