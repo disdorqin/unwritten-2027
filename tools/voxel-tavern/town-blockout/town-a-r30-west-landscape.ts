@@ -80,7 +80,7 @@ export function createWestLandscape(anchor:Anchor,apronRadius:number,northLimit:
       -mound(e,n,-196,71,29,21,1.8);
     const drift=.52*Math.sin((e+180)*.068+(n-160)*.044)
       +.28*Math.sin((e-n)*.112+.8);
-    return w*(broad+drift);
+    return w*(broad+drift)+outcropAt(e,n).lift;
   }
   // These are the already surveyed civil routes, not new gameplay anchors.
   // The broad road to the gate and the industrial footways follow the
@@ -97,6 +97,33 @@ export function createWestLandscape(anchor:Anchor,apronRadius:number,northLimit:
     {points:[[-43,159],[-67,136],[-144,105],[-151.75,112.34]],half:1.75,strength:.7},
     {points:[[-57.9,146],[-59.25,146],[-64,146]],half:1.9,strength:.8},
   ];
+  // Four isolated fractured shoulders on the existing outer carrier.
+  // Oriented lenses, not a ring of evenly spaced rocks.
+  const outcrops=[
+    {e:-208,n:105,a:.62,ru:14,rv:6,h:.50},
+    {e:-216,n:265,a:-.48,ru:17,rv:8,h:.54},
+    {e:-170,n:304,a:.30,ru:15,rv:6,h:.46},
+    {e:-164,n:51,a:-.68,ru:13,rv:7,h:.49},
+  ];
+  function outcropAt(e:number,n:number){
+    let lift=0,exposure=0,band=0;
+    for(const c of outcrops){
+      const dx=e-c.e,dn=n-c.n;
+      if(Math.abs(dx)>c.ru+c.rv||Math.abs(dn)>c.ru+c.rv)continue;
+      const u=dx*Math.cos(c.a)+dn*Math.sin(c.a),v=-dx*Math.sin(c.a)+dn*Math.cos(c.a);
+      const q=Math.hypot(u/c.ru,v/c.rv);
+      if(q>=1)continue;
+      let w=protectionAt(e,n)*(1-smooth((q-.2)/.8));
+      for(const route of civilRoutes)for(let j=1;j<route.points.length;j++)
+        w=Math.min(w,smooth((segmentDistance(e,n,route.points[j-1]!,route.points[j]!)-route.half-2.8)/4));
+      const fracture=.5+.5*Math.sin(v*1.18+Math.sin(u*.46)*.58);
+      const rib=smooth((fracture-.18)/.7);
+      lift+=w*c.h*(.32+.68*rib);
+      const exposed=w*(.30+.70*smooth((fracture-.30)/.55));
+      if(exposed>exposure){exposure=exposed;band=fracture;}
+    }
+    return {lift,exposure,band};
+  }
   const workYards=pads.filter(p=>p.id==='smelter-plant'||p.id==='instrument-plant'||p.id==='ore-yard')
     .map(p=>({...p,radius:p.radius*.72}));
   function surfaceWeightsAt(e:number,n:number){
@@ -119,5 +146,5 @@ export function createWestLandscape(anchor:Anchor,apronRadius:number,northLimit:
     }
     return {packed:seam*packed,ballast:seam*ballast,yard:seam*yard};
   }
-  return {offsetAt,protectionAt,pads,surfaceWeightsAt};
+  return {offsetAt,protectionAt,pads,surfaceWeightsAt,outcropAt};
 }

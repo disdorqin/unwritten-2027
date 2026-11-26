@@ -42,6 +42,22 @@ test('A-R02 civil materials preserve exact shared snow boundary and distinguish 
   assert.ok(field.surfaceWeightsAt(road.anchor.east+r*Math.sin(a),road.anchor.north+r*Math.cos(a)).ballast>.8);
   assert.ok(field.surfaceWeightsAt(field.pads[0]!.center[0],field.pads[0]!.center[1]).yard>.8);
 });
+test('fractured outer shoulders are local real terrain with no B apron or road intrusion',()=>{
+ for(const [e,n]of [[-208,105],[-216,265],[-170,304],[-164,51]]){
+   let peak=0,count=0;
+   for(let dx=-12;dx<=12;dx++)for(let dn=-9;dn<=9;dn++){
+     const s=field.outcropAt(e+dx,n+dn);
+     peak=Math.max(peak,s.lift);if(s.exposure>.15)count++;
+   }
+   assert.ok(peak>.21&&peak<.6&&count>30,JSON.stringify({e,n,peak,count}));
+ }
+ for(let n=0;n<=336;n++)assert.equal(field.outcropAt(0,n).lift,0);
+ for(let e=-77;e<=0;e++)for(let n=153;n<=165;n++)assert.equal(field.outcropAt(e,n).lift,0);
+ for(let i=0;i<360;i++){
+   const a=i*Math.PI/180;
+   assert.equal(field.outcropAt(road.anchor.east+59*Math.sin(a),road.anchor.north+59*Math.cos(a)).exposure,0);
+ }
+});
 test('A-R02 relief is real rendered collision support, not decorative overlay',()=>{
   const carriers=road.group.children.filter(o=>o.name==='meteor-crater-west-ground') as Mesh[];
   const ray=new Raycaster(new Vector3(),new Vector3(0,-1,0));
