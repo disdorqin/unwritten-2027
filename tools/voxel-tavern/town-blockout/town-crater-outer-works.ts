@@ -625,8 +625,21 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     for(const dx of [-6,-3,3,6]){
       const p=fr.at(dx,2.4);
       cyl(brass,p.east,g+2.31,p.north,.28,.28,.12,12,fr.yaw,Math.PI/2);
-      put(iron,dx,g+2.31,2.35,.045,.34,.06,0,-.35);
+      const face=fr.at(dx,2.468);
+      cyl(dark,face.east,g+2.31,face.north,.239,.239,.018,12,fr.yaw,Math.PI/2);
+      for(let k=0;k<9;k++){
+        const theta=-Math.PI*.70+k*Math.PI*.175;
+        put(brass,dx+Math.sin(theta)*.19,g+2.31+Math.cos(theta)*.19,2.487,.026,.055,.012,0,theta);
+      }
+      put(brass,dx+.025,g+2.35,2.49,.025,.19,.016,0,-.35);
+      put(iron,dx,g+2.31,2.505,.045,.045,.026);
       put(timber,dx,g+1.22,2.38,1.25,.1,.75);
+      // Workbench cabinet face and small pull handles, within the existing
+      // registered bench envelope; the aisle remains unobstructed.
+      for(const x of [-.40,.40]){
+        put(workshopSheet,dx+x,g+1.51,2.895,.70,.50,.012);
+        put(brass,dx+x,g+1.62,2.901,.19,.035,.012);
+      }
     }
     for(const dx of [-5,0,5]){
       put(iron,dx,g+5.68,2.75,1.55,.14,.65);
