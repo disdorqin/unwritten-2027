@@ -31,6 +31,7 @@ const report={a,b:bSha,base:sha(base),files:[],scope:'same-instance candidate, n
 const out=process.argv[2]&&resolve(process.argv[2]);
 const browserSegment=process.argv[3]==='--browser=inscription'?'inscription-access':process.argv[3]==='--browser'?'joint-historic':undefined;
 const browser=!!browserSegment;
+const exportIntake=process.argv.includes('--export-intake');
 const lock=out&&out+'.lock';
 if(lock){mkdirSync(dirname(lock),{recursive:true});try{mkdirSync(lock);}catch(e){rmSync(temporary,{recursive:true,force:true});throw e;}}
 try{
@@ -188,8 +189,8 @@ export function bindPlay(c:ReturnType<typeof attachBR30CraterCompletion>,marker:
  assert.equal(road.group.userData.colliders.length,before.length);
  assert.ok(before.every(box=>road.group.userData.colliders.includes(box)));
  report.success=true;report.stage='done';
- if(browser){
-  assert.ok(out,'browser needs report destination');
+ if(browser||exportIntake){
+  assert.ok(out,'browser or intake export needs report destination');
   // Temporary proof-only replacement of A's dormant port, pointing
   // at the separately named B proposal. The exact B blobs stay intact.
   const port="import {retireBR30LegacyTerracePlates} from './town-b-r30-retire-legacy-terraces';\n"+
@@ -200,6 +201,29 @@ export function bindPlay(c:ReturnType<typeof attachBR30CraterCompletion>,marker:
    "export function ar30SurfacePort():AR30SurfacePort{let mounted:ReturnType<typeof attachBR30CraterCompletion>|undefined;let marker:string;return {story:{retire:retireBR30LegacyTerracePlates,refit:refitBR30LegacyStory},attach(road,rail){const tracks=ar30HostTracks(rail),routes=ar30HostRoutes(road,rail);marker=road.inscription.rubbingHostMarker.id;return mounted=attachBR30CraterCompletion(road,rail,tracks,'host-candidate',routes,surveyAR30InscriptionAccess);},createPlay(assembly,ctx){if(!mounted||assembly!==mounted)throw Error('Wrong play assembly');return bindPlay(mounted,marker,ctx);}};}\n";
   writeFileSync(join(temporary,prefix,'town-a-r30-surface-port.ts'),port);
   report.portSHA256=createHash('sha256').update(port).digest('hex');
+  if(exportIntake){
+   // Export the already measured narrow change, not a production grant.
+   const target=join(dirname(out),'待总控接受-三文件接纳包');mkdirSync(target,{recursive:true});
+   const bPath=prefix+'town-b-r30-crater-completion.ts',pPath=prefix+'town-a-r30-surface-port.ts',bindingPath=prefix+'town-a-r30-play-candidate.ts';
+   const entries=[
+    {path:bPath,baseBlob:refBlob(bSha,bPath),source:proposal},
+    {path:pPath,baseBlob:refBlob(a,pPath),source:port.replace('town-b-r30-crater-completion-proposed','town-b-r30-crater-completion')},
+    {path:bindingPath,baseBlob:null,source:playBinding.replace('town-b-r30-crater-completion-proposed','town-b-r30-crater-completion')},
+   ];
+   report.intake={status:'pending independent owner + total controller; not production approval',authorityProvider:null,files:entries.map(({path,baseBlob,source})=>{
+    const bytes=Buffer.from(source),filename=path.split('/').at(-1)+'.txt';
+    writeFileSync(join(target,filename),bytes);
+    return {path,baseBlob,filename,blob:createHash('sha1').update('blob '+bytes.length+'\0').update(bytes).digest('hex'),sha256:createHash('sha256').update(bytes).digest('hex')};
+   })};
+   // The original B was already imported above, so verify canonical
+   // imports in a new process, without any module-cache reuse.
+   for(const entry of entries)writeFileSync(join(temporary,entry.path),entry.source);
+   const url=pathToFileURL(join(temporary,pPath)).href;
+   execFileSync(process.execPath,['--import','tsx','--input-type=module','-e',"import assert from 'node:assert/strict';const {ar30SurfacePort}=await import("+JSON.stringify(url)+");const p=ar30SurfacePort();assert.ok(p.story.retire&&p.story.refit&&p.attach&&p.createPlay&&!p.readAuthority)"],{cwd:root,windowsHide:true,timeout:30000});
+   report.intake.canonicalImports=true;
+   writeFileSync(join(target,'manifest.json'),JSON.stringify(report.intake,null,2)+'\n');
+  }
+  if(browser){
   const {createMeteorCrater,meteorCraterFixturePlan}=await load('meteor-crater');
   const fixture=createMeteorCrater(meteorCraterFixturePlan),an=road.anchor,c=Math.cos(an.yaw),s=Math.sin(an.yaw);
   const point=t=>{const p=fixture.mainTrailPoint(t),east=an.east+p.east*c+p.north*s,north=an.north+p.north*c-p.east*s;return {east,north,height:road.heightAt(east,north),t};};
@@ -252,6 +276,7 @@ export function bindPlay(c:ReturnType<typeof attachBR30CraterCompletion>,marker:
   report.browserExit=status;
   assert.equal(status,0,'joint native browser did not complete');
   report.success=true;report.stage='done';
+  }
  }
 }catch(error){report.failure=String(error?.stack??error);process.exitCode=1;}
 finally{
