@@ -9,10 +9,10 @@ const layer='underground/mine';
 /** Coordinates select accessible wall approaches, not synthetic rock faces.
  * Face position is measured against the actual mounted rock mesh. */
 export const r30OreProbes=[
- {id:'workface-1',foot:[-24,-91,72.75],dir:-1},
- {id:'workface-2',foot:[-56,-91,72.75],dir:-1},
- {id:'workface-3',foot:[-88,-91,70.95],dir:-1},
- {id:'workface-4',foot:[31.5,-91,98],dir:1},
+ {id:'workface-1',foot:[-9,-91,72.75],dir:-1},
+ {id:'workface-2',foot:[-48,-91,79.95],dir:1},
+ {id:'workface-3',foot:[-94,-91,81.75],dir:1},
+ {id:'workface-4',foot:[46,-91,98],dir:1},
  {id:'workface-5',foot:[84.5,-91,88],dir:-1},
 ] as const;
 const traceProbes=[

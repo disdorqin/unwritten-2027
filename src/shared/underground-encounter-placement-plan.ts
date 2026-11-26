@@ -40,7 +40,8 @@ const crystalMimics:readonly Point[]=[
 const firstMineWorkfaceSites=createFirstMineWorkfaces({minX:-100,maxX:100,minZ:45,maxZ:140},-91);
 function localCandidate(family:string,i:number){
   if(family==='90-B'){
-    const [x,y,z]=firstMineWorkfaceSites[i].foot;
+    // U19's real swept route and support frames now occupy the old east workface foot.
+    const [x,y,z]=i===3?[35,-91,91.4]:firstMineWorkfaceSites[i].foot;
     return {frame:'first-mine-local-plus-z-candidate' as const,at:{east:x,north:z,height:y}};
   }
   if(family==='90-A'&&i<4)return {frame:'first-mine-local-plus-z-candidate' as const,at:firstMineShallowWorks.nests[i]};

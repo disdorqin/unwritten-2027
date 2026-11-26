@@ -10,12 +10,15 @@ const water=createUndergroundWaterState({dawnEpoch:0,now:()=>0});
 let domain=interlayerSite.upper.domainId;
 import type {UndergroundMiningTargetView,UndergroundMiningCore} from '../../src/shared/underground-mining.js';
 let oreReview:readonly UndergroundMiningTargetView[]=[],oreCores:readonly UndergroundMiningCore[]=[];
+import {createMineBestiaryEncounter} from '../../src/shared/mine-bestiary.js';
+let creatureReview:ReturnType<ReturnType<typeof createMineBestiaryEncounter>['snapshot']>=[];
 let reviewTargets:readonly UndergroundMiningTargetView[]=[];
 import type {U19MineCartSnapshot} from '../../src/presence/underground-mainline-cart.js';
 let mainlineReview:U19MineCartSnapshot|undefined,mainlineRevision=0;
 const host=mountUndergroundDomainHost({parent:root,road,waterBridge:{readWaterSnapshot:()=>water.tonight()},
  readAcceptedMiningTargets:()=>reviewTargets,
  oreBridge:{acceptsSite:()=>oreReview.length>0,readTargets:()=>oreReview,readCores:()=>oreCores},
+ encounterBridge:{acceptGroup:g=>creatureReview.length?'review-room/'+g.id:undefined,readActors:()=>creatureReview},
  mainlineBridge:{acceptsRoute:()=>!!mainlineReview,readSnapshot:()=>mainlineReview,readLightBudget:()=>2,readViewer:()=>undefined,canSee:()=>false,dispatch:()=>{}},
  readAcceptedDomainFoot:()=>({domainId:domain,...(domain===interlayerSite.lower.domainId?interlayerSite.lower.foot:interlayerSite.upper.foot)})});
 if(host.kind!=='ready')throw Error(host.reason);
@@ -57,7 +60,20 @@ const eyes:Record<string,{eye:readonly [number,number,number];look:readonly [num
 let frames=0,walked=0,rejected=0,trustedW=0,view='entry',stamp=performance.now();
 const keys=new Set<string>(),direction=new Vector3();
 function setView(name:string){
- oreReview=[];oreCores=[];
+ oreReview=[];oreCores=[];creatureReview=[];
+ if(name.startsWith('creature-')){
+  const s=host.encounterSurvey;if(!s?.ready)return false;
+  const spawns=s.buildSpawns(g=>'review-room/'+g.id)!;
+  const authority=createMineBestiaryEncounter(spawns,{hasSpawnSite:()=>true,moveAllowed:()=>false,seesPlayer:()=>false,hearsMining:()=>false,insideCampfire:()=>false});
+  creatureReview=authority.snapshot();
+  const role=name.slice(9),g=s.groups.find(x=>x.id===role);if(!g)return false;
+  const p=g.center,local=host.toLocal(p);if(!local)return false;
+  const candidates=[[local[0],local[2]+2.2],[local[0]+2.2,local[2]],[local[0]-2.2,local[2]],[local[0],local[2]-2.2]];
+  const eye=candidates.map(([x,z])=>host.mounted.toWorld([x,local[1],z])).find(q=>q&&host.passageAt(q.east,q.north));
+  if(!eye)return false;
+  mainlineReview=undefined;host.mounted.sync();
+  camera.position.set(eye.east,host.passageAt(eye.east,eye.north)!.floor+1.67,-eye.north);camera.lookAt(p.east,p.height+(g.species==='snow-clump'?.45:g.species==='rock-snake'?.25:1.0),-p.north);torch.intensity=20;view=name;return true;
+ }
  if(name.startsWith('ore-')){
   if(host.oreSurvey.kind!=='ready')return false;
   const match=/^ore-(\d)(?:-(cracked|open))?$/.exec(name);if(!match)return false;

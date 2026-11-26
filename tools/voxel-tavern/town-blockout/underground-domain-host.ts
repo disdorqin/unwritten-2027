@@ -23,6 +23,8 @@ import {mountR30ReturnBay} from './town-c-r30-return-bay.js';
 import {mountR30MainlineHost,type R30MainlineBridge} from './town-c-r30-mainline-host.js';
 import type {UndergroundMiningTargetView} from '../../../src/shared/underground-mining.js';
 import {surveyR30Ore} from './town-c-r30-ore-survey.js';
+import {surveyR30Encounters} from './town-c-r30-encounter-survey.js';
+import {mountR30EncounterArt,type R30EncounterBridge} from './town-c-r30-encounter-art.js';
 import {mountR30OreArt,type R30OreBridge} from './town-c-r30-ore-art.js';
 
 type Road = ReturnType<typeof mountWestCraterRoad>;
@@ -159,6 +161,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
   crystalBridge?:R30CrystalBridge;
   mainlineBridge?:R30MainlineBridge;
   oreBridge?:R30OreBridge;
+  encounterBridge?:R30EncounterBridge;
   /** Sole existing mining authority's accepted layer snapshot. */
   readAcceptedMiningTargets?:()=>readonly UndergroundMiningTargetView[]|undefined;
   /** C2 scene roots and A/total-control room/mouth acceptance. */
@@ -391,6 +394,9 @@ export function mountUndergroundDomainHost(options: Readonly<{
   }
   const oreSurvey=surveyR30Ore(mounted.group,worldOf,p=>{const q=passageAt(p.east,p.north);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01});
   const oreArt=oreSurvey.kind==='ready'?mountR30OreArt(mounted.group,oreSurvey,options.oreBridge):undefined;
+  const safeCenters=[campFireWorld,...(mine.supportStation?[worldOf([mine.supportStation.x,mine.supportStation.y,mine.supportStation.z])]:[])];
+  const encounterSurvey=oreSurvey.kind==='ready'?surveyR30Encounters(worldOf,p=>passageAt(p.east,p.north),oreSurvey,safeCenters):undefined;
+  const encounterArt=encounterSurvey?.ready?mountR30EncounterArt(mounted.group,encounterSurvey,options.encounterBridge,(e,n)=>passageAt(e,n)):undefined;
   if (originW && basisXW && basisZW) {
     const bxE = basisXW.east - originW.east, bxN = basisXW.north - originW.north;
     const bzE = basisZW.east - originW.east, bzN = basisZW.north - originW.north;
@@ -481,7 +487,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
     return {foot:{...to,height:previous.floor,domainId:from.domainId},posture,clearance:previous.clearance,
       eyeHeight:posture==='crouching'?1:1.67,requiresCrouch:previous.requiresCrouch};
   }
-  const composed={...mounted,sync(){oreArt?.sync();if(mainline?.kind==='ready')mainline.sync();openThinWalls=thinWalls.sync(options.readAcceptedMiningTargets?.());crystalHost?.sync();mounted.sync();deepHost.sync();deepAssembly.sync();
+  const composed={...mounted,sync(){encounterArt?.sync();oreArt?.sync();if(mainline?.kind==='ready')mainline.sync();openThinWalls=thinWalls.sync(options.readAcceptedMiningTargets?.());crystalHost?.sync();mounted.sync();deepHost.sync();deepAssembly.sync();
     // When the physically connected passage is active, retain the adjacent
     // second-mine geometry without enabling its movement domain.
     if(deepHost.mounted&&deepAssembly.activeDomain()===r30LinkDomain(r30DepthLinks[0])&&deepAssembly.openLinks().includes(r30DepthLinks[0].id))
@@ -492,9 +498,9 @@ export function mountUndergroundDomainHost(options: Readonly<{
       const opened=lower&&mounted.installUpperLiftAperture();
       interlayerLift.present(options.interlayerRide.read(),options.interlayerRide.now(),opened);
     }
-  },dispose(){oreArt?.dispose();if(mainline?.kind==='ready')mainline.dispose();returnBay.dispose();thinWalls.dispose();deepAssembly.dispose();crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
+  },dispose(){encounterArt?.dispose();oreArt?.dispose();if(mainline?.kind==='ready')mainline.dispose();returnBay.dispose();thinWalls.dispose();deepAssembly.dispose();crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
   return {
-    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,deepAssembly,thinWalls,returnBay,mainline,oreSurvey,oreArt,
+    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,deepAssembly,thinWalls,returnBay,mainline,oreSurvey,oreArt,encounterSurvey,encounterArt,
     // Layout contract only. The actual city/palace receiving shells and
     // movement/presence host must approve before mounting or allowing travel.
     deepLayerContract:shaftContract.kind==='ready'&&shaftContract.deep.kind==='registered'
