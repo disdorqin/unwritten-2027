@@ -35,12 +35,25 @@ export function mountR30HorseSeat(parent:Group,opts:Readonly<{
   put(seat,s*.19,.29,0,.085,.08,.39,0x655a4b);
   put(seat,0,.29,s*.195,.32,.08,.07,0x655a4b);
  }
+ // Chipped stone plinth, carved rim and an empty offering recess.
+ // The recess is scenery; the accepted memorial-lamp transaction is
+ // still the only offering route. Keep all trim on the supported base.
+ for(const s of [-1,1]){
+  put(seat,s*.23,.135,0,.075,.15,.46,0x726456);
+  for(const v of [-.19,.19])put(seat,s*.23,.135,v,.075,.11,.075,0x8b7861);
+  put(seat,0,.245,s*.207,.35,.04,.06,0x9b8c73);
+ }
+ for(let k=0;k<5;k++)put(seat,-.244,.17,-.15+k*.075,.035,.055,.045,k%2?0x5b5145:0x8b7861);
  // West-facing stone plaque, no lettering. The low relief is a horse
  // profile, not a replacement for the global stone actor.
  put(plate,0,.45,0,.16,.28,.34,0x837057);
  put(plate,0,.605,0,.145,.045,.26,0xa28d6d);
  put(plate,-.086,.45,0,.018,.236,.272,0x5a5147);
- const mask=['...11...','..1111..','..11111.','.111111.','1111111.','111111..','...111..','..1111..'];
+ for(const s of [-1,1]){
+  put(plate,-.091,.45,s*.147,.025,.24,.023,0x9d8a70);
+  put(plate,-.081,.565,s*.115,.027,.036,.04,0xa28d6d);
+ }
+ const mask=['....11..','...111..','..11111.','..111111','.1111111','1111111.','1111....','..111...'];
  for(let row=0;row<mask.length;row++)for(let col=0;col<8;col++)if(mask[row][col]==='1')
   put(plate,-.102,.552-row*.027,(col-3.5)*.027,.014,.025,.025,row<2?0x9c8969:0xb9a583);
  const geo=new BoxGeometry(),map=makeCampGrain('rock'),mat=new MeshLambertMaterial({map}),meshes:InstancedMesh[]=[];
@@ -57,7 +70,7 @@ export function mountR30HorseSeat(parent:Group,opts:Readonly<{
  }
  function sync(){stone.visible=receipt()?.atOrigin===true}
  function blocks(ex:number,nz:number,fy:number,r:number,h:number){
-  return seat.some(p=>p.y+p.h/2>fy+.025&&p.y-p.h/2<fy+h&&Math.hypot(Math.max(0,Math.abs(ex-p.x)-p.w/2),Math.max(0,Math.abs(nz-p.z)-p.d/2))<r);
+  return (receipt()?.atOrigin===true?[...seat,...plate]:seat).some(p=>p.y+p.h/2>fy+.025&&p.y-p.h/2<fy+h&&Math.hypot(Math.max(0,Math.abs(ex-p.x)-p.w/2),Math.max(0,Math.abs(nz-p.z)-p.d/2))<r);
  }
  function prompt(){
   const s=receipt(),f=opts.readFoot();

@@ -31,6 +31,19 @@ export function mountR30CrystalSideArt(parent:Group){
   add(min-.18,n,y+.40,.4,.8,.72,palette[i%5]);
   add(min-.24,n,y+.86,.35,.20,.64,palette[(i+1)%5]);
  }
+ // Terminate the dry trail as a real moonstone observation alcove,
+ // not a working mirror or reward trigger. The end stop stays solid.
+ // Tall stone shoulders are supported on the existing branch banks;
+ // the centre aperture retains an uninterrupted view of the mineral face.
+ const alcove:Part[]=[];
+ for(const s of [-1,1]){
+  const e=min-.24,n=terminal+s*1.47,y=crystalCavernTrailHeight(n);
+  for(let k=0;k<4;k++){
+   add(e-.03*k,n+s*.03*k,y+.98+k*.34,.48-k*.055,.36,.43,palette[(k+5+s)%5]);alcove.push(parts.at(-1)!);
+   add(e+.24-.03*k,n+s*.03*k,y+.98+k*.34,.055,.21,.28,k%2?0x87908a:0x9aa6a1);alcove.push(parts.at(-1)!);
+  }
+  add(e-.11,n+s*.05,y+2.23,.55,.17,.55,0x777b72);alcove.push(parts.at(-1)!);
+ }
  // The displaced decorative group keeps its original count, tilt and
  // root sockets. Add low rock beneath each socket rather than floating
  // roots above the coarse historical ground tiles.
@@ -69,5 +82,5 @@ export function mountR30CrystalSideArt(parent:Group){
    return p.y+p.h/2>y+.025&&p.y-p.h/2<y+h&&Math.hypot(Math.max(0,Math.abs(x)-p.w/2),Math.max(0,Math.abs(z)-p.d/2))<r;
   });
  }
- return {group,parts,bounds,blocks,dispose(){group.removeFromParent();batches.forEach(m=>m.dispose());geo.dispose();map.dispose();material.dispose();group.clear()}};
+ return {group,parts,bounds,alcove,blocks,dispose(){group.removeFromParent();batches.forEach(m=>m.dispose());geo.dispose();map.dispose();material.dispose();group.clear()}};
 }

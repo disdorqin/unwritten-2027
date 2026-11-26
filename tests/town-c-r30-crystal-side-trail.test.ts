@@ -52,7 +52,8 @@ test('original west gallery becomes a supported side trail with real continuous 
     const hit=new Raycaster(origin,target.sub(origin).normalize(),0,2.1).intersectObject(bed)[0];assert.ok(hit,'subgrade side '+e+'/'+side);
    }
   }
-  assert.ok(art.parts.length>100);
+  assert.ok(art.parts.length>100);assert.equal(art.alcove.length,18);
+  for(const b of art.alcove)assert.ok(art.blocks(b.e,b.n,b.y-b.h/2,.27,1.8));
   assert.equal(crystalCavernR30Pieces.length,crystalCavernArchitecture.pieces.length);
   const changed=crystalCavernR30Pieces.filter((part,i)=>part!==crystalCavernArchitecture.pieces[i]);
   assert.ok(changed.length>20&&changed.every(part=>part.name.startsWith('u3/crystals/48/')));
