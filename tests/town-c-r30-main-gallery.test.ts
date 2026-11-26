@@ -30,6 +30,12 @@ test('mine support detail is mounted, posts collide and both approach and branch
     const p=h.mounted.toWorld([x,-91,z])!;assert.ok(h.passageAt(p.east,p.north),'branch at '+x+'/'+z);
    }
   }
+  assert.equal(art.relics.length,7);
+  for(const r of art.relics){
+   const p=h.mounted.toWorld([0,r.floor,r.z])!;assert.ok(h.passageAt(p.east,p.north));
+   assert.ok(art.blocks(r.x,r.z,r.floor,.27,2.6),'hanging cage occupies real tall capsule');
+   assert.ok(!art.blocks(0,r.z,r.floor,.27,1.8),'centre remains clear');
+  }
   const p=h.mounted.toWorld([1.83,-90,17.8])!;assert.equal(h.passageAt(p.east,p.north),undefined);
  }finally{h.mounted.dispose()}
  assert.equal(parent.children.length,0);

@@ -7,7 +7,7 @@ type Part=Readonly<{family:Family;x:number;y:number;z:number;w:number;h:number;d
 const axis=new Vector3(1,0,0);
 export function mountR30MainGallery(parent:Group,mine:Mine){
  const group=new Group();group.name='r30-main-gallery-industrial-remains';
- const parts:Part[]=[],frames:number[]=[];
+ const parts:Part[]=[],frames:number[]=[],relics:{z:number;x:number;floor:number}[]=[];
  const add=(family:Family,x:number,y:number,z:number,w:number,h:number,d:number,color:number,angle=0)=>parts.push({family,x,y,z,w,h,d,angle,color});
  const canonical=mine.expansion?.deepWorks===true&&mine.crouchInterval[0]===31.73;
  if(canonical){
@@ -51,6 +51,33 @@ export function mountR30MainGallery(parent:Group,mine:Mine){
   for(const z of [13.2,17.8,22.4,27,30.4])arch(z,2,3.5);
   for(const z of [46.8])arch(z,2,3.5);
   for(const z of [67,83,87,103,115,119,123])arch(z,4.2,7.2);
+  // Each surviving deep frame carries the original mine's working traces:
+  // riveted wall bracket, extinguished cage, cable spool and chipped plinth.
+  // Everything is attached to an actual standing frame, outside the rail.
+  for(const [i,z] of [67,83,87,103,115,119,123].entries()){
+   if(!frames.includes(z))continue;
+   const p=mine.queryPassage(0,z,.27,1.8,'open');if(!p)continue;
+   const f=p.floor,s=i%2===0?1:-1,x=s*3.74;
+   relics.push({z,x,floor:f});
+   add('iron',s*3.97,f+2.98,z,.22,.16,.14,0x505258);
+   add('wood',s*3.83,f+3.03,z,.34,.12,.19,0x70543e);
+   add('iron',x,f+2.86,z,.08,.31,.09,0x80563d);
+   add('iron',x,f+2.69,z,.28,.075,.27,0x80563d);
+   add('iron',x,f+2.51,z,.19,.29,.19,0x7e775f);
+   for(const dx of [-.125,.125])for(const dz of [-.12,.12])add('iron',x+dx,f+2.51,z+dz,.045,.32,.045,0x505258);
+   add('iron',x,f+2.33,z,.29,.08,.28,0x80563d);
+   // Cable spool and coiled end fastened to the timber, not floor litter.
+   const cableX=s*3.98;
+   add('wood',cableX,f+1.48,z,.16,.55,.57,0x604735);
+   add('iron',cableX-s*.105,f+1.48,z,.065,.49,.49,0x80563d);
+   for(let k=0;k<12;k++){
+    const a=k*Math.PI/6;
+    add('iron',cableX-s*.145,f+1.48+.205*Math.cos(a),z+.205*Math.sin(a),.06,.105,.105,0x505258);
+   }
+   for(let k=0;k<5;k++)add('iron',cableX-s*.12,f+1.10-k*.12,z+.18+k*.02,.06,.14,.055,0x505258);
+   // Broken rock edges broaden the old post foot without touching traffic.
+   for(let k=0;k<3;k++)add('rock',s*(4.03-k*.025),f+.07+k*.045,z+.28+k*.08,.22,.15,.17,0x53504b);
+  }
   // Extend the existing west post's stone foot to the wall-side strip
   // near the retired siding. The 2.5cm survey found a disconnected
   // capsule pocket between its old foot and the siding buffer.
@@ -93,6 +120,6 @@ export function mountR30MainGallery(parent:Group,mine:Mine){
   return boxes.some(p=>p.y+p.hy>floor+.025&&p.y-p.hy<floor+height&&
    Math.hypot(Math.max(0,Math.abs(x-p.x)-p.w/2),Math.max(0,Math.abs(z-p.z)-p.hz))<radius);
  }
- parent.add(group);return {group,parts,frames,blocks,dispose(){group.removeFromParent();
+ parent.add(group);return {group,parts,frames,relics,blocks,dispose(){group.removeFromParent();
   for(const r of resources)r.mesh.dispose();for(const m of new Set(resources.map(r=>r.mat)))m.dispose();for(const m of new Set(resources.map(r=>r.map)))m.dispose();geo.dispose()}};
 }
