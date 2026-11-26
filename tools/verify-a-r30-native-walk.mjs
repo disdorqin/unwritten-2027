@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -284,8 +284,9 @@ async function picture(page,evidence,label){
 }
 import {buildCraterRailExtension} from './voxel-tavern/town-blockout/town-crater-rail-extension.ts';
 const grid=createTerrainGrid(), road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
-const rail=['kengkou','freight'].includes(segment)?buildCraterRailExtension(grid,road):undefined;
+const rail=['kengkou','freight','shankou'].includes(segment)?buildCraterRailExtension(grid,road):undefined;
 const approach={
+ shankou:[[296,516],[296,512]],
  northwalk:[[-12,159],[-12,240],[-12,320]],
  wall:[[-9,159]],
  gatehouse:[[-3,159],[-6,154],[-7,150.2]],
@@ -303,19 +304,19 @@ try{
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:graphicsArgs});
  const {page,evidence}=await openTown(segment);
  await page.locator('#town-panel-toggle').click();
- await page.locator('#jump').selectOption({label:'陨石坑口'});
+ await page.locator('#jump').selectOption({label:segment==='shankou'?'山口站':'陨石坑口'});
  if(await page.locator('#town-settings').evaluate(d=>d.open))await page.locator('#town-settings-close').click();
- await page.waitForFunction(pattern=>{
+ await page.waitForFunction(({pattern,east,north})=>{
    const p=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');
-   return p&&Math.hypot(+p[1]-2,+p[2]-159)<1.2;
- },positionPattern.source,{timeout:45000});
+   return p&&Math.hypot(+p[1]-east,+p[2]-north)<1.2;
+ },{pattern:positionPattern.source,east:segment==='shankou'?296:2,north:segment==='shankou'?520:159},{timeout:45000});
  for(const [i,target] of approach[segment].entries())await walkTo(page,evidence,target,segment+'-approach-'+i);
  const tower=road.outerWorks.towerRoutes.find(t=>t.id===segment+'-tower');
  const path=segment==='northwalk'?[[-12,320],[-12,336],[-12,400],[-12,450],[-9,470],[-4,485],[2,490]].map(([east,north])=>({east,north,height:east<0?road.heightAt(east,north):grid.heightAt(east,north)})):
    segment==='wall'?[-9,-15,-21,-28].map(east=>({east,north:159,height:road.heightAt(east,159)})):
    tower?[tower.entry,...tower.stairs]:segment==='supply'?road.mouthWorks.supplyDeckRoute:
    segment==='supplyinterior'?road.mouthWorks.supplyInteriorRoute:
-   ['kengkou','freight'].includes(segment)?rail.stationWalkRoutes.find(t=>t.id===(segment==='freight'?'freight-shed':'kengkou-station')).points:
+   ['kengkou','freight','shankou'].includes(segment)?rail.stationWalkRoutes.find(t=>t.id===(segment==='freight'?'freight-shed':segment+'-station')).points:
    road.outerWorks.industrialRoutes.find(t=>t.id===(segment==='gatehouse'?'gatehouse':segment+'-plant')).points;
  async function step(point,label){
    await walkTo(page,evidence,[point.east,point.north],label,segment==='northwalk'?.46:.18);
@@ -337,13 +338,14 @@ try{
  }
  for(const [i,point] of path.entries()){
    await step(point,segment+'-up-'+i);
+   if(segment==='shankou'&&i===0)await wallView('shankou-arrival',Math.PI);
    if(segment==='northwalk'&&(i===1||i===2))await wallView('northwalk-'+(i===1?'seam':'mid'),0);
    if(segment==='wall'&&i===0)await wallView('wall-town-face',-Math.PI/2);
    if(segment==='wall'&&i===path.length-1)await wallView('wall-crater-face',Math.PI/2);
  }
  const top=await readPose(page);
- if(segment==='kengkou'||segment==='gatehouse'){
-   const bench=segment==='kengkou'?rail.benchSeats.find(s=>s.id==='坑口站-1'):road.outerWorks.gatehouseSeats[0];
+ if(['kengkou','gatehouse','shankou'].includes(segment)){
+   const bench=segment==='gatehouse'?road.outerWorks.gatehouseSeats[0]:rail.benchSeats.find(s=>s.id===(segment==='shankou'?'山口站-1':'坑口站-1'));
    await step({east:bench.useEast,north:bench.useNorth,height:bench.height},'station-bench');
    await page.waitForFunction(label=>document.querySelector('#world-action')?.textContent?.includes(label),segment==='gatehouse'?'门房长椅':'站台长椅',{timeout:8000});
    await page.keyboard.press('e');
@@ -352,7 +354,7 @@ try{
    await page.keyboard.press('e');
    await page.waitForFunction(pattern=>new RegExp(pattern).test(document.querySelector('#position')?.textContent??''),positionPattern.source,{timeout:8000});
    await step(path.at(-1),'station-stand-return');
-   await face(page,evidence,segment==='gatehouse'?0:1.7+Math.PI);
+   await face(page,evidence,segment==='gatehouse'?0:segment==='shankou'?Math.PI:1.7+Math.PI);
    for(const lighting of ['雪夜','白昼']){
      if((await page.locator('#lighting').textContent())!==lighting){
        await page.locator('#town-panel-toggle').click();
@@ -393,6 +395,18 @@ try{
  }
  for(const [i,point] of path.slice().reverse().slice(1).entries())await step(point,segment+'-down-'+i);
  const returned=await readPose(page);
+ if(segment==='shankou'){
+   const b=rail.timetableReads[0];
+   for(const [e,n]of [[296,511],[308,511],[b.east,b.north]])await walkTo(page,evidence,[e,n],'shankou-board-approach',.30);
+   await wallView('shankou-timetable',Math.PI);
+   await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('山口站时刻牌'),null,{timeout:8000});
+   await page.keyboard.press('e');
+   await page.locator('#place-card[open]').waitFor({timeout:8000});
+   assert.equal(await page.locator('#place-title').textContent(),'山口站时刻牌');
+   await picture(page,evidence,'shankou-timetable-open');
+   await page.locator('#place-card .close-card').click();
+   for(const [e,n]of [[308,511],[296,511],[296,520]])await walkTo(page,evidence,[e,n],'shankou-arrival-return',.3);
+ }
  if(segment==='gatehouse')assert.ok(Math.abs(returned.height-path[0].height)<.08,JSON.stringify({returned,ground:path[0]}));
  await picture(page,evidence,segment+'-return');
  report.traversal={top,returned,expectedTop:path.at(-1),expectedReturn:path[0]};
