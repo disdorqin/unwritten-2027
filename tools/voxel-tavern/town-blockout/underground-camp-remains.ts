@@ -231,11 +231,36 @@ export function createUndergroundCampRemains({ mine, camp, walker }: Options) {
   solid('canteen/cold-stove/flue', -1.78, 1.017, 7.25, .223, 1.35, .223);
 
   function bowl(id: string, x: number, y: number, z: number, inverted = false) {
-    box(id, clay, x, y, z, inverted ? .172 : .107, .026, inverted ? .172 : .107);
-    box(id, '#a28e73', x, y + .024, z, .145, .030, .145);
-    box(id, '#cabb9e', x, y + .052, z, inverted ? .088 : .169, .024, inverted ? .088 : .169);
+    // Voxel pottery rather than three solid cuboids. The upright pieces
+    // have real hollow rims; the lone inverted bowl keeps its original
+    // position and closed foot. All remain inside the authored stove/shelf.
+    const grid=.019,step=.0144;
+    for(let tier=0;tier<5;tier++){
+      const k=inverted?4-tier:tier,outer=[2.65,3.15,3.65,4.2,4.55][k];
+      const inside=k===0?0:Math.max(0,outer-1.15);
+      const tint=[clay,'#a28e73','#bda98a','#c4b398','#cabb9e'][k];
+      for(let dz=-4;dz<=4;dz++){
+        let run:number|undefined;
+        for(let dx=-4;dx<=5;dx++){
+          const r=Math.hypot(dx,dz),filled=dx<=4&&r<=outer&&(k===0||r>=inside);
+          if(filled){run??=dx;continue}
+          if(run!==undefined){
+            // Merge contiguous same-colour cells into one row, preserving
+            // the hollow centre and exact stepped silhouette.
+            box(id,tint,x+(run+dx-1)*grid/2,y+tier*step,z+dz*grid,(dx-run)*grid-.0004,step-.0002,grid-.0004);
+            run=undefined;
+          }
+        }
+      }
+    }
   }
   bowl('canteen/left-bowl', -1.16, 1.018, 7.54, true);
+  // A worn wooden ladle and a folded linen pot cloth, all within
+  // the cold stove's already solid footprint. Neither is collectible.
+  box('canteen/ladle',wornWood,-1.59,1.018,7.53,.043,.025,.18);
+  for(let i=0;i<3;i++)box('canteen/ladle',board,-1.59,1.022,7.44-i*.031,.10-i*.019,.029,.030);
+  for(let i=0;i<4;i++)box('canteen/pot-cloth',i%2?linen:'#908571',-1.59+i*.045,1.018+i*.001,7.73,.044,.019,.15);
+  for(let i=0;i<6;i++)box('canteen/pot-cloth/fringe','#7d7466',-1.58+i*.027,1.0195,7.820,.018,.012,.025);
   solid('canteen/bowl-cupboard', -1.67, 0, 6.29, .59, 1.46, .73);
   box('canteen/bowl-cupboard', wood, -1.83, .068, 6.29, .25, 1.39, .73);
   for (const y of [.116, .53, .94, 1.409]) {
@@ -278,6 +303,12 @@ export function createUndergroundCampRemains({ mine, camp, walker }: Options) {
       box(lamp, index === 2 ? '#655d54' : iron, x, .217, z - .038, .118, .137, .103);
       box(lamp, '#75736b', x, .232, z - .093, .078, .094, .018);
       box(lamp, '#46443c', x, .354, z - .038, .158, .039, .142);
+      // Original extinguished relics: small handle and worn rivets
+      // entirely inside the niche; leave the other three actual slots empty.
+      for(const dx of [-.048,.048])box(lamp,iron,x+dx,.394,z-.038,.021,.043,.025);
+      box(lamp,index===2?'#867765':'#64594b',x,.431,z-.038,.116,.022,.028);
+      for(const dx of [-.065,.065])box(lamp,'#87765b',x+dx,.186,z-.1095,.023,.023,.019);
+      box(lamp,'#57564f',x,.267,z-.108,.023,.064,.018);
     }
     return { id, position: at(x, .166, z - .03), hasSpentLamp, lit: false };
   });
