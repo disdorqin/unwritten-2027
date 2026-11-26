@@ -152,8 +152,11 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
     part(mat, metricBox(mat,sx,sy,sz), east, h, north, yaw, pitch, roll);
   }
   function segBox(mat: MeshStandardMaterial, center: Vector3, quat: Quaternion,
-    lx: number, ly: number, lz: number, sx: number, sy: number, sz: number) {
+    lx: number, ly: number, lz: number, sx: number, sy: number, sz: number, joined=false) {
     const geo = metricBox(mat,sx,sy,sz);
+    // Continuous overlapping longitudinal strips hide both local Z end
+    // faces. Keep the end caps at route endpoints and all separate sleepers.
+    if(joined)geo.setIndex(Array.from(geo.index!.array).slice(0,24));
     geo.translate(lx, ly, lz);
     const g = geo.toNonIndexed();
     g.applyQuaternion(quat);
@@ -232,8 +235,9 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
       const quat = new Quaternion().setFromRotationMatrix(orientation.lookAt(vb, va, up));
       const segLen = va.distanceTo(vb);
       for (const side of [-1, 1]) {
-        segBox(steel, center, quat, side * opts.gauge / 2, -.08, 0, .15, opts.railH, segLen + .07);
-        segBox(darkSteel, center, quat, side * opts.gauge / 2, -.22, 0, .3, .07, segLen + .07);
+        const joined=i>0&&i<samples.length-2;
+        segBox(steel, center, quat, side * opts.gauge / 2, -.08, 0, .15, opts.railH, segLen + .07,joined);
+        segBox(darkSteel, center, quat, side * opts.gauge / 2, -.22, 0, .3, .07, segLen + .07,joined);
       }
       segBox(timber, center, quat, 0, -.32, 0, opts.sleeperWidth, .15, .36);
       segBox(stoneDark, center, quat, 0, -.5, 0, opts.ballastWidth, .26, segLen + .08);
@@ -593,29 +597,39 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
       const d = (s.east + 54.5) ** 2 + (s.north - 155) ** 2;
       if (d < best) { best = d; car = s; }
     }
-    const yaw = Math.atan2(50, -7) + Math.PI / 2;
-    const cy = car.y;
-    box(iron, car.east, cy + .55, car.north, 5.9, .3, 2.3, yaw);
-    // Empty-looking hopper shell now has an actual rim and wheel frame.
-    for(const side of [-1,1]){
-      const e=car.east+Math.sin(yaw)*side*1.16,n=car.north-Math.cos(yaw)*side*1.16;
-      box(rustIron,e,cy+1.75,n,5.7,1.9,.15,yaw);
-      box(iron,e,cy+2.73,n,5.9,.14,.22,yaw);
+    const idx=siding.samples.indexOf(car),a=siding.samples[Math.max(0,idx-1)]!,b=siding.samples[Math.min(siding.samples.length-1,idx+1)]!;
+    const yaw=Math.atan2(b.north-a.north,b.east-a.east),cy=car.y;
+    const at=(x:number,z:number)=>({e:car.east+Math.cos(yaw)*x+Math.sin(yaw)*z,n:car.north+Math.sin(yaw)*x-Math.cos(yaw)*z});
+    const put=(mat:MeshStandardMaterial,x:number,y:number,z:number,w:number,h:number,d:number,roll=0)=>{
+      const p=at(x,z);box(mat,p.e,cy+y,p.n,w,h,d,yaw,0,roll);
+    };
+    // Retired full-gauge hopper with a separate chassis, four rail-aligned
+    // wheelsets and genuinely open freight bin. Gauge is the track's 1.66m.
+    put(iron,0,.95,0,5.9,.28,2.25);
+    for(const z of [-.83,.83])put(darkSteel,0,.68,z,5.8,.18,.16);
+    for(const x of [-2.2,-1.45,1.45,2.2]){
+      const axle=at(x,0);
+      part(darkSteel,new CylinderGeometry(.095,.095,1.92,8),axle.e,cy+.43,axle.n,yaw,Math.PI/2);
+      for(const z of [-.83,.83]){
+        const w=at(x,z);
+        part(darkSteel,new CylinderGeometry(.42,.42,.16,12),w.e,cy+.43,w.n,yaw,Math.PI/2);
+        part(iron,new CylinderGeometry(.20,.20,.20,10),w.e,cy+.43,w.n,yaw,Math.PI/2);
+      }
     }
     for(const side of [-1,1]){
-      const e=car.east+Math.cos(yaw)*side*2.78;
-      // Match the Three yaw used by the actual boxes.
-      box(rustIron,e,cy+1.75,car.north+Math.sin(yaw)*side*2.78,.15,1.9,2.45,yaw);
+      put(rustIron,0,1.92,side*1.16,5.7,1.8,.15);
+      put(iron,0,2.87,side*1.16,5.9,.14,.22);
+      put(rustIron,side*2.78,1.92,0,.15,1.8,2.45);
+      for(const x of [-2.35,-1.17,0,1.17,2.35])put(iron,x,1.93,side*1.24,.12,1.8,.09);
+      put(iron,side*3.03,.97,0,.4,.18,.36);
     }
-    box(rustIron,car.east,cy+.85,car.north,5.55,.17,2.3,yaw);
-    colliders.push(orientedSupportBox(car.east,car.north,yaw,5.9,2.45,cy-.2,cy+2.8));
-    part(rustIron, new CylinderGeometry(.75, 1.55, 1.15, 4), car.east, cy + .95, car.north, yaw + Math.PI / 4);
-    part(ore, new ConeGeometry(1.05, .85, 8), car.east, cy + 3.1, car.north, yaw);
-    for (const [lx, lz] of [[-2.2, -0.95], [2.2, -0.95], [-2.2, 0.95], [2.2, 0.95]] as const) {
-      const wx = car.east + Math.cos(yaw) * lx + Math.sin(yaw) * lz;
-      const wn = car.north - Math.sin(yaw) * lx + Math.cos(yaw) * lz;
-      part(darkSteel, new CylinderGeometry(.42, .42, .14, 10), wx, cy + .18, wn, yaw, Math.PI / 2);
+    put(rustIron,0,1.10,0,5.55,.17,2.3);
+    // Ore stays below the rim; no cone protruding through the hopper top.
+    for(let i=0;i<7;i++){
+      const p=at(-2.1+i*.70,0);
+      part(ore,new DodecahedronGeometry(.62,0),p.e,cy+1.62+(i%3)*.15,p.n,yaw+i*.7);
     }
+    colliders.push(orientedSupportBox(car.east,car.north,yaw,5.9,2.45,cy+.01,cy+2.94));
   }
   {
     // Freight shed west of the siding.
@@ -636,8 +650,14 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
       box(timberWarm,sx+px,g+2.78,sn+pz,.17,.9,.18,0,0,px>0?.55:-.55);
     }
     for(const dn of [-2.35,2.35])box(timber,sx,g+3.05,sn+dn,7.6,.23,.24);
-    box(slate, sx, g + 3.45, sn, 8.4, .22, 6.2, 0, .05);
-    box(snow, sx, g + 3.62, sn, 8.2, .14, 6, 0, .05);
+    const run=3.1,rise=1.22,pitch=Math.atan2(rise,run),slant=Math.hypot(run,rise);
+    for(const side of [-1,1]){
+      box(slate,sx,g+3.30+rise/2,sn+side*run/2,8.4,.17,slant,0,-side*pitch);
+      box(snow,sx,g+3.44+rise/2,sn+side*run/2,8.15,.09,slant-.15,0,-side*pitch);
+      box(timber,sx,g+3.29,sn+side*run,8.45,.20,.19);
+      for(const dx of [-3.4,-1.7,0,1.7,3.4])box(timberWarm,sx+dx,g+3.19+rise/2,sn+side*run/2,.14,.16,slant,0,-side*pitch);
+    }
+    box(timber,sx,g+4.62,sn,8.48,.17,.27);
     box(timber, sx, g + 1.5, sn - 2.55, 7.2, 3, .14);
     colliders.push(orientedSupportBox(sx,sn-2.55,0,7.2,.14,g,g+3));
     // Stock goes on the back wall, leaving a 2m east-west cargo aisle.
@@ -679,9 +699,23 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
     }
     const idx = narrow.samples.indexOf(skip);
     const next = narrow.samples[Math.min(idx + 1, narrow.samples.length - 1)];
-    const yaw = Math.atan2(-(next.east - skip.east), -(next.north - skip.north)) + Math.PI / 2;
-    box(iron, skip.east, skip.y + .5, skip.north, 2.3, .75, 1.35, yaw);
-    part(ore, new ConeGeometry(.62, .55, 8), skip.east, skip.y + 1.05, skip.north, yaw);
+    const yaw=Math.atan2(next.north-skip.north,next.east-skip.east);
+    const at=(x:number,z:number)=>({e:skip.east+Math.cos(yaw)*x+Math.sin(yaw)*z,n:skip.north+Math.sin(yaw)*x-Math.cos(yaw)*z});
+    const put=(mat:MeshStandardMaterial,x:number,y:number,z:number,w:number,h:number,d:number)=>{const p=at(x,z);box(mat,p.e,skip.y+y,p.n,w,h,d,yaw);};
+    put(iron,0,.55,0,2.3,.18,1.22);
+    for(const x of [-.78,.78]){
+      const p=at(x,0);part(darkSteel,new CylinderGeometry(.07,.07,1.10,8),p.e,skip.y+.26,p.n,yaw,Math.PI/2);
+      for(const z of [-.45,.45]){const w=at(x,z);part(darkSteel,new CylinderGeometry(.27,.27,.11,10),w.e,skip.y+.26,w.n,yaw,Math.PI/2);}
+    }
+    for(const s of [-1,1]){
+      put(rustIron,0,.98,s*.62,2.2,.7,.12);
+      put(iron,0,1.36,s*.62,2.35,.10,.16);
+      put(rustIron,s*1.08,.98,0,.12,.7,1.35);
+      for(const x of [-.7,0,.7])put(iron,x,.98,s*.68,.075,.7,.065);
+    }
+    put(rustIron,0,.70,0,2.1,.10,1.14);
+    for(const x of [-.65,0,.65]){const p=at(x,0);part(ore,new DodecahedronGeometry(.36,0),p.e,skip.y+.91,p.n,yaw);}
+    colliders.push(orientedSupportBox(skip.east,skip.north,yaw,2.3,1.36,skip.y,skip.y+1.41));
     const end = narrow.samples.at(-1)!;
     const prev = narrow.samples.at(-2)!;
     const eyaw = Math.atan2(-(end.east - prev.east), -(end.north - prev.north)) + Math.PI / 2;
