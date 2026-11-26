@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','inscription-access','joint-historic'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -284,8 +284,9 @@ async function picture(page,evidence,label){
   evidence.checkpoints.push({label,lighting:await page.locator('#lighting').textContent(),...await readPose(page),wire:evidence.poses.at(-1)});
 }
 import {buildCraterRailExtension} from './voxel-tavern/town-blockout/town-crater-rail-extension.ts';
+import {buildTownRailRoute} from './voxel-tavern/town-blockout/town-railway.ts';
 const grid=createTerrainGrid(), road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
-const rail=['kengkou','freight','shankou','transfer-dock','ore-yard-dock','rail-valley','inscription-access'].includes(segment)?buildCraterRailExtension(grid,road):undefined;
+const rail=['kengkou','freight','shankou','transfer-dock','ore-yard-dock','rail-valley','rail-buffer','inscription-access'].includes(segment)?buildCraterRailExtension(grid,road,segment==='rail-buffer'?buildTownRailRoute(grid).points:undefined):undefined;
 const jointManifest=process.env.AR30_JOINT_ROUTE?JSON.parse(await readFile(process.env.AR30_JOINT_ROUTE,'utf8')):undefined;
 const joint=segment==='joint-historic'?jointManifest:undefined;
 const jointInscription=segment==='inscription-access'?jointManifest?.inscriptionPath:undefined;
@@ -298,6 +299,7 @@ const approach={
  outcrop:[[-12,159],[-23,159],[-23,95],[-60,55]],
  shankou:[[296,516],[296,512]],
  'rail-valley':[],
+ 'rail-buffer':[],
  northwalk:[[-12,159],[-12,240],[-12,320]],
  wall:[[-9,159]],
  gatehouse:[[-3,159],[-6,154],[-7,150.2]],
@@ -325,12 +327,12 @@ try{
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:graphicsArgs});
  const {page,evidence,westWindow}=await openTown(segment);
  await page.locator('#town-panel-toggle').click();
- await page.locator('#jump').selectOption({label:['shankou','rail-valley'].includes(segment)?'山口站':'陨石坑口'});
+ await page.locator('#jump').selectOption({label:segment==='rail-buffer'?'火车站':['shankou','rail-valley'].includes(segment)?'山口站':'陨石坑口'});
  if(await page.locator('#town-settings').evaluate(d=>d.open))await page.locator('#town-settings-close').click();
  await page.waitForFunction(({pattern,east,north})=>{
    const p=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');
    return p&&Math.hypot(+p[1]-east,+p[2]-north)<1.2;
- },{pattern:positionPattern.source,east:['shankou','rail-valley'].includes(segment)?296:2,north:['shankou','rail-valley'].includes(segment)?520:159},{timeout:45000});
+ },{pattern:positionPattern.source,east:segment==='rail-buffer'?526:['shankou','rail-valley'].includes(segment)?296:2,north:segment==='rail-buffer'?305:['shankou','rail-valley'].includes(segment)?520:159},{timeout:45000});
  for(const [i,target] of approach[segment].entries()){
    await walkTo(page,evidence,target,segment+'-approach-'+i);
    if(segment==='water-tower'&&i===1){
@@ -371,7 +373,7 @@ try{
    ...industrial('salvage-pipes'),...industrial('salvage-pipes').slice(0,-1).reverse(),
    ...industrial('ore-yard').slice(1),...industrial('sealed-storehouse').slice(1)
  ]:null;
- const path=jointInscription??joint?.points??salvagePath??ruinsPath??(segment==='inscription-access'?[...rail.stationWalkRoutes.find(r=>r.id==='transfer-dock').points.slice(0,5),...rail.stationWalkRoutes.find(r=>r.id==='inscription-access').points]:segment==='rail-valley'?[[296,520],[291,530],[288,531],[243,515]].map(([east,north])=>({east,north,height:grid.heightAt(east,north)})):scenic?(reverseScenic?[...scenic.points].reverse():scenic.points):segment==='outerclusters'?[[-68,220],[-68,232],[-83,235],[-98,243],[-95,261],[-90,265]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
+ const path=jointInscription??joint?.points??salvagePath??ruinsPath??(segment==='inscription-access'?[...rail.stationWalkRoutes.find(r=>r.id==='transfer-dock').points.slice(0,5),...rail.stationWalkRoutes.find(r=>r.id==='inscription-access').points]:segment==='rail-buffer'?[[526,305],[492,305],[490,343],[484,365],[482,371]].map(([east,north])=>({east,north,height:grid.heightAt(east,north)})):segment==='rail-valley'?[[296,520],[291,530],[288,531],[243,515]].map(([east,north])=>({east,north,height:grid.heightAt(east,north)})):scenic?(reverseScenic?[...scenic.points].reverse():scenic.points):segment==='outerclusters'?[[-68,220],[-68,232],[-83,235],[-98,243],[-95,261],[-90,265]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
    segment==='outcrop'?[[-60,55],[-147,52],[-155,51],[-164,51]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
    segment==='northwalk'?[[-12,320],[-12,336],[-12,400],[-12,450],[-9,470],[-4,485],[2,490]].map(([east,north])=>({east,north,height:east<0?road.heightAt(east,north):grid.heightAt(east,north)})):
    segment==='wall'?[-9,-15,-21,-28].map(east=>({east,north:159,height:road.heightAt(east,159)})):
@@ -431,6 +433,11 @@ try{
      if(i===path.length-1)await wallView('inscription-original-table',Math.atan2(road.inscription.layout.table.east-point.east,road.inscription.layout.table.north-point.north));
    }
    if(joint&&i===joint.trailKnots-1)await picture(page,evidence,'joint-historic-from-haul-road');
+   if(segment==='rail-buffer'&&i===path.length-1){
+     assert.ok(rail.closedHead&&rail.serviceGeometryReady===false);
+     const cap=rail.closedHead;
+     await wallView('rail-buffer-closed-end',Math.atan2(cap.east-point.east,cap.north-point.north));
+   }
    if(segment==='rail-valley'&&(i===2||i===path.length-1)){
      const mid=rail.samples[225];
      await wallView('rail-valley-'+(i===2?'approach':'bridge'),Math.atan2(mid.east-point.east,mid.north-point.north));
