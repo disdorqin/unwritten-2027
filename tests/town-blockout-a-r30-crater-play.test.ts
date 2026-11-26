@@ -14,9 +14,10 @@ function harness(){
  mound(host){const action=(k:'reach-overlook'|'straighten-flag')=>host.pose()&&host.facts()?(k==='reach-overlook'?{kind:k,site:'crater-mound-overlook'} as const:{kind:k,site:'mound-old-work-flag'} as const):undefined;return {action,refresh(){},async interact(k){const i=action(k);return i?host.request(i):{accepted:false};}};},
  rubbing(host){let held=false;return {frame(key){const next=!!(key&&host.pose()&&host.facts());if(next!==held){held=next;host.setHeld('actual-marker',held);}return {held,aim:kind==='paper',shown:0};},release(){if(held)host.setHeld('actual-marker',false);held=false;}};}
  };
- const play=createAR30CraterPlay(leaves,{localPose:()=>local,authority:()=>active?authority:undefined,now:()=>now,notify(){}});
+ let provider=authority;
+ const play=createAR30CraterPlay(leaves,{localPose:()=>local,authority:()=>active?provider:undefined,now:()=>now,notify(){}});
  const input=createAR30PlayInput(()=>play);
- return {play,input,sent,holds,aimCalls:()=>aimCalls,fail:(v:boolean)=>fail=v,setKind:(v:string)=>kind=v,disconnect:()=>active=false,connect:()=>active=true,expire:()=>now+=1001,move:()=>local=undefined,newSession(){accepted={...accepted!,session:'s2'};},sync(){accepted={...accepted!,receivedAt:now};}};
+ return {play,input,sent,holds,replaceProvider(){provider={...authority};},advance(ms:number){now+=ms;accepted={...accepted!,receivedAt:now};},aimCalls:()=>aimCalls,fail:(v:boolean)=>fail=v,setKind:(v:string)=>kind=v,disconnect:()=>active=false,connect:()=>active=true,expire:()=>now+=1001,move:()=>local=undefined,newSession(){accepted={...accepted!,session:'s2'};},sync(){accepted={...accepted!,receivedAt:now};}};
 }
 test('E and Q target capture, no retarget or unintended repeat',async()=>{
  const h=harness();h.input.update();
@@ -54,6 +55,24 @@ test('transport rejection is fail-closed and idle update does not repeat worksho
  h.fail(false);assert.equal((await h.play.tap('calibration:0')).accepted,true);
  h.input.down('E');h.setKind('bellows');h.input.update();h.input.up('E');
  assert.equal(h.sent.length,2);
+});
+test('provider replacement releases the original hold even with the same session',()=>{
+ const h=harness();h.setKind('paper');h.input.update();h.input.down('E');assert.deepEqual(h.holds,[true]);
+ h.replaceProvider();h.input.update();assert.deepEqual(h.holds,[true,false]);
+ h.input.up('E');h.input.down('E');assert.deepEqual(h.holds,[true,false,true]);
+ h.input.up('E');assert.deepEqual(h.holds,[true,false,true,false]);
+ h.setKind('calibration');h.input.down('E');h.replaceProvider();h.input.up('E');assert.equal(h.sent.length,0);
+});
+test('summit transport failure retries only after a cooldown while the same accepted foot is present',async()=>{
+ const h=harness();h.setKind('summit');h.fail(true);h.input.update();
+ await new Promise(resolve=>setImmediate(resolve));
+ for(let i=0;i<100;i++)h.input.update();
+ assert.equal(h.sent.length,1);
+ h.advance(1999);h.input.update();assert.equal(h.sent.length,1);
+ h.fail(false);h.advance(1);h.input.update();
+ await new Promise(resolve=>setImmediate(resolve));
+ assert.equal(h.sent.length,2);
+ h.advance(5000);h.input.update();assert.equal(h.sent.length,2);
 });
 test('summit registers through one request per entry, never invented flag state',async()=>{
  const h=harness();h.setKind('summit');h.input.update();h.input.update();assert.equal(h.sent.length,1);

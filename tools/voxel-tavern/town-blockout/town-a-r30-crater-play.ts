@@ -19,7 +19,7 @@ export type CraterPlayAuthority=Readonly<{
  setHeld(frame:CraterAcceptedFrame,markerId:string,held:boolean):void;
 }>;
 type Hit={station:'bellows'|'calibration'|'sorting'|'weighing'|'turnout';index?:0|1|2};
-type Target={key:string;label:string;mode:'tap'|'hold';reverse?:boolean;available:boolean;session?:string};
+type Target={key:string;label:string;mode:'tap'|'hold';reverse?:boolean;available:boolean;session?:string;authority?:CraterPlayAuthority};
 type WorkshopControl={action(direction?:-1|1):WorkshopIntent|undefined;refresh():void;interact(direction?:-1|1):Promise<CraterReceipt>};
 type MoundControl={action(kind:MoundIntent['kind']):MoundIntent|undefined;refresh():void;interact(kind:MoundIntent['kind']):Promise<CraterReceipt>};
 type RubbingControl={frame(held:boolean):{aim:boolean;held:boolean;shown:number};release():void};
@@ -38,7 +38,8 @@ const stationLabels={bellows:'压动风箱',calibration:'转动校准盘',sortin
 const denied=(reason='unavailable'):CraterReceipt=>({accepted:false,reason});
 export function createAR30CraterPlay(leaves:CraterPlayLeaves,ctx:CraterPlayContext){
  let lastHeld:{authority:CraterPlayAuthority;frame:CraterAcceptedFrame;marker:string}|undefined;
- let active=false,disposed=false,session:string|undefined,autoSummit=false,requestPending=false;
+ let active=false,disposed=false,session:string|undefined,activeAuthority:CraterPlayAuthority|undefined,autoSummit=false,requestPending=false;
+ let nextSummitAttempt=0,scopeEpoch=0;
  let rendered:string|null=null;
  function local(){const p=ctx.localPose();return p&&finitePose(p)?p:undefined;}
  function frame(){
@@ -76,11 +77,11 @@ export function createAR30CraterPlay(leaves:CraterPlayLeaves,ctx:CraterPlayConte
   if(disposed)return;
   const p=local();if(!p)return;
   const f=frame(),q=requestPending?undefined:f?.frame.pose,s=f?.frame.session;
-  if(leaves.aimPaper(p))return {key:'paper',label:'长按拓印',mode:'hold',session:s,available:!!(q&&f?.frame.rubbing&&!f.frame.rubbing.complete&&Number.isFinite(f.frame.rubbing.progress)&&f.frame.rubbing.progress>=0&&f.frame.rubbing.progress<=1&&leaves.aimPaper(q))};
-  if(leaves.aimFlag(p))return {key:'flag',label:'扶正旧工旗',mode:'tap',session:s,available:!!(q&&mound.action('straighten-flag'))};
+  if(leaves.aimPaper(p))return {key:'paper',label:'长按拓印',mode:'hold',session:s,authority:f?.authority,available:!!(q&&f?.frame.rubbing&&!f.frame.rubbing.complete&&Number.isFinite(f.frame.rubbing.progress)&&f.frame.rubbing.progress>=0&&f.frame.rubbing.progress<=1&&leaves.aimPaper(q))};
+  if(leaves.aimFlag(p))return {key:'flag',label:'扶正旧工旗',mode:'tap',session:s,authority:f?.authority,available:!!(q&&mound.action('straighten-flag'))};
   const h=leaves.aimWorkshop(p);if(!h)return;
   const h2=q&&leaves.aimWorkshop(q);
-  return {key:keyFor(h),label:stationLabels[h.station]+(h.station==='calibration'?' · Q反转':''),mode:'tap',session:s,reverse:h.station==='calibration',available:!!(h2&&keyFor(h)===keyFor(h2)&&workshop.action())};
+  return {key:keyFor(h),label:stationLabels[h.station]+(h.station==='calibration'?' · Q反转':''),mode:'tap',session:s,authority:f?.authority,reverse:h.station==='calibration',available:!!(h2&&keyFor(h)===keyFor(h2)&&workshop.action())};
  }
  async function tap(key:string,direction:-1|1=1){
   const t=target();
@@ -93,7 +94,8 @@ export function createAR30CraterPlay(leaves:CraterPlayLeaves,ctx:CraterPlayConte
  function beginHold(key:string){
   const t=target();
   if(!t||t.key!==key||t.mode!=='hold'||!t.available)return false;
-  session=frame()?.frame.session;active=true;rubbing.frame(true);
+  const f=frame();if(!f)return false;
+  session=f.frame.session;activeAuthority=f.authority;active=true;rubbing.frame(true);
   if(!lastHeld){cancelHold();return false;}
   return true;
  }
@@ -101,7 +103,7 @@ export function createAR30CraterPlay(leaves:CraterPlayLeaves,ctx:CraterPlayConte
  function update(){
   if(disposed)return;
   const f=frame();
-  if(session!==f?.frame.session){cancelHold();session=f?.frame.session;autoSummit=false;}
+  if(session!==f?.frame.session||activeAuthority!==f?.authority){cancelHold();session=f?.frame.session;activeAuthority=f?.authority;autoSummit=false;nextSummitAttempt=0;scopeEpoch++;}
   const p=local(),q=f?.frame.pose;
   if(active&&(!q||!p||!leaves.aimPaper(p)||!leaves.aimPaper(q)||!f?.frame.rubbing||f.frame.rubbing.complete))cancelHold();
   rubbing.frame(active);
@@ -111,8 +113,12 @@ export function createAR30CraterPlay(leaves:CraterPlayLeaves,ctx:CraterPlayConte
   const key=f?JSON.stringify([f.frame.session,f.frame.revision,f.frame.receivedAt]):'';
   if(rendered!==key){workshop.refresh();mound.refresh();rendered=key;}
   const summit=!!(q&&p&&leaves.atSummit(p)&&leaves.atSummit(q));
-  if(!summit)autoSummit=false;
-  else if(!requestPending&&!autoSummit&&mound.action('reach-overlook')){autoSummit=true;void mound.interact('reach-overlook').catch(()=>{if(!disposed)ctx.notify('未收到受理回执');});}
+  if(!summit){if(autoSummit){scopeEpoch++;}autoSummit=false;nextSummitAttempt=0;}
+  else if(!requestPending&&!autoSummit&&ctx.now()>=nextSummitAttempt&&f?.frame.mound?.overlookKnown===false&&mound.action('reach-overlook')){
+   autoSummit=true;const epoch=scopeEpoch;
+   const retry=()=>{if(!disposed&&epoch===scopeEpoch){autoSummit=false;nextSummitAttempt=ctx.now()+2000;ctx.notify('未收到受理回执');}};
+   void mound.interact('reach-overlook').then(result=>{if(!result.accepted&&result.reason==='receipt-unavailable')retry();},retry);
+  }
  }
  function dispose(){cancelHold();disposed=true;}
  return {target,tap,beginHold,cancelHold,update,dispose};
@@ -121,29 +127,29 @@ export type CraterPlay=ReturnType<typeof createAR30CraterPlay>;
 /** A captured press belongs to one target for its lifetime. No retarget
  * on release, snow gathering fallback, key repeat, or touch ghost click. */
 export function createAR30PlayInput(play:()=>CraterPlay|undefined){
- let captured:{source:string;key:string;mode:Target['mode'];direction:-1|1;live:boolean;session?:string}|undefined;
+ let captured:{source:string;key:string;mode:Target['mode'];direction:-1|1;live:boolean;session?:string;authority?:CraterPlayAuthority;owner:CraterPlay}|undefined;
  function down(source:string,direction:-1|1=1){
   if(captured)return true;
   const p=play(),t=p?.target();
   if(!p||!t||(direction===-1&&!t.reverse))return false;
-  captured={source,key:t.key,mode:t.mode,direction,live:t.available,session:t.session};
+  captured={source,key:t.key,mode:t.mode,direction,live:t.available,session:t.session,authority:t.authority,owner:p};
   if(t.mode==='hold'&&t.available)captured.live=p.beginHold(t.key);
   return true;
  }
  function up(source:string){
   const c=captured;if(!c||c.source!==source)return false;
   captured=undefined;const p=play();
-  if(c.mode==='hold')p?.cancelHold();
-  else if(c.live&&p?.target()?.session===c.session)void p?.tap(c.key,c.direction);
+  if(c.mode==='hold')c.owner.cancelHold();
+  else if(c.live&&p===c.owner){const t=p.target();if(t?.session===c.session&&t?.authority===c.authority&&t?.key===c.key)void p.tap(c.key,c.direction);}
   return true;
  }
- function cancel(){if(captured){captured.live=false;play()?.cancelHold();}}
+ function cancel(){if(captured){captured.live=false;captured.owner.cancelHold();}}
  function clear(){cancel();captured=undefined;}
  function update(){
   const p=play();
   // Idle input has no captured target to invalidate. The display and
   // actual press each read a fresh target separately.
-  if(captured?.live){const t=p?.target();if(!t||t.key!==captured.key||t.session!==captured.session||!t.available){captured.live=false;p?.cancelHold();}}
+  if(captured?.live){const t=p?.target();if(p!==captured.owner||!t||t.key!==captured.key||t.session!==captured.session||t.authority!==captured.authority||!t.available){captured.live=false;captured.owner.cancelHold();}}
   p?.update();
  }
  return {down,up,cancel,clear,update,cancelSource(source:string){if(captured?.source===source)clear();},target:()=>play()?.target(),click(){
