@@ -1,0 +1,28 @@
+{
+  "status": "pending independent owner + total controller; not production approval",
+  "authorityProvider": null,
+  "files": [
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-completion.ts",
+      "baseBlob": "7dbc56ad538dbc0b3b9c9393b4022065cbd5e51e",
+      "filename": "town-b-r30-crater-completion.ts.txt",
+      "blob": "f0d7391d144f4387557ed8db4181d165975174bf",
+      "sha256": "a28144d04d291e62e4e8413f3f9f7544b0dee6c83afcd7de0c0669d9e3bde6d4"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-a-r30-surface-port.ts",
+      "baseBlob": "eef00dddcce39d87fdfa7661e53ed98a95ac2b34",
+      "filename": "town-a-r30-surface-port.ts.txt",
+      "blob": "f9047292dbe7db54476631dd9ec16ac57df65e0b",
+      "sha256": "5cb837bf8f192a48654ff5411c9d4d9f7a5ca682a45585bdd51fbb7192a3add0"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-a-r30-play-candidate.ts",
+      "baseBlob": null,
+      "filename": "town-a-r30-play-candidate.ts.txt",
+      "blob": "e101ff68ed6263aa08d05464eef29501971e523d",
+      "sha256": "ec89569ca551bab1cca22ef1e5bdd033c8c0f4c6bef7962edb61550b0f045919"
+    }
+  ],
+  "canonicalImports": true
+}

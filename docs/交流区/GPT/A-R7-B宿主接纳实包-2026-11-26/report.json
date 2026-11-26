@@ -1,0 +1,577 @@
+{
+  "a": "b2f28dc42edd6f19bee26f0ba504e284e88f5c65",
+  "b": "eac4b4e0f81e3c1b6ef2b127ede48b1d6051fb96",
+  "base": "53372f1aad067154a19e0042ea47148f8e56989c",
+  "files": [
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-east-historic-walkway.ts",
+      "blob": "fc083cd92806e811812056eb450a99bb684329f7"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/meteor-crater.ts",
+      "blob": "ad6a9e7c0f1c03b642bc68d036b464d6c6c2dd23"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/meteor-crater-surface.ts",
+      "blob": "37d636b3f751bf38aef1c56bc50500b93e922345"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/meteor-crater-interior-dressing.ts",
+      "blob": "b4591dcc4db9d394fa91f689592bd22d1b02916c"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/meteor-crater-floor-worklight-chain.ts",
+      "blob": "fabc8c0dd2e6c65159e019246890077e53a9cf22"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-relief.ts",
+      "blob": "bb0929da01056dee2c9665142dd20d29cd366678"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-ground-normals.ts",
+      "blob": "18dfa42f0925d946668bb9f628b1fd1e9daf0d36"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-workface-layout.ts",
+      "blob": "3715ede7aa7f53c1decca700d222bb8f9db3df52"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-mound-route.ts",
+      "blob": "6b74f71eb6c62a189a691e895faf9368265c6bd3"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-c2-crater-central-mound.ts",
+      "blob": "ad42fa1a7cdc4a61342bd176f3cac675df0a22e4"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-c2-crater-broken-circle.ts",
+      "blob": "2fa9b576bc25582de2dcafc20c6bb80fe5e85aa1"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-crater-midground-s5.ts",
+      "blob": "e67a396b857c174a4c5773e7ad4459090891f7a0"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-remnant-forms.ts",
+      "blob": "f6da057bd31f7bb6a317ebaca7c94d085705ffda"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-relic-view.ts",
+      "blob": "9f9f56bef7959e51544c03275fc209f4c0847481"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-broken-trestle.ts",
+      "blob": "d0555fad576cb6cef5ab8713521233c0b3ca4857"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-retire-legacy-terraces.ts",
+      "blob": "d264eabb9d2853dca3fbd40ad285b644603c1bac"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-settle-story-supports.ts",
+      "blob": "89939344138c0a919eca367b75da486df25fa346"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-workface.ts",
+      "blob": "4b5aa9c2d9b06bcce891752dc1816261ac3c5ddb"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-workstations.ts",
+      "blob": "394fbfe6667e40173a8f369c8b241b986d175ca5"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-workshop-controls.ts",
+      "blob": "ca6db32561f2f23c5a20100f54615bcd38eb4c38"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-physical-kit.ts",
+      "blob": "645a351750e6abe68a5efdf5b6a95c4c15ac43bc"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-route-markers.ts",
+      "blob": "54db1e54ed60f7cea4b1d6fad8112a7efc8be965"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-workshop-approaches.ts",
+      "blob": "23c372ca653c4c0ba29cee879eca8b71ddeba678"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-inscription-approach.ts",
+      "blob": "46ff05a339cf4ba7584ce76f868e815f7673942b"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-return-headframe.ts",
+      "blob": "5c8a81b4208702eef7e762e5f7d5756a8075fc8f"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-c2-crater-inscription.ts",
+      "blob": "ef9e1b47df7cb08570d5a96dc698ea3a4fae1935"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-c2-crater-molten-beads.ts",
+      "blob": "f996fbcae7f4b6fc2bbeec4f9f696a29f165c7ac"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-melt-columns.ts",
+      "blob": "fa1d20f8ac4d99d2c7c7a611ad9ec2e63f31b426"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-mound-planting.ts",
+      "blob": "473bd1e4b61eb6dbbb3cf9aedfde446ab7322210"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-mound-work-flag.ts",
+      "blob": "cb4e82068b29d18a4c03fae0a1438f70914d174c"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-historic-walkway-site.ts",
+      "blob": "d8459f3df6273e3af8f07ab60fff958e4c7ea2c0"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-inscription-rubbing.ts",
+      "blob": "31138e88e45805e2fc24c5475bf514172f8544e7"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-completion.ts",
+      "blob": "7dbc56ad538dbc0b3b9c9393b4022065cbd5e51e"
+    }
+  ],
+  "scope": "same-instance candidate, not mainline acceptance",
+  "stage": "done",
+  "success": true,
+  "surface": {
+    "retired": 128,
+    "settled": 32,
+    "apron": 59,
+    "vertices": 78500,
+    "triangles": 77110,
+    "initialColliders": 1372
+  },
+  "seam": {
+    "probes": 624,
+    "maxError": 1.0658141036401503e-13,
+    "overlaps": 0,
+    "inner": 500,
+    "outer": 512
+  },
+  "rail": {
+    "tracks": [
+      600,
+      90,
+      59
+    ],
+    "routes": [
+      "smelter-plant",
+      "cold-furnace",
+      "instrument-plant",
+      "water-tower",
+      "ore-yard",
+      "sorting-shed",
+      "sealed-storehouse",
+      "ruined-shed",
+      "salvage-pipes",
+      "gatehouse",
+      "western-clusters",
+      "eastern-cluster",
+      "western-shoulders",
+      "rest-west",
+      "rest-northwest",
+      "rest-north",
+      "assembly-registration",
+      "guard-firewood",
+      "guard-seat",
+      "shankou-station",
+      "kengkou-station",
+      "freight-shed",
+      "transfer-dock",
+      "inscription-access",
+      "ore-yard-dock"
+    ],
+    "inscription": [
+      {
+        "east": -55.44285714285714,
+        "north": 165.05714285714285,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -55.3,
+        "north": 166.155,
+        "height": 11.002305603027343
+      },
+      {
+        "east": -55.3,
+        "north": 166.825,
+        "height": 11.227305603027343
+      },
+      {
+        "east": -55.3,
+        "north": 167.495,
+        "height": 11.452305603027344
+      },
+      {
+        "east": -55.3,
+        "north": 168.165,
+        "height": 11.677305603027344
+      },
+      {
+        "east": -55.3,
+        "north": 171,
+        "height": 11.677305603027344
+      },
+      {
+        "east": -55.3,
+        "north": 173.18,
+        "height": 11.677305603027344
+      },
+      {
+        "east": -55.3,
+        "north": 173.835,
+        "height": 11.452305603027344
+      },
+      {
+        "east": -55.3,
+        "north": 174.505,
+        "height": 11.227305603027343
+      },
+      {
+        "east": -55.3,
+        "north": 175.175,
+        "height": 11.002305603027343
+      },
+      {
+        "east": -55.3,
+        "north": 175.845,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -55.3,
+        "north": 176.65,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -64.63075545125356,
+        "north": 183.25,
+        "height": 10.777305603027344
+      }
+    ]
+  },
+  "exactHost": {
+    "accepted": false,
+    "error": "Error: Obstructed inscription approach 0/1.7584227921485638/2.220477057756679e-14"
+  },
+  "bProposal": {
+    "status": "unaccepted owner-interface proposal",
+    "originalBlob": "7dbc56ad538dbc0b3b9c9393b4022065cbd5e51e",
+    "proposedSHA256": "a28144d04d291e62e4e8413f3f9f7544b0dee6c83afcd7de0c0669d9e3bde6d4"
+  },
+  "rimAccess": {
+    "points": [
+      {
+        "east": -40,
+        "north": 159,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -60.5,
+        "north": 142.5,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -66,
+        "north": 139.5,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -68.5,
+        "north": 137,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -75,
+        "north": 137,
+        "height": 11.227305603027345
+      },
+      {
+        "east": -75.5,
+        "north": 137.5,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -68.5,
+        "north": 157.5,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -67,
+        "north": 159,
+        "height": 10.777305603027346
+      }
+    ],
+    "length": 66.63395790804839
+  },
+  "assembly": {
+    "colliders": 1538,
+    "historic": {
+      "trailGap": 1.6129705794527638,
+      "trackGap": 32.02036775150266,
+      "minBody": 0.571620173892424,
+      "maxGrade": 0.447558999605004,
+      "samples": 83,
+      "railLines": 3
+    },
+    "approaches": [
+      {
+        "id": "bellows",
+        "routeId": "cold-furnace",
+        "points": [
+          {
+            "east": -165.75806451612902,
+            "north": 117.43548387096774,
+            "height": 10.777305603027344
+          },
+          {
+            "east": -165.5,
+            "north": 118.55,
+            "height": 10.777305603027344
+          },
+          {
+            "east": -165.5,
+            "north": 120.05,
+            "height": 10.777305603027344
+          },
+          {
+            "east": -164.5,
+            "north": 121.55,
+            "height": 10.777305603027344
+          },
+          {
+            "east": -162.5,
+            "north": 123.05,
+            "height": 10.777305603027344
+          },
+          {
+            "east": -160.5,
+            "north": 124.05,
+            "height": 10.777305603027344
+          }
+        ],
+        "length": 9.182846891607314,
+        "bodyGap": 0.4111782801652328,
+        "trackGap": 10.1439690353491,
+        "maxGrade": 4.448701202619113e-14,
+        "samples": 122
+      },
+      {
+        "id": "calibration",
+        "routeId": "instrument-plant",
+        "points": [
+          {
+            "east": -58.10574797133482,
+            "north": 138.35933570571623,
+            "height": 10.777305603027344
+          },
+          {
+            "east": -64.55,
+            "north": 137.5,
+            "height": 10.777305603027344
+          },
+          {
+            "east": -65.55,
+            "north": 139,
+            "height": 10.777305603027344
+          }
+        ],
+        "length": 8.304071052037827,
+        "bodyGap": 0.4645629793846514,
+        "trackGap": 4.48908877908204,
+        "maxGrade": 2.2662946209770974e-14,
+        "samples": 107
+      },
+      {
+        "id": "sorting",
+        "routeId": "ruined-shed",
+        "points": [
+          {
+            "east": -143.07393857023595,
+            "north": 100.6053747938497,
+            "height": 10.777305603027344
+          },
+          {
+            "east": -143.05,
+            "north": 100.5,
+            "height": 10.777305603027344
+          }
+        ],
+        "length": 0.10805971647107449,
+        "bodyGap": 1.075000000000017,
+        "trackGap": 12.927433012074186,
+        "maxGrade": 0,
+        "samples": 3
+      },
+      {
+        "id": "weighing",
+        "routeId": "transfer-dock",
+        "points": [
+          {
+            "east": -58.40909090909091,
+            "north": 151.63636363636363,
+            "height": 10.777305603027344
+          },
+          {
+            "east": -60,
+            "north": 151.8,
+            "height": 10.777305603027344
+          }
+        ],
+        "length": 1.5993025339320066,
+        "bodyGap": 0.9185450451665361,
+        "trackGap": 3.479545470393046,
+        "maxGrade": 2.2214143999796492e-14,
+        "samples": 21
+      },
+      {
+        "id": "turnout",
+        "routeId": "kengkou-station",
+        "points": [
+          {
+            "east": -37.211263643174355,
+            "north": 167.0529929669279,
+            "height": 10.777305603027344
+          },
+          {
+            "east": -37,
+            "north": 167.05,
+            "height": 10.777305603027344
+          }
+        ],
+        "length": 0.21128484275577528,
+        "bodyGap": 1.1500000000000057,
+        "trackGap": 7.060935299175185,
+        "maxGrade": 0,
+        "samples": 4
+      }
+    ],
+    "inscription": {
+      "points": [
+        {
+          "east": -55.44285714285714,
+          "north": 165.05714285714285,
+          "height": 10.777305603027344
+        },
+        {
+          "east": -55.3,
+          "north": 166.155,
+          "height": 11.002305603027343
+        },
+        {
+          "east": -55.3,
+          "north": 166.825,
+          "height": 11.227305603027343
+        },
+        {
+          "east": -55.3,
+          "north": 167.495,
+          "height": 11.452305603027344
+        },
+        {
+          "east": -55.3,
+          "north": 168.165,
+          "height": 11.677305603027344
+        },
+        {
+          "east": -55.3,
+          "north": 171,
+          "height": 11.677305603027344
+        },
+        {
+          "east": -55.3,
+          "north": 173.18,
+          "height": 11.677305603027344
+        },
+        {
+          "east": -55.3,
+          "north": 173.835,
+          "height": 11.452305603027344
+        },
+        {
+          "east": -55.3,
+          "north": 174.505,
+          "height": 11.227305603027343
+        },
+        {
+          "east": -55.3,
+          "north": 175.175,
+          "height": 11.002305603027343
+        },
+        {
+          "east": -55.3,
+          "north": 175.845,
+          "height": 10.777305603027344
+        },
+        {
+          "east": -55.3,
+          "north": 176.65,
+          "height": 10.777305603027344
+        },
+        {
+          "east": -64.63075545125356,
+          "north": 183.25,
+          "height": 10.777305603027344
+        }
+      ],
+      "length": 23.031154508489713,
+      "steps": 1334,
+      "maxStep": 0.22500000000000142,
+      "bodyGap": 0.2775375832974907,
+      "trackGap": 2.2000014204540896,
+      "routeId": "inscription-access"
+    },
+    "productionReady": false,
+    "mode": "host-candidate"
+  },
+  "playBindingSHA256": "2baed52b9aa2632d52b1f1cdc23e266851fc1936a86b69eee76f93a39f6e588b",
+  "play": {
+    "scope": "actual B model/input bridge, no accepted production authority",
+    "deniedTargets": [
+      "bellows:-",
+      "calibration:0",
+      "sorting:0",
+      "weighing:-",
+      "turnout:-",
+      "paper",
+      "flag"
+    ],
+    "mechanicsSynced": false,
+    "printed": 0,
+    "flagStraight": false
+  },
+  "portSHA256": "0ee8465f9da41cc9028a0bd759d17aca614c2018b9c9e0c8e6c5a93e7f48be1b",
+  "intake": {
+    "status": "pending independent owner + total controller; not production approval",
+    "authorityProvider": null,
+    "files": [
+      {
+        "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-completion.ts",
+        "baseBlob": "7dbc56ad538dbc0b3b9c9393b4022065cbd5e51e",
+        "filename": "town-b-r30-crater-completion.ts.txt",
+        "blob": "f0d7391d144f4387557ed8db4181d165975174bf",
+        "sha256": "a28144d04d291e62e4e8413f3f9f7544b0dee6c83afcd7de0c0669d9e3bde6d4"
+      },
+      {
+        "path": "tools/voxel-tavern/town-blockout/town-a-r30-surface-port.ts",
+        "baseBlob": "eef00dddcce39d87fdfa7661e53ed98a95ac2b34",
+        "filename": "town-a-r30-surface-port.ts.txt",
+        "blob": "f9047292dbe7db54476631dd9ec16ac57df65e0b",
+        "sha256": "5cb837bf8f192a48654ff5411c9d4d9f7a5ca682a45585bdd51fbb7192a3add0"
+      },
+      {
+        "path": "tools/voxel-tavern/town-blockout/town-a-r30-play-candidate.ts",
+        "baseBlob": null,
+        "filename": "town-a-r30-play-candidate.ts.txt",
+        "blob": "e101ff68ed6263aa08d05464eef29501971e523d",
+        "sha256": "ec89569ca551bab1cca22ef1e5bdd033c8c0f4c6bef7962edb61550b0f045919"
+      }
+    ],
+    "canonicalImports": true
+  }
+}

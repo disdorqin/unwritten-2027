@@ -1,0 +1,57 @@
+{
+  "old": "b2f28dc42edd6f19bee26f0ba504e284e88f5c65",
+  "source": "4ce1b80786fd264a059b0cc004e123f73ae6847b",
+  "scope": "same process paired terrain construction; bit exact; timing sensitive to concurrent local load",
+  "samples": [
+    {
+      "relief": true,
+      "pairs": [
+        {
+          "beforeMs": 4653.906499999999,
+          "afterMs": 3682.8720999999987,
+          "digest": "6fbbfc4cf1332c85fca640805c49e3f9415d0a43cbaceac93cbb64dfc7eab55c",
+          "cells": 513441
+        },
+        {
+          "beforeMs": 4762.517500000002,
+          "afterMs": 3707.6335000000017,
+          "digest": "6fbbfc4cf1332c85fca640805c49e3f9415d0a43cbaceac93cbb64dfc7eab55c",
+          "cells": 513441
+        },
+        {
+          "beforeMs": 4499.1633,
+          "afterMs": 3624.9244,
+          "digest": "6fbbfc4cf1332c85fca640805c49e3f9415d0a43cbaceac93cbb64dfc7eab55c",
+          "cells": 513441
+        }
+      ],
+      "medianBefore": 4653.906499999999,
+      "medianAfter": 3682.8720999999987
+    },
+    {
+      "relief": false,
+      "pairs": [
+        {
+          "beforeMs": 4176.5797999999995,
+          "afterMs": 2794.877999999997,
+          "digest": "301226b70d79e51ef152f79be6ac418ddf36a0f11c7a8768b78225d53c6b3602",
+          "cells": 513441
+        },
+        {
+          "beforeMs": 3798.5368000000017,
+          "afterMs": 2875.7929000000004,
+          "digest": "301226b70d79e51ef152f79be6ac418ddf36a0f11c7a8768b78225d53c6b3602",
+          "cells": 513441
+        },
+        {
+          "beforeMs": 3506.5337999999974,
+          "afterMs": 2637.9665999999997,
+          "digest": "301226b70d79e51ef152f79be6ac418ddf36a0f11c7a8768b78225d53c6b3602",
+          "cells": 513441
+        }
+      ],
+      "medianBefore": 3798.5368000000017,
+      "medianAfter": 2794.877999999997
+    }
+  ]
+}

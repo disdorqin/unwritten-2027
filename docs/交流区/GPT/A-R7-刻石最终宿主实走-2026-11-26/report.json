@@ -1,0 +1,1166 @@
+{
+  "a": "4ce1b80786fd264a059b0cc004e123f73ae6847b",
+  "b": "eac4b4e0f81e3c1b6ef2b127ede48b1d6051fb96",
+  "base": "53372f1aad067154a19e0042ea47148f8e56989c",
+  "files": [
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-east-historic-walkway.ts",
+      "blob": "fc083cd92806e811812056eb450a99bb684329f7"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/meteor-crater.ts",
+      "blob": "ad6a9e7c0f1c03b642bc68d036b464d6c6c2dd23"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/meteor-crater-surface.ts",
+      "blob": "37d636b3f751bf38aef1c56bc50500b93e922345"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/meteor-crater-interior-dressing.ts",
+      "blob": "b4591dcc4db9d394fa91f689592bd22d1b02916c"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/meteor-crater-floor-worklight-chain.ts",
+      "blob": "fabc8c0dd2e6c65159e019246890077e53a9cf22"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-relief.ts",
+      "blob": "bb0929da01056dee2c9665142dd20d29cd366678"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-ground-normals.ts",
+      "blob": "18dfa42f0925d946668bb9f628b1fd1e9daf0d36"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-workface-layout.ts",
+      "blob": "3715ede7aa7f53c1decca700d222bb8f9db3df52"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-mound-route.ts",
+      "blob": "6b74f71eb6c62a189a691e895faf9368265c6bd3"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-c2-crater-central-mound.ts",
+      "blob": "ad42fa1a7cdc4a61342bd176f3cac675df0a22e4"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-c2-crater-broken-circle.ts",
+      "blob": "2fa9b576bc25582de2dcafc20c6bb80fe5e85aa1"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-crater-midground-s5.ts",
+      "blob": "e67a396b857c174a4c5773e7ad4459090891f7a0"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-remnant-forms.ts",
+      "blob": "f6da057bd31f7bb6a317ebaca7c94d085705ffda"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-relic-view.ts",
+      "blob": "9f9f56bef7959e51544c03275fc209f4c0847481"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-broken-trestle.ts",
+      "blob": "d0555fad576cb6cef5ab8713521233c0b3ca4857"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-retire-legacy-terraces.ts",
+      "blob": "d264eabb9d2853dca3fbd40ad285b644603c1bac"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-settle-story-supports.ts",
+      "blob": "89939344138c0a919eca367b75da486df25fa346"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-workface.ts",
+      "blob": "4b5aa9c2d9b06bcce891752dc1816261ac3c5ddb"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-workstations.ts",
+      "blob": "394fbfe6667e40173a8f369c8b241b986d175ca5"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-workshop-controls.ts",
+      "blob": "ca6db32561f2f23c5a20100f54615bcd38eb4c38"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-physical-kit.ts",
+      "blob": "645a351750e6abe68a5efdf5b6a95c4c15ac43bc"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-route-markers.ts",
+      "blob": "54db1e54ed60f7cea4b1d6fad8112a7efc8be965"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-workshop-approaches.ts",
+      "blob": "23c372ca653c4c0ba29cee879eca8b71ddeba678"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-inscription-approach.ts",
+      "blob": "46ff05a339cf4ba7584ce76f868e815f7673942b"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-return-headframe.ts",
+      "blob": "5c8a81b4208702eef7e762e5f7d5756a8075fc8f"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-c2-crater-inscription.ts",
+      "blob": "ef9e1b47df7cb08570d5a96dc698ea3a4fae1935"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-c2-crater-molten-beads.ts",
+      "blob": "f996fbcae7f4b6fc2bbeec4f9f696a29f165c7ac"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-melt-columns.ts",
+      "blob": "fa1d20f8ac4d99d2c7c7a611ad9ec2e63f31b426"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-mound-planting.ts",
+      "blob": "473bd1e4b61eb6dbbb3cf9aedfde446ab7322210"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-mound-work-flag.ts",
+      "blob": "cb4e82068b29d18a4c03fae0a1438f70914d174c"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-historic-walkway-site.ts",
+      "blob": "d8459f3df6273e3af8f07ab60fff958e4c7ea2c0"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-inscription-rubbing.ts",
+      "blob": "31138e88e45805e2fc24c5475bf514172f8544e7"
+    },
+    {
+      "path": "tools/voxel-tavern/town-blockout/town-b-r30-crater-completion.ts",
+      "blob": "7dbc56ad538dbc0b3b9c9393b4022065cbd5e51e"
+    }
+  ],
+  "scope": "same-instance candidate, not mainline acceptance",
+  "stage": "done",
+  "success": true,
+  "surface": {
+    "retired": 128,
+    "settled": 32,
+    "apron": 59,
+    "vertices": 78500,
+    "triangles": 77110,
+    "initialColliders": 1372
+  },
+  "seam": {
+    "probes": 624,
+    "maxError": 1.0658141036401503e-13,
+    "overlaps": 0,
+    "inner": 500,
+    "outer": 512
+  },
+  "rail": {
+    "tracks": [
+      600,
+      90,
+      59
+    ],
+    "routes": [
+      "smelter-plant",
+      "cold-furnace",
+      "instrument-plant",
+      "water-tower",
+      "ore-yard",
+      "sorting-shed",
+      "sealed-storehouse",
+      "ruined-shed",
+      "salvage-pipes",
+      "gatehouse",
+      "western-clusters",
+      "eastern-cluster",
+      "western-shoulders",
+      "rest-west",
+      "rest-northwest",
+      "rest-north",
+      "assembly-registration",
+      "guard-firewood",
+      "guard-seat",
+      "shankou-station",
+      "kengkou-station",
+      "freight-shed",
+      "transfer-dock",
+      "inscription-access",
+      "ore-yard-dock"
+    ],
+    "inscription": [
+      {
+        "east": -55.44285714285714,
+        "north": 165.05714285714285,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -55.3,
+        "north": 166.155,
+        "height": 11.002305603027343
+      },
+      {
+        "east": -55.3,
+        "north": 166.825,
+        "height": 11.227305603027343
+      },
+      {
+        "east": -55.3,
+        "north": 167.495,
+        "height": 11.452305603027344
+      },
+      {
+        "east": -55.3,
+        "north": 168.165,
+        "height": 11.677305603027344
+      },
+      {
+        "east": -55.3,
+        "north": 171,
+        "height": 11.677305603027344
+      },
+      {
+        "east": -55.3,
+        "north": 173.18,
+        "height": 11.677305603027344
+      },
+      {
+        "east": -55.3,
+        "north": 173.835,
+        "height": 11.452305603027344
+      },
+      {
+        "east": -55.3,
+        "north": 174.505,
+        "height": 11.227305603027343
+      },
+      {
+        "east": -55.3,
+        "north": 175.175,
+        "height": 11.002305603027343
+      },
+      {
+        "east": -55.3,
+        "north": 175.845,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -55.3,
+        "north": 176.65,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -64.63075545125356,
+        "north": 183.25,
+        "height": 10.777305603027344
+      }
+    ]
+  },
+  "exactHost": {
+    "accepted": false,
+    "error": "Error: Obstructed inscription approach 0/1.7584227921485638/2.220477057756679e-14"
+  },
+  "bProposal": {
+    "status": "unaccepted owner-interface proposal",
+    "originalBlob": "7dbc56ad538dbc0b3b9c9393b4022065cbd5e51e",
+    "proposedSHA256": "a28144d04d291e62e4e8413f3f9f7544b0dee6c83afcd7de0c0669d9e3bde6d4"
+  },
+  "rimAccess": {
+    "points": [
+      {
+        "east": -40,
+        "north": 159,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -60.5,
+        "north": 142.5,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -66,
+        "north": 139.5,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -68.5,
+        "north": 137,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -75,
+        "north": 137,
+        "height": 11.227305603027345
+      },
+      {
+        "east": -75.5,
+        "north": 137.5,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -68.5,
+        "north": 157.5,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -67,
+        "north": 159,
+        "height": 10.777305603027346
+      }
+    ],
+    "length": 66.63395790804839
+  },
+  "assembly": {
+    "colliders": 1538,
+    "historic": {
+      "trailGap": 1.6129705794527638,
+      "trackGap": 32.02036775150266,
+      "minBody": 0.571620173892424,
+      "maxGrade": 0.447558999605004,
+      "samples": 83,
+      "railLines": 3
+    },
+    "approaches": [
+      {
+        "id": "bellows",
+        "routeId": "cold-furnace",
+        "points": [
+          {
+            "east": -165.75806451612902,
+            "north": 117.43548387096774,
+            "height": 10.777305603027344
+          },
+          {
+            "east": -165.5,
+            "north": 118.55,
+            "height": 10.777305603027344
+          },
+          {
+            "east": -165.5,
+            "north": 120.05,
+            "height": 10.777305603027344
+          },
+          {
+            "east": -164.5,
+            "north": 121.55,
+            "height": 10.777305603027344
+          },
+          {
+            "east": -162.5,
+            "north": 123.05,
+            "height": 10.777305603027344
+          },
+          {
+            "east": -160.5,
+            "north": 124.05,
+            "height": 10.777305603027344
+          }
+        ],
+        "length": 9.182846891607314,
+        "bodyGap": 0.4111782801652328,
+        "trackGap": 10.1439690353491,
+        "maxGrade": 4.448701202619113e-14,
+        "samples": 122
+      },
+      {
+        "id": "calibration",
+        "routeId": "instrument-plant",
+        "points": [
+          {
+            "east": -58.10574797133482,
+            "north": 138.35933570571623,
+            "height": 10.777305603027344
+          },
+          {
+            "east": -64.55,
+            "north": 137.5,
+            "height": 10.777305603027344
+          },
+          {
+            "east": -65.55,
+            "north": 139,
+            "height": 10.777305603027344
+          }
+        ],
+        "length": 8.304071052037827,
+        "bodyGap": 0.4645629793846514,
+        "trackGap": 4.48908877908204,
+        "maxGrade": 2.2662946209770974e-14,
+        "samples": 107
+      },
+      {
+        "id": "sorting",
+        "routeId": "ruined-shed",
+        "points": [
+          {
+            "east": -143.07393857023595,
+            "north": 100.6053747938497,
+            "height": 10.777305603027344
+          },
+          {
+            "east": -143.05,
+            "north": 100.5,
+            "height": 10.777305603027344
+          }
+        ],
+        "length": 0.10805971647107449,
+        "bodyGap": 1.075000000000017,
+        "trackGap": 12.927433012074186,
+        "maxGrade": 0,
+        "samples": 3
+      },
+      {
+        "id": "weighing",
+        "routeId": "transfer-dock",
+        "points": [
+          {
+            "east": -58.40909090909091,
+            "north": 151.63636363636363,
+            "height": 10.777305603027344
+          },
+          {
+            "east": -60,
+            "north": 151.8,
+            "height": 10.777305603027344
+          }
+        ],
+        "length": 1.5993025339320066,
+        "bodyGap": 0.9185450451665361,
+        "trackGap": 3.479545470393046,
+        "maxGrade": 2.2214143999796492e-14,
+        "samples": 21
+      },
+      {
+        "id": "turnout",
+        "routeId": "kengkou-station",
+        "points": [
+          {
+            "east": -37.211263643174355,
+            "north": 167.0529929669279,
+            "height": 10.777305603027344
+          },
+          {
+            "east": -37,
+            "north": 167.05,
+            "height": 10.777305603027344
+          }
+        ],
+        "length": 0.21128484275577528,
+        "bodyGap": 1.1500000000000057,
+        "trackGap": 7.060935299175185,
+        "maxGrade": 0,
+        "samples": 4
+      }
+    ],
+    "inscription": {
+      "points": [
+        {
+          "east": -55.44285714285714,
+          "north": 165.05714285714285,
+          "height": 10.777305603027344
+        },
+        {
+          "east": -55.3,
+          "north": 166.155,
+          "height": 11.002305603027343
+        },
+        {
+          "east": -55.3,
+          "north": 166.825,
+          "height": 11.227305603027343
+        },
+        {
+          "east": -55.3,
+          "north": 167.495,
+          "height": 11.452305603027344
+        },
+        {
+          "east": -55.3,
+          "north": 168.165,
+          "height": 11.677305603027344
+        },
+        {
+          "east": -55.3,
+          "north": 171,
+          "height": 11.677305603027344
+        },
+        {
+          "east": -55.3,
+          "north": 173.18,
+          "height": 11.677305603027344
+        },
+        {
+          "east": -55.3,
+          "north": 173.835,
+          "height": 11.452305603027344
+        },
+        {
+          "east": -55.3,
+          "north": 174.505,
+          "height": 11.227305603027343
+        },
+        {
+          "east": -55.3,
+          "north": 175.175,
+          "height": 11.002305603027343
+        },
+        {
+          "east": -55.3,
+          "north": 175.845,
+          "height": 10.777305603027344
+        },
+        {
+          "east": -55.3,
+          "north": 176.65,
+          "height": 10.777305603027344
+        },
+        {
+          "east": -64.63075545125356,
+          "north": 183.25,
+          "height": 10.777305603027344
+        }
+      ],
+      "length": 23.031154508489713,
+      "steps": 1334,
+      "maxStep": 0.22500000000000142,
+      "bodyGap": 0.2775375832974907,
+      "trackGap": 2.2000014204540896,
+      "routeId": "inscription-access"
+    },
+    "productionReady": false,
+    "mode": "host-candidate"
+  },
+  "playBindingSHA256": "2baed52b9aa2632d52b1f1cdc23e266851fc1936a86b69eee76f93a39f6e588b",
+  "play": {
+    "scope": "actual B model/input bridge, no accepted production authority",
+    "deniedTargets": [
+      "bellows:-",
+      "calibration:0",
+      "sorting:0",
+      "weighing:-",
+      "turnout:-",
+      "paper",
+      "flag"
+    ],
+    "mechanicsSynced": false,
+    "printed": 0,
+    "flagStraight": false
+  },
+  "portSHA256": "0ee8465f9da41cc9028a0bd759d17aca614c2018b9c9e0c8e6c5a93e7f48be1b",
+  "browserRoute": {
+    "points": [
+      {
+        "east": -71.53351673578946,
+        "north": 159,
+        "height": 10.777305603027344,
+        "t": 0
+      },
+      {
+        "east": -75.54586316164215,
+        "north": 152.97229608672274,
+        "height": 10.567303999632532,
+        "t": 0.006
+      },
+      {
+        "east": -80.29873239470271,
+        "north": 147.54621847486465,
+        "height": 10.357304459736598,
+        "t": 0.012
+      },
+      {
+        "east": -85.70387938553245,
+        "north": 142.8114587737631,
+        "height": 10.147304644081348,
+        "t": 0.018000000000000002
+      },
+      {
+        "east": -91.66237860782385,
+        "north": 138.84499145451622,
+        "height": 9.937303919854347,
+        "t": 0.024
+      },
+      {
+        "east": -98.06643005431863,
+        "north": 135.70982847019192,
+        "height": 9.72730543855903,
+        "t": 0.03
+      },
+      {
+        "east": -104.80130655462308,
+        "north": 133.45402714514492,
+        "height": 9.517304076928138,
+        "t": 0.036000000000000004
+      },
+      {
+        "east": -111.74740728800154,
+        "north": 132.1099667845645,
+        "height": 9.307304382596294,
+        "t": 0.042
+      },
+      {
+        "east": -118.78238076547522,
+        "north": 131.69390463183674,
+        "height": 9.09730466943579,
+        "t": 0.048
+      },
+      {
+        "east": -125.78327961310188,
+        "north": 132.20581682688254,
+        "height": 8.887303892807033,
+        "t": 0.054
+      },
+      {
+        "east": -132.62870921393255,
+        "north": 133.62952498185427,
+        "height": 8.677305277147045,
+        "t": 0.06
+      },
+      {
+        "east": -139.20093265976712,
+        "north": 135.93310398043212,
+        "height": 8.467304035752505,
+        "t": 0.066
+      },
+      {
+        "east": -145.38789551362626,
+        "north": 139.0695617113314,
+        "height": 8.257304185844298,
+        "t": 0.07200000000000001
+      },
+      {
+        "east": -151.08513556653148,
+        "north": 142.97777675074343,
+        "height": 8.047304814751566,
+        "t": 0.078
+      },
+      {
+        "east": -156.19754505346413,
+        "north": 147.58367559336656,
+        "height": 7.83730389181523,
+        "t": 0.084
+      },
+      {
+        "east": -160.6409556286988,
+        "north": 152.80162697299542,
+        "height": 7.627305043655479,
+        "t": 0.09
+      },
+      {
+        "east": -164.3435197360847,
+        "north": 158.53602718004217,
+        "height": 7.417304044601192,
+        "t": 0.096
+      },
+      {
+        "east": -168.02901306134265,
+        "north": 166.80484942757067,
+        "height": 7.137304480776313,
+        "t": 0.10400000000000001
+      },
+      {
+        "east": -170.19706409378864,
+        "north": 175.5437239695494,
+        "height": 6.857305411512531,
+        "t": 0.112
+      },
+      {
+        "east": -170.79732013310482,
+        "north": 184.47820761325707,
+        "height": 6.577305002599438,
+        "t": 0.12
+      },
+      {
+        "east": -169.8283885516496,
+        "north": 193.33079193989576,
+        "height": 6.297304296211411,
+        "t": 0.128
+      },
+      {
+        "east": -167.33735071153535,
+        "north": 201.82952250104273,
+        "height": 6.017303842339925,
+        "t": 0.136
+      },
+      {
+        "east": -163.4177784656635,
+        "north": 209.71635315143732,
+        "height": 5.737303684761556,
+        "t": 0.14400000000000002
+      },
+      {
+        "east": -158.20633083884616,
+        "north": 216.75497888257263,
+        "height": 5.457303866385977,
+        "t": 0.152
+      },
+      {
+        "east": -151.87805184134757,
+        "north": 222.7379094651566,
+        "height": 5.1773043299431825,
+        "t": 0.16
+      },
+      {
+        "east": -144.64052949896492,
+        "north": 227.49257236283347,
+        "height": 4.8973051012874915,
+        "t": 0.168
+      },
+      {
+        "east": -136.727109912897,
+        "north": 230.8862658533233,
+        "height": 4.6173048672910575,
+        "t": 0.176
+      },
+      {
+        "east": -128.38938749190805,
+        "north": 232.82982100646643,
+        "height": 4.337304093352456,
+        "t": 0.184
+      },
+      {
+        "east": -119.88921264189099,
+        "north": 233.2798728888269,
+        "height": 4.057303918290013,
+        "t": 0.192
+      },
+      {
+        "east": -111.49047060004892,
+        "north": 232.2396857461115,
+        "height": 3.7773056152700475,
+        "t": 0.2
+      },
+      {
+        "east": -103.45088945668687,
+        "north": 229.7585225429214,
+        "height": 3.4973037265775186,
+        "t": 0.20800000000000002
+      },
+      {
+        "east": -96.014131666214,
+        "north": 225.92959467517704,
+        "height": 3.217304498523032,
+        "t": 0.216
+      },
+      {
+        "east": -89.40241171357604,
+        "north": 220.8866714958979,
+        "height": 2.937305142106754,
+        "t": 0.224
+      },
+      {
+        "east": -83.80986352120496,
+        "north": 214.7994701571385,
+        "height": 2.657305239868961,
+        "t": 0.232
+      },
+      {
+        "east": -79.39685533134809,
+        "north": 207.86798292409117,
+        "height": 2.3773043106229697,
+        "t": 0.24
+      },
+      {
+        "east": -76.28541806086118,
+        "north": 200.31593046100426,
+        "height": 2.09730369972284,
+        "t": 0.248
+      },
+      {
+        "east": -74.55591655680924,
+        "north": 192.38355470002864,
+        "height": 1.817303400880185,
+        "t": 0.256
+      },
+      {
+        "east": -74.24505297818212,
+        "north": 184.3199830659172,
+        "height": 1.5373034249961073,
+        "t": 0.264
+      },
+      {
+        "east": -75.34524898941382,
+        "north": 176.3754065497235,
+        "height": 1.2573037614304656,
+        "t": 0.272
+      },
+      {
+        "east": -77.80540993213002,
+        "north": 168.79331714987893,
+        "height": 0.9773052578015466,
+        "t": 0.28
+      },
+      {
+        "east": -81.53303101557631,
+        "north": 161.8030455199096,
+        "height": 0.6973056223624603,
+        "t": 0.28800000000000003
+      },
+      {
+        "east": -86.3975641791293,
+        "north": 155.61282751089743,
+        "height": 0.41730465040809683,
+        "t": 0.296
+      },
+      {
+        "east": -92.2349259085173,
+        "north": 150.40360913773702,
+        "height": 0.1373039857622853,
+        "t": 0.304
+      },
+      {
+        "east": -98.85299209858019,
+        "north": 146.32377401015856,
+        "height": -0.1426963951829432,
+        "t": 0.312
+      },
+      {
+        "east": -106.03789707311654,
+        "north": 143.48494632233854,
+        "height": -0.4226964271598934,
+        "t": 0.32
+      },
+      {
+        "east": -113.56093094534316,
+        "north": 141.95898712031328,
+        "height": -0.7026961128559357,
+        "t": 0.328
+      },
+      {
+        "east": -121.18581327991994,
+        "north": 141.77626292342177,
+        "height": -0.9826954597217359,
+        "t": 0.336
+      },
+      {
+        "east": -128.67611193074254,
+        "north": 142.9252251133149,
+        "height": -1.2626948262294118,
+        "t": 0.34400000000000003
+      },
+      {
+        "east": -135.80257418019724,
+        "north": 145.35329711969274,
+        "height": -1.5426958282921213,
+        "t": 0.352
+      },
+      {
+        "east": -142.35014286489945,
+        "north": 148.96902563184582,
+        "height": -1.8226964343525598,
+        "t": 0.36
+      },
+      {
+        "east": -148.12444278043432,
+        "north": 153.64541312199958,
+        "height": -2.102696763998651,
+        "t": 0.368
+      },
+      {
+        "east": -152.95754183508444,
+        "north": 159.2243130801785,
+        "height": -2.382696682427582,
+        "t": 0.376
+      },
+      {
+        "east": -156.71281649074288,
+        "north": 165.52173762069526,
+        "height": -2.6626960191239597,
+        "t": 0.384
+      },
+      {
+        "east": -159.28878113158387,
+        "north": 172.33390047431732,
+        "height": -2.9426953662964284,
+        "t": 0.392
+      },
+      {
+        "east": -160.6217751326459,
+        "north": 179.44379760333078,
+        "height": -3.222694396497616,
+        "t": 0.4
+      },
+      {
+        "east": -160.6874384413175,
+        "north": 186.6281133510897,
+        "height": -3.5026956201511723,
+        "t": 0.40800000000000003
+      },
+      {
+        "east": -159.50094523646098,
+        "north": 193.66423253532074,
+        "height": -3.782696473733054,
+        "t": 0.41600000000000004
+      },
+      {
+        "east": -157.1160044545182,
+        "north": 200.33713836842404,
+        "height": -4.0626965513323,
+        "t": 0.424
+      },
+      {
+        "east": -153.62267443119333,
+        "north": 206.44598246977688,
+        "height": -4.342696553788157,
+        "t": 0.432
+      },
+      {
+        "east": -149.14407540183655,
+        "north": 211.8101262393907,
+        "height": -4.62269618227357,
+        "t": 0.44
+      },
+      {
+        "east": -143.83211701039232,
+        "north": 216.2744719987879,
+        "height": -4.902695431653633,
+        "t": 0.448
+      },
+      {
+        "east": -137.86238728348926,
+        "north": 219.71392689591082,
+        "height": -5.182694318248446,
+        "t": 0.456
+      },
+      {
+        "east": -131.42837386218793,
+        "north": 222.03687177484161,
+        "height": -5.4626951383921565,
+        "t": 0.464
+      },
+      {
+        "east": -124.73520694567223,
+        "north": 223.18754005145735,
+        "height": -5.742696910235164,
+        "t": 0.47200000000000003
+      },
+      {
+        "east": -117.99312587291271,
+        "north": 223.14724703354133,
+        "height": -6.022696397739878,
+        "t": 0.48
+      },
+      {
+        "east": -111.41087723584677,
+        "north": 221.93444693158818,
+        "height": -6.3026974126750375,
+        "t": 0.488
+      },
+      {
+        "east": -105.18925177583706,
+        "north": 219.60363184754533,
+        "height": -6.582696110302081,
+        "t": 0.496
+      },
+      {
+        "east": -99.51496016896441,
+        "north": 216.2431231332734,
+        "height": -6.862695985421404,
+        "t": 0.504
+      },
+      {
+        "east": -94.55503446405245,
+        "north": 211.9718395530309,
+        "height": -7.142694242304444,
+        "t": 0.512
+      },
+      {
+        "east": -90.45192290097287,
+        "north": 206.9351576185344,
+        "height": -7.422695747763111,
+        "t": 0.52
+      },
+      {
+        "east": -87.31942178013652,
+        "north": 201.30000635629887,
+        "height": -7.702696156098693,
+        "t": 0.528
+      },
+      {
+        "east": -85.23955980163849,
+        "north": 195.24936081988204,
+        "height": -7.982697179448358,
+        "t": 0.536
+      },
+      {
+        "east": -84.89047795988607,
+        "north": 193.6942717989924,
+        "height": -8.052695566616507,
+        "t": 0.538
+      },
+      {
+        "east": -85.96881634131181,
+        "north": 193.47704764024357,
+        "height": -8.005375138433664
+      },
+      {
+        "east": -87.06903120936144,
+        "north": 190.82089398427362,
+        "yaw": 3.5342917352885173,
+        "height": -7.630885774996983
+      }
+    ],
+    "approach": [
+      {
+        "east": -40,
+        "north": 159,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -60.5,
+        "north": 142.5,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -66,
+        "north": 139.5,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -68.5,
+        "north": 137,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -75,
+        "north": 137,
+        "height": 11.227305603027345
+      },
+      {
+        "east": -75.5,
+        "north": 137.5,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -68.5,
+        "north": 157.5,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -67,
+        "north": 159,
+        "height": 10.777305603027346
+      }
+    ],
+    "trailKnots": 73,
+    "chordChecks": 8622,
+    "chordRejected": 0,
+    "historic": [
+      {
+        "east": -84.89047795988607,
+        "north": 193.6942717989924,
+        "height": -8.052695566616507
+      },
+      {
+        "east": -85.96881634131181,
+        "north": 193.47704764024357,
+        "height": -8.005375138433664
+      },
+      {
+        "east": -87.06903120936144,
+        "north": 190.82089398427362,
+        "yaw": 3.5342917352885173,
+        "height": -7.630885774996983
+      }
+    ],
+    "mode": "unaccepted B narrow host API proposal + actual A support audit",
+    "inscriptionPath": [
+      {
+        "east": -57.9,
+        "north": 146,
+        "height": 11.227305603027345
+      },
+      {
+        "east": -58.7,
+        "north": 148,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -58.3,
+        "north": 153,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -57.8,
+        "north": 159,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -56.3,
+        "north": 163,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -55.44285714285714,
+        "north": 165.05714285714285,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -55.3,
+        "north": 166.155,
+        "height": 11.002305603027343
+      },
+      {
+        "east": -55.3,
+        "north": 166.825,
+        "height": 11.227305603027343
+      },
+      {
+        "east": -55.3,
+        "north": 167.495,
+        "height": 11.452305603027344
+      },
+      {
+        "east": -55.3,
+        "north": 168.165,
+        "height": 11.677305603027344
+      },
+      {
+        "east": -55.3,
+        "north": 171,
+        "height": 11.677305603027344
+      },
+      {
+        "east": -55.3,
+        "north": 173.18,
+        "height": 11.677305603027344
+      },
+      {
+        "east": -55.3,
+        "north": 173.835,
+        "height": 11.452305603027344
+      },
+      {
+        "east": -55.3,
+        "north": 174.505,
+        "height": 11.227305603027343
+      },
+      {
+        "east": -55.3,
+        "north": 175.175,
+        "height": 11.002305603027343
+      },
+      {
+        "east": -55.3,
+        "north": 175.845,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -55.3,
+        "north": 176.65,
+        "height": 10.777305603027344
+      },
+      {
+        "east": -64.63075545125356,
+        "north": 183.25,
+        "height": 10.777305603027344
+      }
+    ],
+    "paper": {
+      "east": -63.38075545125356,
+      "north": 183.035,
+      "height": 11.621305603027343,
+      "eastWest": 0.42,
+      "northSouth": 0.34
+    }
+  },
+  "browserExit": 0
+}

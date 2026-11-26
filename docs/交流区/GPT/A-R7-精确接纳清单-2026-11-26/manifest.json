@@ -1,6 +1,6 @@
 {
   "base": "f83805571fce5354e83463dabc261aabc364f792",
-  "source": "589dcbde3b11264bd1067f2f3d93eaee725afae8",
+  "source": "3ef2aa3b6c23daac0a6d2a3a1fce2f4006edbd9e",
   "integration": "479e285538df33849d8ba97ed040e133ec659ee5",
   "scope": "R7 exact blob intake; no branch merge or service approval",
   "conflicts": [],
@@ -149,7 +149,7 @@
           "path": "tools/voxel-tavern/town-blockout/terrain.ts",
           "base": "8327a8d20f78d7a5b13b5a9d3d403dca5c285e09",
           "integration": "8327a8d20f78d7a5b13b5a9d3d403dca5c285e09",
-          "candidate": "141e1a8e3ca56411b3edcde29f40631cbc1bb0ae"
+          "candidate": "14793abe2e07652a3532c999a7244bb7581c116b"
         },
         {
           "path": "tools/voxel-tavern/town-blockout/town-a-r30-north-connector.ts",
@@ -207,7 +207,7 @@
           "path": "tests/town-blockout-a-r30-crater-play.test.ts",
           "base": null,
           "integration": null,
-          "candidate": "9f82f9899f3b395b9d144edca6270db7149f69dd"
+          "candidate": "a46715d1cbb1b6c36b3255ae7806cda4c8e37a43"
         },
         {
           "path": "tests/town-blockout-a-r30-landing-recovery.test.ts",
@@ -231,7 +231,7 @@
           "path": "tools/voxel-tavern/town-blockout/town-a-r30-crater-play.ts",
           "base": null,
           "integration": null,
-          "candidate": "3c71f9f7e821209910a55f6be545af6499c7a1ca"
+          "candidate": "2465ff10be4f785690019f890af3454af5733413"
         },
         {
           "path": "tools/voxel-tavern/town-blockout/town-a-r30-landing-recovery.ts",
@@ -313,7 +313,7 @@
           "path": "tools/verify-a-r30-joint-surface.mjs",
           "base": null,
           "integration": null,
-          "candidate": "f22c758f63754ef2776668683c07e1129ba5f2f3"
+          "candidate": "40e013f66b21fa8c409bed5f44f93a6490493b0b"
         },
         {
           "path": "tools/verify-a-r30-native-local.mjs",
@@ -349,15 +349,21 @@
           "path": "tools/verify-a-r30-rail-convergence.mjs",
           "base": null,
           "integration": null,
-          "candidate": "210ceefc3d46d968a09ed0004c14676a8b1a1537"
+          "candidate": "fbcfb0727d24645100ef5360b2be9dee0e9cd8e5"
+        },
+        {
+          "path": "tools/verify-a-r30-terrain-init.mjs",
+          "base": null,
+          "integration": null,
+          "candidate": "92578e887fd25969fe56d4572246d9ff84fb6f9c"
         }
       ]
     }
   ],
   "gates": [
-    "A-S1 legacy profile 2.6m limit remains red; total-control decision needed; no rail service",
-    "A-S2 dormant B/C ports; actual accepted server domain/pose/receipt required; no production authorization",
-    "A-S3 cloud apron opt-in only, D cable envelope blocked",
+    "A-S1 west river bridge cap fails legacy 2.6m test; 32 actual grade violations and stock junction remain; no rail service",
+    "A-S2 dormant port; exact proposed 3-file acceptance package is documented separately and still lacks actual accepted server provider; no production authorization",
+    "A-S3 cloud apron/dock geometric candidate only; D tower and actual service approvals remain",
     "No direct whole-branch merge; reverify current integration blobs"
   ]
 }
