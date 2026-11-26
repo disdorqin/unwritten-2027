@@ -419,7 +419,10 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     box(iron, doorP.east, g + 2.1, doorP.north, 1.7, 4.2, .14, fr.yaw + .5);
     // Cold chimney: restrained masonry courses and a recessed dark flue.
     // All projecting detail is above the roof or within the existing stack.
-    put(workshopBrick, 10.5, g + 13.0, -2, 1.5, 18, 1.5);
+    // Start at the actual roof penetration; the old full solid shaft
+    // ran through the occupied hall below without a corresponding wall.
+    put(workshopBrick,10.5,g+19.35,-2,1.5,5.30,1.5);
+    put(workshopRust,10.5,g+16.76,-2,2.05,.15,2.05);
     for(const h of [19.0,20.15,21.3]){
       put(workshopRust,10.5,g+h,-2,1.59,.13,1.59);
       for(const x of [-.58,.58])for(const s of [-1,1])
@@ -457,26 +460,62 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     }
     // Blast-furnace tower, independent at the west end: tapered iron stack, cold mouth.
     const bf = fr.at(-19.5, 0);
-    cyl(workshopRust, bf.east, g + 5, bf.north, 1.9, 2.7, 10, 12);
+    hall.slab(workshopBrick,-19.5,0,6.0,6.0,.24,.24);
+    cyl(workshopRust, bf.east, g + 5.12, bf.north, 1.9, 2.7, 9.76, 12,fr.yaw);
     // Tapered load-bearing shell, restrained hoop reinforcement and riveted
     // seams. Bands stay inside the original 5.4m solid collision envelope.
     for(const h of [1.5,3.3,5.2,7.1,8.9]){
       const r=2.7-.08*h;
-      cyl(workshopSheet,bf.east,g+h,bf.north,r+.06,r+.06,.18,12);
+      cyl(workshopSheet,bf.east,g+h,bf.north,r+.06,r+.06,.18,12,fr.yaw);
       for(let i=0;i<12;i++){
         const theta=i*Math.PI/6;
         const x=-19.5+Math.sin(theta)*(r+.03),z=Math.cos(theta)*(r+.03);
         put(workshopSheet,x,g+h,z,.12,.09,.12);
       }
     }
-    cyl(workshopSheet, bf.east, g + 10.3, bf.north, 2.15, 2.15, .6, 12);
-    const bfDoor = fr.at(-19.5, 2.55);
-    box(dark, bfDoor.east, g + 1.1, bfDoor.north, 1.6, 2.2, .2, fr.yaw);
-    cone(slag, fr.at(-19.5, 6.5).east, g + 1.1, fr.at(-19.5, 6.5).north, 3.4, 2.2, 10);
-    cone(slag, fr.at(-24, -5).east, g + .9, fr.at(-24, -5).north, 2.8, 1.8, 10);
-    // The separate cold blast furnace stays a solid mass. Hall walls and
-    // interior furniture are already registered with their actual footprints.
-    hitBox(colliders, bf.east, bf.north, fr.yaw, 5.4, 5.4, g, g + 10);
+    cyl(workshopSheet,bf.east,g+10.3,bf.north,2.15,2.15,.6,12,fr.yaw);
+    // Cold-sealed discharge throat with a masonry arch and a real closed
+    // metal leaf. No fake glowing or enterable furnace.
+    const bfDoor=fr.at(-19.5,2.74);
+    box(dark,bfDoor.east,g+1.40,bfDoor.north,1.38,1.90,.13,fr.yaw);
+    for(const s of [-1,1]){
+      hall.piece(workshopBrick,-19.5+s*.91,2.75,.42,.63,.24,2.50);
+      put(workshopSheet,-19.5+s*.61,g+1.40,2.83,.11,1.84,.12);
+      for(const h of [.69,1.39,2.09])put(workshopRust,-19.5+s*.61,g+h,2.91,.14,.14,.05);
+    }
+    hall.piece(workshopBrick,-19.5,2.75,2.25,.66,2.38,2.82);
+    put(workshopRust,-19.5,g+1.41,2.84,1.12,1.76,.10);
+    for(const h of [.76,1.42,2.08])put(workshopSheet,-19.5,g+h,2.915,1.16,.085,.07);
+    put(iron,-19.08,g+1.40,3.01,.22,.08,.18);
+    // A real polygonal footprint: slice the tapered base in 0.9m strips
+    // instead of a rotated enclosing AABB that blocks the empty corners.
+    for(let i=-3;i<=3;i++){
+      const z=i*.77,r=2.68;
+      const x=Math.sqrt(Math.max(.02,r*r-(Math.abs(z)+.385)**2));
+      const p=fr.at(-19.5,z);
+      colliders.push(orientedSupportBox(p.east,p.north,fr.yaw,2*x,.77,g+.24,g+10.6));
+    }
+    // Solid slag heaps shaped in coherent, uneven terraces, not simple
+    // cones that let players walk through the visible mass.
+    for(const [cx,cz,r,h] of [[-19.5,6.5,3.0,1.8],[-24,-5,2.4,1.48]] as const){
+      const step=r/3.2;
+      for(let i=-2;i<=2;i++)for(let j=-2;j<=2;j++){
+        const rr=Math.hypot(i,j)/3.1;
+        if(rr>.94||rr>.71&&hash(i*23+j*13+cx)>.68)continue;
+        const x=cx+i*step,z=cz+j*step;
+        const p=fr.at(x,z),ground=heightAt(p.east,p.north)??g;
+        const bottom=Math.min(g,ground)-.045;
+        const top=g+Math.max(.25,h*(1-rr)*(.78+.22*hash(i*11+j*29+cz)));
+        const w=step*.93,d=step*.91;
+        put(slag,x,(bottom+top)/2,z,w,top-bottom,d);
+        colliders.push(orientedSupportBox(p.east,p.north,fr.yaw,w,d,bottom,top));
+        if(top-g>.65){
+          const cap=fr.at(x+.04,z-.025),hh=top+.17;
+          put(stoneDark,x+.04,top+.085,z-.025,w*.64,.17,d*.62);
+          colliders.push(orientedSupportBox(cap.east,cap.north,fr.yaw,w*.64,d*.62,top,hh));
+        }
+      }
+    }
     // The hand cart is parked beside the terminal, not across the new
     // narrow-gauge loading throat or the service stairs at local x=4.7.
     const cartX=-3.5,cartZ=8.4;
@@ -660,9 +699,20 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       put(timber, dx, g + 6.8, 5.12, 1.9, .28, .08, 0, .6);
       put(timber, dx, g + 6.8, 5.12, 1.9, .28, .08, 0, -.6);
     }
-    // Tall independent chimney: ~34m total, near twice the 17m roof ridge.
-    put(rustIron, -8, g + 18.0, -2, 1.1, 31, 1.1);
-    put(stoneDark, -8, g + 33.75, -2, 1.5, .45, 1.5);
+    // Tall chimney starts at the roof, not inside the player's stair
+    // and calibration room. Continuous brick courses and flashings.
+    put(workshopBrick,-8,g+24.45,-2,1.15,18.10,1.15);
+    put(workshopRust,-8,g+15.5,-2,1.85,.16,1.85);
+    for(const h of [18.4,22.1,25.8,29.5,32.5]){
+      put(workshopSheet,-8,g+h,-2,1.23,.13,1.23);
+      for(const s of [-1,1])put(workshopRust,-8+s*.61,g+h,-2,.065,.07,.85);
+    }
+    put(stoneDark,-8,g+33.65,-2,1.52,.30,1.52);
+    for(const s of [-1,1]){
+      put(workshopBrick,-8+s*.62,g+33.95,-2,.28,.30,1.50);
+      put(workshopBrick,-8,g+33.95,-2+s*.62,.97,.30,.28);
+    }
+    put(dark,-8,g+33.81,-2,.97,.025,.97);
     // Loading platform, crates, and a burst instrument crate spilling brass parts.
     hall.slab(stone,0,6.65,8,3.30,.9,.9);
     for(const dx of [-1.48,1.48])put(timber,dx,g+2.3,5.04,.16,2.8,.18);
