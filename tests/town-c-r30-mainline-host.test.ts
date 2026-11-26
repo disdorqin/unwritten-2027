@@ -22,6 +22,7 @@ test('real 123m U19 host: track support and railheads, repair, low-speed ride, s
   assert.equal(scene.r30Dressing!.footprints.filter(f=>f.role!=='dead-siding-buffer').length,6);
   assert.equal(scene.r30Dressing!.sidingBuilt,true);
   assert.equal(scene.cart.visible,false);assert.equal(scene.prompt(),undefined);
+  const art=scene.r30Repair!;assert.equal(art.stages.length,10);assert.ok(art.stages.every(s=>s.damaged.visible&&!s.restored.visible));
   const floorMeshes=['underground-mine-rock','underground-mine-rail'].map(n=>h.mounted.group.getObjectByName(n)!);
   const rail=scene.group.getObjectByName('u19/r30-continuous-running-rails')!;
   parent.updateMatrixWorld(true);
@@ -62,10 +63,12 @@ test('real 123m U19 host: track support and railheads, repair, low-speed ride, s
    for(const verb of verbs){
     h.mounted.sync();assert.ok(scene.press('repair'));const i=intents.pop()!;
     assert.equal(i.fault,fault);assert.equal(i.verb,verb);
-    assert.notEqual(a.repair('miner',i.revision,fault,verb),'rejected');now+=100;
+    const before=a.snapshot().faults[fault];assert.equal(art.stages.find(s=>s.fault===fault&&s.index===before)?.damaged.visible,true);
+    assert.notEqual(a.repair('miner',i.revision,fault,verb),'rejected');now+=100;h.mounted.sync();
+    assert.equal(art.stages.find(s=>s.fault===fault&&s.index===before)?.restored.visible,true);
    }
   }
-  assert.equal(a.snapshot().mode,'stopped');
+  assert.equal(a.snapshot().mode,'stopped');assert.ok(art.stages.every(s=>!s.damaged.visible&&s.restored.visible));
   h.mounted.sync();foot=m.motion.boardingFoot();assert.ok(foot&&h.passageAt(foot.east,foot.north));assert.equal(h.passageAt(route.work.camp.position.east,route.work.camp.position.north),undefined);
   assert.ok(scene.press('board'));assert.ok(a.board('miner',rev()));h.mounted.sync();assert.ok(m.motion.riderPose('miner'));assert.equal(m.motion.riderPose('other'),undefined);assert.ok(a.go('miner',rev()));
   function rollUntilStop(){
@@ -95,9 +98,9 @@ test('real 123m U19 host: track support and railheads, repair, low-speed ride, s
   }
   h.mounted.sync();assert.equal(a.snapshot().mode,'derailed');assert.equal(a.snapshot().riderId,'miner');
   const crash=m.motion.riderPose('miner');assert.equal(crash?.mode,'derailed');assert.ok(crash?.canLeave);
-  assert.ok(m.motion.leaveFoot('miner'));assert.ok(scene.cart.visible);
+  assert.ok(m.motion.leaveFoot('miner'));assert.ok(scene.cart.visible);assert.ok(scene.press('leave'));assert.equal(intents.at(-1)?.role,'leave');
   accepted=false;h.mounted.sync();assert.equal(scene.cart.visible,false);assert.equal(m.motion.riderPose('miner'),undefined);
-  assert.equal(scene.press('board'),false);
+  assert.equal(scene.press('board'),false);assert.ok(art.stages.every(s=>s.damaged.visible&&!s.restored.visible));
  }finally{h.mounted.dispose()}
  assert.equal(parent.children.length,0);
 });

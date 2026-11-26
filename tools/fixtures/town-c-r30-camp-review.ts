@@ -57,17 +57,17 @@ const keys=new Set<string>(),direction=new Vector3();
 function setView(name:string){
  if(name.startsWith('rail-')){
   const m=host.mainline;if(m?.kind!=='ready')return false;
-  const role=name.slice(5),route=m.route,work=route.work;
+  const damaged=name.startsWith('rail-damage-'),role=name.slice(damaged?12:5),route=m.route,work=route.work;
   const marks:Record<string,number>={camp:0,sleepers:work.sleepers.chainage,gauge:work.gauge.chainage,curve:60,'turnout-rust':work['turnout-rust'].chainage,turnout:work.turnout.chainage,gate:route.length};
   const at=marks[role];if(at===undefined)return false;
   const rolling=role==='curve',chainage=at;
-  mainlineReview={revision:++mainlineRevision,lastAtMs:mainlineRevision*1000,mode:rolling?'rolling':'stopped',chainage,
-   speed:rolling?1.4:0,brakeHeld:rolling,turnout:role==='turnout'?'gate':'unset',cargo:{oreId:'',pieces:0},faults:{sleepers:3,gauge:3,'turnout-rust':4},...(rolling?{riderId:'review'}:{})};
+  mainlineReview={revision:++mainlineRevision,lastAtMs:mainlineRevision*1000,mode:damaged?'repairing':rolling?'rolling':'stopped',chainage:damaged?0:chainage,
+   speed:rolling?1.4:0,brakeHeld:rolling,turnout:role==='turnout'?'gate':'unset',cargo:{oreId:'',pieces:0},faults:damaged?{sleepers:0,gauge:0,'turnout-rust':0}:{sleepers:3,gauge:3,'turnout-rust':4},...(rolling?{riderId:'review'}:{})};
   host.mounted.sync();
   const p=route.sample(at),f=p.position,shift=(side:number,along:number)=>({east:f.east+Math.cos(p.heading)*side-Math.sin(p.heading)*along,north:f.north+Math.sin(p.heading)*side+Math.cos(p.heading)*along,height:f.height});
   const eye=[shift(1.25,-2.2),shift(-1.25,-2.2),shift(0,at===0?2.6:-2.6)].find(q=>host.passageAt(q.east,q.north));
   if(!eye)return false;
-  camera.position.set(eye.east,eye.height+1.67,-eye.north);camera.lookAt(f.east,f.height+.7,-f.north);torch.intensity=35;view=name;return true;
+  camera.position.set(eye.east,eye.height+1.67,-eye.north);camera.lookAt(f.east,f.height+(damaged?.06:.7),-f.north);torch.intensity=35;view=name;return true;
  }
  mainlineReview=undefined;
  const wallOpen=name==='pocketopen'||name==='shortcutopen';

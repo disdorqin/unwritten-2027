@@ -9,6 +9,7 @@ import type { U19MineCartSnapshot } from '../../../src/presence/underground-main
 import { createUndergroundMineCartModel } from './underground-mine-cart-model.js';
 import {mountR30MainlineDressing} from './town-c-r30-mainline-dressing.js';
 import {mountR30MainlineArches} from './town-c-r30-mainline-arches.js';
+import {mountR30MainlineRepairArt,r30RepairSleeperIndices} from './town-c-r30-mainline-repair-art.js';
 
 type Route = ReturnType<typeof createUndergroundMainlineTrack>;
 type Role = 'repair' | 'board' | 'leave' | 'brake' | 'go' | 'turnout' |
@@ -120,7 +121,9 @@ export function mountUndergroundMainlineScene(host: Options) {
   const railHead=host.r30 ? .025 : 0;
   const pose = new Object3D();
   const sleepers = route.sampleSleepers(.85);
-  for (const s of sleepers) {
+  const damagedSleeperIndices=host.r30?r30RepairSleeperIndices(route):[];
+  for (const [index,s] of sleepers.entries()) {
+    if(damagedSleeperIndices.includes(index))continue;
     const p = s.position;
     piece('rail-sleeper', swatches.wood, host.r30?0x493a2e:swatches.earth,
       p.east,p.height+(host.r30?-.001:-.07),-p.north,gauge+.72,host.r30?.030:.16,.23,s.heading);
@@ -380,8 +383,9 @@ export function mountUndergroundMainlineScene(host: Options) {
   brakeSparks.visible = false;
   brakeSparks.raycast = () => undefined;
   cart.group.add(brakeSparks);
+  const r30Repair=host.r30?mountR30MainlineRepairArt(root,route):undefined;
   const faultMarkers = new Map<string, Group>();
-  for (const key of repairIds) {
+  if(!host.r30)for (const key of repairIds) {
     const marker = new Group();
     marker.name = 'u19-unrepaired-workspot/' + key;
     const atFault = at(route.faults[key]);
@@ -403,7 +407,7 @@ export function mountUndergroundMainlineScene(host: Options) {
       winchWheel.visible = false;
       brakeSparks.visible = false;
       lamps.forEach(lamp => lamp.visible = false);
-      if(host.r30){faultMarkers.forEach(g=>g.visible=false);r30Dressing?.syncTurnout('unset')}
+      if(host.r30){faultMarkers.forEach(g=>g.visible=false);r30Dressing?.syncTurnout('unset');r30Repair?.sync()}
       return false;
     }
     if(host.r30&&(!Number.isFinite(snapshot.lastAtMs)||snapshot.speed<0||
@@ -411,10 +415,10 @@ export function mountUndergroundMainlineScene(host: Options) {
         !snapshot.cargo||!Number.isSafeInteger(snapshot.cargo.pieces)||snapshot.cargo.pieces<0||
         !snapshot.faults||!repairIds.every(k=>Number.isSafeInteger(snapshot.faults[k])&&snapshot.faults[k]>=0&&snapshot.faults[k]<=repairVerbs[k].length)||
         (last&&snapshot.revision<last.revision))){
-      cart.group.visible=false;winchWheel.visible=false;brakeSparks.visible=false;lamps.forEach(l=>l.visible=false);faultMarkers.forEach(g=>g.visible=false);return false;
+      cart.group.visible=false;winchWheel.visible=false;brakeSparks.visible=false;lamps.forEach(l=>l.visible=false);faultMarkers.forEach(g=>g.visible=false);r30Repair?.sync();return false;
     }
     const p = at(snapshot.chainage);
-    r30Dressing?.syncTurnout(snapshot.turnout);r30Dressing?.syncRecall(snapshot.chainage);
+    r30Dressing?.syncTurnout(snapshot.turnout);r30Dressing?.syncRecall(snapshot.chainage);r30Repair?.sync(snapshot);
     cart.group.visible = true;
     winchWheel.visible = true;
     winchWheel.rotation.z = (route.length - snapshot.chainage) * .45;
@@ -465,6 +469,8 @@ export function mountUndergroundMainlineScene(host: Options) {
     const point = route.sample(snapshot.chainage).position;
     if (snapshot.mode === 'derailed' && !snapshot.riderId)
       candidate.push({ role: 'rerail', pos: point, label: '手扶车轮 · 扶正归轨' });
+    if(host.r30&&snapshot.mode==='derailed'&&snapshot.speed===0&&snapshot.riderId===viewer.playerId)
+      candidate.push({role:'leave',pos:point,label:'矿车已停稳 · 主动下车'});
     if (snapshot.mode === 'stopped') {
       if (snapshot.riderId === viewer.playerId) {
         candidate.push({ role: 'leave', pos: point, label: '主动下矿车' });
@@ -511,7 +517,7 @@ export function mountUndergroundMainlineScene(host: Options) {
   return {
     kind: 'ready', group: root, cart: cart.group, sync, prompt, press,
     route, words: undergroundMainlineWords, sleepers: sleepers.length,
-    railHead, r30Dressing,r30Arches,
+    railHead, r30Dressing,r30Arches,r30Repair,
     acceptedSnapshot:()=>!disposed&&cart.group.visible&&last?structuredClone(last):undefined,
     blocks(east:number,north:number,y:number,radius:number,height:number){return !!(r30Dressing?.blocks(east,north,y,radius,height)||r30Arches?.blocks(east,north,y,radius,height))},
     batches: instances.length,
@@ -533,7 +539,7 @@ export function mountUndergroundMainlineScene(host: Options) {
         const material = group.userData.material as MeshStandardMaterial;
         material.dispose();
       }
-      r30Arches?.dispose();r30Dressing?.dispose();r30RailGeometry?.dispose();r30RailMaterial?.dispose();
+      r30Repair?.dispose();r30Arches?.dispose();r30Dressing?.dispose();r30RailGeometry?.dispose();r30RailMaterial?.dispose();
       blockGeo.dispose();
       lampGeometry.dispose(); lampMaterial.dispose();
       root.clear();
