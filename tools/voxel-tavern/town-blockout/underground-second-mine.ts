@@ -3,13 +3,23 @@ import {secondMineRooms,secondMineRoomAt,secondMineBed,secondMineAnchors,canStan
 import {dressSecondMineDryWings} from './underground-second-mine-dry-dressing.js';
 import {c2R30DeepMouths} from './town-c2-r30-deep-mouths.js';
 import {buildTownC2R30Enclosure,c2R30EnclosureRooms} from './town-c2-r30-enclosure.js';
+import {buildTownC2R30WaterworksTrace} from './town-c2-r30-waterworks-trace.js';
+import {mountTownC2R30Ferry} from './town-c2-r30-ferry.js';
+import {mountTownC2PumpHouseAdapter,type C2PumpHouseAdapterHost} from './town-c2-r30-pump-house-adapter.js';
+import type {AcceptedWaterReader} from '../../../src/shared/town-c-water-snapshot-port.js';
 import {createStaticFootIndex,type StaticBox} from './town-c-static-foot-index.js';
 type Part={x:number;n:number;y:number;w:number;d:number;h:number;rz:number};
 type Solid=Readonly<{x:number;n:number;y:number;w:number;d:number;h:number}>;
 export type LiftApertureRect=Readonly<{minE:number;maxE:number;minN:number;maxN:number}>;
 export type SecondMineLiftApertureSite=Readonly<{lower:LiftApertureRect;height:number;ceiling:number}>;
 export type SecondMineLiftAperturePort=Readonly<{site:SecondMineLiftApertureSite;split:(rect:LiftApertureRect,hole:LiftApertureRect)=>readonly LiftApertureRect[];readOpen:()=>boolean}>;
-export type SecondMineSceneOptions=Readonly<{liftAperture?:SecondMineLiftAperturePort;r30Enclosure?:boolean}>;
+export type SecondMineSceneOptions=Readonly<{
+  liftAperture?:SecondMineLiftAperturePort;
+  r30Enclosure?:boolean;
+  r30Waterworks?:boolean;
+  r30Ferry?:boolean;
+  pumpHouse?:Readonly<{readAcceptedWater:AcceptedWaterReader;host?:C2PumpHouseAdapterHost}>;
+}>;
 type EntryRoom=Readonly<{x0:number;x1:number;n0:number;n1:number;ceiling:number}>;
 const colors={rock:0x555b62,basalt:0x353b44,iron:0x777b82,rust:0x815b44,wood:0x71553c,crystal:0x82c5d6,ember:0xe5a05a,gravel:0x66645d} as const;
 type Kind=keyof typeof colors;
@@ -110,6 +120,11 @@ export function createSecondMineScene(options:SecondMineSceneOptions={}){
     group.add(enclosure.group);
     for(const part of enclosure.boxes)solids.push({x:part.x,n:part.n,y:part.y,w:part.w,d:part.d,h:part.h});
   }
+  const waterworks=options.r30Waterworks===false?undefined:buildTownC2R30WaterworksTrace(group);
+  if(waterworks)for(const collider of waterworks.colliders){
+    const box=collider.box;
+    solids.push({x:box.x,n:box.n,y:box.y+box.h/2,w:box.w,d:box.d,h:box.h});
+  }
   let liftPlate:Mesh|null=null,liftOpen=false;
   if(lift){
     liftPlate=new Mesh(meshGeometry,material.get('iron'));liftPlate.name='second-mine-lift-closure';
@@ -192,16 +207,22 @@ export function createSecondMineScene(options:SecondMineSceneOptions={}){
     }
     for(let x=-44;x<=44;x+=2)if(Math.abs(x)>5)box('basalt',x,n+sgn*1.5,.14,1.7,.55,.28);
   }
-  const boat=new Group();boat.name='single-pole-ferry';
-  function boatPart(k:Kind,x:number,n:number,y:number,w:number,d:number,h:number,angle=0){
-    const m=new Mesh(meshGeometry,material.get(k));m.position.set(x,y,-n);m.scale.set(w,h,d);m.rotation.z=angle;boat.add(m);
+  const ferry=options.r30Ferry===false?undefined:mountTownC2R30Ferry({parent:group});
+  let boat:Group;
+  if(ferry){
+    boat=ferry.boat;
+  }else{
+    boat=new Group();boat.name='single-pole-ferry';
+    const boatPart=(k:Kind,x:number,n:number,y:number,w:number,d:number,h:number,angle=0)=>{
+      const m=new Mesh(meshGeometry,material.get(k));m.position.set(x,y,-n);m.scale.set(w,h,d);m.rotation.z=angle;boat.add(m);
+    };
+    for(let n=-2.3;n<=2.3;n+=.34)boatPart('wood',0,n,0,2.1,.32,.18);
+    for(const x of [-1.05,1.05])for(let n=-2.25;n<=2.3;n+=.5)boatPart('wood',x,n,.38,.17,.49,.58);
+    for(const n of [-2.55,2.55])boatPart('wood',0,n,.36,2.1,.18,.58);
+    for(const n of [-1.4,0,1.4])boatPart('wood',0,n,.58,1.96,.3,.14);
+    boatPart('wood',.82,0,1.75,.07,.07,3,.2);
+    boat.position.set(0,-.18,-137);group.add(boat);
   }
-  for(let n=-2.3;n<=2.3;n+=.34)boatPart('wood',0,n,0,2.1,.32,.18);
-  for(const x of [-1.05,1.05])for(let n=-2.25;n<=2.3;n+=.5)boatPart('wood',x,n,.38,.17,.49,.58);
-  for(const n of [-2.55,2.55])boatPart('wood',0,n,.36,2.1,.18,.58);
-  for(const n of [-1.4,0,1.4])boatPart('wood',0,n,.58,1.96,.3,.14);
-  boatPart('wood',.82,0,1.75,.07,.07,3,.2);
-  boat.position.set(0,-.18,-137);group.add(boat);
   // Dry east bypass, above the bed in every water phase; railings do not cross the route.
   for(let n=113;n<164;n+=1.5){
     for(const x of [48.38,54.62]){
@@ -232,6 +253,14 @@ export function createSecondMineScene(options:SecondMineSceneOptions={}){
     const light=new PointLight(0xffb277,24,16,2);light.position.set(camp.east,1.4,-camp.north);group.add(light);
   }
   dressSecondMineDryWings(box);
+  const pumpHouse=options.pumpHouse?mountTownC2PumpHouseAdapter({
+    parent:group,readAcceptedWater:options.pumpHouse.readAcceptedWater,
+    host:{...options.pumpHouse.host,supportsSite:site=>options.pumpHouse?.host?.supportsSite?.(site)===true},
+  }):undefined;
+  if(pumpHouse)for(const box of pumpHouse.colliders){
+    solids.push({x:(box.min[0]+box.max[0])/2,n:-(box.min[2]+box.max[2])/2,y:(box.min[1]+box.max[1])/2,
+      w:box.max[0]-box.min[0],d:box.max[2]-box.min[2],h:box.max[1]-box.min[1]});
+  }
   const overheadBoxes:StaticBox[]=[];
   for(const items of parts.values())for(const part of items){
     const bottom=part.y-part.h/2;
@@ -243,6 +272,13 @@ export function createSecondMineScene(options:SecondMineSceneOptions={}){
     if(bottom<=0+geometryEpsilon)continue;
     overheadBoxes.push({min:[part.x-part.w/2,bottom,-part.n-part.d/2],max:[part.x+part.w/2,part.y+part.h/2,-part.n+part.d/2]});
   }
+  for(const placement of waterworks?.placements??[]){
+    if(placement.y<=.3||placement.part==='wet-mark'||placement.part==='wall-wet-streak'||
+      placement.part==='pipe-wet-streak'||placement.part==='pipe-pillar')continue;
+    overheadBoxes.push({min:[placement.x-placement.w/2,placement.y,-placement.n-placement.d/2],
+      max:[placement.x+placement.w/2,placement.y+placement.h,-placement.n+placement.d/2]});
+  }
+  for(const box of pumpHouse?.colliders??[])if(box.min[1]>geometryEpsilon)overheadBoxes.push(box);
   const overheadIndex=createStaticFootIndex(overheadBoxes);
   const solidIndex=createStaticFootIndex(solids.map(s=>({min:[s.x-s.w/2,s.y-s.h/2,-s.n-s.d/2],max:[s.x+s.w/2,s.y+s.h/2,-s.n+s.d/2]})));
   const dummy=new Matrix4(),q=new Quaternion(),v=new Vector3(),scale=new Vector3(),axis=new Vector3(0,0,1);
@@ -256,7 +292,9 @@ export function createSecondMineScene(options:SecondMineSceneOptions={}){
   let state:MineRiverState='middle';
   function setRiverState(next:MineRiverState){
     state=next;water.visible=next!=='low';water.position.y=next==='high'?-.025:-.24;
-    boat.visible=next==='middle';
+    if(ferry)ferry.sync(next);else boat.visible=next==='middle';
+    waterworks?.setWaterState(next);
+    pumpHouse?.sync();
   }
   function syncLiftAperture(){
     liftOpen=false;
@@ -316,8 +354,8 @@ export function createSecondMineScene(options:SecondMineSceneOptions={}){
     return !!passage&&passage.floor===0&&passage.clearance+geometryEpsilon>=expected.height&&canStand(expected.centre,probeNorth,.27,1.8);
   }
   setRiverState('middle');syncLiftAperture();
-  return {group,boat,water,solids,r30Enclosure:enclosure,anchors:secondMineAnchors,setRiverState,canStand,passageLocal,acceptsMouth,floor:(e:number,n:number)=>secondMineFloor(e,n,state),
+  return {group,boat,water,solids,r30Enclosure:enclosure,waterworks,ferry,pumpHouse,anchors:secondMineAnchors,setRiverState,canStand,passageLocal,acceptsMouth,floor:(e:number,n:number)=>secondMineFloor(e,n,state),
     liftPlate,liftRoofPieces:entryRoofPieces,syncLiftAperture,get liftOpen(){return liftOpen;},
-    get riverState(){return state;},pieces:[...parts.values()].reduce((a,b)=>a+b.length,0)+(enclosure?.stats().pieceCount??0)+boat.children.length+3+(liftPlate?1:0),
-    dispose(){if(disposed)return;disposed=true;group.removeFromParent();enclosure?.dispose();meshGeometry.dispose();waterGeo.dispose();waterMat.dispose();riverGeometries.forEach(g=>g.dispose());material.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());}};
+    get riverState(){return state;},pieces:[...parts.values()].reduce((a,b)=>a+b.length,0)+(enclosure?.stats().pieceCount??0)+(waterworks?.placements.length??0)+(ferry?.stats().pieceCount??boat.children.length)+(pumpHouse?.stats().modelPieceCount??0)+3+(liftPlate?1:0),
+    dispose(){if(disposed)return;disposed=true;group.removeFromParent();pumpHouse?.dispose();ferry?.dispose();waterworks?.dispose();enclosure?.dispose();meshGeometry.dispose();waterGeo.dispose();waterMat.dispose();riverGeometries.forEach(g=>g.dispose());material.forEach(m=>m.dispose());textures.forEach(t=>t.dispose());}};
 }

@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {createSecondMineScene,type LiftApertureRect,type SecondMineLiftAperturePort} from '../tools/voxel-tavern/town-blockout/underground-second-mine.js';
+import {c2PumpHouseFixtureSceneSite} from '../tools/voxel-tavern/town-blockout/town-c2-r30-pump-house-adapter.js';
+import type {PumpHouseSnapshot} from '../src/presence/underground-pump-house.js';
 import {c2R30DeepMouths} from '../tools/voxel-tavern/town-blockout/town-c2-r30-deep-mouths.js';
 // Explicit local fixture only; this does not assert that C's production adapter is integrated.
 const liftSite={lower:{minE:-1.1,maxE:1.1,minN:.9,maxN:3.1},height:0,ceiling:5} as const;
@@ -24,9 +26,11 @@ test('all three water states preserve continuous dry entry-to-exit route; ferry 
         for(let j=0;j<=count;j++){const t=j/count,e=a.east+(b.east-a.east)*t,n=a.north+(b.north-a.north)*t;
           assert.ok(mine.canStand(e,n),state+' blocked '+e.toFixed(2)+','+n.toFixed(2));}
       }
-      assert.equal(mine.boat.visible,state==='middle');
+      assert.equal(mine.ferry?.stats().available,state==='middle');
+      assert.equal(mine.boat.visible,true);
       assert.equal(mine.canStand(0,137),state==='low');
       assert.equal(mine.water.visible,state!=='low');
+      assert.equal(mine.waterworks?.stats.waterPresentationState,state);
     }
   }finally{mine.dispose()}
 });
@@ -35,6 +39,10 @@ test('missing lift port preserves the single closed entry roof and standing rout
   try{
     assert.ok(mine.r30Enclosure,'R30 enclosure is the default production structure');
     assert.equal(mine.group.getObjectByName('town-c2-r30-enclosure')?.parent,mine.group);
+    assert.ok(mine.waterworks);
+    assert.ok(mine.ferry);
+    assert.equal(mine.group.getObjectByName('town-c2-r30-waterworks-trace')?.parent,mine.group);
+    assert.equal(mine.group.getObjectByName('town-c2-r30-ferry')?.parent,mine.group);
     assert.equal(mine.liftPlate,null);
     assert.equal(mine.liftRoofPieces.length,1);
     assert.equal(rectArea(mine.liftRoofPieces[0]),288);
@@ -100,6 +108,37 @@ test('invalid fixture splits and out-of-entry holes fail closed without throwing
       assert.equal(mine.canStand(0,2,.27),true,name);
     }finally{mine.dispose()}
   }
+});
+test('R30 waterworks and ferry can be disabled without changing the legacy scene contract',()=>{
+ const mine=createSecondMineScene({r30Waterworks:false,r30Ferry:false});
+ try{
+    assert.equal(mine.waterworks,undefined);
+    assert.equal(mine.ferry,undefined);
+    assert.equal(mine.boat.visible,true);
+    mine.setRiverState('high');assert.equal(mine.boat.visible,false);
+    mine.setRiverState('low');assert.equal(mine.boat.visible,false);
+  }finally{mine.dispose()}
+});
+test('certified pump house joins mine collision while missing authorization stays closed',()=>{
+ const snapshot:PumpHouseSnapshot={revision:1,lastAtMs:100,water:.2,pumpedMs:0,stage:'running',repairHits:0,repairedJams:0,journalReaders:[]};
+ let accepted=true;
+ const mine=createSecondMineScene({pumpHouse:{readAcceptedWater:()=>accepted?{nightOrdinal:1,phase:'level',baseLevel:'mid',pumpOffset:0,level:'mid'}:undefined,
+   host:{supportsSite:site=>site.domainId===c2PumpHouseFixtureSceneSite.domainId,
+     supportsActionFoot:()=>true,readPumpSnapshot:()=>snapshot,readPassageOpen:()=>false,readFerryRunning:()=>false,
+     readLightBudget:()=>1,readViewer:()=>undefined,canSee:()=>true,dispatch:()=>{}}}});
+ try{
+    assert.ok(mine.pumpHouse);
+    assert.equal(mine.pumpHouse.stats().mountKind,'ready');
+    assert.ok(mine.pumpHouse.colliders.length>0);
+    const pumpSolid=mine.pumpHouse.colliders[0];
+    assert.equal(mine.canStand((pumpSolid.min[0]+pumpSolid.max[0])/2,-(pumpSolid.min[2]+pumpSolid.max[2])/2),false);
+    assert.ok(mine.group.getObjectByName('u17-old-mine-pump-house'));
+    assert.equal(mine.pumpHouse.stats().runtimeAuthorized,true);
+    assert.equal(mine.pumpHouse.stats().passageOpen,false);
+    accepted=false;mine.setRiverState('middle');
+    assert.equal(mine.pumpHouse.stats().runtimeAuthorized,false);
+    assert.equal(mine.pumpHouse.stats().waterConfigured,false);
+  }finally{mine.dispose()}
 });
 test('legacy r30Enclosure=false retains the original base shell and exact N198 mouth',()=>{
   const mine=createSecondMineScene({r30Enclosure:false});

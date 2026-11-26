@@ -1,6 +1,6 @@
 import {
-  BoxGeometry, DataTexture, Group, InstancedMesh, Matrix4, MeshStandardMaterial,
-  NearestFilter, Object3D, PointLight, SRGBColorSpace,
+  Box3, BoxGeometry, DataTexture, Group, InstancedMesh, Matrix4, MeshStandardMaterial,
+  NearestFilter, Object3D, PointLight, SRGBColorSpace, Vector3,
 } from 'three';
 import type { PumpHouseSnapshot } from '../../../src/presence/underground-pump-house.js';
 import {
@@ -104,6 +104,7 @@ export type C2PumpHouseAdapterStats = Readonly<{
   visibleLightCount: number;
   colliderCount: number;
   visualOnlyPieceCount: number;
+  modelPieceCount: number;
   pixelTextureCount: number;
   textureSize: 16;
   textureFilter: 'nearest';
@@ -282,6 +283,17 @@ export function mountTownC2PumpHouseAdapter(options: Readonly<{
     onAcceptedSound: host.onAcceptedSound,
   };
   const mounted = mountUndergroundPumpHouseScene(sceneHost);
+  const colliders = mounted.kind === 'ready' ? mounted.colliders.map(solid => {
+    const box = new Box3(new Vector3(...solid.min), new Vector3(...solid.max));
+    const matrix = new Matrix4().makeRotationY(site.yaw);
+    matrix.setPosition(site.east, site.height, -site.north);
+    box.applyMatrix4(matrix);
+    return Object.freeze({
+      name: solid.name,
+      min: Object.freeze([box.min.x, box.min.y, box.min.z] as const),
+      max: Object.freeze([box.max.x, box.max.y, box.max.z] as const),
+    });
+  }) : [];
   root.visible = mounted.kind === 'ready';
   let disposed = false;
   let waterLevel: 'low' | 'mid' | 'high' | undefined;
@@ -318,6 +330,7 @@ export function mountTownC2PumpHouseAdapter(options: Readonly<{
       visibleLightCount: lights.filter(effectivelyVisible).length,
       colliderCount: !disposed && ready ? ready.colliders.length : 0,
       visualOnlyPieceCount: disposed ? 0 : dressing.boxes.length,
+      modelPieceCount: !disposed && ready ? ready.voxels : 0,
       pixelTextureCount: disposed ? 0 : dressing.textures.length,
       textureSize: 16,
       textureFilter: 'nearest',
@@ -344,6 +357,7 @@ export function mountTownC2PumpHouseAdapter(options: Readonly<{
   sync();
   return Object.freeze({
     group: root,
+    colliders,
     sync,
     stats,
     prompt() { return !disposed && mounted.kind === 'ready' ? mounted.prompt() : undefined; },

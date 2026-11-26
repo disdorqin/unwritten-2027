@@ -33,12 +33,14 @@ export type TownC2R30FerryStats = Readonly<{
   visualOnly: true;
   colliderCount: 0;
   realLightCount: number;
+  pieceCount: number;
   travelProgress: number;
   disposed: boolean;
 }>;
 
 export type TownC2R30FerryScene = Readonly<{
   group: Group;
+  boat: Group;
   /** Accepts only the existing hydrology level. It never reads a clock or network packet. */
   sync(level: MineRiverState): TownC2R30FerryStats;
   /** All four interactions reject every argument: only direct local calls are accepted. */
@@ -229,6 +231,7 @@ export function mountTownC2R30Ferry(options: Readonly<{ parent?: Group }> = {}):
     noticeMeshes.push({ stop, grounded });
   }
   group.add(signs);
+  const pieceCount = parts.length + 2 + 1 + noticeMeshes.length * 3;
 
   const near = secondMineAnchors.nearPier;
   const far = secondMineAnchors.farPier;
@@ -270,6 +273,7 @@ export function mountTownC2R30Ferry(options: Readonly<{ parent?: Group }> = {}):
       visualOnly: true,
       colliderCount: 0,
       realLightCount: realLightCount(),
+      pieceCount,
       travelProgress,
       disposed,
     });
@@ -401,7 +405,7 @@ export function mountTownC2R30Ferry(options: Readonly<{ parent?: Group }> = {}):
   resetTrip('low');
   options.parent?.add(group);
   return Object.freeze({
-    group, sync, board, pole, travel, disembark, update, stats,
+    group, boat, sync, board, pole, travel, disembark, update, stats,
     dispose() {
       if (disposed) return;
       disposed = true;
