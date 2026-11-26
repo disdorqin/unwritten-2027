@@ -205,15 +205,39 @@ export function bindPlay(c:ReturnType<typeof attachBR30CraterCompletion>,marker:
   const point=t=>{const p=fixture.mainTrailPoint(t),east=an.east+p.east*c+p.north*s,north=an.north+p.north*c-p.east*s;return {east,north,height:road.heightAt(east,north),t};};
   const dense=Array.from({length:270},(_,i)=>point(i*.002)).concat(point(.538));
   const selected=[dense[0]];
-  // Preserve the actual tight entry bend; simplify only where the
-  // surveyed centerline is within .12 m of the chord and <= 6 m long.
+  // Preserve the actual tight entry bend. A longer chord is permitted
+  // only if the complete swept corridor is supported and clear on the
+  // exact mounted road + rail solids. The native walk still checks feet.
+  const {supportFootprintOverlaps}=await load('town-a-r30-oriented-support');
+  const solids=[...road.group.userData.colliders,...rail.group.userData.colliders];
+  const cells=new Map();
+  for(const b of solids)for(let e=Math.floor((b.min[0]-.5)/4);e<=Math.floor((b.max[0]+.5)/4);e++)
+   for(let n=Math.floor((-b.max[2]-.5)/4);n<=Math.floor((-b.min[2]+.5)/4);n++){
+    const k=e+','+n,v=cells.get(k)??[];v.push(b);cells.set(k,v);
+   }
+  let chordChecks=0,chordRejected=0;
+  function safeChord(a,b){
+   const len=Math.hypot(b.east-a.east,b.north-a.north),steps=Math.max(1,Math.ceil(len/.08));
+   let last;
+   for(let j=0;j<=steps;j++){
+    const t=j/steps,e=a.east+(b.east-a.east)*t,n=a.north+(b.north-a.north)*t,h=road.heightAt(e,n);
+    chordChecks++;
+    if(!Number.isFinite(h)||(last!==undefined&&Math.abs(h-last)>.22)||(cells.get(Math.floor(e/4)+','+Math.floor(n/4))??[]).some(s=>s.min[1]<h+1.775&&s.max[1]>h+.025&&supportFootprintOverlaps(e,n,s,.45))){chordRejected++;return false;}
+    last=h;
+   }
+   return true;
+  }
   function gap(p,a,b){const de=b.east-a.east,dn=b.north-a.north,t=Math.max(0,Math.min(1,((p.east-a.east)*de+(p.north-a.north)*dn)/(de*de+dn*dn||1)));return Math.hypot(p.east-a.east-t*de,p.north-a.north-t*dn);}
   for(let i=0;i<dense.length-1;){
-   let j=i+1;while(j+1<dense.length&&Math.hypot(dense[j+1].east-dense[i].east,dense[j+1].north-dense[i].north)<=6&&dense.slice(i+1,j+1).every(p=>gap(p,dense[i],dense[j+1])<=.12))j++;
-   selected.push(dense[j]);i=j;
+   let j=i+1,best=j;
+   while(j+1<dense.length&&Math.hypot(dense[j+1].east-dense[i].east,dense[j+1].north-dense[i].north)<=10&&dense.slice(i+1,j+1).every(p=>gap(p,dense[i],dense[j+1])<=.20)){
+    j++;const len=Math.hypot(dense[j].east-dense[i].east,dense[j].north-dense[i].north);
+    if((len<=6&&dense.slice(i+1,j).every(p=>gap(p,dense[i],dense[j])<=.12))||safeChord(dense[i],dense[j]))best=j;
+   }
+   selected.push(dense[best]);i=best;
   }
   const points=[...selected,...completion.historic.route.slice(1)];
-  report.browserRoute={points,approach:rimAccess.points,trailKnots:selected.length,historic:completion.historic.route,mode:'unaccepted B narrow host API proposal + actual A support audit'};
+  report.browserRoute={points,approach:rimAccess.points,trailKnots:selected.length,chordChecks,chordRejected,historic:completion.historic.route,mode:'unaccepted B narrow host API proposal + actual A support audit'};
   report.browserRoute.inscriptionPath=[...rail.stationWalkRoutes.find(r=>r.id==='transfer-dock').points.slice(0,5),...inscription.points];
   report.browserRoute.paper=completion.paper.paper;
   const dir=join(dirname(out),browserSegment==='inscription-access'?'原生联合刻石':'原生联合栈道');

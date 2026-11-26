@@ -229,7 +229,7 @@ async function face(page, evidence, desired) {
     // Sample the actual view. Native pointer coordinates may be rounded at a fractional raster scale.
     const until = Date.now() + 800;
     while (evidence.poses.at(-1)?.seq === before.seq && Date.now() < until) await page.waitForTimeout(30);
-    await page.waitForTimeout(120);
+    await page.waitForTimeout(segment==='joint-historic'?55:120);
   }
   assert.fail(`Native mouse drag could not face ${desired}`);
 }
@@ -255,7 +255,7 @@ async function walkTo(page, evidence, target, label, precision=.46) {
     const backwards = precision < .3 || distance < 1.4;
     await face(page, evidence, desired+(backwards?Math.PI:0));
     const key = backwards ? 's' : 'w';
-    const fast = !backwards&&precision >= .3 && distance > (segment==='joint-historic'?4.5:9) && segment !== 'a4-shots';
+    const fast = !backwards&&precision >= .3 && distance > (segment==='joint-historic'?3.5:9) && segment !== 'a4-shots';
     if (fast) await page.keyboard.down('Shift');
     await page.keyboard.down(key);
     try {
@@ -446,7 +446,7 @@ try{
    road.outerWorks.industrialRoutes.find(t=>t.id===(['gatehouse','ore-yard','cold-furnace','water-tower'].includes(segment)?segment:segment+'-plant')).points);
  async function step(point,label){
    await walkTo(page,evidence,[point.east,point.north],label,joint&&Number.isFinite(point.t)?.35:(scenic||['northwalk','outcrop','outerclusters'].includes(segment))?.35:.18);
-   await page.waitForTimeout(140);
+   await page.waitForTimeout(joint&&Number.isFinite(point.t)?55:140);
    const pose=await readPose(page);
    assert.ok(Math.abs(pose.height-point.height)<(joint&&Number.isFinite(point.t)?.75:.39),JSON.stringify({label,pose,point}));
    if(joint)await appendFile(join(output,'native-validated-steps.ndjson'),JSON.stringify({label,pose,point})+'\n');
