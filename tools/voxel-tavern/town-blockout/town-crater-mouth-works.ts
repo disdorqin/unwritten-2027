@@ -517,16 +517,46 @@ export function buildCraterMouthWorks(road: CraterRoad) {
       box(timberWarm, fascia.east, roofY + .11, fascia.north,
         .16, .22, roofNorthSouth + .08, fr.yaw);
     }
-    // Close both ends of the rear roof with joined stepped gables; the
-    // front gable borders the open deck rather than creating a false wall.
-    for (const dz of [-D / 2 + .02, -.12]) {
-      for (let row = 0; row < 5; row++) {
-        const y = (row + .5) * rise / 5;
-        const span = 2 * (W / 2) * (1 - (row + 1) / 5) + .08;
-        const p = fr.at(0, dz);
-        box(supplyPlanks, p.east, roofY + y, p.north,
-          span, rise / 5 + .012, .21, fr.yaw);
+    // Cut every vertical gable plank to the actual roof profile. The
+    // old five horizontal steps left triangular daylight gaps below
+    // both eaves; the new top edges share the roof pitch.
+    const gableTop=(x:number)=>rise*(1-Math.abs(x)/halfRun)+.055;
+    const plankCount=16,pw=W/plankCount;
+    for(const dz of [-D/2+.02,-.12]){
+      for(let i=0;i<plankCount;i++){
+        const x=-W/2+(i+.5)*pw;
+        const p=fr.at(x,dz);
+        const geo=new BoxGeometry(pw+.002,1,.21);
+        const pos=geo.getAttribute('position'),uv=geo.getAttribute('uv');
+        const normal=geo.getAttribute('normal'),span=supplyPlanks.userData.metricSpan??1;
+        for(let k=0;k<pos.count;k++){
+          const lx=pos.getX(k),isTop=pos.getY(k)>0;
+          const y=isTop?gableTop(x-lx):0;
+          pos.setY(k,y);
+          uv.setXY(k,uv.getX(k)*(Math.abs(normal.getX(k))>.5?.21:pw)/span,Math.abs(normal.getY(k))>.5?uv.getY(k)*.21/span:y/span);
+        }
+        geo.computeVertexNormals();
+        part(supplyPlanks,geo,p.east,roofY,p.north,fr.yaw);
       }
+      const beam=fr.at(0,dz);
+      box(timberWarm,beam.east,roofY+.10,beam.north,W+.06,.19,.28,fr.yaw);
+      const king=fr.at(0,dz);
+      box(timberWarm,king.east,roofY+rise*.51,king.north,.16,rise*.90,.26,fr.yaw);
+      for(const side of [-1,1]){
+        const p=fr.at(side*halfRun/2,dz);
+        box(timberWarm,p.east,roofY+rise/2+.12,p.north,slant+.09,.16,.28,fr.yaw,0,side*slope);
+      }
+    }
+    // Exposed rafter tails and a continuous cross tie above the interior
+    // head clearance, under the same roof plane.
+    for(let i=0;i<5;i++){
+      const dz=rearZ-roofNorthSouth*.40+i*roofNorthSouth*.20;
+      for(const side of [-1,1]){
+        const p=fr.at(side*halfRun/2,dz);
+        box(timber,p.east,roofY+rise/2-.005,p.north,slant+.08,.13,.12,fr.yaw,0,side*slope);
+      }
+      const tie=fr.at(0,dz);
+      box(timber,tie.east,roofY-.035,tie.north,W+.06,.13,.14,fr.yaw);
     }
     const ridgeP = fr.at(0, rearZ);
     box(timberWarm, ridgeP.east, roofY + rise + .23, ridgeP.north,
@@ -613,15 +643,39 @@ export function buildCraterMouthWorks(road: CraterRoad) {
     supplyDeckRoute.push(wp(stairX,1.84,deckY),wp(2.85,1.84,deckY),wp(0,1.84,deckY));
     // Brass telescope on the deck, trained on the crater centre.
     const scope = fr.at(-1.8, D / 4 + .4);
-    for (const a of [0, 2.1, 4.2]) {
-      box(brass, scope.east + Math.sin(a) * .3, roofY + .45, scope.north + Math.cos(a) * .3, .06, .95, .06, fr.yaw, .3 * Math.cos(a), .3 * Math.sin(a));
+    // Three anchored feet, diagonal legs and an actual optical pivot.
+    // The legs' lower ends meet the deck and the upper ends share one hub.
+    const pivotY=roofY+.94;
+    for(let i=0;i<3;i++){
+      const a=i*Math.PI*2/3;
+      const fx=Math.sin(a)*.27,fn=Math.cos(a)*.27;
+      const foot=new Vector3(scope.east+fx,deckY+.045,-scope.north-fn);
+      const hub=new Vector3(scope.east,pivotY,-scope.north);
+      const dir=hub.clone().sub(foot);
+      const geo=new BoxGeometry(.075,dir.length(),.075);
+      geo.applyQuaternion(new Quaternion().setFromUnitVectors(new Vector3(0,1,0),dir.normalize()));
+      const mid=foot.clone().add(hub).multiplyScalar(.5);
+      part(brass,geo,mid.x,mid.y,-mid.z);
+      box(iron,foot.x,deckY+.035,-foot.z,.13,.07,.13,fr.yaw);
     }
+    cyl(iron,scope.east,pivotY,scope.north,.135,.135,.11,10);
+    box(brass,scope.east,roofY+1.025,scope.north,.21,.18,.17,fr.yaw);
+    const pivot=fr.at(-1.8-.18,D/4+.4);
+    cyl(iron,pivot.east,roofY+1.035,pivot.north,.11,.11,.08,10,fr.yaw,0,Math.PI/2);
     cyl(brass, scope.east, roofY + 1.12, scope.north, .11, .16, 1.25, 9, fr.yaw, Math.PI / 2 - .18);
     // Separate focus collars share the exact barrel axis. No second scope
     // or interaction, and no extra floor obstruction at the use point.
     for(const t of [-.38,.29]){
       const p=fr.at(-1.8,D/4+.4+t*Math.cos(.18));
       cyl(iron,p.east,roofY+1.12+t*Math.sin(.18),p.north,.175,.175,.075,10,fr.yaw,Math.PI/2-.18);
+    }
+    // Front objective and rear eye cup lie on the same inclined axis.
+    for(const [t,r]of [[.65,.14],[-.65,.10]] as const){
+      const p=fr.at(-1.8,D/4+.4+t*Math.cos(.18));
+      const h=roofY+1.12+t*Math.sin(.18);
+      cyl(brass,p.east,h,p.north,r,r,.10,10,fr.yaw,Math.PI/2-.18);
+      const d=t+Math.sign(t)*.052,q=fr.at(-1.8,D/4+.4+d*Math.cos(.18));
+      cyl(iron,q.east,roofY+1.12+d*Math.sin(.18),q.north,r*.77,r*.77,.012,10,fr.yaw,Math.PI/2-.18);
     }
     // Reuse the existing optical affordance, not a new story/ledger event.
     const scopeUse=fr.at(-.85,1.84);
