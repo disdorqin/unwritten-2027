@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -286,6 +286,7 @@ import {buildCraterRailExtension} from './voxel-tavern/town-blockout/town-crater
 const grid=createTerrainGrid(), road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
 const rail=segment==='kengkou'?buildCraterRailExtension(grid,road):undefined;
 const approach={
+ northwalk:[[-12,159],[-12,240],[-12,320]],
  wall:[[-9,159]],
  gatehouse:[[-3,159],[-6,154],[-7,150.2]],
  kengkou:[[-12,159],[-29,159],[-35,164],[-36,167]],
@@ -308,12 +309,13 @@ try{
  },positionPattern.source,{timeout:45000});
  for(const [i,target] of approach[segment].entries())await walkTo(page,evidence,target,segment+'-approach-'+i);
  const tower=road.outerWorks.towerRoutes.find(t=>t.id===segment+'-tower');
- const path=segment==='wall'?[-9,-15,-21,-28].map(east=>({east,north:159,height:road.heightAt(east,159)})):
+ const path=segment==='northwalk'?[[-12,320],[-12,336],[-12,400],[-12,450],[-9,470],[-4,485],[2,490]].map(([east,north])=>({east,north,height:east<0?road.heightAt(east,north):grid.heightAt(east,north)})):
+   segment==='wall'?[-9,-15,-21,-28].map(east=>({east,north:159,height:road.heightAt(east,159)})):
    tower?[tower.entry,...tower.stairs]:segment==='supply'?road.mouthWorks.supplyDeckRoute:
    segment==='kengkou'?rail.stationWalkRoutes.find(t=>t.id==='kengkou-station').points:
    road.outerWorks.industrialRoutes.find(t=>t.id===(segment==='gatehouse'?'gatehouse':segment+'-plant')).points;
  async function step(point,label){
-   await walkTo(page,evidence,[point.east,point.north],label,.18);
+   await walkTo(page,evidence,[point.east,point.north],label,segment==='northwalk'?.46:.18);
    await page.waitForTimeout(140);
    const pose=await readPose(page);
    assert.ok(Math.abs(pose.height-point.height)<.39,JSON.stringify({label,pose,point}));
@@ -332,6 +334,7 @@ try{
  }
  for(const [i,point] of path.entries()){
    await step(point,segment+'-up-'+i);
+   if(segment==='northwalk'&&(i===1||i===2))await wallView('northwalk-'+(i===1?'seam':'mid'),0);
    if(segment==='wall'&&i===0)await wallView('wall-town-face',-Math.PI/2);
    if(segment==='wall'&&i===path.length-1)await wallView('wall-crater-face',Math.PI/2);
  }
