@@ -31,14 +31,15 @@ export type CraterPlayLeaves={
  rubbing(host:{pose():CraterPose|undefined;facts():RubbingFacts|undefined;setHeld(marker:string,held:boolean):void}):RubbingControl;
 };
 export type CraterPlayContext={localPose():CraterPose|undefined;authority():CraterPlayAuthority|undefined;now():number;notify(message:string):void};
-const finitePose=(p:CraterPose)=>[p.east,p.north,p.height,p.heading,p.pitch,p.eyeHeight].every(Number.isFinite)&&p.eyeHeight>=.5&&p.eyeHeight<=2.2;
+const finitePose=(p:CraterPose)=>!!p&&[p.east,p.north,p.height,p.heading,p.pitch,p.eyeHeight].every(Number.isFinite)&&p.eyeHeight>=.5&&p.eyeHeight<=2.2;
 const close=(a:CraterPose,b:CraterPose)=>Math.hypot(a.east-b.east,a.north-b.north)<=.30&&Math.abs(a.height-b.height)<=.25&&Math.abs(Math.atan2(Math.sin(a.heading-b.heading),Math.cos(a.heading-b.heading)))<=.16&&Math.abs(a.pitch-b.pitch)<=.12;
 const keyFor=(h:Hit)=>h.station+':'+(h.index??'-');
 const stationLabels={bellows:'压动风箱',calibration:'转动校准盘',sorting:'投放手持矿料',weighing:'称量手持矿料',turnout:'扳动道岔'};
 const denied=(reason='unavailable'):CraterReceipt=>({accepted:false,reason});
 export function createAR30CraterPlay(leaves:CraterPlayLeaves,ctx:CraterPlayContext){
  let lastHeld:{authority:CraterPlayAuthority;frame:CraterAcceptedFrame;marker:string}|undefined;
- let active=false,disposed=false,session:string|undefined,autoSummit=false;
+ let active=false,disposed=false,session:string|undefined,autoSummit=false,requestPending=false;
+ let rendered:string|null=null;
  function local(){const p=ctx.localPose();return p&&finitePose(p)?p:undefined;}
  function frame(){
   if(disposed)return;
@@ -50,9 +51,11 @@ export function createAR30CraterPlay(leaves:CraterPlayLeaves,ctx:CraterPlayConte
  function pose(){return frame()?.frame.pose;}
  function facts<K extends 'workshop'|'mound'|'rubbing'>(key:K){return frame()?.frame[key];}
  const request=async(intent:WorkshopIntent|MoundIntent)=>{
-  const f=frame();if(!f)return denied();
-  // Same accepted pose and target are re-read by the real authority.
-  return f.authority.request(f.frame,intent);
+  const f=frame();if(!f||requestPending)return denied();
+  // All seven interactions share one in-flight request slot; the host
+  // must independently recheck the accepted pose, target and receipt.
+  requestPending=true;
+  try{return await f.authority.request(f.frame,intent);}finally{requestPending=false;}
  };
  function release(){
   const old=lastHeld;lastHeld=undefined;
@@ -68,7 +71,7 @@ export function createAR30CraterPlay(leaves:CraterPlayLeaves,ctx:CraterPlayConte
  function target():Target|undefined{
   if(disposed)return;
   const p=local();if(!p)return;
-  const f=frame(),q=f?.frame.pose,s=f?.frame.session;
+  const f=frame(),q=requestPending?undefined:f?.frame.pose,s=f?.frame.session;
   if(leaves.aimPaper(p))return {key:'paper',label:'长按拓印',mode:'hold',session:s,available:!!(q&&f?.frame.rubbing&&!f.frame.rubbing.complete&&Number.isFinite(f.frame.rubbing.progress)&&f.frame.rubbing.progress>=0&&f.frame.rubbing.progress<=1&&leaves.aimPaper(q))};
   if(leaves.aimFlag(p))return {key:'flag',label:'扶正旧工旗',mode:'tap',session:s,available:!!(q&&mound.action('straighten-flag'))};
   const h=leaves.aimWorkshop(p);if(!h)return;
@@ -97,10 +100,14 @@ export function createAR30CraterPlay(leaves:CraterPlayLeaves,ctx:CraterPlayConte
   const p=local(),q=f?.frame.pose;
   if(active&&(!q||!p||!leaves.aimPaper(p)||!leaves.aimPaper(q)||!f?.frame.rubbing||f.frame.rubbing.complete))cancelHold();
   rubbing.frame(active);
-  workshop.refresh();mound.refresh();
+  // Do not repaint every industrial sign or rebuild its world matrix
+  // on every animation frame. The accepted revision/expiry is the only
+  // display change; no local interpolation mutates committed mechanisms.
+  const key=f?JSON.stringify([f.frame.session,f.frame.revision,f.frame.receivedAt]):'';
+  if(rendered!==key){workshop.refresh();mound.refresh();rendered=key;}
   const summit=!!(q&&p&&leaves.atSummit(p)&&leaves.atSummit(q));
   if(!summit)autoSummit=false;
-  else if(!autoSummit&&mound.action('reach-overlook')){autoSummit=true;void mound.interact('reach-overlook');}
+  else if(!requestPending&&!autoSummit&&mound.action('reach-overlook')){autoSummit=true;void mound.interact('reach-overlook');}
  }
  function dispose(){cancelHold();disposed=true;}
  return {target,tap,beginHold,cancelHold,update,dispose};

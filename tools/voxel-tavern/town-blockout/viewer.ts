@@ -2024,6 +2024,7 @@ function ensureTownInputButton(id: string, label: string, after: HTMLElement): H
 const snowPrimaryButton = ensureTownInputButton('snowball-primary', '投雪球', snowballMeter);
 const touchSledBrakeButton = ensureTownInputButton('touch-sled-brake', '刹车', actionButton);
 const craterReverseButton=ensureTownInputButton('crater-reverse','反转校准盘',actionButton);
+craterReverseButton.style.cssText='position:fixed;right:max(14px,env(safe-area-inset-right));bottom:max(98px,calc(env(safe-area-inset-bottom) + 86px));min-height:48px;min-width:72px;touch-action:manipulation;user-select:none';
 craterReverseButton.addEventListener('click',()=>{if(craterPlayInput.down('reverse-touch',-1))craterPlayInput.up('reverse-touch');});
 touchSledBrakeButton.setAttribute('aria-pressed', 'false');
 const snowballRing = element('snowball-action-ring');

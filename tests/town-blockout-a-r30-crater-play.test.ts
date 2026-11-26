@@ -21,7 +21,9 @@ function harness(){
 test('E and Q target capture, no retarget or unintended repeat',async()=>{
  const h=harness();h.input.update();
  assert.equal(h.input.down('E'),true);h.input.down('E');h.input.up('E');
+ await new Promise(resolve=>setImmediate(resolve));
  assert.equal(h.input.down('Q',-1),true);h.input.up('Q');
+ await new Promise(resolve=>setImmediate(resolve));
  assert.deepEqual(h.sent,[{session:'s1',intent:{kind:'turn-dial',index:0,direction:1}},{session:'s1',intent:{kind:'turn-dial',index:0,direction:-1}}]);
  h.input.down('E');h.setKind('bellows');h.input.update();h.input.up('E');
  assert.equal(h.sent.length,2);assert.equal(h.input.down('Q',-1),false);
@@ -43,8 +45,9 @@ test('session change invalidates discrete press and disables stale facts',()=>{
  h.input.down('E');h.input.up('E');assert.equal(h.sent.length,1);
  h.move();assert.equal(h.play.target(),undefined);assert.equal(h.input.down('E'),false);
 });
-test('summit registers through one request per entry, never invented flag state',()=>{
+test('summit registers through one request per entry, never invented flag state',async()=>{
  const h=harness();h.setKind('summit');h.input.update();h.input.update();assert.equal(h.sent.length,1);
+ await new Promise(resolve=>setImmediate(resolve));
  h.setKind('flag');h.input.update();h.input.down('E');h.input.up('E');assert.equal(h.sent.length,2);
  assert.deepEqual(h.sent[1],{session:'s1',intent:{kind:'straighten-flag',site:'mound-old-work-flag'}});
 });
