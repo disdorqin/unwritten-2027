@@ -25,6 +25,7 @@ import type {UndergroundMiningTargetView} from '../../../src/shared/underground-
 import {surveyR30Ore} from './town-c-r30-ore-survey.js';
 import {mountR30ShallowGallery} from './town-c-r30-shallow-gallery.js';
 import {mountR30DeepBank} from './town-c-r30-deep-bank.js';
+import {mountR30CrouchRoute} from './town-c-r30-crouch-route.js';
 import {mountR30ShallowWayfinding} from './town-c-r30-shallow-wayfinding.js';
 import {surveyR30Encounters} from './town-c-r30-encounter-survey.js';
 import {mountR30EncounterArt,type R30EncounterBridge} from './town-c-r30-encounter-art.js';
@@ -403,6 +404,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
     if(q&&mainline?.kind==='ready'&&(mainline.scene.blocks(east,north,q.floor,undergroundMineSpec.walker.radius,h)||mainline.motion.blocked(east,north,q.floor,undergroundMineSpec.walker.radius,h)))return;
     return q;
   }
+  const crouchRoute=mountR30CrouchRoute(mounted.group,mine.crouchInterval,(x,z,posture)=>{const p=worldOf([x,-91,z]);return passageAt(p.east,p.north,posture)},mine.expansion?.deepWorks===true);
   const oreSurvey=surveyR30Ore(mounted.group,worldOf,p=>{const q=passageAt(p.east,p.north);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01});
   const oreArt=oreSurvey.kind==='ready'?mountR30OreArt(mounted.group,oreSurvey,options.oreBridge):undefined;
   const safeCenters=[campFireWorld,...(mine.supportStation?[worldOf([mine.supportStation.x,mine.supportStation.y,mine.supportStation.z])]:[])];
@@ -509,9 +511,10 @@ export function mountUndergroundDomainHost(options: Readonly<{
       const opened=lower&&mounted.installUpperLiftAperture();
       interlayerLift.present(options.interlayerRide.read(),options.interlayerRide.now(),opened);
     }
-  },dispose(){deepBank?.dispose();shallowWayfinding?.dispose();shallowGallery?.dispose();encounterArt?.dispose();oreArt?.dispose();if(mainline?.kind==='ready')mainline.dispose();returnBay.dispose();thinWalls.dispose();deepAssembly.dispose();crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
+  },dispose(){crouchRoute.dispose();deepBank?.dispose();shallowWayfinding?.dispose();shallowGallery?.dispose();encounterArt?.dispose();oreArt?.dispose();if(mainline?.kind==='ready')mainline.dispose();returnBay.dispose();thinWalls.dispose();deepAssembly.dispose();crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
   return {
-    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,deepAssembly,thinWalls,returnBay,mainline,oreSurvey,oreArt,encounterSurvey,encounterArt,shallowGallery,shallowWayfinding,deepBank,
+    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,deepAssembly,thinWalls,returnBay,mainline,oreSurvey,oreArt,encounterSurvey,encounterArt,shallowGallery,shallowWayfinding,deepBank,crouchRoute,
+    crouchGuidance(){const foot=options.readAcceptedDomainFoot?.();if(foot?.domainId!==undergroundMineLanding.domainId)return;const local=toLocal?.(foot);if(!local)return;const q=passageAt(foot.east,foot.north,'crouching');if(!q||Math.abs(q.floor-foot.height)>.25)return;return crouchRoute.guidance(local[0],local[2])},
     // Layout contract only. The actual city/palace receiving shells and
     // movement/presence host must approve before mounting or allowing travel.
     deepLayerContract:shaftContract.kind==='ready'&&shaftContract.deep.kind==='registered'

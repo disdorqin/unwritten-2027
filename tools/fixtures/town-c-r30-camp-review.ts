@@ -37,6 +37,9 @@ const eyes:Record<string,{eye:readonly [number,number,number];look:readonly [num
  wreck:{eye:[0,-91.2,2],look:[2.31,-90.05,1.48]},
  gallery:{eye:[0,-90.25,17],look:[0,-89.8,28]},
  collapse:{eye:[0,-90.91,30.2],look:[0,-90.25,33]},
+ crouchshore:{eye:[0,-90.86,29.2],look:[0,-88.75,31.18]},
+ crouchcamp:{eye:[0,-91,37.1],look:[0,-88.79,35.82]},
+ crouchinside:{eye:[0,-91,33.0],look:[0,-90.0,35.6]},
  mainshaft:{eye:[0,-91,69],look:[0,-89.1,86]},
  shallowentry:{eye:[-5.2,-91,52],look:[-16,-89.9,52]},
  shallowdesk:{eye:[-16,-91,52.57],look:[-16,-89.72,54.12]},
@@ -151,8 +154,9 @@ function setView(name:string){
  }
  ride?.hide();torch.intensity=35;
  const v=eyes[name];if(!v)return false;const p=vec(v.eye);
- if(!host.passageAt(p.x,-p.z))return false;
- camera.position.copy(p).add(new Vector3(0,1.67,0));camera.lookAt(vec(v.look));view=name;return true;
+ const posture=name==='crouchinside'?'crouching':'standing';
+ if(!host.passageAt(p.x,-p.z,posture))return false;
+ camera.position.copy(p).add(new Vector3(0,posture==='crouching'?1:1.67,0));camera.lookAt(vec(v.look));view=name;return true;
 }
 function step(seconds:number){
  if(!keys.has('w')||seconds<=0||seconds>2)return false;
