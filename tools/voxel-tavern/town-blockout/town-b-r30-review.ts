@@ -10,6 +10,7 @@ import {installBR30MoundWorkFlag,createBR30MoundControls} from './town-b-r30-mou
 import {createMound} from './town-crater-points-play';
 import {installBR30RubbingPaper,createBR30RubbingControls} from './town-b-r30-inscription-rubbing';
 import {createCarvedStoneRubbing} from './town-carved-stone-rubbing';
+import {bR30InscriptionApproachPlan} from './town-b-r30-inscription-approach';
 import {createBR30WorkshopReviewFixture} from './town-b-r30-workshop-review-fixture';
 import {stripBR30LegacyTerraceMesh} from './town-b-r30-retire-legacy-terraces';
 import {settleBR30StorySupports} from './town-b-r30-settle-story-supports';
@@ -58,6 +59,8 @@ add('molten-beads','熔珠滩 · 矿道近读',beadFoot,bead);
 const inscription=road.inscription.layout;
 add('inscription-stone','黑石刻石',inscription.useFoot,{...inscription.stone,east:inscription.stone.east-.8,height:inscription.stone.height+.25});
 add('inscription-rubbing','拓印台',inscription.useFoot,rubbingPaper.paper);
+const inscriptionApproach=bR30InscriptionApproachPlan.map(([east,north])=>({east,north,height:road.heightAt(east,north)!}));
+add('inscription-approach','转运站 · 刻石接近段',inscriptionApproach[0],{...inscriptionApproach[1],height:inscriptionApproach[1].height+1.65});
 const approach=fixture.mainTrailPoint(.99);
 add('bottom','矿道末段向井口',world(approach.east,approach.north),{east:a.east,north:a.north,height:a.rimHeight-33.9});
 for(const site of markers.sites){
@@ -173,5 +176,5 @@ renderer.domElement.addEventListener('pointerup',()=>drag=false);
 renderer.domElement.addEventListener('pointermove',e=>{if(drag){yaw+=e.movementX*.003;pitch=Math.max(-1.3,Math.min(1.3,pitch-e.movementY*.003));}});
 select.addEventListener('change',choose);phase.addEventListener('click',()=>{night=!night;light();});
 resize();choose();light();
-Object.defineProperty(window,'__bR30Review',{value:()=>({frame,night,east,north,feet,yaw,pitch,view:select.value,views,retiredPlates,settledSupports:settledSupports.length,draws:renderer.info.render.calls,tris:renderer.info.render.triangles,aim:machines.aimControl({east,north,height:feet},yaw,pitch,1.65)?.station??null,workshop:workshop?.state(),moundRoute:mound.route,moundAudit:mound.audit,moltenBeads:road.moltenBeads.stats,rubbing:rubbingMode?{progress:rubbingRule.progress,complete:rubbingRule.complete,entry:rubbingEntry,shown:rubbingPaper.shown,cellCount:rubbingPaper.cellCount,held:rubbingHeld}:undefined,workFlag:{at:workFlag.at,foot:workFlag.foot,target:workFlag.target(),straight:workFlag.straight,parts:workFlag.parts,fixture:moundMode?{known,flagStraight:moundRule.flagStraight,aim:!!moundControls?.action('straighten-flag')}:undefined}})});
+Object.defineProperty(window,'__bR30Review',{value:()=>({frame,night,east,north,feet,yaw,pitch,view:select.value,views,retiredPlates,settledSupports:settledSupports.length,draws:renderer.info.render.calls,tris:renderer.info.render.triangles,aim:machines.aimControl({east,north,height:feet},yaw,pitch,1.65)?.station??null,workshop:workshop?.state(),moundRoute:mound.route,moundAudit:mound.audit,moltenBeads:road.moltenBeads.stats,inscriptionApproach,rubbing:rubbingMode?{progress:rubbingRule.progress,complete:rubbingRule.complete,entry:rubbingEntry,shown:rubbingPaper.shown,cellCount:rubbingPaper.cellCount,held:rubbingHeld}:undefined,workFlag:{at:workFlag.at,foot:workFlag.foot,target:workFlag.target(),straight:workFlag.straight,parts:workFlag.parts,fixture:moundMode?{known,flagStraight:moundRule.flagStraight,aim:!!moundControls?.action('straighten-flag')}:undefined}})});
 requestAnimationFrame(tick);
