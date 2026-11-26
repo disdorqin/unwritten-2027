@@ -1,6 +1,6 @@
 import { Group, Vector3 } from 'three';
 import { resolveUndergroundShaftRegistration } from '../../../src/presence/underground-shaft-registration.js';
-import { undergroundCampPickaxe } from '../../../src/shared/underground-camp-pickaxe.js';
+import { undergroundCampPickaxe,resolveUndergroundCampPickaxeSite,type UndergroundCampPickaxeResult } from '../../../src/shared/underground-camp-pickaxe.js';
 import { createUndergroundMineLayout, type UndergroundMineSpec } from './underground-mine-layout';
 import { mountUndergroundMineDomain } from './underground-domain-scene';
 import { createUndergroundCampRemains } from './underground-camp-remains';
@@ -138,6 +138,12 @@ export type UndergroundCampBridge = Readonly<{
   isAimingAt(world: Point): boolean;
   showPickupNotice(): void;
   onRested(roomId: string): void;
+  /** The existing per-profile grantToolOnce receipt; no separate inventory.
+   * The legacy viewer omits this port until A supplies the presence route. */
+  pickaxeReceipt?:Readonly<{
+    read():Readonly<{playerId:string;domainId:string;claimed:boolean}>|undefined;
+    claim(playerId:string,siteId:typeof undergroundCampPickaxe.siteId):Promise<UndergroundCampPickaxeResult>;
+  }>;
   /**
    * Lamp authority seam (ruling 2026-11-22): the single lamp ledger lives
    * with the shaft-head lamp room on the presence side; the camp holds no
@@ -218,6 +224,23 @@ export function mountUndergroundDomainHost(options: Readonly<{
   }
   const recordedRelics = new Set<string>();
   let pickaxeTaken = false;
+  const pickaxeReceipt=campBridge?.pickaxeReceipt;
+  function readPickaxeReceipt(){
+    const s=pickaxeReceipt?.read(),f=options.readAcceptedDomainFoot?.();
+    if(!s||!f||s.domainId!==undergroundMineLanding.domainId||f.domainId!==s.domainId||
+      typeof s.playerId!=='string'||!s.playerId.trim()||typeof s.claimed!=='boolean'||![f.east,f.north,f.height].every(Number.isFinite))return;
+    return s;
+  }
+  // Only an acknowledged, in-flight grant may hide the tool while the
+  // corresponding receipt stream catches up. Different profiles cannot
+  // inherit that local presentation suppression.
+  let acknowledgedPickaxePlayer:string|undefined;
+  function availablePickaxe(){
+    if(!pickaxeReceipt)return !pickaxeTaken;
+    const s=readPickaxeReceipt();if(!s)return false;
+    if(acknowledgedPickaxePlayer!==s.playerId)acknowledgedPickaxePlayer=undefined;
+    return !s.claimed&&acknowledgedPickaxePlayer!==s.playerId;
+  }
 
   const readLights = () => {
     if (!offerings) {
@@ -278,13 +301,25 @@ export function mountUndergroundDomainHost(options: Readonly<{
       },
     },
     pickaxe: {
-      available: () => !pickaxeTaken,
+      available: availablePickaxe,
+      receiptDriven: !!pickaxeReceipt,
       aimedAt: (point: readonly [number, number, number]) => {
         const world = toWorldPoint?.(point);
         return world !== undefined && campBridge.isAimingAt(world);
       },
       claim: async (siteId: string) => {
         if (siteId !== undergroundCampPickaxe.siteId) return 'rejected' as const;
+        if(pickaxeReceipt){
+          const s=readPickaxeReceipt();
+          if(!s)return 'rejected' as const;
+          if(s.claimed||acknowledgedPickaxePlayer===s.playerId)return 'already-granted' as const;
+          const result=await pickaxeReceipt.claim(s.playerId,undergroundCampPickaxe.siteId);
+          const current=readPickaxeReceipt();
+          if(current?.playerId!==s.playerId)return 'rejected' as const;
+          if(result!=='granted'&&result!=='already-granted')return 'rejected' as const;
+          acknowledgedPickaxePlayer=s.playerId;
+          return result;
+        }
         if (pickaxeTaken) return 'already-granted' as const;
         pickaxeTaken = true;
         return 'granted' as const;
@@ -315,6 +350,12 @@ export function mountUndergroundDomainHost(options: Readonly<{
     return { east: world.x, north: -world.z, height: world.y };
   };
   const campFireWorld = worldOf(mine.anchors.campRecovery.position);
+  const localPickaxe=resolveUndergroundCampPickaxeSite(mine,undergroundMineSpec.camp);
+  const pickaxeContract=localPickaxe?{siteId:localPickaxe.id,domainId:undergroundMineLanding.domainId,
+   aim:worldOf(localPickaxe.aim),approach:worldOf(localPickaxe.approach),
+   // Server checks horizontal tool position and actual floor datum, not
+   // the height of the head lying on the table.
+   site:{domainId:undergroundMineLanding.domainId,...worldOf([localPickaxe.aim[0],localPickaxe.approach[1],localPickaxe.aim[2]])}}:undefined;
   const recoveryRuntime = {
     sites: [{
       fire: {
@@ -532,6 +573,6 @@ export function mountUndergroundDomainHost(options: Readonly<{
     floorAt: (east: number, north: number,posture:'standing'|'crouching'='standing') => passageAt(east, north,posture)?.floor,
     toLocal: (world: Point) => toLocal?.(world),
     offeringsSnapshot: () => offerings?.snapshot(),
-    campFireWorld,
+    campFireWorld,pickaxeContract,
   } as const;
 }
