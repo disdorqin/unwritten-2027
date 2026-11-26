@@ -25,13 +25,14 @@ try{
  const load=n=>import(pathToFileURL(join(tmp,prefix,n+'.ts')).href);
  const {createTerrainGrid,worldBounds}=await load('terrain');
  const {mountWestCraterRoad}=await load('town-za22-crater-road');
- const {buildTownRailRoute}=await load('town-railway');
+ const {createTownRailway}=await load('town-railway');
  const {buildCraterRailExtension}=await load('town-crater-rail-extension');
  const {createAR30RidgeOwnership}=await load('town-a-r30-ridge-ownership');
  const {buildFrontRidgeR30Field,mountFrontRidgeR30}=await load('town-d-r30-front-ridge');
  const {planRidgeForest,ridgeForestRouteClearance}=await load('town-d-r30-forest');
  const {planAR30RailJunction}=await load('town-a-r30-rail-junction-plan');
- const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n)),loop=buildTownRailRoute(grid);
+ const {surveyAR30WestJunction}=await load('town-a-r30-rail-west-junction');
+ const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n)),originalRailway=createTownRailway(grid,()=>0),loop=originalRailway.route;
  const rail=buildCraterRailExtension(grid,road,loop.points);
  const ownership=createAR30RidgeOwnership({loop:loop.points,branch:rail.samples});
  const naked=buildFrontRidgeR30Field(grid.groundHeightAt,()=>1),field=buildFrontRidgeR30Field(grid.groundHeightAt,ownership.weight);
@@ -62,6 +63,9 @@ try{
   assert.ok(hit);meshProbe++;meshError=Math.max(meshError,Math.abs(hit.point.y-field.heightAt(e,n)));
  }
  assert.ok(meshError<.0001);
+ let midPadProbes=0,midPadMax=0;
+ for(let e=425;e<=455;e++)for(let n=508;n<=532;n++){midPadProbes++;midPadMax=Math.max(midPadMax,Math.abs(field.heightAt(e,n)-140));}
+ assert.equal(midPadMax,0);
  const slots=[[320,650],[440,520],[526,329],[336,640],[296,502],[296,520]].map(([east,north])=>({east,north,old:grid.groundHeightAt(east,north),unprotected:naked.heightAt(east,north),protected:field.heightAt(east,north),ownership:ownership.weight(east,north)}));
  const placements=planRidgeForest(field,ridgeForestRouteClearance([loop.points.map(p=>({east:p.x,north:-p.z})),rail.samples]));
  assert.ok(placements.every(p=>Math.abs(p.height-field.heightAt(p.east,p.north))<1e-6));
@@ -73,8 +77,10 @@ try{
  const corrected=buildCraterRailExtension({...grid,groundHeightAt:combined,heightAt:(e,n)=>{const h=grid.heightAt(e,n),g=grid.groundHeightAt(e,n);return h===g?combined(e,n):h}},road,loop.points);
  const plan=planAR30RailJunction(corrected.samples,loop.points,combined);
  const oldOnly=planAR30RailJunction(rail.samples,loop.points,grid.groundHeightAt);
- report.field={edgeProbes,edgeMax,frozenProbes,frozenMax,unmaskedMax,meshProbe,meshError,triangles,slots,placements:placements.length,feather:ownership.feather,affected,maskSlope,unmaskedSlope};
- report.rail={before:rail.verticalSurvey.violations.length,after:corrected.verticalSurvey.violations.length,junction:corrected.junctionAudit,eastValley:{spans:rail.eastValleyBridgeSpans.length,bearings:rail.eastValleyBridgeSpans.reduce((s,p)=>s+p.bearings,0),maxFill:rail.eastValleyRepair.maxFill},oldPlan:{attempts:oldOnly.attempts,best:oldOnly.best,accepted:!!oldOnly.plan},protectedPlan:{attempts:plan.attempts,best:plan.best,accepted:!!plan.plan}};
+ const west=surveyAR30WestJunction(rail.samples,loop.points,[...originalRailway.group.userData.colliders,...originalRailway.group.userData.floors],grid.groundHeightAt);
+ report.westPlan={attempts:west.attempts,geometries:west.geometries,rejects:west.rejects,best:west.best,accepted:!!west.plan};
+ report.field={midPadProbes,midPadMax,edgeProbes,edgeMax,frozenProbes,frozenMax,unmaskedMax,meshProbe,meshError,triangles,slots,placements:placements.length,feather:ownership.feather,affected,maskSlope,unmaskedSlope};
+ report.rail={before:rail.verticalSurvey.violations.length,after:corrected.verticalSurvey.violations.length,junction:corrected.junctionAudit,closedHead:corrected.closedHead,eastValley:{spans:rail.eastValleyBridgeSpans.length,bearings:rail.eastValleyBridgeSpans.reduce((s,p)=>s+p.bearings,0),maxFill:rail.eastValleyRepair.maxFill},oldPlan:{attempts:oldOnly.attempts,best:oldOnly.best,accepted:!!oldOnly.plan},protectedPlan:{attempts:plan.attempts,best:plan.best,accepted:!!plan.plan}};
  assert.equal(corrected.verticalSurvey.violations.length,rail.verticalSurvey.violations.length);
  assert.equal(corrected.serviceGeometryReady,false);
  report.success=true;mounted.dispose();
