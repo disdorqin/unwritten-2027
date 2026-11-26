@@ -13,6 +13,8 @@ test('forest uses actual terrain and excludes the complete protected corridor',(
    if(p.kind==='pine'||p.kind==='flagpine'){assert.ok(p.height<205);assert.ok(model.blocked(p.east,p.north,p.height))}
   }
   assert.equal(planRidgeForest(field,()=>false).length,0);
+  const p=model.placements[0]!;model.updateView(p.east,p.north);assert.ok(model.detailCounts().near>0);
+  model.updateView(-2000,-2000);assert.equal(model.detailCounts().near,0);
   assert.deepEqual(model.placements,planRidgeForest(field,clear));
  }finally{model.dispose();model.dispose()}
 });

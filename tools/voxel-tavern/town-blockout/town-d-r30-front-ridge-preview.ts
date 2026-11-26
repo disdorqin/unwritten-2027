@@ -20,10 +20,10 @@ document.querySelector('#scene')!.append(renderer.domElement);
 const camera=new PerspectiveCamera(66,1,.12,1500);
 const views=[
  {name:'山脚',e:320,n:285,yaw:0,pitch:.22},
- {name:'西侧支脊',e:94,n:532,yaw:Math.PI/2,pitch:.20},
+ {name:'西侧林谷',e:30,n:350,yaw:.56,pitch:.35},
  {name:'中山台',e:440,n:514,yaw:0,pitch:.08},
- {name:'云海台',e:336,n:640,yaw:Math.PI,pitch:-.20},
- {name:'山背',e:320,n:788,yaw:Math.PI,pitch:.48},
+ {name:'云海台南坡',e:336,n:600,yaw:Math.PI,pitch:-.65},
+ {name:'东北山背',e:610,n:775,yaw:-1.98,pitch:.48},
 ] as const;
 let index=0,e=320,n=285,h=field.heightAt(e,n)!,yaw=0,pitch=.22,night=false,walked=0,frames=0,last=performance.now(),fps=0;
 const keys=new Set<string>();
@@ -42,8 +42,8 @@ renderer.setAnimationLoop(now=>{
  const scale=dt*4.5/Math.max(1,Math.hypot(f,s)),de=(Math.sin(yaw)*f+Math.cos(yaw)*s)*scale,dn=(Math.cos(yaw)*f-Math.sin(yaw)*s)*scale;
  const y=field.heightAt(e+de,n+dn),distance=Math.hypot(de,dn);
  if(y!==undefined&&distance>0&&Math.abs(y-h)<=distance*.60+.02&&!forest.blocked(e+de,n+dn,y)&&!station.blocked(e+de,n+dn,y,.27)){e+=de;n+=dn;h=y;walked+=distance}
- camera.position.set(e,h+1.65,-n);target.set(e+Math.sin(yaw)*Math.cos(pitch),h+1.65+Math.sin(pitch),-n-Math.cos(yaw)*Math.cos(pitch));camera.lookAt(target);renderer.render(scene,camera);
+ camera.position.set(e,h+1.65,-n);target.set(e+Math.sin(yaw)*Math.cos(pitch),h+1.65+Math.sin(pitch),-n-Math.cos(yaw)*Math.cos(pitch));camera.lookAt(target);forest.updateView(e,n);model.updateView(e,n);renderer.render(scene,camera);
  document.querySelector('#status')!.textContent=views[index]!.name+' · E'+e.toFixed(1)+' N'+n.toFixed(1)+' Y'+h.toFixed(1)+' · '+fps+' FPS · '+renderer.info.render.calls+' draws';
 });
-Object.defineProperty(window,'__ridgeR30',{value:{state:()=>({reviewOnly:true,index,e,n,h,yaw,pitch,night,walked,frames,fps,draws:renderer.info.render.calls,tris:renderer.info.render.triangles,ground:field.heightAt(e,n),forestCount:forest.placements.length})}});
+Object.defineProperty(window,'__ridgeR30',{value:{state:()=>({reviewOnly:true,index,e,n,h,yaw,pitch,night,walked,frames,fps,draws:renderer.info.render.calls,tris:renderer.info.render.triangles,ground:field.heightAt(e,n),forestCount:forest.placements.length,forestLOD:forest.detailCounts(),terrainLOD:model.detailCounts()})}});
 addEventListener('pagehide',()=>{renderer.setAnimationLoop(null);station.dispose();forest.dispose();model.dispose();renderer.dispose()});
