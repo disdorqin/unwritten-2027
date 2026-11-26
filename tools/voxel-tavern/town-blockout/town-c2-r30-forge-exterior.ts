@@ -363,9 +363,11 @@ export function mountTownC2R30ForgeExterior(options: Readonly<{
   }));
   const footIndex = createStaticFootIndex(colliders);
   function blocks(e: number, n: number, y = 0, r = .27) {
+    if (!certified) return true;
     return ![e, n, y, r].every(Number.isFinite) || r <= 0 || footIndex.blocks(e, n, y, r);
   }
   function canStand(e: number, n: number, y = 0, r = .27) {
+    if (!certified) return false;
     const foot = c2R30ForgeExteriorFixtureDatum.footprint;
     if (![e, n, y, r].every(Number.isFinite) || e - r < foot.minE || e + r > foot.maxE ||
         n - r < foot.minN || n + r > foot.maxN) return false;

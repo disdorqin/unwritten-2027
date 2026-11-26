@@ -38,7 +38,10 @@ test('C2 R09 keeps the certified forge approach and gate centre walkable', () =>
     e: 142, y: 3.86, n: 4.0, w: 4.2, h: .5, d: .9, solid: true, emitter: false,
   }), true);
 
-  const exterior = mountTownC2R30ForgeExterior();
+  const exterior = mountTownC2R30ForgeExterior({
+    site: { ...c2R30ForgeExteriorFixtureSite, domainId: 'host:u10:forge-exterior' },
+    supportsSite: () => true,
+  });
   try {
     for (let n = 1.9; n <= 4.3; n += .1) {
       assert.equal(exterior.canStand(142, n), true, `approach blocked at n=${n.toFixed(1)}`);
@@ -65,6 +68,8 @@ test('C2 R09 stays hidden and unregistered until the host certifies its site', (
     assert.equal(local.stats().interactionSockets, 0);
     assert.equal(local.stats().lootCount, 0);
     assert.equal(local.stats().presenceChanges, 0);
+    assert.equal(local.blocks(140.35, 2.62), true, 'uncertified geometry must fail closed');
+    assert.equal(local.canStand(142, 3), false, 'uncertified footprint must not grant ground');
   } finally {
     local.dispose();
   }
