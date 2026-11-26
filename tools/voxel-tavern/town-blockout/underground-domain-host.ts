@@ -14,7 +14,8 @@ import type { UndergroundWater90OreVisual } from './town-c2-underground-water-mi
 import { resolveR30ShaftContract } from './town-c-r30-shaft-contract.js';
 import {r30DeepFrames,r30DeepLocalFeet,r30DeepWorldFeet,r30DepthLinks,r30DeepRoomProposals} from './town-c-r30-deep-layer-contract.js';
 import {createR30DeepHost} from './town-c-r30-deep-host.js';
-import {mountR30InterlayerLift,type R30InterlayerRide} from './town-c-r30-interlayer-lift.js';
+import {mountR30InterlayerLift,r30InterlayerLiftSite,splitR30LiftAperture,type R30InterlayerRide} from './town-c-r30-interlayer-lift.js';
+import {createR30C2Consumer,type R30DeepRoomPort} from './town-c-r30-c2-consumer.js';
 import {createR30CrystalHost,type R30CrystalBridge} from './town-c-r30-crystal-host.js';
 import {makeR30CrystalFrame} from './town-c-r30-crystal-support.js';
 import {r30GateSwitchBlocks} from './underground-crystal-gate.js';
@@ -198,6 +199,8 @@ export function mountUndergroundDomainHost(options: Readonly<{
   readAcceptedMiningTargets?:()=>readonly UndergroundMiningTargetView[]|undefined;
   /** C2 scene roots and A/total-control room/mouth acceptance. */
   deepAssemblyBridge?:R30DeepAssemblyBridge;
+  /** Actual pinned C2 source; room/route acceptance comes from A. */
+  deepRooms?:R30DeepRoomPort;
   /** C2 certifies its actual roof opening; C certifies the upper mesh cut.
    * The existing transport authority supplies the accepted trip and clock. */
   interlayerRide?:Readonly<{read:()=>R30InterlayerRide|undefined;now:()=>number;lowerOpeningCertified:()=>boolean}>;
@@ -556,12 +559,18 @@ export function mountUndergroundDomainHost(options: Readonly<{
     supportsMineThreshold:()=>!!mine.queryPassage(0,139.5,.27,1.8,'open'),
     installMouth:mounted.installCrystalMouth,bridge:options.crystalBridge,readAcceptedFoot:options.readAcceptedDomainFoot,
     supportsMineInteractionFoot:p=>{const q=passageAt(p.east,p.north);return !!q&&Math.abs(q.floor-p.height)<.025}});
+  let lowerApertureOpen=false;
+  const site=r30InterlayerLiftSite.aperture.lower;
   const deepHost=createR30DeepHost({parent,seamRegistered:registeredSeam,
+    liftAperture:options.interlayerRide?{site:{lower:site,height:0,ceiling:site.ceiling},readOpen:()=>lowerApertureOpen,
+      split:(rect,hole)=>splitR30LiftAperture({minX:rect.minE,maxX:rect.maxE,minZ:rect.minN,maxZ:rect.maxN},{minX:hole.minE,maxX:hole.maxE,minZ:hole.minN,maxZ:hole.maxN})
+        .map(r=>({minE:r.minX,maxE:r.maxX,minN:r.minZ,maxN:r.maxZ}))}:undefined,
     readAcceptedWater:()=>options.waterBridge?.readWaterSnapshot?.(),
     readAcceptedFoot:options.readAcceptedDomainFoot,
     blocks:(domain,point,radius)=>interlayerLift?.blocks(domain,point,radius)===true});
+  const c2Consumer=options.deepRooms&&!options.deepAssemblyBridge?createR30C2Consumer(options.deepRooms,deepHost):undefined;
   const deepAssembly=createR30DeepAssembly({parent,seamRegistered:registeredSeam,
-    bridge:options.deepAssemblyBridge,readAcceptedFoot:options.readAcceptedDomainFoot,
+    bridge:c2Consumer?.bridge??options.deepAssemblyBridge,readAcceptedFoot:options.readAcceptedDomainFoot,
     supportsSecondMine:p=>deepHost.supportsArrival('underground/mine-2',p)});
   // Existing viewer already invokes mounted.sync()/dispose(). Preserve its
   // entry point and lifecycle, even before A supplies accepted domain feet.
@@ -591,8 +600,8 @@ export function mountUndergroundDomainHost(options: Readonly<{
     if(domain===undergroundMineLanding.domainId)return passageAt(east,north,posture);
     if(domain==='underground/crystal')return crystalHost?.passageAt(domain,east,north,posture);
     if(domain==='underground/mine-2'){
-      const p=deepHost.passageAt(domain,east,north);
-      return p?{...p,clearance:1.8,requiresCrouch:false}:undefined;
+      const p=deepHost.passageAt(domain,east,north,undergroundMineSpec.walker.radius,posture==='crouching'?undergroundMineSpec.walker.crouchingHeight:undergroundMineSpec.walker.standingHeight);
+      return p?{...p,requiresCrouch:p.clearance<undergroundMineSpec.walker.standingHeight}:undefined;
     }
     const q=deepAssembly.passageAt(domain,east,north,undergroundMineSpec.walker.radius,
       posture==='crouching'?undergroundMineSpec.walker.crouchingHeight:undergroundMineSpec.walker.standingHeight);
@@ -622,11 +631,13 @@ export function mountUndergroundDomainHost(options: Readonly<{
       deepHost.mounted.group.visible=true;
     interlayerLift?.showDomain(deepHost.status()==='ready'?'underground/mine-2':undefined);
     if(options.interlayerRide&&interlayerLift){
-      const lower=options.interlayerRide.lowerOpeningCertified();
+      const lower=options.interlayerRide.lowerOpeningCertified()&&deepHost.lowerApertureReady();
       const opened=lower&&mounted.installUpperLiftAperture();
-      interlayerLift.present(options.interlayerRide.read(),options.interlayerRide.now(),opened);
+      const cue=interlayerLift.present(options.interlayerRide.read(),options.interlayerRide.now(),opened);
+      lowerApertureOpen=!!cue&&!cue.arrived;
+      deepHost.mounted?.syncLiftAperture();
     }
-  },dispose(){horseSeat?.dispose();acoustics?.dispose();approachStory?.dispose();if(tutorialCart?.kind==='ready')tutorialCart.dispose();deepRetreat.dispose();waterReadout?.dispose();crouchRoute.dispose();deepBank?.dispose();shallowWayfinding?.dispose();shallowGallery?.dispose();encounterArt?.dispose();oreArt?.dispose();if(mainline?.kind==='ready')mainline.dispose();returnBay.dispose();thinWalls.dispose();deepAssembly.dispose();crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
+  },dispose(){horseSeat?.dispose();acoustics?.dispose();approachStory?.dispose();if(tutorialCart?.kind==='ready')tutorialCart.dispose();deepRetreat.dispose();waterReadout?.dispose();crouchRoute.dispose();deepBank?.dispose();shallowWayfinding?.dispose();shallowGallery?.dispose();encounterArt?.dispose();oreArt?.dispose();if(mainline?.kind==='ready')mainline.dispose();returnBay.dispose();thinWalls.dispose();deepAssembly.dispose();c2Consumer?.dispose();crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
   return {
     kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,deepAssembly,thinWalls,returnBay,mainline,tutorialCart,approachStory,acoustics,soundSites,oreSurvey,oreArt,encounterSurvey,encounterArt,shallowGallery,shallowWayfinding,deepBank,crouchRoute,waterReadout,deepRetreat,
     crouchGuidance(){const foot=options.readAcceptedDomainFoot?.();if(foot?.domainId!==undergroundMineLanding.domainId)return;const local=toLocal?.(foot);if(!local)return;const q=passageAt(foot.east,foot.north,'crouching');if(!q||Math.abs(q.floor-foot.height)>.25)return;return crouchRoute.guidance(local[0],local[2])},
