@@ -77,6 +77,23 @@ test('old approach rocks are replaced by grounded supports outside the north foo
    assert.ok(b.max[1]>b.min[1]);
  }
 });
+test('all eight outer clusters have grounded fragmented rock and dead pine supports',()=>{
+ const pieces=road.outerWorks.outerClusterPieces;
+ assert.equal(pieces.length,48);
+ for(let i=1;i<=8;i++){
+  const local=pieces.filter(p=>p.id==='outer-cluster-'+i);
+  assert.equal(local.filter(p=>p.kind==='rock').length,4);
+  assert.equal(local.filter(p=>p.kind==='pine').length,2);
+  const site=road.outerWorks.sites.find(s=>s.id==='outer-cluster-'+i)!;
+  for(const p of local){
+   const b=p.support;
+   assert.ok(Math.hypot(p.east-site.east,p.north-site.north)<10);
+   assert.ok(b.min[1]<road.heightAt(p.east,p.north)!);
+   assert.ok(b.max[1]>road.heightAt(p.east,p.north)!);
+   assert.ok((p.kind==='pine'?road.outerWorks.colliders:road.outerWorks.floors).includes(b));
+  }
+ }
+});
 test('A-R02 relief is real rendered collision support, not decorative overlay',()=>{
   const carriers=road.group.children.filter(o=>o.name==='meteor-crater-west-ground') as Mesh[];
   const ray=new Raycaster(new Vector3(),new Vector3(0,-1,0));

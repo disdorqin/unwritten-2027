@@ -1454,27 +1454,75 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   }
   // ---------- outer-band mid-ground clusters (north/west band + approach) ----------
   const clusterSpots: [number, number][] = [[232, 84], [258, 96], [288, 86], [315, 102], [340, 90], [22, 98], [48, 84], [72, 106]];
-  clusterSpots.forEach(([b, r], ci) => {
-    const p = site(`outer-cluster-${ci + 1}`, b, r, 7);
-    if (!p) return;
-    const g = p.height;
-    for (let i = 0; i < 4; i++) {
-      const e = p.east + (hash(ci * 31 + i * 7) - .5) * 11;
-      const n = p.north + (hash(ci * 17 + i * 3) - .5) * 11;
-      const h = heightAt(e, n);
-      if (h === undefined) continue;
-      const s = 1.2 + hash(i * 13 + ci) * 2.4;
-      part(i % 2 ? stoneDark : stone, new DodecahedronGeometry(s, 0), e, h + s * .3, n, hash(i + ci) * 3);
-    }
-    // One or two dead pines per cluster, bare trunks leaning.
-    for (let i = 0; i < 2; i++) {
-      const e = p.east + (hash(ci * 7 + i * 19) - .5) * 9;
-      const n = p.north + (hash(ci * 23 + i * 5) - .5) * 9;
-      const h = heightAt(e, n);
-      if (h === undefined) continue;
-      const lean = .08 + hash(i * 3 + ci) * .12;
-      cyl(timber, e, h + 3.4, n, .14, .24, 7, 7, 0, 0, lean);
-      cone(timber, e, h + 6.4, n, 1.5, 2.6, 7, 0, 0, lean);
+  const outerClusterPieces:{id:string;kind:'rock'|'pine';east:number;north:number;support:CraterHitBox}[]=[];
+  // Preserve the already exercised public routes and north rail corridor.
+  const protectedLines:number[][][]=[
+    [[0,159],[-67,159]], [[-12,118],[-12,450]],
+    [[-40,159],[-37,168],[-39,175],[-62,201],[-68,220],[-83,235],[-98,243],[-120,256],[-123.84,255.71]],
+    [[-40,159],[-80,126],[-95,128],[-110,124],[-126,123],[-151,129],[-170,148],[-178,163],[-186.63,174.61]],
+    [[-43,159],[-67,136],[-144,105],[-151.75,112.34]],
+    [[-23,159],[-23,95],[-60,55],[-164,51]],
+    [[-46,158],[-41,196],[-38,248],[-36,318]],
+  ];
+  const distanceTo=(e:number,n:number,a:number[],b:number[])=>{
+    const dx=b[0]-a[0],dn=b[1]-a[1],t=Math.max(0,Math.min(1,((e-a[0])*dx+(n-a[1])*dn)/(dx*dx+dn*dn||1)));
+    return Math.hypot(e-a[0]-dx*t,n-a[1]-dn*t);
+  };
+  function clearCluster(e:number,n:number,w:number,d:number){
+    const margin=Math.hypot(w,d)/2+.65;
+    if(e+w/2>=-1||e-w/2<=-240||n-d/2<=0||n+d/2>=336)return false;
+    if(Math.hypot(e-anchor.east,n-anchor.north)<67+margin)return false;
+    if(protectedLines.some(line=>line.slice(1).some((b,j)=>distanceTo(e,n,line[j]!,b)<margin+2.2)))return false;
+    if(fencePosts.some(p=>Math.hypot(e-anchor.east-p.radius*Math.sin(d2r(p.bearing)),n-anchor.north-p.radius*Math.cos(d2r(p.bearing)))<margin+2.1))return false;
+    if([...colliders,...floors].some(q=>q.min[0]<e+w/2+.45&&q.max[0]>e-w/2-.45&&q.min[2]<-n+d/2+.45&&q.max[2]>-n-d/2-.45))return false;
+    return true;
+  }
+  clusterSpots.forEach(([b,r],ci)=>{
+    const p=site(`outer-cluster-${ci+1}`,b,r,7);
+    if(!p)return;
+    let rocks=0,pines=0;
+    for(let j=0;j<84&&(rocks<4||pines<2);j++){
+      const pine=rocks>=4;
+      const phase=j*2.399963+ci*.73;
+      const radius=2.8+(j%11)*.68;
+      const e=p.east+Math.cos(phase)*radius,n=p.north+Math.sin(phase)*radius;
+      const w=pine?1.1:1.65+hash(ci*31+j*7)*1.9,d=pine?1.1:1.1+hash(ci*17+j*13)*1.3;
+      if(!clearCluster(e,n,w,d))continue;
+      const ys=[-1,1].flatMap(x=>[-1,1].map(z=>heightAt(e+x*w/2,n+z*d/2)));
+      if(ys.some(y=>y===undefined))continue;
+      const low=Math.min(...ys as number[])-.12,h=Math.max(...ys as number[]);
+      const record=(kind:'rock'|'pine',q:CraterHitBox)=>outerClusterPieces.push({id:p.id,kind,east:e,north:n,support:q});
+      if(!pine){
+        const rise=.62+hash(ci*19+j*23)*1.08;
+        box(shoulderRock,e,(low+h+.34)/2,n,w,h+.34-low,d);
+        hitBox(floors,e,n,0,w,d,low,h+.34);record('rock',floors.at(-1)!);
+        const x=e+.08*w,z=n-.10*d,tw=w*.72,td=d*.72;
+        box(shoulderRock,x,h+(.34+rise)/2,z,tw,rise-.34,td);
+        hitBox(floors,x,z,0,tw,td,h+.34,h+rise);
+        if((ci+j)%2===0){
+          box(cleanSnow,x,h+rise+.035,z,tw*.84,.07,td*.88);
+          hitBox(floors,x,z,0,tw*.84,td*.88,h+rise,h+rise+.07);
+        }
+        rocks++;
+      }else{
+        const trunkH=4.5+hash(ci*31+j*17)*2.2;
+        const stem=.28+hash(ci*13+j)*.09;
+        // Box-section trunk and roots use exact visible collision; short
+        // broken branches sit above player head height.
+        box(workshopWood,e,(low+h+.24)/2,n,1.02,h+.24-low,.34);
+        box(workshopWood,e,(low+h+.24)/2,n,.34,h+.24-low,1.02);
+        hitBox(floors,e,n,0,1.02,.34,low,h+.24);
+        hitBox(floors,e,n,0,.34,1.02,low,h+.24);
+        box(workshopWood,e,(low+h+trunkH)/2,n,stem,h+trunkH-low,stem);
+        hitBox(colliders,e,n,0,stem,stem,low,h+trunkH);record('pine',colliders.at(-1)!);
+        for(let k=0;k<4;k++){
+          const side=k%2?1:-1,y=h+2.35+k*.66,len=.65+hash(j*17+k*19)*.72;
+          box(workshopWood,e+side*len*.42,y,n,.10+len,.12,.15,0,0,side*.34);
+          box(cleanSnow,e+side*len*.42,y+.09,n,len*.68,.045,.11,0,0,side*.34);
+        }
+        box(shoulderRock,e,h+trunkH+.07,n,stem*.8,.14,stem*.8);
+        pines++;
+      }
     }
   });
   // Rebuild the two old decorative approach clusters as low, grounded
@@ -1518,7 +1566,7 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   }
   setNight(true);
   return {
-    group, sites, fencePosts, setNight, towerRoutes,industrialRoutes,gatehouseSeats,shoulderStacks,approachRockSupports,
+    group, sites, fencePosts, setNight, towerRoutes,industrialRoutes,gatehouseSeats,shoulderStacks,approachRockSupports,outerClusterPieces,
     wallLine: { east: wallEast, northStart: 13, northEnd: 307 },
     colliders, floors, ramps,
   };
