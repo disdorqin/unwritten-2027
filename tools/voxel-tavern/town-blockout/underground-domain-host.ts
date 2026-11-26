@@ -340,7 +340,9 @@ export function mountUndergroundDomainHost(options: Readonly<{
   const basisXW = mounted.toWorld([1, 0, 0]);
   const basisZW = mounted.toWorld([0, 0, 1]);
   let interlayerLift:ReturnType<typeof mountR30InterlayerLift>|undefined;
-  function passageAt(east: number, north: number) {
+  function passageAt(east: number, north: number, posture:'standing'|'crouching'='standing') {
+    if(posture!=='standing'&&posture!=='crouching')return undefined;
+    const bodyHeight=posture==='crouching'?undergroundMineSpec.walker.crouchingHeight:undergroundMineSpec.walker.standingHeight;
     if (!originW || !basisXW || !basisZW) return undefined;
     const dx = east - originW.east, dn = north - originW.north;
     const bxE = basisXW.east - originW.east, bxN = basisXW.north - originW.north;
@@ -349,11 +351,11 @@ export function mountUndergroundDomainHost(options: Readonly<{
     const localZ = dx * bzE + dn * bzN;
     if(mounted.wreck?.blocks(localX,localZ,undergroundMineSpec.walker.radius))return;
     const passage=mine.queryPassage(localX, localZ, undergroundMineSpec.walker.radius,
-      undergroundMineSpec.walker.standingHeight);
+      bodyHeight);
     // The camp's real furnishings (including R30 hearth) own their collision
     // locally. Keep the original passage metadata when the standing capsule fits.
     if(passage?.zone==='camp'&&!mounted.camp?.queryPassage(localX,localZ,
-      undergroundMineSpec.walker.radius,undergroundMineSpec.walker.standingHeight))return;
+      undergroundMineSpec.walker.radius,bodyHeight))return;
     if(passage&&interlayerLift?.blocks(undergroundMineLanding.domainId,{east,north,height:passage.floor}))return;
     return passage;
   }
@@ -389,6 +391,23 @@ export function mountUndergroundDomainHost(options: Readonly<{
     blocks:(domain,point,radius)=>interlayerLift?.blocks(domain,point,radius)===true});
   // Existing viewer already invokes mounted.sync()/dispose(). Preserve its
   // entry point and lifecycle, even before A supplies accepted domain feet.
+  /** Swept local move for the single public movement owner. This returns a
+   * legal proposal only; no player pose or authority is changed here. */
+  function resolveMineStep(from:Point,to:Readonly<{east:number;north:number}>,posture:'standing'|'crouching'){
+    if(![from.east,from.north,from.height,to.east,to.north].every(Number.isFinite))return;
+    const distance=Math.hypot(to.east-from.east,to.north-from.north);
+    if(distance>3)return; // a frame step, never a teleport across a wall
+    const initial=passageAt(from.east,from.north,posture);
+    if(!initial||Math.abs(initial.floor-from.height)>.25)return;
+    const count=Math.max(1,Math.ceil(distance/.08));let previous=initial;
+    for(let i=1;i<=count;i++){
+      const p=passageAt(from.east+(to.east-from.east)*i/count,from.north+(to.north-from.north)*i/count,posture);
+      if(!p||Math.abs(p.floor-previous.floor)>.22)return;
+      previous=p;
+    }
+    return {foot:{...to,height:previous.floor},posture,clearance:previous.clearance,
+      eyeHeight:posture==='crouching'?1.0:1.67,requiresCrouch:previous.requiresCrouch};
+  }
   const composed={...mounted,sync(){mounted.sync();deepHost.sync();
     interlayerLift?.showDomain(deepHost.status()==='ready'?'underground/mine-2':undefined);
     if(options.interlayerRide&&interlayerLift){
@@ -404,7 +423,9 @@ export function mountUndergroundDomainHost(options: Readonly<{
     deepLayerContract:shaftContract.kind==='ready'&&shaftContract.deep.kind==='registered'
       ?{frames:r30DeepFrames,localFeet:r30DeepLocalFeet,worldFeet:r30DeepWorldFeet,
         links:r30DepthLinks,roomProposals:r30DeepRoomProposals,productionReady:false as const}:undefined,
-    floorAt: (east: number, north: number) => passageAt(east, north)?.floor,
+    resolveMineStep,
+    canStandUp:(east:number,north:number)=>passageAt(east,north,'standing')!==undefined,
+    floorAt: (east: number, north: number,posture:'standing'|'crouching'='standing') => passageAt(east, north,posture)?.floor,
     toLocal: (world: Point) => toLocal?.(world),
     offeringsSnapshot: () => offerings?.snapshot(),
     campFireWorld,
