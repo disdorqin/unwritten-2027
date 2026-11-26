@@ -4,7 +4,12 @@ import {mountUndergroundDomainHost} from '../voxel-tavern/town-blockout/undergro
 const scene=new Scene();scene.background=new Color(0x1c232a);scene.fog=new FogExp2(0x1c232a,.035);
 const root=new Group();scene.add(root,new AmbientLight(0xb4c4de,.55));
 const road=mountWestCraterRoad(260,()=>10.7773);
-const host=mountUndergroundDomainHost({parent:root,road});
+import {createUndergroundWaterState} from '../../src/presence/underground-water-state.js';
+import {r30InterlayerLiftSite as interlayerSite,type R30InterlayerRide} from '../voxel-tavern/town-blockout/town-c-r30-interlayer-lift.js';
+const water=createUndergroundWaterState({dawnEpoch:0,now:()=>0});
+let domain=interlayerSite.upper.domainId;
+const host=mountUndergroundDomainHost({parent:root,road,waterBridge:{readWaterSnapshot:()=>water.tonight()},
+ readAcceptedDomainFoot:()=>({domainId:domain,...(domain===interlayerSite.lower.domainId?interlayerSite.lower.foot:interlayerSite.upper.foot)})});
 if(host.kind!=='ready')throw Error(host.reason);
 const camp=host.mounted.camp!;
 const camera=new PerspectiveCamera(70,innerWidth/innerHeight,.05,65);
@@ -24,6 +29,26 @@ let frames=0,walked=0,rejected=0,trustedW=0,view='entry',stamp=performance.now()
 const keys=new Set<string>(),direction=new Vector3();
 function setView(name:string){
  const ride=host.mounted.shaftRide;
+ const lift=host.interlayerLift;
+ if(name.startsWith('deep-')){
+  ride?.hide();if(!lift)return false;
+  domain=name==='deep-lower'?interlayerSite.lower.domainId:interlayerSite.upper.domainId;
+  host.mounted.sync();
+  if(name==='deep-bore'){
+   const receipt:R30InterlayerRide={id:1,linkId:'mine1-mine2-lift',riderId:'review-fixture',fromDomain:interlayerSite.upper.domainId,toDomain:interlayerSite.lower.domainId,departedAt:0,travelMs:25000};
+   const cue=lift.present(receipt,12500,true);if(!cue)return false;
+   camera.position.set(cue.eye.east,cue.eye.height,-cue.eye.north);
+   camera.lookAt(camera.position.clone().add(new Vector3(.2,-.5,-1)));
+   torch.intensity=15;
+  }else{
+   lift.present(undefined,0,false);
+   const lower=domain===interlayerSite.lower.domainId,a=lower?interlayerSite.approach.lower:interlayerSite.approach.upper,p=lower?interlayerSite.lower.foot:interlayerSite.upper.foot;
+   if(!(lower?host.deepHost.passageAt(domain,a.east,a.north):host.passageAt(a.east,a.north)))return false;
+   camera.position.set(a.east,a.height+1.67,-a.north);camera.lookAt(p.east,p.height+1.2,-p.north);torch.intensity=35;
+  }
+  view=name;return true;
+ }
+ lift?.present(undefined,0,false);domain=interlayerSite.upper.domainId;host.mounted.sync();
  if(name.startsWith('lift-')){
   if(!ride)return false;
   const at=name==='lift-upper'?4000:name==='lift-mid'?12500:20500;
@@ -52,4 +77,4 @@ addEventListener('keydown',e=>{if(e.key.toLowerCase()==='w'){keys.add('w');if(e.
 addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
 if(!setView('entry'))throw Error('camp entry blocked');
 function frame(){host.mounted.sync();render.render(scene,camera);frames++;requestAnimationFrame(frame)}requestAnimationFrame(frame);
-Object.assign(window,{campR30:{setView,step,reset:()=>{frames=0;stamp=performance.now()},inspect:()=>({view,frames,walked,rejected,trustedW,calls:render.info.render.calls,tris:render.info.render.triangles,fps:frames*1000/Math.max(1,performance.now()-stamp),roofParts:camp.r30Roof.parts.length,props:camp.props.length})}});
+Object.assign(window,{campR30:{setView,step,reset:()=>{frames=0;stamp=performance.now()},inspect:()=>({view,frames,walked,rejected,trustedW,calls:render.info.render.calls,tris:render.info.render.triangles,fps:frames*1000/Math.max(1,performance.now()-stamp),roofParts:camp.r30Roof.parts.length,props:camp.props.length,interlayerParts:host.interlayerLift?.parts,deepStatus:host.deepHost.status()})}});

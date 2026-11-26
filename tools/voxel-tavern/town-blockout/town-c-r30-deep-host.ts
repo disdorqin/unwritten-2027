@@ -14,6 +14,7 @@ type HostOptions=Readonly<{
  /** The movement/Presence owner supplies its accepted domain and foot.
   * This is deliberately NOT the camera, current target, or local height. */
  readAcceptedFoot?:()=>AcceptedFoot|undefined;
+ blocks?:(domain:string,point:R30Point,radius:number)=>boolean;
 }>;
 /** One render lifecycle for the registered second mine, independent of
  * delayed snapshots. No independent clock or movement authority. */
@@ -51,11 +52,13 @@ export function createR30DeepHost(options:HostOptions){
    if(disposed||!options.seamRegistered||!second||status==='awaiting-water'||domainId!==secondMineDomainId||
     !isSecondMinePresenceFoot(foot.east,foot.north,foot.height))return false;
    const p=second.passageAt(foot.east,foot.north);
-   return p!==undefined&&Math.abs(p.floor-foot.height)<.02;
+   return p!==undefined&&Math.abs(p.floor-foot.height)<.02&&!options.blocks?.(domainId,foot,.27);
   },
   passageAt(domainId:string,east:number,north:number,radius=.27){
    if(disposed||!active||domainId!==secondMineDomainId)return;
-   return second?.passageAt(east,north,radius);
+   const p=second?.passageAt(east,north,radius);
+   if(p&&options.blocks?.(domainId,{east,north,height:p.floor},radius))return;
+   return p;
   },
   connection:options.seamRegistered?secondMineConnections:undefined,
   get mounted(){return second},

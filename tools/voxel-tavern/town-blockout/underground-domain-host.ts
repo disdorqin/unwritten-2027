@@ -14,6 +14,7 @@ import type { UndergroundWater90OreVisual } from './town-c2-underground-water-mi
 import { resolveR30ShaftContract } from './town-c-r30-shaft-contract.js';
 import {r30DeepFrames,r30DeepLocalFeet,r30DeepWorldFeet,r30DepthLinks,r30DeepRoomProposals} from './town-c-r30-deep-layer-contract.js';
 import {createR30DeepHost} from './town-c-r30-deep-host.js';
+import {mountR30InterlayerLift,type R30InterlayerRide} from './town-c-r30-interlayer-lift.js';
 
 type Road = ReturnType<typeof mountWestCraterRoad>;
 type Mine = ReturnType<typeof createUndergroundMineLayout>;
@@ -146,6 +147,8 @@ export function mountUndergroundDomainHost(options: Readonly<{
   parent: Group; road: Road; campBridge?: UndergroundCampBridge;
   /** Accepted movement/Presence foot only, never inferred from camera height. */
   readAcceptedDomainFoot?:()=> (Point&Readonly<{domainId:string}>)|undefined;
+  /** Only the existing transport host can certify both physical openings. */
+  interlayerRide?:Readonly<{read:()=>R30InterlayerRide|undefined;now:()=>number;openingsCertified:()=>boolean}>;
   /** Production water loop (batch 103, interface aligned to C2's fix
    * round): the mine presence room relays the single presence-side
    * tonight() snapshot; the host forwards the raw snapshot reader
@@ -335,6 +338,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
   const originW = mounted.toWorld([0, 0, 0]);
   const basisXW = mounted.toWorld([1, 0, 0]);
   const basisZW = mounted.toWorld([0, 0, 1]);
+  let interlayerLift:ReturnType<typeof mountR30InterlayerLift>|undefined;
   function passageAt(east: number, north: number) {
     if (!originW || !basisXW || !basisZW) return undefined;
     const dx = east - originW.east, dn = north - originW.north;
@@ -349,6 +353,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
     // locally. Keep the original passage metadata when the standing capsule fits.
     if(passage?.zone==='camp'&&!mounted.camp?.queryPassage(localX,localZ,
       undergroundMineSpec.walker.radius,undergroundMineSpec.walker.standingHeight))return;
+    if(passage&&interlayerLift?.blocks(undergroundMineLanding.domainId,{east,north,height:passage.floor}))return;
     return passage;
   }
   if (originW && basisXW && basisZW) {
@@ -375,14 +380,20 @@ export function mountUndergroundDomainHost(options: Readonly<{
     supportAt: (east,north) => road.heightAt(east,north),
     lampRoom: road.lampRoom?.footprint,
   }) : { kind: 'unregistered-shaft' as const };
-  const deepHost=createR30DeepHost({parent,seamRegistered:shaftContract.kind==='ready'&&shaftContract.deep.kind==='registered',
+  const registeredSeam=shaftContract.kind==='ready'&&shaftContract.deep.kind==='registered';
+  interlayerLift=registeredSeam?mountR30InterlayerLift(mounted.group):undefined;
+  const deepHost=createR30DeepHost({parent,seamRegistered:registeredSeam,
     readAcceptedWater:()=>options.waterBridge?.readWaterSnapshot?.(),
-    readAcceptedFoot:options.readAcceptedDomainFoot});
+    readAcceptedFoot:options.readAcceptedDomainFoot,
+    blocks:(domain,point,radius)=>interlayerLift?.blocks(domain,point,radius)===true});
   // Existing viewer already invokes mounted.sync()/dispose(). Preserve its
   // entry point and lifecycle, even before A supplies accepted domain feet.
-  const composed={...mounted,sync(){mounted.sync();deepHost.sync()},dispose(){deepHost.dispose();mounted.dispose()}};
+  const composed={...mounted,sync(){mounted.sync();deepHost.sync();
+    interlayerLift?.showDomain(deepHost.status()==='ready'?'underground/mine-2':undefined);
+    if(options.interlayerRide)interlayerLift?.present(options.interlayerRide.read(),options.interlayerRide.now(),options.interlayerRide.openingsCertified());
+  },dispose(){interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
   return {
-    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,
+    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,
     // Layout contract only. The actual city/palace receiving shells and
     // movement/presence host must approve before mounting or allowing travel.
     deepLayerContract:shaftContract.kind==='ready'&&shaftContract.deep.kind==='registered'
