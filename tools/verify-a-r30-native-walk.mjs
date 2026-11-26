@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -305,6 +305,8 @@ const approach={
  'ore-yard':[[-12,159],...smelterFootway],
  'transfer-dock':[[-12,159],[-43,159]],
  'ore-yard-dock':[[-12,159],...smelterFootway,[-132,101],[-132,100],[-123,100]],
+ 'guard-shed':[[-12,159],[-40,159],[-37,168],[-39,175],[-62,201],[-68,220],[-83,235],[-98,243],[-110,244],[-119,245]],
+ 'assembly-registration':[[-12,159],...smelterFootway.slice(0,4)],
 };
 try{
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:graphicsArgs});
@@ -324,6 +326,8 @@ try{
    segment==='wall'?[-9,-15,-21,-28].map(east=>({east,north:159,height:road.heightAt(east,159)})):
    tower?[tower.entry,...tower.stairs]:segment==='supply'?road.mouthWorks.supplyDeckRoute:
    segment==='supplyinterior'?road.mouthWorks.supplyInteriorRoute:
+   segment==='guard-shed'?road.mouthWorks.guardShedRoutes.find(r=>r.id==='guard-firewood').points:
+   segment==='assembly-registration'?road.mouthWorks.assemblyRoutes[0].points:
    ['transfer-dock','ore-yard-dock'].includes(segment)?rail.stationWalkRoutes.find(t=>t.id===segment).points:
    ['kengkou','freight','shankou'].includes(segment)?rail.stationWalkRoutes.find(t=>t.id===(segment==='freight'?'freight-shed':segment+'-station')).points:
    road.outerWorks.industrialRoutes.find(t=>t.id===(segment==='gatehouse'||segment==='ore-yard'?segment:segment+'-plant')).points;
@@ -381,6 +385,32 @@ try{
      }
      await picture(page,evidence,segment+'-'+(lighting==='雪夜'?'night':'day'));
    }
+ }else if(segment==='guard-shed'){
+   await wallView('guard-hearth',Math.PI);
+   await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('添柴'),null,{timeout:8000});
+   await page.keyboard.press('e');
+   await page.waitForFunction(()=>document.querySelector('#town-activity-status')?.textContent?.includes('火盆亮了'),null,{timeout:8000});
+   await picture(page,evidence,'guard-fed');
+   await page.keyboard.press('e');
+   await page.waitForFunction(()=>document.querySelector('#town-activity-status')?.textContent?.includes('恢复原样'),null,{timeout:8000});
+   await step(path[0],'guard-hearth-exit');
+   const seatPath=road.mouthWorks.guardShedRoutes.find(r=>r.id==='guard-seat').points;
+   for(const [i,p]of seatPath.entries())await step(p,'guard-seat-'+i);
+   await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('哨棚长椅'),null,{timeout:8000});
+   await page.keyboard.press('e');
+   await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('起身'),null,{timeout:8000});
+   await picture(page,evidence,'guard-seated');
+   await page.keyboard.press('e');
+   for(const [i,p]of [...seatPath].reverse().entries())await step(p,'guard-seat-return-'+i);
+   await step(path.at(-1),'guard-hearth-return');
+ }else if(segment==='assembly-registration'){
+   await wallView('assembly-notice',168*Math.PI/180);
+   await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('阅读入坑告示'),null,{timeout:8000});
+   await page.keyboard.press('e');
+   await page.locator('#place-card[open]').waitFor({timeout:8000});
+   assert.equal(await page.locator('#place-title').textContent(),'入坑登记');
+   await picture(page,evidence,'assembly-notice-open');
+   await page.locator('#place-card .close-card').click();
  }else if(segment==='supplyinterior'){
    await wallView('supplyinterior-map',150*Math.PI/180);
    await page.waitForFunction(()=>document.querySelector('#world-action')?.textContent?.includes('手绘图'),null,{timeout:8000});
