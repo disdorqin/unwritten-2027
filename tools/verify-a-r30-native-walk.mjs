@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','inscription-access'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','inscription-access','joint-historic'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -286,7 +286,9 @@ async function picture(page,evidence,label){
 import {buildCraterRailExtension} from './voxel-tavern/town-blockout/town-crater-rail-extension.ts';
 const grid=createTerrainGrid(), road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
 const rail=['kengkou','freight','shankou','transfer-dock','ore-yard-dock','rail-valley','inscription-access'].includes(segment)?buildCraterRailExtension(grid,road):undefined;
+const joint=segment==='joint-historic'?JSON.parse(await readFile(process.env.AR30_JOINT_ROUTE,'utf8')):undefined;
 const approach={
+ 'joint-historic':[[-12,159],[-40,159],[-67,159]],
  outerclusters:[[-12,159],[-40,159],[-37,168],[-39,175],[-62,201],[-68,220]],
  'western-clusters':[[-12,159],[-40,159],[-37,168],[-39,175],[-62,201],[-68,220],[-83,235],[-98,243]],
  'eastern-cluster':[[-12,159],[-40,159]],
@@ -319,7 +321,7 @@ const approach={
 };
 try{
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:graphicsArgs});
- const {page,evidence}=await openTown(segment);
+ const {page,evidence,westWindow}=await openTown(segment);
  await page.locator('#town-panel-toggle').click();
  await page.locator('#jump').selectOption({label:['shankou','rail-valley'].includes(segment)?'山口站':'陨石坑口'});
  if(await page.locator('#town-settings').evaluate(d=>d.open))await page.locator('#town-settings-close').click();
@@ -342,6 +344,17 @@ try{
      await wallView('supply-cabin-'+(i===2?'wide':'roofline'),Math.atan2(site.east-target[0],site.north-target[1]));
    }
  }
+ if(joint){
+   const deadline=Date.now()+60000;
+   while(Date.now()<deadline){
+     const f=westWindow();
+     if(f?.state?.phase==='night-window'&&f.state.canEnterRestricted){report.legalWindow=f.state;break;}
+     await page.waitForTimeout(350);
+   }
+   assert.ok(report.legalWindow,'No accepted west night-window');
+   await walkTo(page,evidence,[-71,159],'joint-authorized-rim',.30);
+   await picture(page,evidence,'joint-rim');
+ }
  const tower=road.outerWorks.towerRoutes.find(t=>t.id===segment+'-tower');
  const scenic=road.outerWorks.landscapeRoutes.find(r=>r.id===segment);
  const reverseScenic=segment==='western-clusters';
@@ -355,7 +368,7 @@ try{
    ...industrial('salvage-pipes'),...industrial('salvage-pipes').slice(0,-1).reverse(),
    ...industrial('ore-yard').slice(1),...industrial('sealed-storehouse').slice(1)
  ]:null;
- const path=salvagePath??ruinsPath??(segment==='inscription-access'?[...rail.stationWalkRoutes.find(r=>r.id==='transfer-dock').points.slice(0,5),...rail.stationWalkRoutes.find(r=>r.id==='inscription-access').points]:segment==='rail-valley'?[[296,520],[291,530],[288,531],[243,515]].map(([east,north])=>({east,north,height:grid.heightAt(east,north)})):scenic?(reverseScenic?[...scenic.points].reverse():scenic.points):segment==='outerclusters'?[[-68,220],[-68,232],[-83,235],[-98,243],[-95,261],[-90,265]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
+ const path=joint?.points??salvagePath??ruinsPath??(segment==='inscription-access'?[...rail.stationWalkRoutes.find(r=>r.id==='transfer-dock').points.slice(0,5),...rail.stationWalkRoutes.find(r=>r.id==='inscription-access').points]:segment==='rail-valley'?[[296,520],[291,530],[288,531],[243,515]].map(([east,north])=>({east,north,height:grid.heightAt(east,north)})):scenic?(reverseScenic?[...scenic.points].reverse():scenic.points):segment==='outerclusters'?[[-68,220],[-68,232],[-83,235],[-98,243],[-95,261],[-90,265]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
    segment==='outcrop'?[[-60,55],[-147,52],[-155,51],[-164,51]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
    segment==='northwalk'?[[-12,320],[-12,336],[-12,400],[-12,450],[-9,470],[-4,485],[2,490]].map(([east,north])=>({east,north,height:east<0?road.heightAt(east,north):grid.heightAt(east,north)})):
    segment==='wall'?[-9,-15,-21,-28].map(east=>({east,north:159,height:road.heightAt(east,159)})):
@@ -367,10 +380,10 @@ try{
    ['kengkou','freight','shankou'].includes(segment)?rail.stationWalkRoutes.find(t=>t.id===(segment==='freight'?'freight-shed':segment+'-station')).points:
    road.outerWorks.industrialRoutes.find(t=>t.id===(['gatehouse','ore-yard','cold-furnace','water-tower'].includes(segment)?segment:segment+'-plant')).points);
  async function step(point,label){
-   await walkTo(page,evidence,[point.east,point.north],label,(scenic||['northwalk','outcrop','outerclusters'].includes(segment))?.35:.18);
+   await walkTo(page,evidence,[point.east,point.north],label,joint&&Number.isFinite(point.t)?.35:(scenic||['northwalk','outcrop','outerclusters'].includes(segment))?.35:.18);
    await page.waitForTimeout(140);
    const pose=await readPose(page);
-   assert.ok(Math.abs(pose.height-point.height)<.39,JSON.stringify({label,pose,point}));
+   assert.ok(Math.abs(pose.height-point.height)<(joint&&Number.isFinite(point.t)?.75:.39),JSON.stringify({label,pose,point}));
    return pose;
  }
  async function wallView(label,heading){
@@ -414,6 +427,7 @@ try{
      if(Math.abs(point.north-176.65)<.01)await wallView('transfer-rear-stair',Math.PI);
      if(i===path.length-1)await wallView('inscription-original-table',Math.atan2(road.inscription.layout.table.east-point.east,road.inscription.layout.table.north-point.north));
    }
+   if(joint&&i===joint.trailKnots-1)await picture(page,evidence,'joint-historic-from-haul-road');
    if(segment==='rail-valley'&&(i===2||i===path.length-1)){
      const mid=rail.samples[225];
      await wallView('rail-valley-'+(i===2?'approach':'bridge'),Math.atan2(mid.east-point.east,mid.north-point.north));
@@ -546,6 +560,9 @@ try{
    await tilt(dy);
    await wallView(segment+'-elevation',heading);
    await tilt(-dy);
+ }else if(joint){
+   const last=path.at(-1),before=path.at(-2);
+   await wallView('joint-historic-deck',Math.atan2(last.east-before.east,last.north-before.north));
  }else if(segment==='transfer-dock'){
    await wallView('transfer-dock-narrow',-Math.PI/2);
    await wallView('transfer-dock-standard',Math.PI/2);
@@ -577,6 +594,10 @@ try{
    await page.keyboard.press('e');
  }
  for(const [i,point] of path.slice().reverse().slice(1).entries())await step(point,segment+'-down-'+i);
+ if(joint){
+   await walkTo(page,evidence,[-67,159],'joint-return-outside',.35);
+   await waitForWire(page,evidence,p=>p?.area==='west'&&Math.hypot(p.east+67,p.north-159)<.7);
+ }
  const returned=await readPose(page);
  if(segment==='shankou'){
    const b=rail.timetableReads[0];

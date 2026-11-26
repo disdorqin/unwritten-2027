@@ -10,11 +10,13 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const [segment, evidencePath] = process.argv.slice(2);
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','inscription-access'].includes(segment) && evidencePath,
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','inscription-access','joint-historic'].includes(segment) && evidencePath,
   'Usage: node tools/verify-a-r30-native-local.mjs <segment> <evidence directory>');
 const run = promisify(execFile);
 const repo = fileURLToPath(new URL('../', import.meta.url));
-const viewer = join(repo, 'tools', 'voxel-tavern');
+const candidateRoot=process.env.AR30_JOINT_ROOT?resolve(process.env.AR30_JOINT_ROOT):undefined;
+if(candidateRoot)assert.ok(candidateRoot.startsWith(resolve(repo,'.a-r30-joint-proof-'))&&segment==='joint-historic','restricted joint proof root');
+const viewer = join(candidateRoot??repo, 'tools', 'voxel-tavern');
 const output = resolve(evidencePath);
 await mkdir(output, { recursive: true });
 const source = (await run('git', ['rev-parse', 'HEAD'], { cwd: repo, windowsHide: true })).stdout.trim();
@@ -31,7 +33,7 @@ try {
 try {
   const [oldSource,oldTree,raw]=await Promise.all(['source-commit.txt','source-tree.txt','za22-live-walk.json'].map(n=>readFile(join(output,n),'utf8')));
   const old=JSON.parse(raw);
-  if(oldSource.trim()===source&&oldTree.trim()===sourceTree&&old.segment===segment&&!old.failure&&old.errors===0&&old.traversal){
+  if(!candidateRoot&&oldSource.trim()===source&&oldTree.trim()===sourceTree&&old.segment===segment&&!old.failure&&old.errors===0&&old.traversal){
     console.log(JSON.stringify({reusedCompletedEvidence:true,source,segment,output}));
     await rm(lock,{recursive:true,force:true});
     process.exit(0);
@@ -47,7 +49,7 @@ const temporary = await mkdtemp(join(repo, '.za22-live-proof-'));
 const web = join(temporary, 'web');
 const compiled = join(temporary, 'server');
 const cwdRequire = createRequire(join(repo, 'package.json'));
-const viewerRequire = createRequire(join(viewer, 'package.json'));
+const viewerRequire = createRequire(join(repo,'tools','voxel-tavern','package.json'));
 const vite = join(dirname(viewerRequire.resolve('vite/package.json')), 'bin', 'vite.js');
 const tsc = join(dirname(cwdRequire.resolve('typescript/package.json')), 'bin', 'tsc');
 const hardware = process.env.ZA22_HARDWARE === '1';
