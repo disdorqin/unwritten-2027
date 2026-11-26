@@ -6,6 +6,7 @@ import {townC2CraterCentralMoundProtectedSites as protectedSites} from './town-c
 import {createMeteorCrater,meteorCraterFixturePlan} from './meteor-crater';
 import {craterFloorWorklightSites,craterFloorLampRockBufferM} from './meteor-crater-floor-worklight-sites';
 import {bR30ReturnAxis} from './town-b-r30-return-headframe';
+import {bR30MoundRoutePlan} from './town-b-r30-mound-route';
 
 type Road=ReturnType<typeof mountWestCraterRoad>;
 type EN=Readonly<{east:number;north:number}>;
@@ -17,7 +18,6 @@ function segmentGap(p:EN,a:EN,b:EN){
  const e=b.east-a.east,n=b.north-a.north,t=Math.min(1,Math.max(0,((p.east-a.east)*e+(p.north-a.north)*n)/(e*e+n*n||1)));
  return Math.hypot(p.east-a.east-e*t,p.north-a.north-n*t);
 }
-const proposedRoute=[[-137.62417573244022,194.45454545454544],[-134.12417573244022,189.95454545454544],[-117.62417573244022,175.45454545454544],[-111.12417573244022,181.95454545454544],[-110.62417573244022,185.95454545454544],[-112.12417573244022,189.45454545454544],[-120,196]] as const;
 const distanceTo=(p:EN,points:readonly EN[])=>Math.min(...points.slice(1).map((q,i)=>segmentGap(p,points[i],q)));
 function seeded(seed:number){let x=seed>>>0;return()=>{x=(Math.imul(x,1664525)+1013904223)>>>0;return x/4294967296;};}
 /** A ground survey, not a new support surface. The steep path is a
@@ -34,7 +34,7 @@ export function surveyBR30MoundPlanting(road:Road){
  const reserves=[...Object.values(protectedSites),
   ...craterFloorWorklightSites.map(q=>({east:a.east+q.east*c+q.north*s,north:a.north+q.north*c-q.east*s,radius:craterFloorLampRockBufferM})),
   {...bR30ReturnAxis,radius:2.35},...(road.winch?[road.winch.survey.snakeStoneReservation]:[])];
- const route=proposedRoute.map(([east,north])=>{
+ const route=bR30MoundRoutePlan.map(([east,north])=>{
   const height=road.heightAt(east,north);if(height===undefined||!Number.isFinite(height))throw Error('Missing mound climb support');
   return {east,north,height};
  });

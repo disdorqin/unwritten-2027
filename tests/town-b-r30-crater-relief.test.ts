@@ -7,6 +7,7 @@ import {createMeteorCrater,meteorCraterFixturePlan} from '../tools/voxel-tavern/
 import {bR30CraterBed,bR30VisibleLipRadius,bR30HaulCrossSection} from '../tools/voxel-tavern/town-blockout/town-b-r30-crater-relief';
 import {createCraterBrokenCircleHeightField,craterBrokenCircleFeatures} from '../tools/voxel-tavern/town-blockout/town-c2-crater-broken-circle';
 import {townC2CraterCentralMoundProtectedSites} from '../tools/voxel-tavern/town-blockout/town-c2-crater-central-mound';
+import {bR30MoundTrailWear} from '../tools/voxel-tavern/town-blockout/town-b-r30-mound-route';
 
 test('R30 asymmetric bed has no exterior seam shift or deeper hidden floor',()=>{
   const heights:number[]=[],lips:number[]=[];
@@ -32,6 +33,17 @@ test('R30 production west mount uses one final surface and retains the real rout
   const a=road.anchor,c=Math.cos(a.yaw),s=Math.sin(a.yaw);
   const mesh=road.group.getObjectByName('meteor-crater-walk-mesh') as Mesh;
   assert.equal(mesh.userData.bR30UnifiedRelief,true);
+  const wear=mesh.geometry.getAttribute('aCraterMoundWear'),vertices=mesh.geometry.getAttribute('position');
+  assert.equal(wear.count,vertices.count);
+  let marked=0;
+  for(let i=0;i<wear.count;i++){
+    const v=wear.getX(i);assert.ok(Number.isFinite(v)&&v>=0&&v<=1);
+    if(v>.1){marked++;assert.ok(vertices.getY(i)>-35,'wear stays on raised slope');}
+  }
+  assert.ok(marked>20&&marked<wear.count*.05,'local footpath, not broad recoloring');
+  assert.equal(bR30MoundTrailWear({east:-120,north:196},7.5,0),1);
+  assert.equal(bR30MoundTrailWear({east:-120,north:185},0,0),0);
+  assert.equal(bR30MoundTrailWear({east:-120,north:196},7.5,1),0);
   assert.equal(road.centralMound.meshes.length,0);
   assert.equal(road.brokenCircle.group.children.length,0);
   const fixture=createMeteorCrater(meteorCraterFixturePlan);
