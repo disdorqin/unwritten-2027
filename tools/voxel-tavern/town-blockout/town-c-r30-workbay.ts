@@ -12,7 +12,7 @@ export function mountR30Workbay(parent:Group,mine:Mine){
  const enabled=mine.expansion?.deepWorks===true;
  function cart(x:number,z:number,tip:number){
   const car=createUndergroundMineCartModel();const pose=new Group();
-  pose.rotation.y=Math.PI/2;car.group.rotation.z=tip;car.group.scale.setScalar(1.35);pose.add(car.group);
+  pose.rotation.y=Math.PI/2;car.group.rotation.z=tip;car.group.scale.setScalar(tip?1.35:1);pose.add(car.group);
   pose.updateMatrixWorld(true);const b=new Box3().setFromObject(pose);
   pose.position.set(x,floor+.02-b.min.y,z);pose.updateMatrixWorld(true);
   const actual=new Box3().setFromObject(pose);

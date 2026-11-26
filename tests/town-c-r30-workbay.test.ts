@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {Group,Box3,Vector3} from 'three';
+import {Group,Box3,Vector3,InstancedMesh,Matrix4} from 'three';
 import {mountWestCraterRoad} from '../tools/voxel-tavern/town-blockout/town-za22-crater-road.js';
 import {mountUndergroundDomainHost,undergroundMineSpec} from '../tools/voxel-tavern/town-blockout/underground-domain-host.js';
 import {createUndergroundMineLayout} from '../src/shared/underground-mine-layout.js';
@@ -10,6 +10,22 @@ test('retired rail equipment has real bounds and west haulage route remains trav
  try{
   const bay=host.mounted.workbay!;assert.equal(bay.cartCount,2);assert.ok(bay.parts>350);
   const mine=createUndergroundMineLayout(undergroundMineSpec);
+  // Use actual instanced wheel transforms relative to the bay, not a
+  // duplicated nominal wheel dimension. Both rail heads are at floor+.020.
+  parent.updateMatrixWorld(true);
+  const cart=bay.group.getObjectByName('r30-retired-iron-cart')!;
+  const wheels=cart.getObjectByName('mine-cart-four-rail-wheels') as InstancedMesh;
+  assert.equal(wheels.count,4);
+  const inv=bay.group.matrixWorld.clone().invert(),matrix=new Matrix4();
+  wheels.geometry.computeBoundingBox();
+  for(let i=0;i<wheels.count;i++){
+   wheels.getMatrixAt(i,matrix);
+   matrix.premultiply(wheels.matrixWorld).premultiply(inv);
+   const box=wheels.geometry.boundingBox!.clone().applyMatrix4(matrix);
+   const center=box.getCenter(new Vector3()),rail=center.z<73.45?72.95:73.95;
+   assert.ok(Math.abs(center.z-rail)<.001,'wheel must sit on rail centre');
+   assert.ok(Math.abs(box.min.y-(-91+.020))<.001,'wheel must touch rail head');
+  }
   for(const b of bay.boxes){
    assert.ok(b.min.x>=-20&&b.max.x<=-4.2&&b.min.z>=71.6&&b.max.z<=81.1);
    assert.ok(b.min.y>=-91.001&&b.max.y<=-84.6);
