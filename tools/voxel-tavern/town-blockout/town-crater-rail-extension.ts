@@ -366,6 +366,16 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
         const p=at(0,z);
         box(timber,p.east,deckY+2.35,p.north,5.05,.20,.22,rotation);
       }
+      // Lanterns hang beside posts, not in the central head clearance.
+      // Reuse the existing emissive glass; no new point lights.
+      for(const side of [-1,1]){
+        const p=at(side*2.4,3.0);
+        box(iron,p.east,deckY+2.39,p.north,.065,.38,.065,rotation);
+        box(glow,p.east,deckY+2.13,p.north,.24,.25,.24,rotation);
+        for(const y of [2.0,2.27])box(iron,p.east,deckY+y,p.north,.32,.065,.32,rotation);
+        for(const x of [-.13,.13])for(const z of [-.13,.13])
+          box(iron,p.east+x,deckY+2.13,p.north+z,.035,.25,.035,rotation);
+      }
     }
     for(const side of [-1,1]){
       const bc=at(side*3.8,3.45);
@@ -451,9 +461,13 @@ export function buildCraterRailExtension(grid: Terrain, road: CraterRoad) {
     for(const s of [-1,1]){
       const e=bx+s*.8,h=groundAt(e,bn);
       box(stone,e,h+.07,bn,.35,.26,.35);
-      box(timber,e,(h+g+2.2)/2,bn,.14,g+2.2-h,.14);
+      // Posts meet the underside of the board rather than crossing the
+      // visible chalk surface. Short rear cleats carry the actual frame.
+      const bottom=g+1.545;
+      box(timber,e,(h+bottom+.035)/2,bn-.075,.14,bottom+.035-h,.14);
+      box(iron,e,bottom+.08,bn-.075,.22,.24,.14);
       colliders.push(orientedSupportBox(e,bn,0,.35,.35,h-.06,h+.2));
-      colliders.push(orientedSupportBox(e,bn,0,.14,.14,h,g+2.2));
+      colliders.push(orientedSupportBox(e,bn-.075,0,.14,.14,h,bottom+.035));
     }
     // Face the north arrival shoulder rather than the track.
     colliders.push(orientedSupportBox(bx,bn,0,2.18,.07,g+1.545,g+2.855));
