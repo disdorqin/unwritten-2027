@@ -63,7 +63,11 @@ export function installBR30MeltColumns(road:Road){
   const bound=g.boundingBox!;boxes.push({min:bound.min.toArray(),max:bound.max.toArray()});
   parts[p.cluster.endsWith('1')?0:1].push(g);
   const tip={east:p.east+.09,north:p.north,height:top-.07};
-  views.push(surveyBR30RelicView(road.heightAt,trail,tip));
+  // Prefer the actual middle/upper body, not a mathematically visible
+  // tip peeking above a cutting. Preserve original story anchors.
+  const body={east:p.east+.035,north:p.north,height:ground+p.height*.55};
+  const upper={east:p.east+.05,north:p.north,height:ground+p.height*.75};
+  views.push(surveyBR30RelicView(road.heightAt,trail,body)??surveyBR30RelicView(road.heightAt,trail,upper)??surveyBR30RelicView(road.heightAt,trail,tip));
   // One restrained mineral at each original root; no independent light.
   const e=p.east+Math.cos(angle)*.72,n=p.north-Math.sin(angle)*.72,base=support(e,n);
   const cr=(r:number,y:number,embedded=false):V[]=>Array.from({length:6},(_,j)=>{
