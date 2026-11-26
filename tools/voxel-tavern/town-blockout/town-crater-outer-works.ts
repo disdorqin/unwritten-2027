@@ -1168,22 +1168,23 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       part(rustIron, new ConeGeometry(.11, .42, 5), east, h + 4.9, north, -rad);
       fencePosts.push({ bearing: b, radius: r });
       if (prev && b - prev.b === 2) {
-        const midB = d2r((b + prev.b) / 2);
-        const midR = (r + ringRadius(prev.b)) / 2;
-        const me = anchor.east + midR * Math.sin(midB);
-        const mn = anchor.north + midR * Math.cos(midB);
-        const mh = heightAt(me, mn);
-        if (mh !== undefined) {
-          const chord = 2 * midR * Math.sin(d2r(1)) + .15;
-          for (const ry of [1.15, 2.6, 4.05]) box(rustIron, me, mh + ry, mn, chord, .12, .07, -midB);
-          for (let bar = 0; bar < 4; bar++) {
-            const bb = d2r(prev.b + .4 + bar * .4);
-            const br = ringRadius(prev.b + .4 + bar * .4);
-            const be = anchor.east + br * Math.sin(bb);
-            const bn = anchor.north + br * Math.cos(bb);
-            const bh = heightAt(be, bn);
-            if (bh !== undefined) box(rustIron, be, bh + 2.3, bn, .07, 4.4, .07, -bb);
-          }
+        // Fit the actual post-to-post chord, including the abrupt radius
+        // transitions at the industrial reservations. Rails and the solid
+        // collision segment now share the same centreline.
+        const de=east-prev.east,dn=north-prev.north,dh=h-prev.h;
+        const run=Math.hypot(de,dn),yaw=Math.atan2(dn,de),roll=Math.atan2(dh,run);
+        const me=(east+prev.east)/2,mn=(north+prev.north)/2,mh=(h+prev.h)/2;
+        const chord=Math.hypot(run,dh)+.13;
+        for(const ry of [1.15,2.6,4.05])box(rustIron,me,mh+ry,mn,chord,.12,.07,yaw,0,roll);
+        // Long diagonal transitions need more pickets, not wider holes.
+        // Ground each picket and terminate it just below the sloped cap.
+        const count=Math.max(4,Math.ceil(run/.70)-1);
+        for(let bar=1;bar<=count;bar++){
+          const t=bar/(count+1),be=prev.east+t*de,bn=prev.north+t*dn;
+          const ground=heightAt(be,bn),line=prev.h+t*dh;
+          if(ground===undefined)continue;
+          const base=Math.min(ground+.10,line+.10),top=Math.max(ground+.25,line+4.50);
+          box(rustIron,be,(base+top)/2,bn,.07,top-base,.07,yaw);
         }
       }
       // S-1 collision: one segment box per drawn panel span. The skip
