@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>FR-08 雪夜门廊装饰 · 独立预览</title>
+  <link rel="stylesheet" href="./friend3-decor-preview.css">
+</head>
+<body>
+  <main class="f3-decor">
+    <header class="f3-decor-header">
+      <div>
+        <p class="f3-decor-kicker">UNWRITTEN 2027 · FR-08 独立预览</p>
+        <h1>雪夜门廊装饰</h1>
+        <p class="f3-decor-sub">在局部门廊上挂灯笼、摆明信片。选择款式后点击发光挂点；已放置的装饰可点击撤下。纯本地状态，不接公共地形、存档或多人权威。</p>
+      </div>
+    </header>
+
+    <section class="f3-decor-workspace">
+      <div class="f3-decor-stage" id="decor-scene">
+        <p class="f3-decor-hint">拖动旋转 · 点击发光挂点放置 · 点击装饰撤下</p>
+      </div>
+      <aside class="f3-decor-panel" aria-label="装饰控制面板">
+        <section class="f3-decor-section">
+          <h2>选择装饰</h2>
+          <div id="kind-list" class="f3-kind-list" role="group" aria-label="装饰类型"></div>
+          <div id="variant-list" class="f3-variant-list" role="group" aria-label="装饰款式"></div>
+        </section>
+        <section class="f3-decor-section">
+          <h2>挂点</h2>
+          <div id="anchor-list" class="f3-anchor-list" role="group" aria-label="挂点列表"></div>
+        </section>
+        <section class="f3-decor-section">
+          <p id="decor-counts" class="f3-decor-counts">灯笼 0/5 · 明信片 0/5</p>
+          <div class="f3-decor-actions">
+            <button id="undo" type="button" disabled>撤回上一件</button>
+            <button id="clear" type="button" disabled>全部撤回</button>
+            <button id="zoom-in" type="button">拉近</button>
+            <button id="zoom-out" type="button">拉远</button>
+            <button id="reset-view" type="button">重置视角</button>
+          </div>
+        </section>
+        <p id="decor-status" class="f3-decor-status" role="status" aria-live="polite">选择灯笼或明信片，然后点击场景中的发光挂点。</p>
+      </aside>
+    </section>
+
+    <footer class="f3-decor-footer">原创程序化灯笼与明信片 · MIT · 仅局部本地状态，不接公共地形、存档、星石或多人权威</footer>
+  </main>
+  <script type="module" src="./friend3-decor-preview.ts"></script>
+</body>
+</html>
