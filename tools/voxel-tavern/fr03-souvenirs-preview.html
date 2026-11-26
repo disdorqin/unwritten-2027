@@ -139,6 +139,7 @@ function focusItem(idx, viewMode = 'front') {
   [...listEl.children].forEach((b, i) => b.classList.toggle('active', i === idx));
   renderMeta();
   if (idx < 0) {
+    items.forEach(({ group }) => { group.rotation.y = 0; });
     controls.target.set(0, 1.15, 0);
     camera.position.set(1.6, 1.85, 2.75);
   } else {
@@ -182,21 +183,72 @@ document.getElementById('btn-day').onclick = (e) => {
   }
 };
 
-// Tap / click in 3D canvas to inspect a souvenir
+// Tap / click in 3D canvas to inspect nearest visible, unoccluded souvenir (ignoring drags)
 const raycaster = new THREE.Raycaster();
 const pointer = new THREE.Vector2();
+const meshOwner = new Map();
+const pickTargets = [];
+
+function isEffectivelyVisible(obj) {
+  let cur = obj;
+  while (cur) {
+    if (!cur.visible) return false;
+    cur = cur.parent;
+  }
+  return true;
+}
+
+items.forEach(({ group }, idx) => {
+  group.traverse((obj) => {
+    if (obj.isMesh && obj.userData?.lodRole !== 'proxy') {
+      meshOwner.set(obj, idx);
+      pickTargets.push(obj);
+    }
+  });
+});
+
+// Include solid cabinet parts (excluding transparent front-glass) as occluders
+cabinet.traverse((obj) => {
+  if (obj.isMesh && obj.name !== 'front-glass' && obj.userData?.lodRole !== 'proxy') {
+    meshOwner.set(obj, -1);
+    pickTargets.push(obj);
+  }
+});
+
+let pointerDown = null;
+renderer.domElement.addEventListener('pointerdown', (ev) => {
+  pointerDown = { x: ev.clientX, y: ev.clientY, id: ev.pointerId };
+});
+renderer.domElement.addEventListener('pointercancel', () => {
+  pointerDown = null;
+});
 renderer.domElement.addEventListener('pointerup', (ev) => {
+  if (!pointerDown || ev.pointerId !== pointerDown.id) return;
+  const dist = Math.hypot(ev.clientX - pointerDown.x, ev.clientY - pointerDown.y);
+  pointerDown = null;
+  if (dist > 6) return; // Ignore orbit/pan drag releases
+
   const rect = renderer.domElement.getBoundingClientRect();
   pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
   pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
   raycaster.setFromCamera(pointer, camera);
-  for (let i = 0; i < items.length; i++) {
-    if (raycaster.intersectObject(items[i].group, true).length > 0) {
-      focusItem(i, 'front');
-      break;
-    }
+
+  const visibleTargets = pickTargets.filter(isEffectivelyVisible);
+  const hits = raycaster.intersectObjects(visibleTargets, false);
+  if (hits.length === 0) return;
+
+  const ownerIdx = meshOwner.get(hits[0].object);
+  if (typeof ownerIdx === 'number' && ownerIdx >= 0) {
+    focusItem(ownerIdx, 'front');
   }
 });
+
+window.__FR03_PREVIEW__ = {
+  focusItem,
+  getSelectedIndex: () => selectedIndex,
+  getItemCount: () => items.length,
+  getItemRotationY: (idx) => items[idx]?.group.rotation.y ?? 0,
+};
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;

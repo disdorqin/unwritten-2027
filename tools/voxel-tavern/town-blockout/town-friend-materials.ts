@@ -198,15 +198,28 @@ export class FriendMaterialLibrary {
       transparent: spec.transparent ?? false,
       opacity: spec.opacity ?? 1,
     });
+    mat.userData.friendSharedMaterial = true;
+    map.userData.friendSharedTexture = true;
     this.cache.set(kind, mat);
     return mat;
   }
 
-  dispose(): void {
+  ownsMaterial(mat: Material | null | undefined): boolean {
+    return Boolean(mat && mat.userData?.friendSharedMaterial === true);
+  }
+
+  get size(): number {
+    return this.cache.size;
+  }
+
+  dispose(): { materialsDisposed: number; texturesDisposed: number } {
+    const materialsDisposed = this.cache.size;
+    const texturesDisposed = this.textures.length;
     for (const mat of this.cache.values()) mat.dispose();
     for (const tex of this.textures) tex.dispose();
     this.cache.clear();
     this.textures.length = 0;
+    return { materialsDisposed, texturesDisposed };
   }
 }
 
@@ -338,21 +351,49 @@ export function applyAssetLod(root: Object3D, level: 'high' | 'low'): void {
   });
 }
 
-export function disposeAssetGroup(group: Group): void {
+export interface DisposeStats {
+  geometriesDisposed: number;
+  materialsDisposed: number;
+  texturesDisposed: number;
+}
+
+export function disposeAssetGroup(group: Group): DisposeStats {
+  const stats: DisposeStats = {
+    geometriesDisposed: 0,
+    materialsDisposed: 0,
+    texturesDisposed: 0,
+  };
   group.traverse((obj) => {
-    if (obj instanceof Mesh) {
+    if (!(obj instanceof Mesh)) return;
+    if (!obj.geometry.userData?.friendDisposed) {
+      obj.geometry.userData = obj.geometry.userData ?? {};
+      obj.geometry.userData.friendDisposed = true;
       obj.geometry.dispose();
-      const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
-      for (const m of mats) {
-        if (m && typeof m.dispose === 'function') {
-          if ('map' in m && m.map && typeof m.map.dispose === 'function') {
-            m.map.dispose();
-          }
-          m.dispose();
+      stats.geometriesDisposed += 1;
+    }
+    const mats = Array.isArray(obj.material) ? obj.material : [obj.material];
+    for (const m of mats) {
+      if (!m || typeof m.dispose !== 'function') continue;
+      // Never dispose materials/textures owned by FriendMaterialLibrary.
+      if (m.userData?.friendSharedMaterial === true) continue;
+      if (m.userData?.friendDisposed === true) continue;
+
+      if ('map' in m && m.map && typeof m.map.dispose === 'function') {
+        const tex = m.map as { userData?: Record<string, unknown>; dispose: () => void };
+        if (tex.userData?.friendSharedTexture !== true && tex.userData?.friendDisposed !== true) {
+          tex.userData = tex.userData ?? {};
+          tex.userData.friendDisposed = true;
+          tex.dispose();
+          stats.texturesDisposed += 1;
         }
       }
+      m.userData = m.userData ?? {};
+      m.userData.friendDisposed = true;
+      m.dispose();
+      stats.materialsDisposed += 1;
     }
   });
+  return stats;
 }
 
 export function createDebugColliderWireframe(colliders: FriendColliderBox[]): Group {
