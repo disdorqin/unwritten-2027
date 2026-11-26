@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<link rel="icon" href="data:," />
+<title>FR-13 地下营地与勇士城生活陈设 · 独立岩洞展台</title>
+<style>
+  :root{
+    --bg:#120f10; --panel:#1d1715db; --line:#e39b593d; --ink:#f5ece3; --dim:#bda793;
+    --amber:#f0b668;
+  }
+  html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--ink);
+    font:13.5px/1.5 "Segoe UI",system-ui,-apple-system,"Microsoft YaHei",sans-serif}
+  canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+  canvas:active{cursor:grabbing}
+  #hud{position:absolute;top:14px;left:14px;width:min(360px,calc(100vw - 28px));
+    max-height:calc(100vh - 28px);overflow:auto;padding:14px 16px;border:1px solid var(--line);
+    border-radius:14px;background:var(--panel);backdrop-filter:blur(12px);box-shadow:0 16px 44px #0007}
+  h1{font-size:15px;margin:0 0 2px;color:#ffdfb3}
+  .sub{font-size:11.5px;color:var(--dim);margin:0 0 10px}
+  .row{display:flex;gap:6px;flex-wrap:wrap;margin:7px 0}
+  button{border:1px solid #e39b5966;background:#2e241fd4;color:#f7eee5;padding:5px 9px;
+    border-radius:8px;cursor:pointer;font:inherit;font-size:12px}
+  button:hover{background:#42332c}
+  button.active{background:#9c553b;border-color:#f0b668}
+  .list{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:10px 0}
+  .item{text-align:left;padding:6px 8px;font-size:12px;border-radius:7px;
+    border:1px solid #ffffff16;background:#16110fb8;color:#e5d8cb}
+  .item.active{border-color:var(--amber);background:#332216cc;color:#ffe4be}
+  .meta{margin-top:8px;padding:10px;border-radius:10px;background:#120d0bb8;border:1px solid #ffffff14;font-size:12px}
+  .meta b{color:var(--amber)}
+  .foot{position:absolute;right:14px;bottom:12px;font-size:11px;color:#b29b88;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="hud">
+  <h1>FR-13 地下营地/勇士城生活陈设（8 类）</h1>
+  <p class="sub">独立暗岩暖火展台 · 绿色线框=阻挡碰撞，琥珀线框=低矮摆件</p>
+  <div class="row">
+    <button id="btn-overview" class="active">全览</button>
+    <button id="btn-front">近景</button>
+    <button id="btn-back">远景合批</button>
+  </div>
+  <div class="row">
+    <button id="btn-day">幽暗 / 营火光</button>
+    <button id="btn-lod">LOD: 高精度</button>
+    <button id="btn-col">净空线框: 关</button>
+  </div>
+  <div id="asset-list" class="list"></div>
+  <div id="meta-box" class="meta"></div>
+</div>
+<div class="foot">拖拽旋转 · 滚轮缩放 · 独立展台不含拾取或剧情权限</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import {
+  FriendMaterialLibrary,
+  applyAssetLod,
+  createDebugColliderWireframe,
+} from './town-blockout/town-friend-materials.ts';
+import {
+  FR13_UNDERGROUND_PROPS_CATALOG,
+  buildInstancedUndergroundProxies,
+} from './town-blockout/town-friend-underground-props.ts';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x181312);
+scene.fog = new THREE.Fog(0x181312, 16, 48);
+
+const camera = new THREE.PerspectiveCamera(48, window.innerWidth / window.innerHeight, 0.1, 140);
+camera.position.set(7.6, 4.6, 10.0);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.target.set(0, 0.8, 0);
+
+const hemi = new THREE.HemisphereLight(0xc2a78e, 0x241d1a, 0.78);
+scene.add(hemi);
+const keyLight = new THREE.DirectionalLight(0xffd9b0, 1.15);
+keyLight.position.set(8, 12, 9);
+keyLight.castShadow = true;
+keyLight.shadow.mapSize.set(1024, 1024);
+keyLight.shadow.camera.near = 1;
+keyLight.shadow.camera.far = 42;
+keyLight.shadow.camera.left = -10;
+keyLight.shadow.camera.right = 10;
+keyLight.shadow.camera.top = 10;
+keyLight.shadow.camera.bottom = -10;
+scene.add(keyLight);
+
+const campFire = new THREE.PointLight(0xff9c3e, 2.2, 20, 1.3);
+campFire.position.set(0, 3.0, 2.2);
+scene.add(campFire);
+
+const libs = new FriendMaterialLibrary();
+
+const caveFloor = new THREE.Mesh(
+  new THREE.BoxGeometry(28, 0.4, 24),
+  libs.get('dark_rock'),
+);
+caveFloor.position.set(0, -0.2, 0);
+caveFloor.receiveShadow = true;
+scene.add(caveFloor);
+
+const cobblePad = new THREE.Mesh(
+  new THREE.BoxGeometry(11.8, 0.06, 5.6),
+  libs.get('cobble'),
+);
+cobblePad.position.set(0, 0.03, 0);
+cobblePad.receiveShadow = true;
+scene.add(cobblePad);
+
+const placed = [];
+const cols = 4;
+const spacingX = 2.65;
+const spacingZ = 2.55;
+
+FR13_UNDERGROUND_PROPS_CATALOG.forEach((entry, idx) => {
+  const row = Math.floor(idx / cols);
+  const col = idx % cols;
+  const x = (col - (cols - 1) / 2) * spacingX;
+  const z = (row - 0.5) * spacingZ;
+  const group = entry.build(libs);
+  group.position.set(x, 0.06, z);
+  const wire = createDebugColliderWireframe(entry.meta.colliders);
+  wire.visible = false;
+  group.add(wire);
+  scene.add(group);
+  placed.push({ entry, group, wire });
+});
+
+const farPositions = Array.from({ length: 10 }, (_, i) => [(i - 4.5) * 2.2, 0, -14]);
+scene.add(buildInstancedUndergroundProxies(farPositions));
+
+let activeIndex = 0;
+let lowLod = false;
+let showCol = false;
+let dimMode = false;
+
+const listEl = document.getElementById('asset-list');
+const metaEl = document.getElementById('meta-box');
+
+function renderMeta(idx) {
+  const { entry } = placed[idx];
+  const m = entry.meta;
+  const colTxt = m.colliders
+    .map((c) => `${c.solid ? '阻挡' : '可越'}: ${c.size.map((n) => n.toFixed(2)).join('×')}m`)
+    .join(' / ');
+  metaEl.innerHTML =
+    `<div><b>${m.name}</b> (${m.id})</div>` +
+    `<div>分类：${m.category} · 尺寸：${m.dimensions.map((n) => n.toFixed(2)).join('×')} m</div>` +
+    `<div>碰撞：${colTxt}</div>` +
+    `<div>LOD：近 ${m.lod.nearDistance}m / 远 ${m.lod.farDistance}m / 剔除 ${m.lod.cullDistance}m · 合批:${m.lod.instancingReady ? '是' : '否'}</div>` +
+    `<div>净空说明：${m.clearanceNote}</div>`;
+}
+
+function selectAsset(idx, focus = true) {
+  activeIndex = idx;
+  [...listEl.children].forEach((b, i) => b.classList.toggle('active', i === idx));
+  renderMeta(idx);
+  if (focus) {
+    const p = placed[idx].group.position;
+    controls.target.set(p.x, 0.72, p.z);
+    camera.position.set(p.x + 2.4, 2.0, p.z + 2.8);
+  }
+}
+
+placed.forEach(({ entry }, idx) => {
+  const btn = document.createElement('button');
+  btn.className = 'item' + (idx === 0 ? ' active' : '');
+  btn.textContent = entry.meta.name;
+  btn.onclick = () => selectAsset(idx, true);
+  listEl.appendChild(btn);
+});
+renderMeta(0);
+
+function setCamMode(mode) {
+  ['btn-overview', 'btn-front', 'btn-back'].forEach((id) =>
+    document.getElementById(id).classList.toggle('active', id === `btn-${mode}`),
+  );
+  if (mode === 'overview') {
+    controls.target.set(0, 0.8, 0);
+    camera.position.set(7.6, 4.6, 10.0);
+  } else if (mode === 'front') {
+    selectAsset(activeIndex, true);
+  } else {
+    controls.target.set(0, 0.6, -14);
+    camera.position.set(0, 4.6, -4.5);
+  }
+}
+
+document.getElementById('btn-overview').onclick = () => setCamMode('overview');
+document.getElementById('btn-front').onclick = () => setCamMode('front');
+document.getElementById('btn-back').onclick = () => setCamMode('back');
+
+document.getElementById('btn-lod').onclick = (e) => {
+  lowLod = !lowLod;
+  placed.forEach(({ group }) => applyAssetLod(group, lowLod ? 'low' : 'high'));
+  e.target.textContent = `LOD: ${lowLod ? '低模代理' : '高精度'}`;
+  e.target.classList.toggle('active', lowLod);
+};
+
+document.getElementById('btn-col').onclick = (e) => {
+  showCol = !showCol;
+  placed.forEach(({ wire }) => { wire.visible = showCol; });
+  e.target.textContent = `净空线框: ${showCol ? '开' : '关'}`;
+  e.target.classList.toggle('active', showCol);
+};
+
+document.getElementById('btn-day').onclick = (e) => {
+  dimMode = !dimMode;
+  scene.background.setHex(dimMode ? 0x0b0909 : 0x181312);
+  scene.fog.color.setHex(dimMode ? 0x0b0909 : 0x181312);
+  keyLight.intensity = dimMode ? 0.25 : 1.15;
+  hemi.intensity = dimMode ? 0.28 : 0.78;
+  campFire.intensity = dimMode ? 3.5 : 2.2;
+  e.target.classList.toggle('active', dimMode);
+};
+
+window.__FR13_PREVIEW__ = {
+  get count() { return placed.length; },
+  get activeId() { return placed[activeIndex].entry.meta.id; },
+  selectAsset,
+  setCamMode,
+};
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+function tick() {
+  requestAnimationFrame(tick);
+  controls.update();
+  renderer.render(scene, camera);
+}
+tick();
+</script>
+</body>
+</html>
