@@ -4,16 +4,17 @@ import {resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {chromium} from 'playwright';
 import {createServer} from 'vite';
-const root=fileURLToPath(new URL('../',import.meta.url)),out=resolve(root,process.argv[2]==='deep'?'.evidence/c-r30-interlayer':process.argv[2]==='lift'?'.evidence/c-r30-lift':'.evidence/c-r30-camp'),cache=resolve(out,'.vite-cache');
+const root=fileURLToPath(new URL('../',import.meta.url)),out=resolve(root,process.argv[2]==='crystal'?'.evidence/c-r30-crystal-host':process.argv[2]==='deep'?'.evidence/c-r30-interlayer':process.argv[2]==='lift'?'.evidence/c-r30-lift':'.evidence/c-r30-camp'),cache=resolve(out,'.vite-cache');
 await mkdir(out,{recursive:true});
-const html='<!doctype html><meta charset="utf-8"><link rel="icon" href="data:,"><style>body{margin:0;overflow:hidden;background:#1c232a}</style><script type="module" src="/tools/fixtures/town-c-r30-camp-review.ts"></script>';
+const fixture=process.argv[2]==='crystal'?'town-c-r30-crystal-host-review.ts':'town-c-r30-camp-review.ts';
+const html='<!doctype html><meta charset="utf-8"><link rel="icon" href="data:,"><style>body{margin:0;overflow:hidden;background:#1c232a}</style><script type="module" src="/tools/fixtures/'+fixture+'"></script>';
 const server=await createServer({configFile:false,root,publicDir:false,cacheDir:cache,resolve:{dedupe:['three']},plugins:[{name:'camp-r30-review',configureServer(vite){vite.middlewares.use('/camp-r30-review',(_req,res)=>{res.setHeader('Content-Type','text/html');res.end(html)})}}],server:{host:'127.0.0.1',port:0,hmr:false}});
 let browser;const result={scope:'real mounted mine host and local movement query, review camera light only, not live Presence or device performance',errors:[],views:{},passed:false};
 try{
  await server.listen();browser=await chromium.launch({executablePath:'C:/Program Files/Google/Chrome/Application/chrome.exe',headless:true,args:['--use-gl=angle','--use-angle=d3d11']});
  const page=await browser.newPage({viewport:{width:1280,height:720},deviceScaleFactor:.8});page.on('pageerror',e=>result.errors.push(String(e)));
  await page.goto('http://127.0.0.1:'+server.httpServer.address().port+'/camp-r30-review',{waitUntil:'networkidle'});await page.waitForFunction(()=>window.campR30?.inspect().frames>2);
- for(const name of process.argv[2]==='deep'?['deep-upper','deep-bore','deep-lower']:process.argv[2]==='lift'?['lift-upper','lift-mid','lift-deep','wreck']:['entry','hearth','dorm','canteen','memorial','exit']){
+ for(const name of process.argv[2]==='crystal'?['entry','forest','overlook','quay','far']:process.argv[2]==='deep'?['deep-upper','deep-bore','deep-lower']:process.argv[2]==='lift'?['lift-upper','lift-mid','lift-deep','wreck']:['entry','hearth','dorm','canteen','memorial','exit']){
   assert.ok(await page.evaluate(name=>window.campR30.setView(name),name),name+' blocked');
   await page.evaluate(()=>new Promise(done=>requestAnimationFrame(()=>requestAnimationFrame(done))));
   result.views[name]=await page.evaluate(()=>window.campR30.inspect());

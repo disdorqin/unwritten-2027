@@ -19,6 +19,7 @@ import {mountFirstMineDeepWorks} from './town-c-first-mine-deep-works.js';
 import {applyR30CampRock} from './town-c-r30-camp-art.js';
 import {mountR30LiftPresentation,mountR30LiftWreck} from './town-c-r30-lift-presentation.js';
 import {cutR30UpperLiftFloor} from './town-c-r30-upper-aperture.js';
+import {cutR30CrystalEndWall} from './town-c-r30-crystal-support.js';
 import {
   mountTownC2UndergroundWaterMinus90,
   type UndergroundWater90OreVisual,
@@ -152,7 +153,7 @@ export function mountUndergroundMineDomain(host: Host) {
   const geometries: BufferGeometry[] = [];
   let waterMesh: Mesh | undefined;
   let rockMesh:Mesh|undefined;
-  let upperLiftAperture=false;
+  let upperLiftAperture=false,crystalMouth=false,rockVertices=mine.mesh.rock;
   let campRock:ReturnType<typeof applyR30CampRock>|undefined;
   for (const surface of ['rock', 'rail', 'water'] as const) {
     const vertices = mine.mesh[surface];
@@ -267,7 +268,7 @@ export function mountUndergroundMineDomain(host: Host) {
     installUpperLiftAperture(){
       if(disposed||!rockMesh)return false;
       if(upperLiftAperture)return true;
-      const cut=cutR30UpperLiftFloor(mine.mesh.rock);
+      const cut=cutR30UpperLiftFloor(rockVertices);
       if(cut.kind!=='ready')return false;
       const previous=rockMesh.geometry;
       const g=new BufferGeometry();
@@ -277,9 +278,23 @@ export function mountUndergroundMineDomain(host: Host) {
       const index=geometries.indexOf(previous);if(index>=0)geometries[index]=g;else geometries.push(g);
       rockMesh.geometry=g;rockMesh.material=next?.materials??materials.rock;
       previous.dispose();campRock?.dispose();campRock=next;
-      upperLiftAperture=true;return true;
+      rockVertices=cut.vertices;upperLiftAperture=true;return true;
     },
     hasUpperLiftAperture:()=>upperLiftAperture,
+    installCrystalMouth(){
+      if(disposed||!rockMesh)return false;
+      if(crystalMouth)return true;
+      const cut=cutR30CrystalEndWall(rockVertices);
+      if(cut.kind!=='ready')return false;
+      const previous=rockMesh.geometry,g=new BufferGeometry();
+      g.setAttribute('position',new BufferAttribute(cut.vertices,3));g.computeVertexNormals();
+      const campStart=mine.route.at(-2)?.from[2];
+      const next=campStart!==undefined?applyR30CampRock(g,materials.rock,campStart,campStart+campSpec.length):undefined;
+      const index=geometries.indexOf(previous);if(index>=0)geometries[index]=g;else geometries.push(g);
+      rockMesh.geometry=g;rockMesh.material=next?.materials??materials.rock;
+      previous.dispose();campRock?.dispose();campRock=next;rockVertices=cut.vertices;crystalMouth=true;return true;
+    },
+    hasCrystalMouth:()=>crystalMouth,
     pumpHouse: pumpHouse?.kind === 'ready' ? pumpHouse : undefined,
     pumpHouseStatus: pumpHouse?.kind ?? 'unregistered',
     expedition,

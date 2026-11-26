@@ -15,6 +15,8 @@ import { resolveR30ShaftContract } from './town-c-r30-shaft-contract.js';
 import {r30DeepFrames,r30DeepLocalFeet,r30DeepWorldFeet,r30DepthLinks,r30DeepRoomProposals} from './town-c-r30-deep-layer-contract.js';
 import {createR30DeepHost} from './town-c-r30-deep-host.js';
 import {mountR30InterlayerLift,type R30InterlayerRide} from './town-c-r30-interlayer-lift.js';
+import {createR30CrystalHost,type R30CrystalBridge} from './town-c-r30-crystal-host.js';
+import {makeR30CrystalFrame} from './town-c-r30-crystal-support.js';
 
 type Road = ReturnType<typeof mountWestCraterRoad>;
 type Mine = ReturnType<typeof createUndergroundMineLayout>;
@@ -147,6 +149,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
   parent: Group; road: Road; campBridge?: UndergroundCampBridge;
   /** Accepted movement/Presence foot only, never inferred from camera height. */
   readAcceptedDomainFoot?:()=> (Point&Readonly<{domainId:string}>)|undefined;
+  crystalBridge?:R30CrystalBridge;
   /** C2 certifies its actual roof opening; C certifies the upper mesh cut.
    * The existing transport authority supplies the accepted trip and clock. */
   interlayerRide?:Readonly<{read:()=>R30InterlayerRide|undefined;now:()=>number;lowerOpeningCertified:()=>boolean}>;
@@ -302,7 +305,8 @@ export function mountUndergroundDomainHost(options: Readonly<{
     supportsFire: () => true,
     readConfirmedContact: () => undefined,
   };
-  const readGateStage = () => 'closed' as const;
+  let crystalHost:ReturnType<typeof createR30CrystalHost>|undefined;
+  const readGateStage = () => crystalHost?.stage()??'closed';
 
   // Water loop consumption (interface aligned to C2's fix round): the
   // host forwards the bridge's raw snapshot reader as the adapter's
@@ -351,7 +355,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
     const localZ = dx * bzE + dn * bzN;
     if(mounted.wreck?.blocks(localX,localZ,undergroundMineSpec.walker.radius))return;
     const passage=mine.queryPassage(localX, localZ, undergroundMineSpec.walker.radius,
-      bodyHeight);
+      bodyHeight,readGateStage());
     // The camp's real furnishings (including R30 hearth) own their collision
     // locally. Keep the original passage metadata when the standing capsule fits.
     if(passage?.zone==='camp'&&!mounted.camp?.queryPassage(localX,localZ,
@@ -385,6 +389,11 @@ export function mountUndergroundDomainHost(options: Readonly<{
   }) : { kind: 'unregistered-shaft' as const };
   const registeredSeam=shaftContract.kind==='ready'&&shaftContract.deep.kind==='registered';
   interlayerLift=registeredSeam?mountR30InterlayerLift(mounted.group):undefined;
+  const crystalFrame=registeredSeam?makeR30CrystalFrame(mounted.toWorld,road.anchor.yaw):undefined;
+  const mineThreshold=mounted.toWorld([0,-91,139.5])!,mineWinch=mounted.toWorld([-2.28,-91,138.02])!;
+  crystalHost=createR30CrystalHost({parent,frame:crystalFrame,mineThreshold,mineWinch,
+    supportsMineThreshold:()=>!!mine.queryPassage(0,139.5,.27,1.8,'open'),
+    installMouth:mounted.installCrystalMouth,bridge:options.crystalBridge,readAcceptedFoot:options.readAcceptedDomainFoot});
   const deepHost=createR30DeepHost({parent,seamRegistered:registeredSeam,
     readAcceptedWater:()=>options.waterBridge?.readWaterSnapshot?.(),
     readAcceptedFoot:options.readAcceptedDomainFoot,
@@ -408,16 +417,16 @@ export function mountUndergroundDomainHost(options: Readonly<{
     return {foot:{...to,height:previous.floor},posture,clearance:previous.clearance,
       eyeHeight:posture==='crouching'?1.0:1.67,requiresCrouch:previous.requiresCrouch};
   }
-  const composed={...mounted,sync(){mounted.sync();deepHost.sync();
+  const composed={...mounted,sync(){crystalHost?.sync();mounted.sync();deepHost.sync();
     interlayerLift?.showDomain(deepHost.status()==='ready'?'underground/mine-2':undefined);
     if(options.interlayerRide&&interlayerLift){
       const lower=options.interlayerRide.lowerOpeningCertified();
       const opened=lower&&mounted.installUpperLiftAperture();
       interlayerLift.present(options.interlayerRide.read(),options.interlayerRide.now(),opened);
     }
-  },dispose(){interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
+  },dispose(){crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
   return {
-    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,
+    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,
     // Layout contract only. The actual city/palace receiving shells and
     // movement/presence host must approve before mounting or allowing travel.
     deepLayerContract:shaftContract.kind==='ready'&&shaftContract.deep.kind==='registered'
