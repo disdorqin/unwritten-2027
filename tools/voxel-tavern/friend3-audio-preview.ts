@@ -158,7 +158,7 @@ muteButton.addEventListener('click', () => {
   const next = !audio.getSettings().muted;
   audio.setMuted(next);
   updateGlobal();
-  announce(next ? '已静音，牌局仍在计时。' : '已取消静音。');
+  announce(next ? '已静音。' : '已取消静音。');
 });
 
 stopAllButton.addEventListener('click', () => {
