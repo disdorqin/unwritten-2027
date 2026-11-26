@@ -1,4 +1,4 @@
-import {BoxGeometry,BufferGeometry,CylinderGeometry,Group,Mesh,MeshStandardMaterial,Quaternion,Vector3} from 'three';
+import {BoxGeometry,BufferGeometry,DataTexture,Group,Mesh,MeshStandardMaterial,NearestFilter,Quaternion,SRGBColorSpace,Vector3} from 'three';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import type {Box} from './landmark-kit';
 type Point=Readonly<{east:number;north:number;height:number}>;
@@ -7,7 +7,20 @@ type Segment=Readonly<EN&{yaw:number}>;
 type Ground=(east:number,north:number)=>number|undefined;
 type Tri=readonly [Point,Point,Point];
 type Family='wood'|'endgrain'|'iron'|'rope'|'stone';
-const palette:Record<Family,number>={wood:0x5b4433,endgrain:0x8a6a4b,iron:0x58463d,rope:0x8d7958,stone:0x777067};
+const palette:Record<Family,number>={wood:0x67503a,endgrain:0x957653,iron:0x554a42,rope:0x9c8968,stone:0x80786c};
+function grain(f:Family){
+ const rgb=palette[f],n=16,data=new Uint8Array(n*n*4);
+ for(let y=0;y<n;y++)for(let x=0;x<n;x++){
+  let t=1;
+  if(f==='wood')t=.77+.19*Math.sin(x*1.5+.35*Math.sin(y*.46))+.12*(x%5!==0?1:0);
+  else if(f==='endgrain')t=.78+.2*Math.sin(Math.hypot(x-4,y-9)*1.8)+.11;
+  else if(f==='rope')t=(x+y)%5<2?.76:1.08;
+  else if(f==='iron')t=.76+.19*((x*5+y*11)%13)/12+.10*(x%6===0?1:0);
+  else t=.81+.22*((Math.floor(x/3)*5+Math.floor(y/4)*7)%9)/8;
+  data.set([Math.min(255,(rgb>>16)*t),Math.min(255,(rgb>>8&255)*t),Math.min(255,(rgb&255)*t),255],(y*n+x)*4);
+ }
+ const map=new DataTexture(data,n,n);map.colorSpace=SRGBColorSpace;map.magFilter=map.minFilter=NearestFilter;map.generateMipmaps=false;map.needsUpdate=true;return map;
+}
 const forward=(p:Segment,u:number,v:number)=>({east:p.east+Math.sin(p.yaw)*u+Math.cos(p.yaw)*v,north:p.north+Math.cos(p.yaw)*u-Math.sin(p.yaw)*v});
 const distance=(a:EN,b:EN)=>Math.hypot(a.east-b.east,a.north-b.north);
 /** Canonical east-wall three-section model. Detached until A verifies an
@@ -116,14 +129,21 @@ export function buildBR30HistoricWalkway(ground:Ground,plan:readonly [Segment,Se
  // Old tools exactly one of each: pickaxe, slatted basket, dark oil lamp.
  solid('wood',pos(first,.42,-.30,deck+.05),pos(first,.88,-.41,deck+.10),.045,.045);
  solid('iron',pos(first,.86,-.57,deck+.08),pos(first,.90,-.24,deck+.10),.055,.055);
+ solid('iron',pos(first,.86,-.57,deck+.08),pos(first,.79,-.64,deck+.035),.036,.035);
+ solid('iron',pos(first,.90,-.24,deck+.10),pos(first,.95,-.18,deck+.04),.038,.035);
  for(let i=0;i<8;i++){
   const a=i*Math.PI/4,u=.57+.135*Math.cos(a),v=.36+.135*Math.sin(a);
   block('endgrain',first,u,v,deck+.13,.09,.075,.24);
+  const b=(i+1)*Math.PI/4;solid('rope',pos(first,u,v,deck+.25),pos(first,.57+.135*Math.cos(b),.36+.135*Math.sin(b),deck+.25),.028,.028);
  }
  block('wood',first,.57,.36,deck+.035,.27,.27,.06);
+ for(const [a,b] of [[-.135,0],[0,.135]])solid('rope',pos(first,.57+a,.36,deck+.25+(a===0?.15:0)),pos(first,.57+b,.36,deck+.25+(b===0?.15:0)),.022,.022);
  block('iron',first,.04,-.39,deck+.035,.16,.16,.07);
  solid('iron',pos(first,.04,-.39,deck+.04),pos(first,.04,-.39,deck+.21),.075,.075);
  block('iron',first,.04,-.39,deck+.21,.12,.12,.035);
+ for(const u of [-.012,.092])for(const v of [-.442,-.338])solid('iron',pos(first,u,v,deck+.06),pos(first,u,v,deck+.20),.016,.016);
+ solid('iron',pos(first,-.015,-.39,deck+.23),pos(first,.04,-.39,deck+.30),.018,.018);
+ solid('iron',pos(first,.04,-.39,deck+.30),pos(first,.095,-.39,deck+.23),.018,.018);
  // Dangling snapped ladder, attached to second section only.
  const p=plan[1],y=tops[1];
  for(const v of [-.19,.19])solid('wood',pos(p,-.65,v,y-.18),pos(p,-1.02,v,y-1.08),.065,.065,true);
@@ -131,10 +151,10 @@ export function buildBR30HistoricWalkway(ground:Ground,plan:readonly [Segment,Se
  const materials=new Map<Family,MeshStandardMaterial>();
  for(const [f,list] of batches){
   const geometry=mergeGeometries(list);list.forEach(g=>g.dispose());if(!geometry)throw Error('Historical mesh merge failed');
-  const material=new MeshStandardMaterial({color:palette[f],roughness:1,flatShading:true});materials.set(f,material);
+  const material=new MeshStandardMaterial({map:grain(f),roughness:1,flatShading:true});materials.set(f,material);
   const mesh=new Mesh(geometry,material);mesh.name='historic-walkway/'+f;group.add(mesh);
  }
  let disposed=false;
  return {group,plan,tops,gaps:[gap12,gap23] as const,entry:{...start,height:entryHeight},firstFoot:{...first,height:deck},support,boxes,pieces,
-  productionReady:false as const,dispose(){if(disposed)return;disposed=true;group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});materials.forEach(m=>m.dispose());}};
+  productionReady:false as const,dispose(){if(disposed)return;disposed=true;group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});materials.forEach(m=>{m.map?.dispose();m.dispose();});}};
 }
