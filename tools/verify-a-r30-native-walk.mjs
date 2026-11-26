@@ -288,7 +288,7 @@ const grid=createTerrainGrid(), road=mountWestCraterRoad(worldBounds.depth,n=>gr
 const rail=['kengkou','freight','shankou','transfer-dock','ore-yard-dock','rail-valley','inscription-access'].includes(segment)?buildCraterRailExtension(grid,road):undefined;
 const joint=segment==='joint-historic'?JSON.parse(await readFile(process.env.AR30_JOINT_ROUTE,'utf8')):undefined;
 const approach={
- 'joint-historic':[[-12,159],[-40,159],[-67,159]],
+ 'joint-historic':[[-12,159],[-40,159]],
  outerclusters:[[-12,159],[-40,159],[-37,168],[-39,175],[-62,201],[-68,220]],
  'western-clusters':[[-12,159],[-40,159],[-37,168],[-39,175],[-62,201],[-68,220],[-83,235],[-98,243]],
  'eastern-cluster':[[-12,159],[-40,159]],
@@ -345,6 +345,7 @@ try{
    }
  }
  if(joint){
+   for(const [i,p]of joint.approach.slice(1).entries())await walkTo(page,evidence,[p.east,p.north],'joint-three-rail-approach-'+i,i===2||i===3?.20:.30);
    const deadline=Date.now()+60000;
    while(Date.now()<deadline){
      const f=westWindow();
@@ -597,6 +598,7 @@ try{
  if(joint){
    await walkTo(page,evidence,[-67,159],'joint-return-outside',.35);
    await waitForWire(page,evidence,p=>p?.area==='west'&&Math.hypot(p.east+67,p.north-159)<.7);
+   for(const [i,p]of joint.approach.slice(0,-1).reverse().entries())await walkTo(page,evidence,[p.east,p.north],'joint-three-rail-return-'+i,.30);
  }
  const returned=await readPose(page);
  if(segment==='shankou'){

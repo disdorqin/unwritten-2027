@@ -8,6 +8,9 @@ type Anchor=Readonly<{east:number;north:number}>;
  * physical route and the packed surface use this one sequence. */
 // Shared surveyed detour along the north of the assembly court, then
 // rejoin the original yard crossing; no path passes through the flagpoles.
+// Safe three-rail approach measured on the full A/B surface candidate.
+// The trail wear stops at the shared crater apron; no new rail deck.
+export const rimPublicAccessFootway=[[-40,159],[-60.5,142.5],[-66,139.5],[-68.5,137],[-75,137],[-75.5,148.5],[-70,154],[-67,159]] as const;
 export const smelterFootway=[[-43,159],[-67,136],[-91,129],[-106.94,125.4],[-117,124],[-122,116],[-125,112.65],[-144,105]] as const;
 export const coldFurnaceFootway=[[-144,105],[-151.5,112.5],[-158.5,112.5],[-171,121],[-172,125.5]] as const;
 export const waterTowerFootway=[[-36,145],[-38,145],[-44.5,145.5],[-44.5,147.5]] as const;
@@ -128,6 +131,7 @@ export function createWestLandscape(anchor:Anchor,apronRadius:number,northLimit:
     {points:sortingShedFootway,half:.70,strength:.60},
     {points:salvagePipeFootway,half:.70,strength:.55},
     {points:inscriptionAccessFootway,half:.86,strength:.70},
+    {points:rimPublicAccessFootway,half:.85,strength:.64},
     {points:coldFurnaceFootway,half:1.12,strength:.68},
     {points:waterTowerFootway,half:.92,strength:.62},
   ];

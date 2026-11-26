@@ -89,5 +89,18 @@ export function createAR30RimAccessSurvey(road:Road,rail:Rail,radius=.30){
   check(points);
   return {points,states:states.length,rawPoints:raw.length,length:points.slice(1).reduce((s,p,i)=>s+distance(points[i]!,p),0)};
  }
- return {search,check};
+ function trace(plan:readonly (readonly [number,number])[]){
+  const [e,n]=plan[0]!,h=road.heightAt(e,n);
+  if(h===undefined)throw Error('Missing rim approach start');
+  const start=step(e,n,h);if(!start)throw Error('Rim approach start obstructed');
+  const points=[start];
+  for(const [east,north]of plan.slice(1)){
+   const p=line(points.at(-1)!,{east,north});
+   if(!p)throw Error('Rim approach invalidated '+east+'/'+north);
+   points.push(p);
+  }
+  check(points);
+  return {points,length:points.slice(1).reduce((s,p,i)=>s+distance(points[i]!,p),0)};
+ }
+ return {search,check,trace};
 }
