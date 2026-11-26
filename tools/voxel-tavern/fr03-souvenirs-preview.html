@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<link rel="icon" href="data:," />
+<title>FR-03 原创纪念品与展柜 · 独立交互预览</title>
+<style>
+  :root{
+    --bg:#0d1522; --panel:#101d2cd8; --line:#8fb3cf33; --ink:#e9f2f9; --dim:#9ab2c6;
+    --amber:#e3be7f;
+  }
+  html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--ink);
+    font:13.5px/1.5 "Segoe UI",system-ui,-apple-system,"Microsoft YaHei",sans-serif}
+  canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+  canvas:active{cursor:grabbing}
+  #hud{position:absolute;top:14px;left:14px;width:min(350px,calc(100vw - 28px));
+    max-height:calc(100vh - 28px);overflow:auto;padding:14px 16px;border:1px solid var(--line);
+    border-radius:14px;background:var(--panel);backdrop-filter:blur(12px);box-shadow:0 16px 44px #0006}
+  h1{font-size:15px;margin:0 0 2px;color:#fbe1b0}
+  .sub{font-size:11.5px;color:var(--dim);margin:0 0 10px}
+  .row{display:flex;gap:6px;flex-wrap:wrap;margin:7px 0}
+  button{border:1px solid #8aacc688;background:#1c3246c9;color:#eaf3fa;padding:5px 9px;
+    border-radius:8px;cursor:pointer;font:inherit;font-size:12px}
+  button:hover{background:#284661}
+  button.active{background:#b55b38;border-color:#e99c7f}
+  .list{display:grid;grid-template-columns:1fr 1fr;gap:5px;margin:10px 0}
+  .item{text-align:left;padding:6px 8px;font-size:12px;border-radius:7px;
+    border:1px solid #ffffff16;background:#0a141fb8;color:#d6e5f2}
+  .item.active{border-color:var(--amber);background:#2b2318cc;color:#ffe6ba}
+  .meta{margin-top:8px;padding:10px;border-radius:10px;background:#081019b0;border:1px solid #ffffff12;font-size:12px}
+  .meta b{color:var(--amber)}
+  .foot{position:absolute;right:14px;bottom:12px;font-size:11px;color:#8ba3b8;pointer-events:none}
+</style>
+</head>
+<body>
+<div id="hud">
+  <h1>FR-03 原创纪念品与展柜（6 件 + 展柜）</h1>
+  <p class="sub">纯本地展示与旋转查看 · 不接全局收集/存档/经济</p>
+  <div class="row">
+    <button id="btn-overview" class="active">展柜全览</button>
+    <button id="btn-front">近景细看</button>
+    <button id="btn-back">背面检查</button>
+  </div>
+  <div class="row">
+    <button id="btn-spin">自动旋转: 开</button>
+    <button id="btn-day">夜间 / 日间</button>
+  </div>
+  <div id="asset-list" class="list"></div>
+  <div id="meta-box" class="meta"></div>
+</div>
+<div class="foot">鼠标/触控点击单件放大查看 · 拖拽旋转</div>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { FriendMaterialLibrary } from './town-blockout/town-friend-materials.ts';
+import {
+  FR03_SHOWCASE_META,
+  FR03_SOUVENIRS_CATALOG,
+  buildShowcaseCabinet,
+} from './town-blockout/town-friend-souvenirs.ts';
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x131e2c);
+
+const camera = new THREE.PerspectiveCamera(46, window.innerWidth / window.innerHeight, 0.05, 80);
+camera.position.set(1.6, 1.85, 2.75);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.target.set(0, 1.15, 0);
+
+const hemi = new THREE.HemisphereLight(0xd4e5f7, 0x2c3440, 0.95);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff1dc, 1.35);
+sun.position.set(3, 5, 4);
+sun.castShadow = true;
+scene.add(sun);
+
+const cabinetLight = new THREE.PointLight(0xffcb82, 1.4, 4, 1.5);
+cabinetLight.position.set(0, 1.68, 0.18);
+scene.add(cabinetLight);
+
+const libs = new FriendMaterialLibrary();
+
+const floor = new THREE.Mesh(new THREE.BoxGeometry(8, 0.16, 6), libs.get('cobble'));
+floor.position.set(0, -0.08, 0);
+floor.receiveShadow = true;
+scene.add(floor);
+
+const cabinet = buildShowcaseCabinet(libs);
+scene.add(cabinet);
+
+// Place the 6 souvenirs on the 2 shelves of the cabinet
+const placements = [
+  [-0.52, 1.245, 0.04],
+  [0.0, 1.245, 0.04],
+  [0.52, 1.245, 0.04],
+  [-0.52, 0.70, 0.04],
+  [0.0, 0.70, 0.04],
+  [0.52, 0.70, 0.04],
+];
+
+const items = [];
+FR03_SOUVENIRS_CATALOG.forEach((entry, idx) => {
+  const g = entry.build(libs);
+  const [px, py, pz] = placements[idx];
+  g.position.set(px, py, pz);
+  scene.add(g);
+  items.push({ entry, group: g, pos: new THREE.Vector3(px, py + 0.16, pz) });
+});
+
+let selectedIndex = -1; // -1 = cabinet overview
+let autoSpin = true;
+let isNight = false;
+
+const listEl = document.getElementById('asset-list');
+const metaEl = document.getElementById('meta-box');
+
+function renderMeta() {
+  const m = selectedIndex < 0 ? FR03_SHOWCASE_META : items[selectedIndex].entry.meta;
+  metaEl.innerHTML =
+    `<b>${m.name}</b> (${m.id})<br>` +
+    `分类：${m.category} · 尺寸：${m.dimensions.join(' × ')} m<br>` +
+    `说明：${m.clearanceNote}<br>` +
+    `授权：${m.license}`;
+}
+
+function focusItem(idx, viewMode = 'front') {
+  selectedIndex = idx;
+  [...listEl.children].forEach((b, i) => b.classList.toggle('active', i === idx));
+  renderMeta();
+  if (idx < 0) {
+    controls.target.set(0, 1.15, 0);
+    camera.position.set(1.6, 1.85, 2.75);
+  } else {
+    const t = items[idx].pos;
+    controls.target.copy(t);
+    const zOff = viewMode === 'back' ? -0.85 : 0.85;
+    camera.position.set(t.x + 0.35, t.y + 0.25, t.z + zOff);
+  }
+}
+
+items.forEach(({ entry }, idx) => {
+  const btn = document.createElement('button');
+  btn.className = 'item';
+  btn.textContent = `${idx + 1}. ${entry.meta.name}`;
+  btn.onclick = () => focusItem(idx, 'front');
+  listEl.appendChild(btn);
+});
+renderMeta();
+
+document.getElementById('btn-overview').onclick = () => focusItem(-1);
+document.getElementById('btn-front').onclick = () => focusItem(selectedIndex < 0 ? 0 : selectedIndex, 'front');
+document.getElementById('btn-back').onclick = () => focusItem(selectedIndex < 0 ? 0 : selectedIndex, 'back');
+document.getElementById('btn-spin').onclick = (e) => {
+  autoSpin = !autoSpin;
+  e.currentTarget.textContent = autoSpin ? '自动旋转: 开' : '自动旋转: 关';
+  e.currentTarget.classList.toggle('active', autoSpin);
+};
+document.getElementById('btn-day').onclick = (e) => {
+  isNight = !isNight;
+  e.currentTarget.classList.toggle('active', isNight);
+  if (isNight) {
+    scene.background.setHex(0x070d16);
+    hemi.intensity = 0.26;
+    sun.intensity = 0.3;
+    cabinetLight.intensity = 2.6;
+  } else {
+    scene.background.setHex(0x131e2c);
+    hemi.intensity = 0.95;
+    sun.intensity = 1.35;
+    cabinetLight.intensity = 1.4;
+  }
+};
+
+// Tap / click in 3D canvas to inspect a souvenir
+const raycaster = new THREE.Raycaster();
+const pointer = new THREE.Vector2();
+renderer.domElement.addEventListener('pointerup', (ev) => {
+  const rect = renderer.domElement.getBoundingClientRect();
+  pointer.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1;
+  pointer.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1;
+  raycaster.setFromCamera(pointer, camera);
+  for (let i = 0; i < items.length; i++) {
+    if (raycaster.intersectObject(items[i].group, true).length > 0) {
+      focusItem(i, 'front');
+      break;
+    }
+  }
+});
+
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+function animate() {
+  requestAnimationFrame(animate);
+  if (autoSpin && selectedIndex >= 0) {
+    items[selectedIndex].group.rotation.y += 0.012;
+  }
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
