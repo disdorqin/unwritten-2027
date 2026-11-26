@@ -8,6 +8,7 @@ import type { createUndergroundMainlineTrack, UndergroundMainlinePoint } from
 import type { U19MineCartSnapshot } from '../../../src/presence/underground-mainline-cart.js';
 import { createUndergroundMineCartModel } from './underground-mine-cart-model.js';
 import {mountR30MainlineDressing} from './town-c-r30-mainline-dressing.js';
+import {mountR30MainlineArches} from './town-c-r30-mainline-arches.js';
 
 type Route = ReturnType<typeof createUndergroundMainlineTrack>;
 type Role = 'repair' | 'board' | 'leave' | 'brake' | 'go' | 'turnout' |
@@ -271,6 +272,7 @@ export function mountUndergroundMainlineScene(host: Options) {
   }
   // Hot lamps belong to their real metal cage and must stay inside the shared light budget.
   const r30Dressing=host.r30?mountR30MainlineDressing(root,route,host.r30.supportsProp):undefined;
+  const r30Arches=host.r30&&r30Dressing?mountR30MainlineArches(root,route,host.r30.supportsProp,r30Dressing.footprints):undefined;
   const lampPoints = host.r30?[]:[0, route.length, route.turnoutMetres,
     route.faults.sleepers, route.faults.gauge, route.faults['turnout-rust']];
   const lamps: PointLight[] = [...(r30Dressing?.lamps??[])];
@@ -509,9 +511,9 @@ export function mountUndergroundMainlineScene(host: Options) {
   return {
     kind: 'ready', group: root, cart: cart.group, sync, prompt, press,
     route, words: undergroundMainlineWords, sleepers: sleepers.length,
-    railHead, r30Dressing,
+    railHead, r30Dressing,r30Arches,
     acceptedSnapshot:()=>!disposed&&cart.group.visible&&last?structuredClone(last):undefined,
-    blocks(east:number,north:number,y:number,radius:number,height:number){return r30Dressing?.blocks(east,north,y,radius,height)??false},
+    blocks(east:number,north:number,y:number,radius:number,height:number){return !!(r30Dressing?.blocks(east,north,y,radius,height)||r30Arches?.blocks(east,north,y,radius,height))},
     batches: instances.length,
     dispose() {
       if (disposed) return;
@@ -531,7 +533,7 @@ export function mountUndergroundMainlineScene(host: Options) {
         const material = group.userData.material as MeshStandardMaterial;
         material.dispose();
       }
-      r30Dressing?.dispose();r30RailGeometry?.dispose();r30RailMaterial?.dispose();
+      r30Arches?.dispose();r30Dressing?.dispose();r30RailGeometry?.dispose();r30RailMaterial?.dispose();
       blockGeo.dispose();
       lampGeometry.dispose(); lampMaterial.dispose();
       root.clear();
