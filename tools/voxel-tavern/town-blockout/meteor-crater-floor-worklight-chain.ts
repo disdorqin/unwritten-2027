@@ -68,6 +68,13 @@ for(const post of craterFloorWorklightPosts){
   append(id+'/light-core','amber',e,y+2.59,n,.38,.46,.40);
   append(id+'/roof','stone',e,y+2.94,n,.85,.14,.84);
   append(id+'/roof-ridge','frost',e,y+3.02,n,.39,.075,.39);
+  // Iron hood underside, warm reflector and four bolted ribs; the amber
+  // core remains the only emissive glass and the existing source stays put.
+  append(id+'/hood-reflector','ochre',e,y+2.843,n,.57,.045,.57);
+  for(const [i,dx,dn,w,d] of [[0,-.32,0,.055,.66],[1,.32,0,.055,.66],[2,0,-.32,.66,.055],[3,0,.32,.66,.055]] as const){
+    append(id+'/hood-edge-'+i,'worn-iron',e+dx,y+2.859,n+dn,w,.08,d);
+    append(id+'/hood-bolt-'+i,'ochre',e+dx,y+2.812,n+dn,.055,.035,.055);
+  }
   append(id+'/snow-foot','frost',e,y+.19,n,.88,.12,.82);
   // Recessed industrial base plate, four clamping cleats and a small
   // conduit/strain relief. Keep the complete assembly inside the old
@@ -167,7 +174,11 @@ export function mountCraterFloorWorklightChain(owner:Group,
     materials.push(material);
   }
   const lights=posts.map(post=>{
-    const light=new PointLight(0xffc17f,1.5,13.5,2);
+    // Match the existing warm chain (6–8 intensity) for orientation;
+    // the three actual workface-side sources have stronger work light.
+    // No added light, shadow caster, range, coordinate or phase authority.
+    const workside=['c2/winch-watch','c2/south-brace','c2/haulage-turn'].includes(post.id);
+    const light=new PointLight(0xffc17f,workside?12:6,13.5,2);
     light.name=post.id+'/light-source';
     light.position.set(post.east,post.bulbHeight,-post.north);
     light.visible=false;
