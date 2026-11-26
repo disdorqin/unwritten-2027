@@ -55,6 +55,16 @@ test('R30 physical subtargets forward existing rule actions without fabricating 
   const heldProjection=projectBR30Workshop({...facts(),bellows:{pressure:.65,heldMs:6000,inBand:true,cast:false,stroke:.2}});
   assert.equal(heldProjection.bellowsHeld,.6);assert.equal(heldProjection.bellowsInBand,true);
   assert.equal(projectBR30Workshop(facts()).sortingFill[0],1/6);
+  const projected=projectBR30Workshop(facts());
+  assert.equal(projected.weighingKg,kg);assert.equal(projected.weighingNeedle,kg/18);
+  const needle=station.group.getObjectByName('b-r30-scale-needle')!;
+  assert.ok(Math.abs(needle.rotation.z-(.5-kg/18)*2.5)<1e-9);
+  const visibleOre=station.group.getObjectByName('sort-fragment-0-0')!;
+  assert.equal(visibleOre.visible,true);
+  assert.equal(station.group.getObjectByName('sort-fragment-0-1')!.visible,false);
+  station.show(projectBR30Workshop({...facts(),sorting:{bins:{stardust:6,scrap:0,rubble:0}}}));
+  for(let i=0;i<6;i++)assert.equal(station.group.getObjectByName('sort-fragment-0-'+i)!.visible,true);
+  assert.equal(station.group.getObjectByName('sort-fragment-1-0')!.visible,false);
   assert.ok(sent.every(a=>!('lumpId' in a)));
   station.dispose();
 });

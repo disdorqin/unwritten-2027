@@ -56,7 +56,8 @@ export function projectBR30Workshop(f:BR30WorkshopFacts):CraterWorkstationView {
     calibrationLocked:f.calibration.locked,
     calibrationTargets:dialTargets(f.dayIndex),
     sortingFill:oreKinds.map(k=>clamp(f.sorting.bins[k]/sortBasketCapacity)) as unknown as Triple<number>,
-    weighingNeedle:clamp(f.scale.kg/17.9),
+    weighingNeedle:clamp(f.scale.kg/18),
+    weighingKg:Number.isFinite(f.scale.kg)&&f.scale.kg>=0&&f.scale.kg<=17.9?f.scale.kg:undefined,
     turnout:f.track.thrown?'branch':'straight',
   };
 }

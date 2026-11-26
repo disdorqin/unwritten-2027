@@ -82,7 +82,7 @@ export function surveyCraterWorkstations(road:Road,rail:Rails): readonly Worksta
 export type CraterWorkstationView = Readonly<{
   /** Read from the existing B rule leaf; normalized animation values only. */
   bellowsStroke:number; gaugeNeedle:number; sortingFill:readonly [number,number,number];
-  weighingNeedle:number; turnout:'straight'|'branch';
+  weighingNeedle:number; weighingKg?:number; turnout:'straight'|'branch';
   /** All three actual instrument dial angles, supplied by the existing rule. */
   calibrationAngles?:readonly [number,number,number];
   calibrationLocked?:readonly [boolean,boolean,boolean];
@@ -129,8 +129,11 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
   const wheel=new CylinderGeometry(1,1,1,12);
   const oreGeometry=new DodecahedronGeometry(1,0);
   const controls=new Map<CraterWorkstationId,Group>();
-  const fills:Mesh[]=[];
   const orePiles:Mesh[][]=[[],[],[]];
+  const tallyPegs:Mesh[][]=[[],[],[]];
+  const tallyOn=new MeshStandardMaterial({color:0xbd9b63,roughness:.9});
+  const tallyOff=new MeshStandardMaterial({color:0x493e35,roughness:.95});
+  let paintWeight:((kg:number|undefined)=>void)|undefined;
   const dialKnobs:Mesh[]=[];
   const dialPointers:Group[]=[];
   const dialStatus:MeshStandardMaterial[]=[];
@@ -245,7 +248,10 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
         fixed(iron,x,.84,0,.56,.11,.66);
         for(const side of [-1,1])fixed(timber,x+side*.265,.96,0,.045,.27,.68);
         fixed(timber,x,.96,-.315,.55,.27,.045);
-        const chunk=moving(ores[i],g,x,.92,0,.42,.10,.42);fills.push(chunk);
+        // Six brass tally plugs correspond to the six accepted fragments.
+        // The tray itself remains empty until actual accepted pieces arrive.
+        fixed(iron,x,1.13,-.27,.50,.082,.09);
+        for(let j=0;j<6;j++)tallyPegs[i].push(moving(tallyOff,g,x-.20+j*.08,1.13,-.212,.048,.049,.032));
         // Irregular individual fragments, not a flat solid block in the tray.
         for(let j=0;j<6;j++){
           const ore=new Mesh(oreGeometry,ores[i]);
@@ -269,11 +275,39 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
       fixed(iron,0,.78,-.37,.13,1.19,.13);
       fixed(iron,0,1.36,-.30,.65,.36,.16);
       fixed(paper,0,1.36,-.205,.52,.28,.03);
-      weighNeedle=needle(g,0,1.34,-.18);weighNeedle.scale.set(.52,.52,.52);
-      for(let i=0;i<7;i++){
-        const a=-1.25+i*.416;
-        const tick=moving(dark,g,Math.sin(a)*.18,1.29+Math.cos(a)*.18,-.18,.012,.035,.015);
+      // The actual 0–18 kg mechanical arc and pointer share the same
+      // centre and angle. The accepted rule maximum is 17.9 kg.
+      weighNeedle=needle(g,0,1.27,-.166);weighNeedle.scale.set(.60,.60,.60);
+      weighNeedle.name='b-r30-scale-needle';
+      for(let i=0;i<=6;i++){
+        const a=-1.25+i*2.5/6;
+        const tick=moving(dark,g,Math.sin(a)*.177,1.27+Math.cos(a)*.177,-.17,.010,.026,.013);
         tick.rotation.z=-a;
+      }
+      if(typeof document!=='undefined'){
+        const canvas=document.createElement('canvas');canvas.width=512;canvas.height=278;
+        const ctx=canvas.getContext('2d');
+        if(ctx){
+          const tex=new CanvasTexture(canvas);tex.colorSpace=SRGBColorSpace;
+          tex.minFilter=tex.magFilter=NearestFilter;tex.generateMipmaps=false;
+          const face=new Mesh(new PlaneGeometry(.50,.27),new MeshBasicMaterial({map:tex}));
+          face.name='b-r30-scale-reading';face.position.set(0,1.36,-.187);g.add(face);
+          let last='';
+          paintWeight=(kg)=>{
+            const valid=typeof kg==='number'&&Number.isFinite(kg)&&kg>=0&&kg<=17.9;
+            const reading=valid?kg.toFixed(1)+' kg':'— kg';if(reading===last)return;last=reading;
+            ctx.fillStyle='#d4c49d';ctx.fillRect(0,0,512,278);
+            ctx.strokeStyle='#665743';ctx.lineWidth=5;ctx.strokeRect(7,7,498,264);
+            ctx.fillStyle='#4a3b2f';ctx.textAlign='center';ctx.textBaseline='middle';ctx.font='bold 27px sans-serif';
+            for(let i=0;i<=6;i+=2){
+              const a=-1.25+i*2.5/6;
+              ctx.fillText(String(i*3),256+Math.sin(a)*207,231-Math.cos(a)*207);
+            }
+            ctx.fillStyle='#514637';ctx.fillRect(161,198,190,54);
+            ctx.fillStyle='#e7d6a9';ctx.font='bold 37px sans-serif';ctx.fillText(reading,256,225);tex.needsUpdate=true;
+          };
+          paintWeight(undefined);
+        }
       }
       fixed(rust,0,.62,-.25,.26,.07,.23);
       sign(g,site.label,1.56,-.19,.62);
@@ -358,13 +392,14 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
       dialKnobs.forEach((k,i)=>{const a=view.calibrationAngles![i];k.rotation.set(Math.PI/2,0,0);k.rotateY(Number.isFinite(a)?a:0);});
     }else if(dialKnobs[1])dialKnobs[1].rotation.y=gaugeValue*3.4;
     dialStatus.forEach((m,i)=>{m.color.set(view.calibrationLocked?.[i]?0x78ac7d:0x553b32);});
-    fills.forEach((m,i)=>{
-      const fill=clamped(view.sortingFill[i]),h=.015+fill*.10;
-      m.scale.y=h;m.position.y=.885+h/2;
-      orePiles[i].forEach((ore,j)=>{ore.visible=(j+1)/orePiles[i].length<=fill;});
+    orePiles.forEach((pile,i)=>{
+      const fill=clamped(view.sortingFill[i]);
+      pile.forEach((ore,j)=>{ore.visible=(j+1)/pile.length<=fill+1e-9;});
+      tallyPegs[i].forEach((peg,j)=>{peg.material=(j+1)/pile.length<=fill+1e-9?tallyOn:tallyOff;});
     });
     scalePlatform!.position.y=.37-weight*.035;
-    weighNeedle!.rotation.z=(weight-.5)*2;
+    weighNeedle!.rotation.z=(.5-weight)*2.5;
+    paintWeight?.(view.weighingKg);
     lever!.rotation.z=view.turnout==='branch'?.44:-.44;
     // Both physically moving grips use actual matrix positions; a press
     // after a pressure stroke must still target the real handle.
@@ -384,7 +419,7 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
     const geometries=new Set<import('three').BufferGeometry>();
     root.traverse(o=>{if(o instanceof Mesh){geometries.add(o.geometry);if(o.material instanceof MeshBasicMaterial){o.material.map?.dispose();o.material.dispose();}}});
     for(const geo of geometries)geo.dispose();
-    for(const mat of allMaterials){mat.map?.dispose();mat.dispose();}signal?.dispose();dialStatus.forEach(m=>m.dispose());pressureStatus.dispose();pressureStepMaterial.dispose();pressureStepOff.dispose();unit.dispose();wheel.dispose();oreGeometry.dispose();
+    for(const mat of allMaterials){mat.map?.dispose();mat.dispose();}signal?.dispose();dialStatus.forEach(m=>m.dispose());pressureStatus.dispose();pressureStepMaterial.dispose();pressureStepOff.dispose();tallyOn.dispose();tallyOff.dispose();unit.dispose();wheel.dispose();oreGeometry.dispose();
   }
   return {group:root,sites,colliders:sites.map(s=>s.footprint),aim,aimControl,targets,show,dispose};
 }
