@@ -138,6 +138,13 @@ export function createTownD2R30Ropeway(options: TownD2R30RopewayOptions = {}) {
 
   let disposed = false;
   let night = false;
+  let operationClaimed=false;
+  let lastStates=cableView.update(epochMs);
+  function updateStates(states:Parameters<typeof cableView.updateStates>[0]){
+    if(disposed)return [];
+    lastStates=cableView.updateStates(states);
+    return lastStates;
+  }
   return {
     group,
     /** The canonical cable and stations, so the legacy host can keep its rules. */
@@ -153,12 +160,20 @@ export function createTownD2R30Ropeway(options: TownD2R30RopewayOptions = {}) {
     update(nowMs: number) {
       if (disposed) return [];
       if (!Number.isFinite(nowMs)) throw new RangeError('D2-R09 needs a finite timestamp.');
-      return cableView.update(nowMs);
+      if(operationClaimed)return lastStates;
+      lastStates=cableView.update(nowMs);return lastStates;
     },
     /** Same actual cabin transforms for the staged, pre-repair journey. */
-    updateStates(states: Parameters<typeof cableView.updateStates>[0]) {
-      if(disposed)return [];
-      return cableView.updateStates(states);
+    updateStates,
+    /** Disable the old assembly's wall-clock updates while the authoritative
+     * transport owner is installed. This prevents a second writer moving cars. */
+    claimOperationalClock(){
+      if(disposed||operationClaimed)throw Error('Ropeway operational clock already owned or disposed');
+      operationClaimed=true;
+      const parked:Parameters<typeof cableView.updateStates>[0]=[{...cable.cabinsAt(epochMs+cable.legMs)[0]!,canBoardOrExit:false},{...cable.cabinsAt(epochMs)[1]!,canBoardOrExit:false}];
+      updateStates(parked);
+      let released=false;
+      return {park(){if(!released)updateStates(parked);},release(){if(!released){released=true;operationClaimed=false;}}};
     },
     setNight(value: boolean) {
       if (disposed) throw new Error('The D2-R09 ropeway is disposed.');
