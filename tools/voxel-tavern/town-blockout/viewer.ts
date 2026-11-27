@@ -29,6 +29,7 @@ import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, wo
 import { addTerrainMeshes } from './terrain-mesh';
 import {mountWestMountainGround,westMountainTrackProtection} from './town-night-a-summit-west-ground';
 import {westPresenceBounds} from '../../../src/shared/za22-west-domain';
+import {createSouthEntryHost} from './town-night-a-summit-entry-host';
 import { createTerrainSupportContract } from './town-a-r30-terrain-contract';
 import { supportFootprintOverlaps } from './town-a-r30-oriented-support';
 import { mainSummitLayout, mainSummitSpec } from './main-summit-block';
@@ -601,6 +602,7 @@ const cloudRoute = createZa22CloudRoute({
   enterOrExit: transferCloudTerminal,
   view: (title, message) => { activityContext.open(title, message); },
 });
+const southEntryHost=createSouthEntryHost();
 // 缆车修缮一线宿主 (B2): the host holds no repair state — actions are
 // derived per frame from the server-authored state in town-presence.
 // Anchors follow the repair spec's three fault points: the rust brake
@@ -3318,7 +3320,7 @@ function supportAt(
 }
 
 function obstructed(east: number, north: number, feet: number, { colliders, floors } = geometryAt(east, north)) {
-  if (cloudRoute.active()) return cloudRoute.blocked(east, north, feet, bodyRadius, bodyHeight);
+  if (cloudRoute.active()) return cloudRoute.blocked(east, north, feet, bodyRadius, bodyHeight)||southEntryHost.blocked(east,north,feet,bodyRadius,bodyHeight);
   if (!homeReturn && east < 0) {
     if (!outdoorWalkable(east, north)) return true;
     if (ensureWestCraterRoad().fenceBlocks(east, north, feet, bodyRadius)) return true;
@@ -3838,6 +3840,7 @@ renderer.setAnimationLoop(now => {
   const dt = Math.min(.25, frameSeconds);
   previous = now;
   cloudRoute.update({ east: x, north: n, height: ground }, !!productionRidge?.transportReady && !sledRide.active());
+  southEntryHost.sync(cloudRoute.assembly(),nightMode);
   updateGuardPosts();
   if (cloudRoute.active()) {
     renderCloudRoute(frameSeconds);
