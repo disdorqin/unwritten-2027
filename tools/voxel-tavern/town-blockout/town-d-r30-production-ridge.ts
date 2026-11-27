@@ -24,7 +24,7 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
  if(east.ok&&'field'in east)field=east.field;
  // Never publish an overlapping or protected cut merely because individual
  // segments passed. Fall back to the natural mountain, not the old shell.
- const lower=buildMiddleEastRoadbed(field,allowed,lowerEastServiceControls);
+ const lower=buildMiddleEastRoadbed(field,allowed,lowerEastServiceControls,{startHeight:26});
  if(lower.ok&&'field'in lower)field=lower.field;
  const accepted=[south,east,lower].filter(r=>r.ok&&'field'in r);
  const coherent=accepted.every(r=>auditRidgeRoadSurface(field,r.route).maxGrade<=.12+1e-6)&&
@@ -47,8 +47,9 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
  // closed. No cabin motion, old line, or unverified domain transfer.
  const cableSurvey=surveyRidgeCableSpans(field,true);
  const cableAudit=auditRidgeCableSweep(field,cableSurvey);
+ const serviceExit=roads.includes(lower)&&Math.abs((field.heightAt(522,355)??-1)-26)<.001;
  const facilities=stationReady&&cableAudit.groundHits===0&&cableAudit.minMoving>=.25
-  ?mountRidgeCableFacilities(owner,field,true,true):undefined;
+  ?mountRidgeCableFacilities(owner,field,true,true,serviceExit):undefined;
  function heightAt(e:number,n:number){
   return patch.ownsCell(Math.floor(e),Math.floor(n))?grid.heightAt(e,n):undefined;
  }
@@ -64,7 +65,7 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
   const d=Math.hypot(to.east-from.east,to.north-from.north);
   return d<1e-6||h1-h0<=.85*d+1e-5;
  }
- return {field,ownership,ownsCell:patch.ownsCell,changedVertices:patch.changedVertices,roads,stationReady,model,forest,heightAt,allowsUphill,facilities,cableAudit,
+ return {field,ownership,ownsCell:patch.ownsCell,changedVertices:patch.changedVertices,roads,stationReady,model,forest,heightAt,allowsUphill,facilities,cableAudit,serviceExit,
   blocked(e:number,n:number,h:number,r=.27){return forest.blocked(e,n,h,r)||!!station?.blocked(e,n,h,r)||!!facilities?.blocked(e,n,h,r)||furniture.some(f=>f.blocked(e,n,h,r))||banks.some(b=>b.blocked(e,n,h,r))},
   setNight(night:boolean){station?.setNight(night);facilities?.setNight(night);furniture.forEach(f=>f.setNight(night))},
   updateView(e:number,n:number){model.updateView(e,n);forest.updateView(e,n);banks.forEach(b=>b.updateView(e,n));facilities?.updateView(e,n)},

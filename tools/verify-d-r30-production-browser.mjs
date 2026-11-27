@@ -85,6 +85,12 @@ try{
  await snap('cable-dock-day');
  const dock=frames.at(-1).frame.ridge;assert.ok(dock.cableMounted&&Math.abs(dock.foot[2]-26)<.06&&dock.foot[2]-dock.surface>1);
  await day();await snap('cable-dock-night');
+ await travel('w',()=>window.__m1Frame.ridge.foot[1]>=354.8);
+ await travel('a',()=>window.__m1Frame.ridge.foot[0]<=516.5);
+ await snap('native-dock-to-ground-road');
+ const road=frames.at(-1).frame.ridge;assert.ok(Math.abs(road.foot[2]-road.surface)<.12);
+ await travel('d',()=>window.__m1Frame.ridge.foot[0]>=525.9);
+ await snap('native-ground-road-to-dock');
  await travel('s',()=>window.__m1Frame.ridge.foot[1]<=306);
  await snap('station-dock-return');
  assert.equal(errors.filter(e=>e.startsWith('page:')).length,0);

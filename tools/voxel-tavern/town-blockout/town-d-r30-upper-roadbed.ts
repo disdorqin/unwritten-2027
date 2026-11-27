@@ -23,11 +23,11 @@ export const middleEastNorthControls=Object.freeze([...middleEastExtendedControl
  {east:517,north:600},{east:514,north:610},{east:511,north:620},{east:507,north:630},
  {east:501,north:638},{east:496,north:646},{east:489,north:652},{east:480,north:655}
 ]);
-// M2 low east service road, separate from the elevated boarding deck.
-// Terminal road-to-deck access is not asserted by this candidate.
+// M2 deck west exit, exact 26m terminal grade; same real raster.
+// The whole previous low service corridor is replaced, not stacked.
 export const lowerEastServiceControls=Object.freeze([
- {east:526,north:354},{east:526,north:360},{east:526,north:370},{east:523,north:380},
- {east:520,north:390},{east:520,north:400},{east:514,north:404},{east:507,north:408}
+ {east:522,north:355},{east:515,north:355},{east:508,north:357},{east:503,north:364},
+ {east:503,north:374},{east:507,north:386},{east:514,north:397},{east:507,north:408}
 ]);
 // Separate south exit candidate. This is the first west-facing descent
 // section, not a finished base-station connection.
@@ -53,7 +53,7 @@ type Core={e:number;n:number;lo:number;hi:number;natural:number};
  * vertices. Feasible interval propagation enforces a conservative
  * triangle gradient bound, not just a nominal centreline profile.
  * No road overlay, no write to the source array, no authority claim. */
-export function buildMiddleEastRoadbed(field:FrontRidgeR30Field,allowed:Allowed,controls:readonly EN[]=middleEastRoadControls){
+export function buildMiddleEastRoadbed(field:FrontRidgeR30Field,allowed:Allowed,controls:readonly EN[]=middleEastRoadControls,terminal?:Readonly<{startHeight?:number;endHeight?:number}>){
  if(controls.length<2||controls.some((p,i)=>!Number.isFinite(p.east)||!Number.isFinite(p.north)||(i>0&&p.east===controls[i-1]!.east&&p.north===controls[i-1]!.north)))throw new RangeError('road controls');
  const path=smoothPath(controls);
  let cum=0;
@@ -79,8 +79,11 @@ export function buildMiddleEastRoadbed(field:FrontRidgeR30Field,allowed:Allowed,
  for(const [id,p]of near){
   const {e,n}=p,old=field.vertexAt(e,n);
   if(p.distance>half)continue;
-  const fixed=pin(e,n)||!allowed(e,n)||endpoints.some(a=>a.east===e&&a.north===n);
-  core.set(id,{e,n,natural:old,lo:fixed?old:old-cutLimit,hi:fixed?old:old+cutLimit});
+  const protectedVertex=pin(e,n)||!allowed(e,n),endpoint=endpoints.findIndex(a=>a.east===e&&a.north===n);
+  const target=endpoint===0?terminal?.startHeight:endpoint===1?terminal?.endHeight:undefined;
+  if(target!==undefined&&(!Number.isFinite(target)||Math.abs(target-old)>cutLimit+1e-6||protectedVertex&&Math.abs(target-old)>1e-6))return {ok:false as const,reason:'terminal grade violates protected height or earthwork',east:e,north:n,route};
+  const fixed=protectedVertex||endpoint>=0,datum=target??old;
+  core.set(id,{e,n,natural:old,lo:fixed?datum:old-cutLimit,hi:fixed?datum:old+cutLimit});
  }
  const queue=[...core.keys()],queued=new Set(queue);
  for(let k=0;k<queue.length;k++){

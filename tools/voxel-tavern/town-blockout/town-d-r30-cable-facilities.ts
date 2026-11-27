@@ -89,7 +89,7 @@ export function auditRidgeCableSweep(field:FrontRidgeR30Field,survey:ReturnType<
 }
 type Part={m:MeshLambertMaterial;matrix:import('three').Matrix4};
 type Solid={e:number;n:number;bottom:number;top:number;w:number;d:number;yaw:number};
-export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Field,externalDock=false,closed=false){
+export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Field,externalDock=false,closed=false,serviceExit=false){
  const group=new Group();group.name='d-r30-front-cable-facilities';owner.add(group);
  const geometry=new BoxGeometry(),tmp=new Object3D(),parts:Part[]=[],solids:Solid[]=[];
  const stone=new MeshLambertMaterial({color:'#78818a'}),ash=new MeshLambertMaterial({color:'#9ba9af'}),wood=new MeshLambertMaterial({color:'#73523b'}),oak=new MeshLambertMaterial({color:'#ad8966'}),iron=new MeshLambertMaterial({color:'#384c58'}),brass=new MeshLambertMaterial({color:'#b9a074'}),snow=new MeshLambertMaterial({color:'#dce5eb'}),glass=new MeshLambertMaterial({color:'#7fa3a3'}),lamp=new MeshLambertMaterial({color:'#e9c58e'});
@@ -204,10 +204,12 @@ export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Fiel
     box(stone,e,n,h+.14,.88,.88,.6,true);
     box(iron,e,n,(h+top)/2,.32,.32,top-h,true);
     box(iron,e,n,top-.12,.62,.62,.24);
-    box(wood,e,n,p.height+.50,.15,.15,1.0,true);
-    box(brass,e,n,p.height+1.03,.23,.23,.12);
+    if(!(closed&&serviceExit&&sign===-1&&n===356)){
+     box(wood,e,n,p.height+.50,.15,.15,1.0,true);
+     box(brass,e,n,p.height+1.03,.23,.23,.12);
+    }
    }
-   for(const n of [351.5,354.5])for(const dh of [.45,.96])box(wood,e,n,p.height+dh,.13,3,.13,true);
+   for(const n of [351.5,354.5])if(!(closed&&serviceExit&&sign===-1&&n===354.5))for(const dh of [.45,.96])box(wood,e,n,p.height+dh,.13,3,.13,true);
   }
   for(const n of [350,353,356])box(iron,p.east,n,p.height-.24,7.1,.28,.24);
   // Actual platform slab is registered in the host's existing floor
@@ -218,7 +220,7 @@ export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Fiel
    // south entrance stays open, both sides and the far end are guarded.
    for(const s of [-1,1]){
     for(const y of [.46,.96])box(wood,p.east+s*3.35,(back+350)/2,p.height+y,.13,350-back,.13,true);
-    for(const y of [.46,.96])box(wood,p.east+s*3.35,(356+front)/2,p.height+y,.13,front-356,.13,true);
+    if(!(serviceExit&&s===-1))for(const y of [.46,.96])box(wood,p.east+s*3.35,(356+front)/2,p.height+y,.13,front-356,.13,true);
    }
    for(const y of [.46,.96])box(iron,p.east,front-.13,p.height+y,6.8,.14,.15,true);
    for(const e of [p.east-3.35,p.east,p.east+3.35])box(iron,e,front-.13,p.height+.50,.15,.18,1.0,true);
@@ -256,7 +258,7 @@ export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Fiel
  // Presentation uses the same existing three-stop clock, with the
  // measured candidate spans. The public authority remains unchanged.
  const clock=createNorthRidgeCableClock(survey.lowerMetres,survey.length-survey.lowerMetres,0);
- const cabinGroups=[-1,1].map(side=>{
+ const cabinGroups=(closed&&serviceExit?[1,-1]:[-1,1]).map(side=>{
    const car=new Group();car.name='d-r30-cable-cabin-'+side;group.add(car);
    const localParts:Part[]=[];
    function local(m:MeshLambertMaterial,x:number,y:number,z:number,w:number,h:number,d:number){
