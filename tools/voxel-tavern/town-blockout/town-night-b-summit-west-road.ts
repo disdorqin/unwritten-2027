@@ -63,11 +63,26 @@ export function createNightBWestRoad(points:readonly Point[],groundAt:Height,gua
    const x=d(a),y=d(b);if(x<0&&y<0)return 0;if(x<0)lo=Math.max(lo,x/(x-y));else if(y<0)hi=Math.min(hi,x/(x-y));
   }return Math.max(0,hi-lo)*Math.hypot(b.east-a.east,b.north-a.north);
  }
+ // Index the whole surveyed route before laying any guard. At a hairpin
+ // an apparently exposed edge can lie inside the adjoining walking lane.
+ for(let i=1;i<points.length;i++){const a=points[i-1]!,b=points[i]!;insert(routeCells,{a,b},[a,b],half);}
+ let internalGuardMetres=0;
+ function guardInsideLane(a:Point,b:Point){
+  const steps=Math.max(1,Math.ceil(Math.hypot(a.east-b.east,a.north-b.north)/.08));
+  for(let i=0;i<=steps;i++){
+   const p=mix(a,b,i/steps);
+   for(const s of routeCells.get(Math.floor(p.east/cell)+','+Math.floor(p.north/cell))??[]){
+    const de=s.b.east-s.a.east,dn=s.b.north-s.a.north,u=de*de+dn*dn;
+    const t=u?Math.max(0,Math.min(1,((p.east-s.a.east)*de+(p.north-s.a.north)*dn)/u)):0;
+    if(Math.abs(p.height-(lerp(s.a.height,s.b.height,t)+lift))<.8&&projectedDistance(s.a,s.b,p.east,p.north)<1.46)return true;
+   }
+  }
+  return false;
+ }
  for(let i=1;i<sectionsAt.length;i++){
   const a=sectionsAt[i-1]!,b=sectionsAt[i]!,span=Math.hypot(b.p.east-a.p.east,b.p.north-a.p.north);
   if(span<1e-6)continue;
   const grade=Math.abs(b.p.height-a.p.height)/span;if(grade>mainSummitTrailSpec.maximumGrade+1e-6)throw new RangeError('road exceeds canonical grade');
-  const segment={a:a.p,b:b.p};insert(routeCells,segment,[a.p,b.p],half);
   const edgeA=[a.edge(-1),a.edge(1)],edgeB=[b.edge(-1),b.edge(1)];
   const ext=boundsOf([...edgeA,...edgeB]);if(ext.e<bounds.west||ext.w>bounds.east||ext.n<bounds.south||ext.s>bounds.north)continue;
   const metres=clippedLength(a.p,b.p);length+=metres;maxGrade=Math.max(maxGrade,grade);sections++;
@@ -87,6 +102,7 @@ export function createNightBWestRoad(points:readonly Point[],groundAt:Height,gua
    if(Math.min(l.height-g0,r.height-g1)>.9&&interior(o0)&&interior(o1)&&!guardReserved((o0.east+o1.east)/2,(o0.north+o1.north)/2,span/2+.2)){
     const up=(p:Point,h:number)=>({...p,height:p.height+h});
     const ia=a.edge(side,half+.24),ib=b.edge(side,half+.24),oa=a.edge(side,half+.38),ob=b.edge(side,half+.38);
+    if(guardInsideLane(ia,ib)){internalGuardMetres+=span;continue;}
     for(const h of [.48,.98]){
      const aa=up(ia,h),bb=up(ib,h),cc=up(oa,h),dd=up(ob,h);
      quad(aa,cc,bb,dd,'rail');quad(aa,up(aa,-.13),bb,up(bb,-.13),'rail');quad(cc,up(cc,-.13),dd,up(dd,-.13),'rail');
@@ -115,5 +131,5 @@ export function createNightBWestRoad(points:readonly Point[],groundAt:Height,gua
   return gridKeys(e-r,e+r,n-r,n+r).some(key=>(railCells.get(key)??[]).some(s=>{if(projectedDistance(s.a,s.b,e,n)>r+.15)return false;const de=s.b.east-s.a.east,dn=s.b.north-s.a.north,t=Math.max(0,Math.min(1,((e-s.a.east)*de+(n-s.a.north)*dn)/(de*de+dn*dn)));const y=lerp(s.a.height,s.b.height,t);return h+body>y&&h<y+1.03}));
  }
  let disposed=false;
- return {group,cutTread,surfaceAt,reserved,blocked,stats:Object.freeze({length,maxGrade,maxCut,maxFill,railMetres,sections,treadTris,stoneTris,railTris,draws:group.children.length,triangles:treadTris+stoneTris+railTris}),dispose(){if(disposed)return;disposed=true;group.removeFromParent();group.clear();geos.forEach(g=>g.dispose());roadMaterial.dispose();stoneMaterial.dispose();railMaterial.dispose();triCells.clear();routeCells.clear();railCells.clear();}};
+ return {group,cutTread,surfaceAt,reserved,blocked,stats:Object.freeze({length,maxGrade,maxCut,maxFill,railMetres,internalGuardMetres,sections,treadTris,stoneTris,railTris,draws:group.children.length,triangles:treadTris+stoneTris+railTris}),dispose(){if(disposed)return;disposed=true;group.removeFromParent();group.clear();geos.forEach(g=>g.dispose());roadMaterial.dispose();stoneMaterial.dispose();railMaterial.dispose();triCells.clear();routeCells.clear();railCells.clear();}};
 }
