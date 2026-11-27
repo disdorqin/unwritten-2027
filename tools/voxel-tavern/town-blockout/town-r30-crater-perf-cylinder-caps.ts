@@ -9,7 +9,7 @@ const x=new Vector3(),z=new Vector3(),normal=new Vector3(),point=new Vector3();
  * has min<=n<=max componentwise and topMin<=n·top, n·bottom<=bottomMax.
  * Only remove a cap when the entire interval is strictly back-facing. */
 export function extendCylinderCapEnvelope(e:Envelope,m:Matrix4){
- if(!e.valid)return;const a=m.elements;if(!a.every(Number.isFinite)||m.determinant()<=0){e.valid=false;return;}
+ if(!e.valid)return;const a=m.elements;if(!a.every(Number.isFinite)||a[3]!==0||a[7]!==0||a[11]!==0||a[15]!==1||m.determinant()<=0){e.valid=false;return;}
  x.set(a[0],a[1],a[2]);z.set(a[8],a[9],a[10]);normal.crossVectors(z,x);if(normal.lengthSq()<1e-20){e.valid=false;return;}normal.normalize();
  e.min.min(normal);e.max.max(normal);point.set(0,e.cert.top,0).applyMatrix4(m).sub(e.origin);e.topMin=Math.min(e.topMin,normal.dot(point));
  point.set(0,e.cert.bottom,0).applyMatrix4(m).sub(e.origin);e.bottomMax=Math.max(e.bottomMax,normal.dot(point));e.count++;

@@ -159,7 +159,7 @@ export function installCraterRenderPerf(root:Group,lod:Lod,room?:Group,ground?:G
   const ring=exterior?.ringForCamera(camera,tightWall);
   if(p2Enabled){localCells.begin(camera,localWall&&!compare?ring:undefined,localWall,compactCells&&!compare);if(!compare||crosslineProbe)externalCells.begin(camera,ring,localWall,compactCells&&!compare);groundCells?.begin(camera);}
   if(compare&&p3Enabled){localStatic.begin(camera);if(crosslineProbe)externalStatic.begin(camera);}
-  if(!compare&&coalesceInstances)coalescer.begin(camera,!ring,capFaces);
+  if(!compare)coalescer.begin(camera,coalesceInstances&&!ring,capFaces);
   if(!compare&&propBatches)props.begin(camera);
   if(!compare&&paletteBatches)palettes.begin(camera);
   if(!compare)indices.begin(camera,ring,indexCells);

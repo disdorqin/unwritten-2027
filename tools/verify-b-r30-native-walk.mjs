@@ -351,8 +351,10 @@ try{
   }
   if(segment==='rim-return'){
     // Separate actual upper segment; not a full bottom-to-rim round trip.
-    const upper=route.points.filter(p=>p.t<=.12);
-    result.scope='normal entry/actual authorized rim and t0..0.12 round trip only; no floor or full descent claim';
+    const limit=Number(process.env.ZA22_RIM_RETURN_T??.12);
+    assert.ok(Number.isFinite(limit)&&limit>=.12&&limit<=.30,'Invalid upper return limit');
+    const upper=route.points.filter(p=>p.t<=limit);
+    result.scope='normal entry/actual authorized rim and t0..'+limit+' round trip only; no floor or full descent claim';result.upperLimit=limit;
     await traverse(upper,'down');
     await snapshot(page,evidence,'upper-turnback');
     await traverse([...upper].reverse(),'up');
