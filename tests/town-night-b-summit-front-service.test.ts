@@ -60,7 +60,9 @@ test('front service uses surveyed dual cabins, actual repair authority and termi
  assert.equal(moving.station,null);assert.equal(host.exit(),undefined);
  const car=facilities.group.getObjectByName('d-r30-cable-cabin--1')!;
  assert.ok(Math.hypot(car.position.x-moving.feet.east,car.position.y-moving.feet.height,car.position.z+moving.feet.north)<1e-8);
- t=opened+first.repositionMs+first.clock.oneWayMs+1000;host.updateVisuals();assert.ok(host.exit());assert.equal(host.riding(),false);
+ t=opened+first.repositionMs+first.clock.oneWayMs+1000;host.updateVisuals();const summitExit=host.exit();assert.ok(summitExit);assert.equal(host.riding(),false);
+ if(!first.serviceOpen()){assert.equal(host.board(summitExit,1,0),false);t=epoch+600000+1000;}
+ assert.ok(host.board(summitExit,1,0));t+=first.clock.oneWayMs;host.updateVisuals();const baseExit=host.exit();assert.ok(baseExit);assert.equal(host.riding(),false);if(first.serviceOpen())assert.ok(host.board(baseExit,1,0));
  const closed=mountRidgeCableFacilities(new Group(),field,true,true,true);
  try{const blockedHost=createNightBCableRideHost({front:first,frontFacilities:closed,upperOrigin:{east:300,north:676},domain:()=> 'town',acceptLanding:()=>true});assert.equal(blockedHost.frontBound,false);}finally{closed.dispose();}
  }finally{facilities.dispose();}

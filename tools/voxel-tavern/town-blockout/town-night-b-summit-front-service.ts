@@ -73,7 +73,10 @@ export function createNightBFrontService(input:FrontCableServiceInput){
   const f=first(),at=cabinStates()?.[cabin];
   const firstBoard=input.firstRun&&cabin===0&&f?.phase==='first'&&f.boarding&&f.elapsed<frontCableTerminalDwellMs&&input.daylight()===true;
   if((!serviceOpen()&&!firstBoard)||!at?.station||!input.dockClear(at.station,foot))return;
-  if(Math.hypot(foot.east-at.feet.east,foot.north-at.feet.north)>.9||Math.abs(foot.height-at.feet.height)>.43)return;
+  const approach={...at.feet,north:at.feet.north-2.1};
+  const near=(p:Foot)=>Math.hypot(foot.east-p.east,foot.north-p.north)<=.900000001&&Math.abs(foot.height-p.height)<=.430000001;
+  // The walking approach used on exit must also be a legal boarding point.
+  if(!input.dockClear(at.station,approach)||!input.dockClear(at.station,at.feet)||(!near(at.feet)&&!near(approach)))return;
   return Object.freeze({cabin});
  }
  let lastPresentation=0;
