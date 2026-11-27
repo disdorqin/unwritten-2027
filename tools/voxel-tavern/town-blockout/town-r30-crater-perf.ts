@@ -6,7 +6,7 @@ import {createCraterGroundCells} from './town-r30-crater-perf-ground';
 const exteriorCells=new WeakMap<Group,ReturnType<typeof createCraterInstanceCells>>();
 const exteriorSessions=new WeakMap<Group,ReturnType<typeof createCraterExteriorOcclusion>>();
 /** D registers explicitly approved exterior roots after normal scene assembly. */
-export function setCraterExteriorRenderRoots(root:Group,roots:readonly Object3D[]){const session=exteriorSessions.get(root);if(!session)return false;session.refresh(roots);session.prepare();exteriorCells.get(root)?.enqueue(roots);return !!session.ring;}
+export function setCraterExteriorRenderRoots(root:Group,roots:readonly Object3D[]){const session=exteriorSessions.get(root);if(!session)return false;session.refresh(roots);session.prepare();exteriorCells.get(root)?.replaceRoots(roots);return !!session.ring;}
 
 const comparison=()=>typeof location!=='undefined'&&new URLSearchParams(location.search).has('profile')&&new URLSearchParams(location.search).has('pPerfCompare');
 type Batch={original:Mesh[];mesh:Mesh};
@@ -103,7 +103,7 @@ export function installCraterRenderPerf(root:Group,lod:Lod,room?:Group,ground?:G
   const d=(event as CustomEvent<Profile>).detail;
   if(!d||typeof d.enabled!=='boolean')return;
   enabled=d.enabled;p2Enabled=d.p2Enabled??d.enabled;batch?.enable(enabled);probe=d.camera;crosslineProbe=!!d.crosslineProbe&&!!probe;
-  if(compare&&exterior&&scene){const roots=crosslineProbe?scene.children.filter(o=>o!==root&&o.name!=='underground-domain-host'):[];exterior.refresh(roots);if(crosslineProbe){exterior.prepare();if(p2Enabled)externalCells.register(roots);}}
+  if(compare&&exterior&&scene){const roots=crosslineProbe?scene.children.filter(o=>o!==root&&o.name!=='underground-domain-host'):[];exterior.refresh(roots);externalCells.replaceRoots(roots);if(crosslineProbe){exterior.prepare();if(p2Enabled)externalCells.register(roots);}}
   generation++;breakdown=undefined;lastGpu=null;
  };
  if(compare)document.addEventListener('town-p1-perf-control',onControl);

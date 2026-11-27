@@ -6,7 +6,7 @@ import {createCraterGroundCells} from '../tools/voxel-tavern/town-blockout/town-
 import {instanceWorkshopParts} from '../tools/voxel-tavern/town-blockout/town-r30-crater-perf-workshop';
 test('instance cells preserve every transform and tint; mutations fall back to original',()=>{
  const scene=new Scene(),root=new Group();scene.add(root);
- const m=new InstancedMesh(new BoxGeometry(),new MeshStandardMaterial(),32),matrix=new Matrix4(),c=new Color();
+ const m=new InstancedMesh(new BoxGeometry(1,1,1,4,4,4),new MeshStandardMaterial(),32),matrix=new Matrix4(),c=new Color();
  for(let i=0;i<32;i++){m.setMatrixAt(i,matrix.makeTranslation(i<16?-100+i*.1:100+i*.1,0,-10));m.setColorAt(i,c.setRGB(i/32,.5,.7));}
  m.instanceMatrix.needsUpdate=true;m.instanceColor!.needsUpdate=true;m.computeBoundingSphere();root.add(m);
  const sys=createCraterInstanceCells(24,8);sys.enqueue([root]);assert.equal(sys.sourceCount,0);assert.equal(sys.pendingSources,1);sys.warmStep(8,Infinity);assert.equal(sys.sourceCount,0);assert.equal(m.children.length,0);while(sys.pendingSources)sys.warmStep(8,Infinity);
@@ -18,7 +18,7 @@ test('instance cells preserve every transform and tint; mutations fall back to o
  sys.restore();assert.equal(m.layers.mask,1);assert.ok(m.children.every(o=>!o.visible&&o.layers.mask===0));
  m.setMatrixAt(0,matrix.makeTranslation(0,0,-10));m.instanceMatrix.needsUpdate=true;
  assert.equal(sys.begin(cam).sources,0);assert.equal(m.layers.mask,1);
- sys.dispose();assert.equal(m.children.length,0);
+ sys.replaceRoots([]);assert.equal(sys.sourceCount,0);assert.equal(m.children.length,0);sys.dispose();
 });
 test('ground cell index multiset equals the authoritative triangles, no attribute replacement',()=>{
  const scene=new Scene(),g=new PlaneGeometry(112,112,56,56);g.rotateX(-Math.PI/2);
