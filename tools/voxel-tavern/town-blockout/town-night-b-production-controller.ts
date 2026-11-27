@@ -5,6 +5,7 @@ import type {installNightBUpperOperation} from './town-night-b-summit-upper-inst
 import type {createTownD2R30Ropeway} from './town-d2-r30-ropeway';
 import type {mountMainSummitCableWorkshop} from './main-summit-cable-workshop';
 import {createCableRepairHost,cableWakeEvent,type RepairAnchors} from './town-cable-repair-host';
+import {createNightBFrontBoardPresenter} from './town-night-b-front-boards';
 import {summitReleaseApproaches} from '../../../src/shared/za22-summit-presence-domain';
 type Foot={east:number;north:number;height:number};
 type Presence=Pick<ReturnType<typeof createTownPresence>,'getCableLineState'|'cableServerNow'|'getTownNightWindow'|'getCableLineWokeAt'|'getCableLineOpenedAt'|'getTownWeatherDawnEpoch'|'sampleCableRide'|'setActivityPose'|'sendSummitCableRelease'|'sendCableRepair'>;
@@ -36,11 +37,14 @@ export function createNightBProductionController(input:Input){
  const ride=createNightBCableRideHost({front:front?.service,frontFacilities:front?.facilities,upper:upper?.service,upperRopeway:input.ropeway,upperOrigin:input.upperOrigin,
  domain:()=>{const d=input.domain();return d==='mountain'?'town':d;},acceptLanding:input.acceptLanding});
  const repair=input.frontRepair&&createCableRepairHost(1,input.frontRepair.anchors);
+ const boards=front&&createNightBFrontBoardPresenter(front.facilities.group.parent??front.facilities.group,front.facilities.survey);
+ let boardStatus:Parameters<ReturnType<typeof createNightBFrontBoardPresenter>>[0]|undefined;
  const local=(f:Foot)=>({...f,east:f.east-input.upperOrigin.east,north:f.north-input.upperOrigin.north});
  function tick(yaw:number):CableRideFrame|undefined{
   if(upper)upper.update();
   ride.updateVisuals(!!upper);
   const s=p.getCableLineState(1);if(s)repair?.sync(s);
+  if(front&&boards){const status=!s||p.cableServerNow()===undefined?'offline':s.stage==='dormant'?'dormant':s.stage==='one-station'||front.service.firstRun()?.phase==='reposition'?'repair':front.service.serviceOpen()?'running':'parked';if(status!==boardStatus){boards(status);boardStatus=status;}}
   const frame=ride.pose();if(frame)p.sampleCableRide(frame,yaw);return frame;
  }
  function actions(feet:Foot){
