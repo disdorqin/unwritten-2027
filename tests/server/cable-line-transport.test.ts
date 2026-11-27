@@ -15,6 +15,7 @@ type Message = {
   line?: number; stage?: string; openedNow?: boolean;
   flags?: { cableLine1Open: boolean; cableLine2Open: boolean };
   state?: CableState;
+  openedAt?:number|null;
 };
 
 async function connected(t: TestContext, server: Awaited<ReturnType<typeof createPresenceServer>>, name: string) {
@@ -153,7 +154,7 @@ test('town and mountain rooms share both cable versions, without duplicate broad
  b.socket.terminate();const rejoined=await connected(t,mountain,'山上乙');
  const first=await rejoined.next(f=>f.type==='cable-line'&&f.line===1);
  const second=await rejoined.next(f=>f.type==='cable-line'&&f.line===2);
- assert.equal(first.state?.version,1);assert.equal(second.state?.version,version);assert.equal(second.stage,'full-line');assert.equal(second.openedNow,false);
+ assert.equal(first.state?.version,1);assert.equal(first.openedAt,null);assert.equal(second.state?.version,version);assert.equal(second.stage,'full-line');assert.equal(second.openedNow,false);assert.equal(second.openedAt,authority.hello(2).openedAt);assert.ok(typeof second.openedAt==='number'&&Number.isSafeInteger(second.openedAt));
  await mountain.close();a.socket.send(JSON.stringify({type:'event',kind:'cable-repair',line:1,event:{kind:'strike-rust'}}));
  assert.equal((await a.next(f=>f.type==='cable-line'&&f.line===1)).state?.version,2);
 });

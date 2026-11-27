@@ -1,3 +1,4 @@
+import {nightBCableDispatch,type CableDispatchInput} from './town-night-b-summit-dispatch';
 import {summitCableSpec,type SummitCablePoint} from './main-summit-cable';
 import {createMainSummitCableTravel,type SummitCableRide} from './main-summit-cable-travel';
 import type {createTownD2R30Ropeway} from './town-d2-r30-ropeway';
@@ -41,6 +42,7 @@ export type NightBLine2ServiceInput=Readonly<{
  state:()=>Za36CableRepairState|undefined;
  /** Authoritative service clock. Undefined while not synchronized. */
  now:()=>number|undefined;
+ dispatch?:CableDispatchInput;
  daylight:()=>boolean|undefined;
  /** Includes the final terrain, station, other buildings and route owner collision. */
  dockClear:(station:Station,feet:SummitCablePoint)=>boolean;
@@ -48,16 +50,18 @@ export type NightBLine2ServiceInput=Readonly<{
 export function createNightBLine2Service(input:NightBLine2ServiceInput){
  const r=input.ropeway;
  const physical=input.audit.candidateEnvelopeClear&&input.audit.externalSurveyed&&r.decks.length===4&&r.decks.every(d=>!d.interference);
- const time=()=>{const t=input.now();return typeof t==='number'&&Number.isFinite(t)?t:undefined};
- const serviceOpen=()=>{const state=input.state();return physical&&state?.line===2&&state.stage==='full-line'&&input.daylight()===true&&time()!==undefined};
+ const dispatch=()=>{const t=input.now();if(typeof t!=='number'||!Number.isFinite(t))return;return input.dispatch?nightBCableDispatch(t,input.dispatch.openedAt(),input.dispatch.dawnEpoch(),r.cable.legMs):{virtualMs:t,boarding:true,parked:false};};
+ const time=()=>dispatch()?.virtualMs;
+ const serviceOpen=()=>{const state=input.state();return physical&&state?.line===2&&state.stage==='full-line'&&input.daylight()===true&&dispatch()?.boarding===true};
  const travel=createMainSummitCableTravel(r.cable,({station,cabinIndex})=>{
   if(!serviceOpen())return false;
   const d=r.cable.ropes[cabinIndex].dock(station);
   return input.dockClear(station,d.approach)&&input.dockClear(station,d.board);
  });
  const valid=(ride:SummitCableRide)=>ride.cabinIndex===0||ride.cabinIndex===1;
- function present(){const t=time();if(t!==undefined)return r.update(t);}
- return {physical,serviceOpen,present,
+ let lastPresentation=0;
+ function present(){const t=time();if(physical&&t!==undefined)lastPresentation=t;return r.update(lastPresentation);}
+ return {physical,serviceOpen,present,dispatch,
   board(feet:SummitCablePoint,cabin:0|1){const t=time();if(t===undefined||!serviceOpen()||![feet.east,feet.north,feet.height].every(Number.isFinite)||(cabin!==0&&cabin!==1))return;const at=r.cable.cabinsAt(t)[cabin];if(!at.station||!input.dockClear(at.station,feet))return;return travel.attemptBoard(t,cabin,feet);},
   ridePose(ride:SummitCableRide){const t=time();if(t!==undefined&&valid(ride))return travel.ridePose(t,ride);},
   exit(ride:SummitCableRide){const t=time();if(t===undefined||!valid(ride))return;const at=r.cable.cabinsAt(t)[ride.cabinIndex];if(!at.station)return;const feet=travel.exit(t,ride);if(feet&&input.dockClear(at.station,feet))return feet;},

@@ -1,3 +1,4 @@
+import {nightBCableDispatch,type CableDispatchInput} from './town-night-b-summit-dispatch';
 import {createNorthRidgeCableClock} from './north-ridge-cable-clock';
 import type {surveyRidgeCableSpans,auditRidgeCableSweep} from './town-d-r30-cable-facilities';
 import type {Za36CableRepairState} from './town-za36-cable-repair';
@@ -12,6 +13,7 @@ export type FrontCableServiceInput=Readonly<{
  /** Must be the actual authoritative state and shared clock, not a local reducer. */
  state:()=>Za36CableRepairState|undefined;
  now:()=>number|undefined;
+ dispatch?:CableDispatchInput;
  daylight:()=>boolean|undefined;
  /** The host certifies real deck/approach support and external obstruction. */
  dockClear:(station:Station,foot:Foot)=>boolean;
@@ -28,8 +30,9 @@ export function createNightBFrontService(input:FrontCableServiceInput){
   const a=s.path[lo]!,b=s.path[hi]!,t=Math.max(0,Math.min(1,(distance-s.measure[lo]!)/(s.measure[hi]!-s.measure[lo]!)));
   return {east:a.east+(b.east-a.east)*t+(cabin===0?-1.55:1.55),north:a.north+(b.north-a.north)*t,height:a.height+(b.height-a.height)*t};
  }
- const time=()=>{const t=input.now();return typeof t==='number'&&Number.isFinite(t)?t:undefined;};
- function serviceOpen(){const state=input.state();return physical&&state?.line===1&&state.stage==='full-line'&&input.daylight()===true&&time()!==undefined;}
+ const dispatch=()=>{const t=input.now();if(typeof t!=='number'||!Number.isFinite(t))return;return input.dispatch?nightBCableDispatch(t,input.dispatch.openedAt(),input.dispatch.dawnEpoch(),clock.oneWayMs):{virtualMs:t,boarding:true,parked:false};};
+ const time=()=>dispatch()?.virtualMs;
+ function serviceOpen(){const state=input.state();return physical&&state?.line===1&&state.stage==='full-line'&&input.daylight()===true&&dispatch()?.boarding===true;}
  function cabinsAt(t:number){return clock.cabinsAt(t).map((c,i)=>({...c,feet:sample(c.distanceMetres,i as Cabin)}));}
  /** Map the SAME timetable onto the existing production cabin presentation,
   * which consumes the original no-terminal-dwell clock. No speed changes. */
@@ -43,7 +46,9 @@ export function createNightBFrontService(input:FrontCableServiceInput){
   if(Math.hypot(foot.east-at.feet.east,foot.north-at.feet.north)>.9||Math.abs(foot.height-at.feet.height)>.43)return;
   return Object.freeze({cabin});
  }
- return {clock,physical,serviceOpen,cabinsAt,presentationMs,board,
+ let lastPresentation=0;
+ return {clock,physical,serviceOpen,cabinsAt,presentationMs,board,dispatch,
+  presentationTime(){const t=time();if(physical&&t!==undefined)lastPresentation=presentationMs(t);return lastPresentation;},
   ridePose(ride:Ride){const t=time();if(t===undefined)return;return cabinsAt(t)[ride.cabin];},
   exit(ride:Ride){const t=time();if(t===undefined)return;const at=cabinsAt(t)[ride.cabin];if(!at?.station)return;
    // The surveyed deck supports the cabin floor; host must supply actual clear exit.

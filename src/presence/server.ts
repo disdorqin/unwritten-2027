@@ -350,7 +350,7 @@ export async function createPresenceServer(options: Options = {}) {
   // per line, this server the only writer. The wire frame is B's
   // CableLineFrame plus the full snapshot the client repair host syncs
   // from; flags stay derived inside the authority, never set here.
-  const cableLine = options.cableLineAuthority ?? createCableLineAuthority();
+  const cableLine = options.cableLineAuthority ?? createCableLineAuthority(wallNow);
   const cableLineWire = (frame: CableLineFrame) =>
     JSON.stringify({ ...frame, state: cableLine.snapshot(frame.line) });
   // Ice palace rites: the authority validates the caller's alcove pose and

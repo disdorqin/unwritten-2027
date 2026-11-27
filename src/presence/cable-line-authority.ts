@@ -30,15 +30,18 @@ export type CableLineFrame = Readonly<{
   stage: Za36CableRepairState['stage'];
   /** True only on the single frame where the line flips to full-line. */
   openedNow: boolean;
+  /** Server wall epoch at the only transition to full-line, retained on hello. */
+  openedAt: number | null;
   flags: CableLineFlags;
 }>;
 
-export function createCableLineAuthority() {
+export function createCableLineAuthority(now:()=>number=Date.now) {
   const lines = {
     1: createZa36CableRepair(1),
     2: createZa36CableRepair(2),
   } as const;
 
+  const openedAt:Record<Za36CableRepairLine,number|null>={1:null,2:null};
   const listeners = new Set<(frame: CableLineFrame) => void>();
   function flags(): CableLineFlags {
     return {
@@ -49,7 +52,7 @@ export function createCableLineAuthority() {
 
   function frame(line: Za36CableRepairLine, openedNow: boolean): CableLineFrame {
     const state = lines[line].snapshot();
-    return { type: 'cable-line', line, version: state.version, stage: state.stage, openedNow, flags: flags() };
+    return { type: 'cable-line', line, version: state.version, stage: state.stage, openedNow, openedAt:openedAt[line], flags: flags() };
   }
 
   return {
@@ -67,8 +70,11 @@ export function createCableLineAuthority() {
      * the frame to broadcast, with openedNow set exactly once per line.
      */
     applyEvent(line: Za36CableRepairLine, event: Za36CableRepairEvent): CableLineFrame | undefined {
+      const epoch=now();
+      if(!Number.isSafeInteger(epoch)||epoch<0)return undefined;
       const result = lines[line].apply(event);
       if (!result.accepted) return undefined;
+      if(result.opened)openedAt[line]=epoch;
       const accepted = frame(line, result.opened);
       for (const listener of [...listeners]) listener(accepted);
       return accepted;
