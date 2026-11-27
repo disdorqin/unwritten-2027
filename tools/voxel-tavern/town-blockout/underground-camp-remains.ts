@@ -3,6 +3,7 @@ import {
   Object3D, PlaneGeometry, SRGBColorSpace,
 } from 'three';
 import { undergroundCampDiningTables } from '../../../src/shared/underground-camp-pickaxe';
+import {makeCampGrain,mountR30CampRoof,mountR30CampHearthGlow} from './town-c-r30-camp-art.js';
 
 type Point = readonly [x: number, y: number, z: number];
 type Span = { from: Point; to: Point; zone: string };
@@ -230,11 +231,36 @@ export function createUndergroundCampRemains({ mine, camp, walker }: Options) {
   solid('canteen/cold-stove/flue', -1.78, 1.017, 7.25, .223, 1.35, .223);
 
   function bowl(id: string, x: number, y: number, z: number, inverted = false) {
-    box(id, clay, x, y, z, inverted ? .172 : .107, .026, inverted ? .172 : .107);
-    box(id, '#a28e73', x, y + .024, z, .145, .030, .145);
-    box(id, '#cabb9e', x, y + .052, z, inverted ? .088 : .169, .024, inverted ? .088 : .169);
+    // Voxel pottery rather than three solid cuboids. The upright pieces
+    // have real hollow rims; the lone inverted bowl keeps its original
+    // position and closed foot. All remain inside the authored stove/shelf.
+    const grid=.019,step=.0144;
+    for(let tier=0;tier<5;tier++){
+      const k=inverted?4-tier:tier,outer=[2.65,3.15,3.65,4.2,4.55][k];
+      const inside=k===0?0:Math.max(0,outer-1.15);
+      const tint=[clay,'#a28e73','#bda98a','#c4b398','#cabb9e'][k];
+      for(let dz=-4;dz<=4;dz++){
+        let run:number|undefined;
+        for(let dx=-4;dx<=5;dx++){
+          const r=Math.hypot(dx,dz),filled=dx<=4&&r<=outer&&(k===0||r>=inside);
+          if(filled){run??=dx;continue}
+          if(run!==undefined){
+            // Merge contiguous same-colour cells into one row, preserving
+            // the hollow centre and exact stepped silhouette.
+            box(id,tint,x+(run+dx-1)*grid/2,y+tier*step,z+dz*grid,(dx-run)*grid-.0004,step-.0002,grid-.0004);
+            run=undefined;
+          }
+        }
+      }
+    }
   }
   bowl('canteen/left-bowl', -1.16, 1.018, 7.54, true);
+  // A worn wooden ladle and a folded linen pot cloth, all within
+  // the cold stove's already solid footprint. Neither is collectible.
+  box('canteen/ladle',wornWood,-1.59,1.018,7.53,.043,.025,.18);
+  for(let i=0;i<3;i++)box('canteen/ladle',board,-1.59,1.022,7.44-i*.031,.10-i*.019,.029,.030);
+  for(let i=0;i<4;i++)box('canteen/pot-cloth',i%2?linen:'#908571',-1.59+i*.045,1.018+i*.001,7.73,.044,.019,.15);
+  for(let i=0;i<6;i++)box('canteen/pot-cloth/fringe','#7d7466',-1.58+i*.027,1.0195,7.820,.018,.012,.025);
   solid('canteen/bowl-cupboard', -1.67, 0, 6.29, .59, 1.46, .73);
   box('canteen/bowl-cupboard', wood, -1.83, .068, 6.29, .25, 1.39, .73);
   for (const y of [.116, .53, .94, 1.409]) {
@@ -277,10 +303,29 @@ export function createUndergroundCampRemains({ mine, camp, walker }: Options) {
       box(lamp, index === 2 ? '#655d54' : iron, x, .217, z - .038, .118, .137, .103);
       box(lamp, '#75736b', x, .232, z - .093, .078, .094, .018);
       box(lamp, '#46443c', x, .354, z - .038, .158, .039, .142);
+      // Original extinguished relics: small handle and worn rivets
+      // entirely inside the niche; leave the other three actual slots empty.
+      for(const dx of [-.048,.048])box(lamp,iron,x+dx,.394,z-.038,.021,.043,.025);
+      box(lamp,index===2?'#867765':'#64594b',x,.431,z-.038,.116,.022,.028);
+      for(const dx of [-.065,.065])box(lamp,'#87765b',x+dx,.186,z-.1095,.023,.023,.019);
+      box(lamp,'#57564f',x,.267,z-.108,.023,.064,.018);
     }
     return { id, position: at(x, .166, z - .03), hasSpentLamp, lit: false };
   });
 
+  // A small stone hearth sits beside (not on) the certified standing fire
+  // anchor. This is only the physical hearth; healing remains U-13's job.
+  const hearthX=extension/2,hearthZ=3.7; // artStart is centred in the ten-metre camp section
+  solid('recovery/hearth',hearthX,0,hearthZ,1.02,.46,1.02);
+  box('recovery/hearth/base','#343940',hearthX,.004,hearthZ,1.01,.12,1.01);
+  for(let row=0;row<2;row++)for(let j=0;j<3;j++){
+    const off=(j-1)*.32;
+    for(const d of [-1,1]){
+      box('recovery/hearth/stone',row?'#505258':'#41454a',hearthX+off,.13+row*.15,hearthZ+d*.413,.305,.142,.17);
+      if(j===1)box('recovery/hearth/side',row?'#575958':'#3b4146',hearthX+d*.416,.135+row*.15,hearthZ,.165,.135,.638);
+    }
+  }
+  for(let i=0;i<3;i++)box('recovery/hearth/charred-log','#70543e',hearthX+(i-1)*.19,.132+i*.014,hearthZ,.15,.13,.55);
   /** The floor and roof are owned by mine; block any intervening solid prop in the standing footprint. */
   function queryPassage(x: number, z: number, playerRadius: number, bodyHeight: number) {
     if (![x, z, playerRadius, bodyHeight].every(Number.isFinite) || playerRadius < 0 || bodyHeight <= 0) return;
@@ -338,7 +383,9 @@ export function createUndergroundCampRemains({ mine, camp, walker }: Options) {
   ].map(({ id, foot: [x, y, z] }) =>
     lightMount({ id, position: [x, y + 2.35, z], radius: 4, tone: 'cool' } as const));
   const geometry = new BoxGeometry();
-  const material = new MeshLambertMaterial();
+  // Pixel wear on the original furnishings; geometry, anchors and collider IDs stay unchanged.
+  const furnishingGrain=makeCampGrain('neutral');
+  const material = new MeshLambertMaterial({map:furnishingGrain});
   const batch = new InstancedMesh(geometry, material, props.length);
   batch.name = 'camp-voxel-furnishings';
   const transform = new Object3D();
@@ -355,6 +402,8 @@ export function createUndergroundCampRemains({ mine, camp, walker }: Options) {
   batch.computeBoundingBox();
   batch.computeBoundingSphere();
   group.add(batch);
+  const r30Roof=mountR30CampRoof(group,{floor,start,length,extension,side});
+  const r30Hearth=mountR30CampHearthGlow(group,at(hearthX,0,hearthZ));
 
   const textMeshes = signs.flatMap(({ text, position, size, rotation, color }) => {
     if (typeof document === 'undefined') return [];
@@ -381,7 +430,7 @@ export function createUndergroundCampRemains({ mine, camp, walker }: Options) {
 
   let disposed = false;
   return {
-    group, props, colliders, rooms, route, recovery, queryPassage,
+    group, props, colliders, rooms, route, recovery, queryPassage, r30Roof, r30Hearth,
     lighting: { offeringAnchors, guideAnchors },
     dining: { tables, bowl: leftBowl, stoveLit: false, sign: undergroundCampInscriptions.canteen },
     memorial: { position: at(monumentX, 1.361, 9.572), approach: memorialApproach,
@@ -395,6 +444,9 @@ export function createUndergroundCampRemains({ mine, camp, walker }: Options) {
       batch.dispose();
       geometry.dispose();
       material.dispose();
+      furnishingGrain.dispose();
+      r30Roof.dispose();
+      r30Hearth.dispose();
       for (const mesh of textMeshes) {
         mesh.material.map?.dispose();
         mesh.material.dispose();

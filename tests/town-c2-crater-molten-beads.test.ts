@@ -80,6 +80,21 @@ test('C2-03 fixes the 20×15 m east-west beach and exactly 640 instanced voxel b
   }
   assert.ok(maxEast - minEast > maxNorth - minNorth, 'the occupied long axis must run east-west');
   assert.ok(observedMin >= .06 && observedMax <= .18);
+  // Real transformed vertices of the cut-corner beads must meet and
+  // emerge from the final terrain, not bridge a metre-high cut seam.
+  const p=mesh.geometry.getAttribute('position'),vertex=new Vector3();
+  assert.equal(p.count/3,48);
+  for(const matrix of beadMatrices(scene)){
+    matrix.decompose(position,rotation,scale);
+    let lo=Infinity,hi=-Infinity;
+    for(let i=0;i<p.count;i++){
+      vertex.fromBufferAttribute(p,i).applyMatrix4(matrix);
+      const support=road.heightAt(vertex.x,-vertex.z)!;
+      assert.ok(Number.isFinite(support));
+      lo=Math.min(lo,vertex.y-support);hi=Math.max(hi,vertex.y-support);
+    }
+    assert.ok(lo<=0&&hi>0&&hi<1.25*scale.x);
+  }
 });
 
 test('C2-03 restrains night emission and hides all near-read beads beyond 15 m and at the crater lip', () => {

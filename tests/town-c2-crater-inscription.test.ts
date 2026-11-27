@@ -191,7 +191,11 @@ test('C2-04 stone/table/paper/ink use nearest-filtered 16px material families', 
   assert.equal(stoneMap.repeat.x, 2, 'the west face resolves finer stone grain rather than stretching 16 pixels over 2.4 m');
   const stoneColors = stone.geometry.getAttribute('color');
   assert.ok(stoneColors);
-  assert.ok(stoneColors.getX(0) !== stoneColors.getX(4), 'stone faces retain distinct top/side tonal variation');
+  const normals=stone.geometry.getAttribute('normal'),positions=stone.geometry.getAttribute('position');
+  const top=Array.from({length:normals.count},(_,i)=>i).find(i=>normals.getY(i)>.95)!;
+  const west=Array.from({length:normals.count},(_,i)=>i).find(i=>normals.getX(i)<-.95)!;
+  assert.ok(stoneColors.getX(top)!==stoneColors.getX(west),'top and west faces retain distinct tonal variation');
+  assert.ok(Array.from({length:positions.count},(_,i)=>i).some(i=>Math.abs(positions.getZ(i))>1.1&&positions.getY(i)>.1&&positions.getY(i)<.22),'upper arris has real chips');
 });
 
 test('C2-04 appends one tight slab collider to the existing za22 channel and exports only a rubbing host marker', () => {

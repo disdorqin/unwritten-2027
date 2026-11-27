@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.json",
+  "include": [
+    "town-blockout/viewer.ts",
+    "vite.config.ts",
+    "../../tests/town-d-r30-*.test.ts",
+    "../../tests/town-r30-crater-perf*.test.ts",
+    "../../tests/town-blockout-terrain-mesh.test.ts"
+  ]
+}

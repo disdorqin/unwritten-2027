@@ -190,6 +190,18 @@ export function mountMainSummitExtras(assembly: Assembly) {
   const coarseMaterial = assembly.block.coarse.material;
   const coarseDayColor = coarseMaterial.color.getHex();
 
+  // R30 mounts these canonical facility bodies against its solid massif. Keep
+  // the legacy objects and APIs alive, but suppress only their visual roots so
+  // the production host never draws the same facility twice. Additive extras
+  // (approach signs/posts, wish lock, terrace art/edge, shelters, machine room
+  // and glow band) deliberately remain outside this list.
+  const legacyFacilityVisuals = [
+    paint.mesh, bannerCloud.group, icefall.group, rockTowers.group, surveyStations.group,
+    hutFurnishings.group, wingRack.group, windGround.group, skyWatch.group, trailMarkers.group,
+    bellPosts.group, glideVisuals.group, glideEntities.group,
+  ];
+  for (const visual of legacyFacilityVisuals) visual.visible = !assembly.r30Mounted;
+
   let disposed = false;
   return {
     approach, posts, signs, wingRack, cableTravel, glideRings, glideProgress, cloud, paint, bannerCloud, icefall, rockTowers,
@@ -208,6 +220,7 @@ export function mountMainSummitExtras(assembly: Assembly) {
     },
     /** Night material version (§2.4): paint and massif darken together. */
     setNight(night: boolean) {
+      assembly.setNight(night);
       paint.setNight(night);
       coarseMaterial.color.setHex(night ? 0x2f3f52 : coarseDayColor);
       glowNight = night;

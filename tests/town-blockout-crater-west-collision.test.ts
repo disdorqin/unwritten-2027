@@ -4,6 +4,7 @@ import { buildCraterMouthWorks, type CraterHitBox } from '../tools/voxel-tavern/
 import { buildCraterOuterWorks } from '../tools/voxel-tavern/town-blockout/town-crater-outer-works';
 import { mountWestCraterRoad } from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
 import { createTerrainGrid, worldBounds } from '../tools/voxel-tavern/town-blockout/terrain';
+import { supportFootprintOverlaps } from '../tools/voxel-tavern/town-blockout/town-a-r30-oriented-support';
 
 const terrain = createTerrainGrid();
 
@@ -53,13 +54,13 @@ test('supply station: walls block, the 2.8 m doorway and interior stay open', ()
   assert.equal(blocked(mouth.colliders, supply.east, supply.north), false, 'interior is enterable');
   const counter = frameAt(supply, 330, 1.4, 1.1);
   assert.equal(blocked(mouth.colliders, counter.east, counter.north), true, 'counter blocks');
-  // Interior slab is a standable floor at g + .91; a doorway ramp exists.
-  assert.ok(Math.abs(floorTopAt(mouth.floors, supply.east, supply.north) - 12.91) < .01, 'slab floor top');
-  assert.ok(mouth.ramps.length >= 1, 'doorway ramp exported');
-  const ramp = mouth.ramps[0];
-  assert.equal(ramp.axis, 'z', 'supply faces 330° — north-dominant ramp');
-  assert.ok(doorPoint.east >= ramp.min[0] && doorPoint.east <= ramp.max[0] &&
-    -doorPoint.north >= ramp.min[2] && -doorPoint.north <= ramp.max[2], 'ramp covers the doorway');
+  // Interior slab and four real treads share the production support list.
+  assert.ok(mouth.floors.some(f=>Math.abs(f.max[1]-12.91)<.01&&supportFootprintOverlaps(supply.east,supply.north,f,.01)), 'interior slab beneath the separate roof deck');
+  const route=mouth.supplyInteriorRoute;
+  assert.equal(route.length,8);
+  for(const p of route.slice(1,5))
+    assert.ok(mouth.floors.some(f=>Math.abs(f.max[1]-p.height)<.01&&supportFootprintOverlaps(p.east,p.north,f,.01)),'physical tread');
+  assert.ok(!mouth.ramps.some(r=>doorPoint.east>=r.min[0]&&doorPoint.east<=r.max[0]&&-doorPoint.north>=r.min[2]&&-doorPoint.north<=r.max[2]),'no hidden doorway ramp');
 });
 
 test('guard shed: back wall and posts block, the open sides stay open', () => {
@@ -93,13 +94,21 @@ test('town-era wall: segments block, the gate channel stays walkable', () => {
   assert.equal(blocked(outer.colliders, -18, 100), true, 'wall segment blocks');
 });
 
-test('gatehouse: walls block, doorway open, base is a floor with a ramp', () => {
+test('gatehouse: walls block, doorway open, base is reached by physical steps', () => {
   const back = frameAt({ east: -13, north: 150.5 }, 90, 0, -1.93);
   assert.equal(blocked(outer.colliders, back.east, back.north), true, 'gatehouse back wall blocks');
   const door = frameAt({ east: -13, north: 150.5 }, 90, 0, 1.93);
   assert.equal(blocked(outer.colliders, door.east, door.north), false, 'gatehouse doorway open');
   assert.ok(Math.abs(floorTopAt(outer.floors, -13, 150.5) - 13) < .01, 'gatehouse base floor top');
-  assert.ok(outer.ramps.length >= 1, 'gatehouse doorway ramp exported');
+  const route=outer.industrialRoutes.find(r=>r.id==='gatehouse');
+  assert.ok(route,'gatehouse route exported');
+  assert.equal(route.points.length,7);
+  const steps=route.points.slice(1,5);
+  for(const [i,p] of steps.entries()){
+    assert.ok(Math.abs(p.height-(12+(i+1)/4))<.01,'one quarter metre riser on flat ground');
+    assert.ok(outer.floors.some(b=>p.east>=b.min[0]&&p.east<=b.max[0]&&-p.north>=b.min[2]&&-p.north<=b.max[2]&&Math.abs(b.max[1]-p.height)<.01),'physical tread support');
+  }
+  assert.ok(!outer.ramps.some(r=>r.min[0]<=door.east&&r.max[0]>=door.east&&r.min[2]<=-door.north&&r.max[2]>=-door.north),'no invisible doorway ramp');
 });
 
 test('fence ring: panels block, station / rail / collapsed gaps stay open', () => {
@@ -127,7 +136,7 @@ test('za22 top group carries the merged west walk geometry, all west of the seam
   };
   assert.ok(colliders.length >= 200, `merged colliders (${colliders.length})`);
   assert.ok(floors.length >= 3, 'merged floors');
-  assert.ok(ramps.length >= 2, 'merged ramps');
+  assert.equal(ramps.length,road.mouthWorks.ramps.length+road.outerWorks.ramps.length,'merge all remaining ramps, not retired invisible door ramps');
   for (const box of [...colliders, ...floors, ...ramps]) {
     assert.ok(box.max[0] < 0, `box stays west of the seam (max east ${box.max[0]})`);
     assert.ok(box.min[0] < box.max[0] && box.min[1] < box.max[1] && box.min[2] < box.max[2], 'box is well-formed');

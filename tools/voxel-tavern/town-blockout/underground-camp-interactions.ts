@@ -41,6 +41,8 @@ type Options = {
   lookAtBowl(bowl: Bowl): boolean;
   /** Idempotent per visitor in the host catalogue. */
   recordRelic(entry: typeof undergroundCanteenBowlRelic): RelicResult | Promise<RelicResult>;
+  /** A production catalogue may change after reconnect or profile change. */
+  readBowlKnown?(): boolean;
   canOfferLamp?(nicheId: string): boolean;
   offerLamp?(nicheId: string): boolean | Promise<boolean>;
 };
@@ -174,10 +176,10 @@ export function createUndergroundCampInteractions(options: Options) {
         return await options.offerLamp?.(action.niche.id) ? 'lamp-offered' : 'rejected';
       }
       if (!options.lookAtBowl(action.bowl)) return 'rejected';
-      if (bowlKnown) return 'bowl-known';
+      if (options.readBowlKnown ? options.readBowlKnown() : bowlKnown) return 'bowl-known';
       const result = await options.recordRelic(undergroundCanteenBowlRelic);
       if (result !== 'recorded' && result !== 'already-recorded') return 'rejected';
-      bowlKnown = true;
+      if (!options.readBowlKnown) bowlKnown = true;
       return result === 'recorded' ? 'bowl-recorded' : 'bowl-known';
     } finally {
       busy = false;
@@ -199,6 +201,6 @@ export function createUndergroundCampInteractions(options: Options) {
 
   return {
     prompt, press, update, cancelSeat,
-    snapshot: () => ({ seatedRoomId: seated?.room.id, rested: seated?.rested ?? false, bowlKnown }),
+    snapshot: () => ({ seatedRoomId: seated?.room.id, rested: seated?.rested ?? false, bowlKnown: options.readBowlKnown?.() ?? bowlKnown }),
   };
 }

@@ -1,0 +1,21 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><link rel="icon" href="data:,"><title>B · 一代人栈道预制审图</title><style>html,body{margin:0;overflow:hidden;background:#24313c;color:#f3eadb;font:14px system-ui}canvas{display:block}aside{position:fixed;left:12px;top:12px;padding:10px 14px;background:#17242de8;border:1px solid #a38e72}button,select{background:#39464d;color:#fff;border:1px solid #99846b;padding:5px}p{margin:6px 0}</style></head><body><aside><strong>一代人栈道 · 三段实体</strong><p>独立坡面夹具，非东壁实际落位。</p><select id="view"><option value="0">全景 · 两处断口</option><option value="1">第一段 · 坡板与旧工具</option><option value="2">后两段 · 断梯与残梁</option></select> <button id="phase">白昼</button></aside><script type="module">
+import {Color,DirectionalLight,Fog,HemisphereLight,Mesh,MeshStandardMaterial,PerspectiveCamera,PlaneGeometry,Scene,WebGLRenderer} from 'three';
+import {buildBR30HistoricWalkway} from './town-blockout/town-b-r30-east-historic-walkway';
+const scene=new Scene(),camera=new PerspectiveCamera(55,1,.05,80),renderer=new WebGLRenderer({antialias:true});
+renderer.setPixelRatio(Math.min(devicePixelRatio,1.5));document.body.prepend(renderer.domElement);
+const ground=(e,n)=>.10*n+.025*e;
+const model=buildBR30HistoricWalkway(ground,[{east:0,north:0,yaw:0},{east:0,north:3.8,yaw:0},{east:.25,north:7,yaw:.16}]);scene.add(model.group);
+const surface=new PlaneGeometry(26,26,32,32);surface.rotateX(-Math.PI/2);
+const p=surface.getAttribute('position');for(let i=0;i<p.count;i++)p.setY(i,ground(p.getX(i),-p.getZ(i)));surface.computeVertexNormals();
+scene.add(new Mesh(surface,new MeshStandardMaterial({color:0x66615a,roughness:1,flatShading:true})));
+const sky=new HemisphereLight(0xc9d8e9,0x6b5949,1.55),sun=new DirectionalLight(0xffe0b0,2.1);sun.position.set(-5,8,4);scene.add(sky,sun);
+const view=document.querySelector('#view'),phase=document.querySelector('#phase');
+let night=false,frame=0;
+const cameras=[[[8,5.7,3],[0,1,-3.1]],[[2.25,1.95,1.7],[0,.55,-.45]],[[4.4,3.65,-3.3],[.1,2,-5.5]]];
+function choose(){const [a,b]=cameras[Number(view.value)];camera.position.set(...a);camera.lookAt(...b)}
+function light(){scene.background=new Color(night?0x243149:0xa6b8c5);scene.fog=new Fog(scene.background,18,55);sky.intensity=night?.75:1.55;sun.intensity=night?.23:2.1;phase.textContent=night?'雪夜':'白昼'}
+view.onchange=choose;phase.onclick=()=>{night=!night;light()};
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix()}addEventListener('resize',resize);resize();choose();light();
+window.__historicReview=()=>({frame,night,view:view.value,pieces:model.pieces,boxes:model.boxes.length,support:model.support.length,gaps:model.gaps,draws:renderer.info.render.calls,tris:renderer.info.render.triangles,productionReady:model.productionReady});
+function tick(){renderer.render(scene,camera);frame++;requestAnimationFrame(tick)}tick();
+</script></body></html>
