@@ -1,0 +1,264 @@
+{
+  "source": "e12cd0dbe24ce6304e0997682b4b151158c01f76",
+  "passed": true,
+  "reviewOnly": true,
+  "frames": [
+    {
+      "name": "south-valley-day",
+      "index": 0,
+      "night": false,
+      "frames": 49,
+      "draws": 125,
+      "triangles": 123750,
+      "changed": 13926,
+      "min": -16.148212265664032,
+      "max": 32.54381387715158,
+      "gully": 8815,
+      "entryMeshes": 7,
+      "forest": {
+        "trees": 903,
+        "rocks": 458,
+        "excluded": 1270,
+        "cells": 109,
+        "instances": 9043,
+        "triangles": 108516
+      },
+      "road": {
+        "total": 1475.9999999999998,
+        "length": 59.99999999999999,
+        "unbuilt": 1415.9999999999998,
+        "minGap": -9.271402988499062,
+        "maxGap": 44.47963394725133,
+        "posts": 6,
+        "bridged": 58.000000000000036,
+        "runs": 4
+      },
+      "renderTriangles": 147737
+    },
+    {
+      "name": "south-valley-night",
+      "index": 0,
+      "night": true,
+      "frames": 92,
+      "draws": 125,
+      "triangles": 123750,
+      "changed": 13926,
+      "min": -16.148212265664032,
+      "max": 32.54381387715158,
+      "gully": 8815,
+      "entryMeshes": 7,
+      "forest": {
+        "trees": 903,
+        "rocks": 458,
+        "excluded": 1270,
+        "cells": 109,
+        "instances": 9043,
+        "triangles": 108516
+      },
+      "road": {
+        "total": 1475.9999999999998,
+        "length": 59.99999999999999,
+        "unbuilt": 1415.9999999999998,
+        "minGap": -9.271402988499062,
+        "maxGap": 44.47963394725133,
+        "posts": 6,
+        "bridged": 58.000000000000036,
+        "runs": 4
+      },
+      "renderTriangles": 147737
+    },
+    {
+      "name": "gate-day",
+      "index": 1,
+      "night": false,
+      "frames": 121,
+      "draws": 125,
+      "triangles": 123750,
+      "changed": 13926,
+      "min": -16.148212265664032,
+      "max": 32.54381387715158,
+      "gully": 8815,
+      "entryMeshes": 7,
+      "forest": {
+        "trees": 903,
+        "rocks": 458,
+        "excluded": 1270,
+        "cells": 109,
+        "instances": 9043,
+        "triangles": 108516
+      },
+      "road": {
+        "total": 1475.9999999999998,
+        "length": 59.99999999999999,
+        "unbuilt": 1415.9999999999998,
+        "minGap": -9.271402988499062,
+        "maxGap": 44.47963394725133,
+        "posts": 6,
+        "bridged": 58.000000000000036,
+        "runs": 4
+      },
+      "renderTriangles": 141635
+    },
+    {
+      "name": "gate-night",
+      "index": 1,
+      "night": true,
+      "frames": 167,
+      "draws": 125,
+      "triangles": 123750,
+      "changed": 13926,
+      "min": -16.148212265664032,
+      "max": 32.54381387715158,
+      "gully": 8815,
+      "entryMeshes": 7,
+      "forest": {
+        "trees": 903,
+        "rocks": 458,
+        "excluded": 1270,
+        "cells": 109,
+        "instances": 9043,
+        "triangles": 108516
+      },
+      "road": {
+        "total": 1475.9999999999998,
+        "length": 59.99999999999999,
+        "unbuilt": 1415.9999999999998,
+        "minGap": -9.271402988499062,
+        "maxGap": 44.47963394725133,
+        "posts": 6,
+        "bridged": 58.000000000000036,
+        "runs": 4
+      },
+      "renderTriangles": 141635
+    },
+    {
+      "name": "plaza-day",
+      "index": 2,
+      "night": false,
+      "frames": 213,
+      "draws": 23,
+      "triangles": 123750,
+      "changed": 13926,
+      "min": -16.148212265664032,
+      "max": 32.54381387715158,
+      "gully": 8815,
+      "entryMeshes": 7,
+      "forest": {
+        "trees": 903,
+        "rocks": 458,
+        "excluded": 1270,
+        "cells": 109,
+        "instances": 9043,
+        "triangles": 108516
+      },
+      "road": {
+        "total": 1475.9999999999998,
+        "length": 59.99999999999999,
+        "unbuilt": 1415.9999999999998,
+        "minGap": -9.271402988499062,
+        "maxGap": 44.47963394725133,
+        "posts": 6,
+        "bridged": 58.000000000000036,
+        "runs": 4
+      },
+      "renderTriangles": 20106
+    },
+    {
+      "name": "plaza-night",
+      "index": 2,
+      "night": true,
+      "frames": 256,
+      "draws": 23,
+      "triangles": 123750,
+      "changed": 13926,
+      "min": -16.148212265664032,
+      "max": 32.54381387715158,
+      "gully": 8815,
+      "entryMeshes": 7,
+      "forest": {
+        "trees": 903,
+        "rocks": 458,
+        "excluded": 1270,
+        "cells": 109,
+        "instances": 9043,
+        "triangles": 108516
+      },
+      "road": {
+        "total": 1475.9999999999998,
+        "length": 59.99999999999999,
+        "unbuilt": 1415.9999999999998,
+        "minGap": -9.271402988499062,
+        "maxGap": 44.47963394725133,
+        "posts": 6,
+        "bridged": 58.000000000000036,
+        "runs": 4
+      },
+      "renderTriangles": 20106
+    },
+    {
+      "name": "gully-day",
+      "index": 3,
+      "night": false,
+      "frames": 297,
+      "draws": 35,
+      "triangles": 123750,
+      "changed": 13926,
+      "min": -16.148212265664032,
+      "max": 32.54381387715158,
+      "gully": 8815,
+      "entryMeshes": 7,
+      "forest": {
+        "trees": 903,
+        "rocks": 458,
+        "excluded": 1270,
+        "cells": 109,
+        "instances": 9043,
+        "triangles": 108516
+      },
+      "road": {
+        "total": 1475.9999999999998,
+        "length": 59.99999999999999,
+        "unbuilt": 1415.9999999999998,
+        "minGap": -9.271402988499062,
+        "maxGap": 44.47963394725133,
+        "posts": 6,
+        "bridged": 58.000000000000036,
+        "runs": 4
+      },
+      "renderTriangles": 45475
+    },
+    {
+      "name": "gully-night",
+      "index": 3,
+      "night": true,
+      "frames": 345,
+      "draws": 35,
+      "triangles": 123750,
+      "changed": 13926,
+      "min": -16.148212265664032,
+      "max": 32.54381387715158,
+      "gully": 8815,
+      "entryMeshes": 7,
+      "forest": {
+        "trees": 903,
+        "rocks": 458,
+        "excluded": 1270,
+        "cells": 109,
+        "instances": 9043,
+        "triangles": 108516
+      },
+      "road": {
+        "total": 1475.9999999999998,
+        "length": 59.99999999999999,
+        "unbuilt": 1415.9999999999998,
+        "minGap": -9.271402988499062,
+        "maxGap": 44.47963394725133,
+        "posts": 6,
+        "bridged": 58.000000000000036,
+        "runs": 4
+      },
+      "renderTriangles": 45475
+    }
+  ],
+  "errors": []
+}
