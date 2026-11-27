@@ -4,6 +4,7 @@ import { createUndergroundMineLift, type UndergroundMineLiftTrip } from '../../.
 import { createUndergroundLiftDomainHandoff } from '../../../src/presence/underground-lift-domain-handoff';
 import type { resolveUndergroundShaftRegistration } from '../../../src/presence/underground-shaft-registration';
 import type { UndergroundEntrySnapshot } from '../../../src/presence/underground-entry';
+import type { R30ReturnRidePort,R30ReturnRidePath } from './town-c-r30-return-ride';
 
 type Registration = ReturnType<typeof resolveUndergroundShaftRegistration>;
 type Foot = Readonly<{ east: number; north: number; height: number }>;
@@ -11,6 +12,7 @@ type AcceptedFoot = Foot & Readonly<{ playerId: string; domainId: string }>;
 
 export type DreamChainTrip = Readonly<{
   id: number; first: boolean; departedAt: number; travelMs: number; direction: 'down' | 'up';
+  ridePath?:R30ReturnRidePath;
 }>;
 
 export type DreamChainEvent =
@@ -26,6 +28,9 @@ export type DreamChainHost = Readonly<{
   onEvent(event: DreamChainEvent): void;
   /** True while another player stands at the steady-rope stay (duo crank). */
   readRopeHeld?(): boolean;
+  /** Optional relocated route; if supplied but uncertified, deny cage rides
+   * rather than silently falling back to the retired station. */
+  returnRide?:R30ReturnRidePort;
 }>;
 
 const liftTravelMs = 25_000;
@@ -52,6 +57,13 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
     height: connection.firstFallLanding.height,
   };
   const playerId = host.playerId;
+  const relocated=host.returnRide;
+  if(relocated&&(relocated.domains['crater-floor']!==surfaceDomain||relocated.domains.mine!==mineDomain||
+    Math.abs(relocated.path.shaft.height-shaftFoot.height)>.025||relocated.path.shaft.height<=connection.depthLine||relocated.path.landing.height>=connection.depthLine))return {kind:'unregistered'} as const;
+  const ridePath=relocated?.path;
+  const rideDock=(stop:'crater-floor'|'mine')=>stop==='mine'?ridePath?.landing??mineLanding:ridePath?.shaft??shaftFoot;
+  let rideRevision:string|undefined,callingEmpty=false,confirmedDockId:number|undefined;
+  const rideCertified=()=>!relocated||!!rideRevision&&relocated.revision()===rideRevision;
 
   let phase: 'surface' | 'mine' = 'surface';
   let dockedStop: 'crater-floor' | 'mine' = 'crater-floor';
@@ -59,14 +71,17 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
   let confirmedTransfer: { playerId: string; departure: AcceptedFoot; landing: AcceptedFoot } | undefined;
   let acceptedLanding: { tripId: number; foot: AcceptedFoot } | undefined;
   let lastTripId = 0;
-  let firstFallDeparture: AcceptedFoot | undefined;
+  let firstFall: {trip: DreamChainTrip; departure: AcceptedFoot} | undefined;
+  // Retain the most recent completed landing until the next departure. The
+  // cinematic can ask after the dock tick or retry after a lost response.
+  let lastLanding: {tripId:number;foot:Foot} | undefined;
   let activeTrip: UndergroundMineLiftTrip | undefined;
   let pendingRide: 'down' | 'up' | undefined;
-  const landingWaiters = new Map<number, (foot: Foot) => void>();
+  const landingWaiters = new Map<number, {promise:Promise<Foot|undefined>;resolve:(foot:Foot|undefined)=>void}>();
 
   const acceptedFoot = (): AcceptedFoot | undefined => {
     const foot = host.readLocalFoot();
-    if (!foot) return undefined;
+    if (!foot || ![foot.east,foot.north,foot.height].every(Number.isFinite)) return undefined;
     return { playerId, domainId: phase === 'mine' ? mineDomain : surfaceDomain, ...foot };
   };
   const nearShaft = (foot: Foot) =>
@@ -85,6 +100,9 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
     readConfirmedFirstFallTransfer: () => confirmedTransfer,
     isFirstFallDeparture: (_id, point) => nearShaft(point),
     isDepthLineCrossing: (point) => {
+      // Repeated cage rides use the relocated vertical bore only after its
+      // live certificate. The original first-fall crossing stays unchanged.
+      if(relocated&&!firstFall)return rideCertified()&&relocated.crossing(point);
       // The transfer segment runs from the bore axis to the pool landing
       // beside it; a crossing counts when it stays inside that corridor.
       const ax = shaftFoot.east, az = shaftFoot.north;
@@ -98,8 +116,9 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
     },
     isFirstFallPool: (point) => nearMineLanding(point) && point.height <= -85,
     canBoardCage: (_id, direction) => {
-      const foot = host.readLocalFoot();
+      const foot = acceptedFoot();
       if (!foot) return false;
+      if(relocated)return rideCertified()&&relocated.check(direction==='down'?'crater-floor':'mine',callingEmpty?'call':'board',foot);
       return direction === 'down' ? nearShaft(foot) : nearMineLanding(foot);
     },
     load: () => savedSnapshot,
@@ -120,7 +139,7 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
     allocateTripId: () => ++lastTripId,
     requestCageRide: (id, direction) => bridge.requestCageRide(id, direction),
     readAcceptedFoot: acceptedFoot,
-    isAtBoardingPlatform: (stop, foot) => stop === 'crater-floor' ? nearShaft(foot) : nearMineLanding(foot),
+    isAtBoardingPlatform: (stop, foot) => relocated?rideCertified()&&relocated.check(stop,callingEmpty?'call':'board',foot):stop === 'crater-floor' ? nearShaft(foot) : nearMineLanding(foot),
     // The host reports the physical dock: once a trip's travel has elapsed the
     // cage stands at its destination; before that it stands at the last dock.
     readDockedStop: () => activeTrip && host.now() - activeTrip.departedAt >= activeTrip.travelMs
@@ -133,18 +152,29 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
     domains: { 'crater-floor': surfaceDomain, mine: mineDomain },
     readAcceptedLanding: () => acceptedLanding,
     isAtAcceptedLanding: (stop, foot) => {
-      const target = stop === 'mine' ? mineLanding : shaftFoot;
+      if(relocated)return rideCertified()&&relocated.check(stop,'landing',foot);
+      const target = rideDock(stop);
       return Math.abs(foot.east - target.east) <= .01 && Math.abs(foot.north - target.north) <= .01 &&
         Math.abs(foot.height - target.height) <= .01;
     },
   });
 
   function settleLanding(tripId: number, foot: Foot) {
+    lastLanding={tripId,foot:{...foot}};
     const waiter = landingWaiters.get(tripId);
     if (waiter) {
       landingWaiters.delete(tripId);
-      waiter(foot);
+      waiter.resolve({...foot});
     }
+  }
+
+  function waitForLanding(tripId:number):Promise<Foot|undefined>{
+    const existing=landingWaiters.get(tripId);
+    if(existing)return existing.promise;
+    let resolve!:(foot:Foot|undefined)=>void;
+    const promise=new Promise<Foot|undefined>(done=>{resolve=done});
+    landingWaiters.set(tripId,{promise,resolve});
+    return promise;
   }
 
   function departWithPlayer(direction: 'down' | 'up') {
@@ -152,8 +182,10 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
     const trip = lift.depart(playerId);
     if (!trip) return undefined;
     activeTrip = trip;
+    confirmedDockId=undefined;
+    lastLanding=undefined;
     const chainTrip: DreamChainTrip = {
-      id: trip.id, first: false, departedAt: trip.departedAt, travelMs: trip.travelMs, direction,
+      id: trip.id, first: false, departedAt: trip.departedAt, travelMs: trip.travelMs, direction,...(ridePath?{ridePath}:{})
     };
     host.onEvent({ kind: 'trip-started', trip: chainTrip });
     return chainTrip;
@@ -178,7 +210,15 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
      */
     crankWinch(dtSeconds: number) {
       if (!bridge.sceneState().coverVisible) return { kind: 'already-open', progress: 1 } as const;
-      winchLeaf.tick(dtSeconds, { cranking: true, ropeHeld: host.readRopeHeld?.() ?? false });
+      const foot=acceptedFoot();
+      const reach=connection.winch;
+      if(!foot||foot.domainId!==surfaceDomain||Math.hypot(foot.east-reach.east,foot.north-reach.north)>reach.horizontalReach||Math.abs(foot.height-reach.height)>reach.verticalReach){
+        bridge.releaseWinch(playerId);
+        return {kind:'unreachable',progress:winchLeaf.progress} as const;
+      }
+      // The feel model may advance only from a reachable held frame; large
+      // resume deltas are not continuous cranking samples.
+      winchLeaf.tick(Math.min(dtSeconds,.3), { cranking: true, ropeHeld: host.readRopeHeld?.() ?? false });
       const result = bridge.holdWinchExternal(playerId);
       if (result.kind === 'opened') host.onEvent({ kind: 'well-opened' });
       return { ...result, progress: winchLeaf.progress } as const;
@@ -199,17 +239,25 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
     },
     phase: () => phase,
     pendingRide: () => pendingRide,
+    /** Read-only cue for the existing viewer renderer. Empty repositioning
+     * is not a player camera ride; no second motion authority is created. */
+    presentationTrip():DreamChainTrip|undefined{
+      if(firstFall)return {...firstFall.trip};
+      if(activeTrip?.riders.includes(playerId))return {id:activeTrip.id,first:false,departedAt:activeTrip.departedAt,travelMs:activeTrip.travelMs,direction:activeTrip.direction,...(ridePath?{ridePath}:{})};
+    },
 
     /** The opener walks from the handle into the open bore; this issues the fall order. */
     requestFirstFall() {
+      if(firstFall||activeTrip||pendingRide||phase!=='surface')return undefined;
       const foot = acceptedFoot();
       if (!foot) return undefined;
       const order = bridge.requestFirstFall(playerId);
       if (!order) return undefined;
-      firstFallDeparture = foot;
       const trip: DreamChainTrip = {
         id: ++lastTripId, first: true, departedAt: host.now(), travelMs: liftTravelMs, direction: 'down',
       };
+      firstFall={trip,departure:foot};
+      lastLanding=undefined;
       host.onEvent({ kind: 'trip-started', trip });
       return { order, trip };
     },
@@ -221,12 +269,18 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
      * trip-started event fires at the actual departure either way.
      */
     requestCageRide(direction: 'down' | 'up') {
-      if (activeTrip || pendingRide) return undefined;
+      if (firstFall || activeTrip || pendingRide) return undefined;
+      rideRevision=relocated?.revision();
+      if(!rideCertified())return undefined;
       const boardingStop = direction === 'down' ? 'crater-floor' : 'mine';
       if (dockedStop !== boardingStop) {
-        const empty = lift.callEmptyCage(playerId, boardingStop);
+        callingEmpty=true;
+        let empty:UndergroundMineLiftTrip|undefined;
+        try{empty=lift.callEmptyCage(playerId, boardingStop)}finally{callingEmpty=false;}
         if (!empty) return undefined;
         activeTrip = empty;
+        confirmedDockId=undefined;
+        lastLanding=undefined;
         pendingRide = direction;
         return undefined;
       }
@@ -239,21 +293,24 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
      * and the domain handoff has issued its wake cue.
      */
     requestLanding(tripId: number): Promise<Foot | undefined> {
-      if (firstFallDeparture && !activeTrip) {
+      if(lastLanding?.tripId===tripId)return Promise.resolve({...lastLanding.foot});
+      if (firstFall?.trip.id===tripId) {
+        const now=host.now();
+        if(!Number.isFinite(now)||now-firstFall.trip.departedAt<firstFall.trip.travelMs)return Promise.resolve(undefined);
         const landing: AcceptedFoot = { playerId, domainId: mineDomain, ...mineLanding };
-        confirmedTransfer = { playerId, departure: firstFallDeparture, landing };
+        confirmedTransfer = { playerId, departure: firstFall.departure, landing };
         const result = bridge.confirmFirstFall(playerId);
-        firstFallDeparture = undefined;
+        confirmedTransfer=undefined;
         if (result?.kind !== 'first-fall-landed') return Promise.resolve(undefined);
+        firstFall=undefined;
         // The fall moves the player, not the cage: the lift stays docked at
         // the crater floor until the empty cage is called down.
         phase = 'mine';
+        settleLanding(tripId,mineLanding);
         return Promise.resolve({ ...mineLanding });
       }
-      if (activeTrip?.id === tripId) {
-        return new Promise((resolve) => {
-          landingWaiters.set(tripId, (foot) => resolve(foot));
-        });
+      if (activeTrip?.id === tripId && activeTrip.riders.includes(playerId)) {
+        return waitForLanding(tripId);
       }
       return Promise.resolve(undefined);
     },
@@ -262,7 +319,7 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
     update() {
       if (!activeTrip) return;
       const trip = activeTrip;
-      if (host.now() - trip.departedAt < trip.travelMs) return;
+      if (!Number.isFinite(host.now())||host.now() - trip.departedAt < trip.travelMs||!rideCertified()) return;
       if (trip.riders.length === 0) {
         // An empty repositioning leg: confirm the dock, then depart with the
         // waiting rider if one is pending.
@@ -272,27 +329,42 @@ export function createUndergroundDreamChain(host: DreamChainHost) {
         if (pendingRide) {
           const direction = pendingRide;
           pendingRide = undefined;
-          departWithPlayer(direction);
+          // A call foot is outside the cage: wait for a second, explicit
+          // boarding request at the physical dock on the relocated route.
+          if(!relocated)departWithPlayer(direction);
         }
         return;
       }
-      handoff.jolt(playerId, trip.id);
-      if (!handoff.confirmDock(trip.id)) return;
+      if(confirmedDockId!==trip.id){
+        handoff.jolt(playerId, trip.id);
+        if (!handoff.confirmDock(trip.id)) return;
+        confirmedDockId=trip.id;
+      }
       const toMine = trip.destination === 'mine';
       acceptedLanding = {
         tripId: trip.id,
-        foot: { playerId, domainId: toMine ? mineDomain : surfaceDomain, ...(toMine ? mineLanding : shaftFoot) },
+        foot: { playerId, domainId: toMine ? mineDomain : surfaceDomain, ...rideDock(trip.destination) },
       };
+      if(relocated&&(!rideCertified()||!relocated.check(trip.destination,'landing',acceptedLanding.foot)))return;
       const wake = handoff.wake(playerId, trip.id);
       if (!wake) return;
-      handoff.finishWake(playerId, trip.id);
       // The ride physically carried the player through the bore: submit the
       // crossing segment so the entry flips the player's mode (peace above
       // the depth line, survival below it) for the next boarding check.
-      const originFoot = trip.origin === 'mine' ? mineLanding : shaftFoot;
-      bridge.confirmDepthCrossing(playerId, originFoot, {
+      const originFoot = rideDock(trip.origin);
+      const crossing=bridge.confirmDepthCrossing(playerId, originFoot, {
         east: wake.foot.east, north: wake.foot.north, height: wake.foot.height,
       });
+      if(!crossing){
+        // Never announce an unaccepted mode change. The cage is physically
+        // docked; report failure rather than leave an immortal pending promise.
+        if(relocated)return; // retain the docked cue for a certified retry
+        handoff.finishWake(playerId,trip.id);
+        activeTrip=undefined;dockedStop=trip.destination;acceptedLanding=undefined;
+        landingWaiters.get(trip.id)?.resolve(undefined);landingWaiters.delete(trip.id);
+        return;
+      }
+      handoff.finishWake(playerId,trip.id);
       activeTrip = undefined;
       dockedStop = trip.destination;
       phase = toMine ? 'mine' : 'surface';

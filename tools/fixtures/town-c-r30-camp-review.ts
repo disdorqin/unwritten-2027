@@ -1,0 +1,243 @@
+import {AmbientLight,Color,FogExp2,Group,PerspectiveCamera,PointLight,Scene,Vector3,WebGLRenderer} from 'three';
+import {mountWestCraterRoad} from '../voxel-tavern/town-blockout/town-za22-crater-road.js';
+import {mountUndergroundDomainHost} from '../voxel-tavern/town-blockout/underground-domain-host.js';
+const scene=new Scene();scene.background=new Color(0x1c232a);scene.fog=new FogExp2(0x1c232a,.035);
+const root=new Group();scene.add(root,new AmbientLight(0xb4c4de,.55));
+const road=mountWestCraterRoad(260,()=>10.7773);
+import {createUndergroundWaterState} from '../../src/presence/underground-water-state.js';
+import {r30InterlayerLiftSite as interlayerSite,type R30InterlayerRide} from '../voxel-tavern/town-blockout/town-c-r30-interlayer-lift.js';
+const water=createUndergroundWaterState({dawnEpoch:0,now:()=>0});
+let waterConnected=true;
+let domain=interlayerSite.upper.domainId;
+import type {UndergroundMiningTargetView,UndergroundMiningCore} from '../../src/shared/underground-mining.js';
+let oreReview:readonly UndergroundMiningTargetView[]=[],oreCores:readonly UndergroundMiningCore[]=[];
+import {createMineBestiaryEncounter} from '../../src/shared/mine-bestiary.js';
+let creatureReview:ReturnType<ReturnType<typeof createMineBestiaryEncounter>['snapshot']>=[];
+let reviewTargets:readonly UndergroundMiningTargetView[]=[];
+import type {U19MineCartSnapshot} from '../../src/presence/underground-mainline-cart.js';
+let mainlineReview:U19MineCartSnapshot|undefined,mainlineRevision=0;
+import type {MineCartSnapshot} from '../../src/shared/underground-mine-cart-track.js';
+let tutorialCartReview:MineCartSnapshot|undefined,tutorialCartRevision=0;
+let reviewCampFoot:{east:number;north:number;height:number}|undefined=interlayerSite.upper.foot,reviewPickaxeClaimed=false;
+const hostResult=mountUndergroundDomainHost({parent:root,road,waterBridge:{readWaterSnapshot:()=>waterConnected?water.tonight():undefined},
+ readAcceptedMiningTargets:()=>reviewTargets,
+ oreBridge:{acceptsSite:()=>oreReview.length>0,readTargets:()=>oreReview,readCores:()=>oreCores},
+ encounterBridge:{acceptGroup:g=>creatureReview.length?'review-room/'+g.id:undefined,readActors:()=>creatureReview},
+ mainlineBridge:{acceptsRoute:()=>!!mainlineReview,readSnapshot:()=>mainlineReview,readLightBudget:()=>2,readViewer:()=>undefined,canSee:()=>false,dispatch:()=>{}},
+ tutorialCartBridge:{acceptsTrack:()=>!!tutorialCartReview,readSnapshot:()=>tutorialCartReview,readViewer:()=>undefined,canSee:()=>false,dispatch:()=>{}},
+ campBridge:{now:()=>performance.now(),readWorldFoot:()=>reviewCampFoot,sit:()=>false,stand:()=>false,onSeatedChange:()=>{},isAimingAt:()=>false,showPickupNotice:()=>{},onRested:()=>{},
+  pickaxeReceipt:{read:()=>({playerId:'review-only',domainId:domain,claimed:reviewPickaxeClaimed}),claim:async()=>'rejected'}},
+ readAcceptedDomainFoot:()=>({domainId:domain,...(domain===interlayerSite.lower.domainId?interlayerSite.lower.foot:reviewCampFoot??interlayerSite.upper.foot)})});
+if(hostResult.kind!=='ready')throw Error(hostResult.reason);
+const host=hostResult;
+const camp=host.mounted.camp!;
+import {mountR30ReturnRelocationCandidate,r30ReturnRelocationCandidate as returnPlan} from '../voxel-tavern/town-blockout/town-c-r30-return-relocation-candidate.js';
+const relocationRoot=new Group();relocationRoot.visible=false;scene.add(relocationRoot);
+relocationRoot.position.copy(host.mounted.group.position);relocationRoot.quaternion.copy(host.mounted.group.quaternion);
+let relocation:ReturnType<typeof mountR30ReturnRelocationCandidate>|undefined;
+const camera=new PerspectiveCamera(70,innerWidth/innerHeight,.05,65);
+const torch=new PointLight(0xffd1a0,35,16,2);camera.add(torch);scene.add(camera);
+const render=new WebGLRenderer({antialias:false,powerPreference:'low-power'});render.setSize(innerWidth,innerHeight);document.body.append(render.domElement);
+const vec=(local:readonly [number,number,number])=>{const p=host.mounted.toWorld(local)!;return new Vector3(p.east,p.height,-p.north)};
+const eyes:Record<string,{eye:readonly [number,number,number];look:readonly [number,number,number]}>={
+ entry:{eye:[0,-91,35.29],look:[0,-90.4,40]},
+ hearth:{eye:[2.5,-91,40],look:[2.5,-90.42,38.7]},
+ dorm:{eye:camp.rooms[3].approach,look:[6.4,-90.1,40.7]},
+ canteen:{eye:[0,-91,42.45],look:[-1.4,-90.15,42.45]},
+ memorial:{eye:[2.6,-91,43.76],look:[2.6,-89.65,44.6]},
+ exit:{eye:[0,-91,43],look:[0,-90.1,35.4]},
+ wreck:{eye:[0,-91.2,2],look:[2.31,-90.05,1.48]},
+ gallery:{eye:[0,-90.25,17],look:[0,-89.8,28]},
+ collapse:{eye:[0,-90.91,30.2],look:[0,-90.25,33]},
+ crouchshore:{eye:[0,-90.86,29.2],look:[0,-88.75,31.18]},
+ crouchcamp:{eye:[0,-91,37.1],look:[0,-88.79,35.82]},
+ crouchinside:{eye:[0,-91,33.0],look:[0,-90.0,35.6]},
+ mainshaft:{eye:[0,-91,69],look:[0,-89.1,86]},
+ shallowentry:{eye:[-5.2,-91,52],look:[-16,-89.9,52]},
+ shallowdesk:{eye:[-16,-91,52.57],look:[-16,-89.72,54.12]},
+ shallowrack:{eye:[-27,-91,51.45],look:[-27,-89.65,49.9]},
+ shallowturn:{eye:[-94,-91,54],look:[-94,-89.6,59]},
+ shallowbench:{eye:[-82,-91,59.6],look:[-82,-89.7,61.15]},
+ shallowbarrels:{eye:[-83,-91,66.10],look:[-83,-90.28,67.65]},
+ shallowexit:{eye:[-68,-91,68],look:[-68,-89.6,75]},
+ bankwest:{eye:[-14,-91,131],look:[-21,-89.8,126.7]},
+ bankbench:{eye:[-21,-91,129.1],look:[-21,-89.8,126.7]},
+ bankwater:{eye:[5.8,-91.12,118],look:[7.4,-89.8,119]},
+ bankeast:{eye:[21,-91,131],look:[26,-89.9,135.7]},
+ bankbypass:{eye:[45.3,-91,117.4],look:[47,-89.9,117.3]},
+ retreatwest:{eye:[-22,-91,131],look:[-20,-90.92,131]},
+ retreateast:{eye:[45.5,-91,122.1],look:[45.5,-90.92,120.1]},
+ oldsupports:{eye:[0,-91,101],look:[0,-88.7,119]},
+ deeptrack:{eye:[0,-91,121],look:[0,-89.7,138]},
+ bayentry:{eye:[-5,-91,76],look:[-16,-90.2,74]},
+ baycart:{eye:[-11.2,-91,76],look:[-10.1,-90.5,73.45]},
+ baywreck:{eye:[-16.1,-91,76],look:[-16.1,-90.6,73.45]},
+ baydesk:{eye:[-16.1,-91,77],look:[-16.2,-89.85,80.1]},
+ pocketclosed:{eye:[4.7,-91,59.6],look:[6.1,-89.8,59.6]},
+ pocketopen:{eye:[9.1,-91,59.6],look:[18.2,-89.6,59.6]},
+ shortcutclosed:{eye:[-50,-91,67.7],look:[-50,-89.8,70.05]},
+ shortcutopen:{eye:[-50,-91,69],look:[-50,-90,76]},
+ annexentry:{eye:[-3.5,-91,101.1],look:[-8.2,-90,101.1]},
+ annexbunk:{eye:[-8.1,-91,102.1],look:[-11.7,-89.7,102.1]},
+ annexmap:{eye:[-8.5,-91,102.1],look:[-8.5,-89.3,99.53]},
+ annexrear:{eye:[-9.0,-91,101.1],look:[-11.7,-90.35,99.75]},
+ annexsupply:{eye:[-8.1,-91,106.7],look:[-11.7,-89.7,106.7]},
+ annexreturn:{eye:[-8.1,-91,107.9],look:[0,-90,107.9]},
+ returnapproach:{eye:[0,-90.19,15.8],look:[-4.7,-89.05,15.8]},
+ returnstand:{eye:[-2.8,-90.19,15.8],look:[-4.7,-89.05,15.8]},
+ returnbell:{eye:[-3,-90.206,16.12],look:[-3,-88.95,16.95]},
+};
+let frames=0,walked=0,rejected=0,trustedW=0,view='entry',stamp=performance.now();
+const keys=new Set<string>(),direction=new Vector3();
+function setView(name:string){
+ root.visible=true;relocationRoot.visible=false;
+ if(name.startsWith('returnreloc-')){
+  relocation??=mountR30ReturnRelocationCandidate(relocationRoot);
+  root.visible=false;relocationRoot.visible=true;
+  const [x,y,z]=returnPlan.dock,turn=x+3;
+  const views:Record<string,{eye:[number,number];look:[number,number,number]}>={
+   'returnreloc-join':{eye:[-4.7,15.8],look:[turn,-89,15.8]},
+   'returnreloc-corridor':{eye:[turn,12],look:[turn,-89,4]},
+   'returnreloc-dock':{eye:[turn,z],look:[x,y+1,z]},
+  };
+  const v=views[name];if(!v)return false;
+  const p=relocation.passageAt(...v.eye);if(!p)return false;
+  camera.position.copy(vec([v.eye[0],p.floor+1.67,v.eye[1]]));camera.lookAt(vec(v.look));torch.intensity=22;view=name;return true;
+ }
+ oreReview=[];oreCores=[];creatureReview=[];
+ tutorialCartReview=undefined;reviewPickaxeClaimed=false;reviewCampFoot=interlayerSite.upper.foot;
+ if(name.startsWith('tutorial-cart-')){
+  const a=host.tutorialCart;if(a?.kind!=='ready')return false;
+  const step=name.endsWith('end')?2:0;
+  tutorialCartReview={step,revision:++tutorialCartRevision};mainlineReview=undefined;host.mounted.sync();a.update(1);
+  const p=a.track.point(step),side=host.mounted.toWorld([1.25,-90.2,step===0?14.8:16.2])!;
+  const q=host.passageAt(side.east,side.north);if(!q)return false;
+  camera.position.set(side.east,q.floor+1.67,-side.north);camera.lookAt(p.east,p.height+.4,-p.north);torch.intensity=22;view=name;return true;
+ }
+ if(name.startsWith('tutorial-pickaxe-')){
+  const c=host.pickaxeContract;if(!c)return false;
+  reviewCampFoot=c.approach;reviewPickaxeClaimed=name.endsWith('taken');mainlineReview=undefined;host.mounted.sync();
+  const p=c.approach,q=host.passageAt(p.east,p.north);if(!q)return false;
+  camera.position.set(p.east,q.floor+1.67,-p.north);camera.lookAt(c.aim.east,c.aim.height,-c.aim.north);torch.intensity=15;view=name;return true;
+ }
+ if(name.startsWith('water-')){
+  const r=host.waterReadout;if(!r?.face||r.baseline===undefined)return false;
+  waterConnected=name!=='water-pending';
+  water.shiftPump(1);water.shiftPump(1);water.shiftPump(1);water.shiftPump(1);
+  // Set exactly the effective state using the original pump authority.
+  for(let i=0;i<(name==='water-low'?4:name==='water-mid'?3:0);i++)water.shiftPump(-1);
+  mainlineReview=undefined;host.mounted.sync();
+  const at=vec([5.1,-91.12,r.face.z+.39]),p=host.passageAt(at.x,-at.z);
+  if(!p)return false;
+  camera.position.set(at.x,p.floor+1.67,at.z);camera.lookAt(vec([r.face.x,r.baseline+.99,r.face.z+.39]));torch.intensity=15;view=name;return true;
+ }
+ waterConnected=true;
+ if(name.startsWith('creature-')){
+  const s=host.encounterSurvey;if(!s?.ready)return false;
+  const spawns=s.buildSpawns(g=>'review-room/'+g.id)!;
+  const authority=createMineBestiaryEncounter(spawns,{hasSpawnSite:()=>true,moveAllowed:()=>false,seesPlayer:()=>false,hearsMining:()=>false,insideCampfire:()=>false});
+  creatureReview=authority.snapshot();
+  const action=name.endsWith('-action'),role=name.slice(9,action?-7:undefined),g=s.groups.find(x=>x.id===role);if(!g)return false;
+  if(action)creatureReview=creatureReview.map(a=>g.members.some(m=>m.id===a.id)?{...a,phase:g.species==='snow-clump'?'rebuild':g.species==='rock-snake'?'peek':'windup'}:a);
+  const p=g.center,local=host.toLocal(p);if(!local)return false;
+  const candidates=[[local[0],local[2]+2.2],[local[0]+2.2,local[2]],[local[0]-2.2,local[2]],[local[0],local[2]-2.2]];
+  const eye=candidates.map(([x,z])=>host.mounted.toWorld([x,local[1],z])).find(q=>q&&host.passageAt(q.east,q.north));
+  if(!eye)return false;
+  mainlineReview=undefined;host.mounted.sync();
+  camera.position.set(eye.east,host.passageAt(eye.east,eye.north)!.floor+1.67,-eye.north);camera.lookAt(p.east,p.height+(g.species==='snow-clump'?.45:g.species==='rock-snake'?.25:1.0),-p.north);torch.intensity=20;view=name;return true;
+ }
+ if(name.startsWith('ore-')){
+  if(host.oreSurvey.kind!=='ready')return false;
+  const match=/^ore-(\d)(?:-(cracked|open))?$/.exec(name);if(!match)return false;
+  const s=host.oreSurvey.ordinary[Number(match[1])-1];if(!s)return false;
+  const hits=match[2]==='open'?3:match[2]==='cracked'?2:0;
+  oreReview=host.oreSurvey.ordinary.map(o=>({...o.target,hits:o===s?hits:0,open:o===s&&hits===3}));
+  if(hits===3)oreCores=[{id:JSON.stringify([s.target.id,1000]),at:s.coreAt,mineral:s.marker.mineral,amount:s.marker.amount}];
+  mainlineReview=undefined;host.mounted.sync();
+  const p=s.foot,a=s.target.at;
+  const back={east:p.east+s.normal.east*.65,north:p.north+s.normal.north*.65,height:p.height};
+  const eye=hits===3&&host.passageAt(back.east,back.north)?back:p;
+  camera.position.set(eye.east,eye.height+1.67,-eye.north);camera.lookAt(hits===3?p.east:a.east,hits===3?p.height+.14:a.height,-(hits===3?p.north:a.north));torch.intensity=18;view=name;return true;
+ }
+ if(name.startsWith('terminal-')){
+  const m=host.mainline;if(m?.kind!=='ready'||!m.scene.r30Terminal)return false;
+  const t=m.scene.r30Terminal,role=name.includes('camp')?'camp':'gate',board=t.boards.find(b=>b.role===role);
+  if(!board)return false;
+  const route=m.route,empty=name.endsWith('empty'),pending=name.endsWith('pending');
+  mainlineReview=pending?undefined:{revision:++mainlineRevision,lastAtMs:mainlineRevision*1000,mode:'stopped',
+   chainage:role==='camp'?0:route.length,speed:0,brakeHeld:false,turnout:'gate',cargo:empty?{oreId:'',pieces:0}:{oreId:'review-ore',pieces:12},faults:{sleepers:3,gauge:3,'turnout-rust':4}};
+  host.mounted.sync();
+  const target=board.group.getWorldPosition(new Vector3()),forward=new Vector3(0,0,1).applyQuaternion(board.group.quaternion),right=new Vector3(1,0,0).applyQuaternion(board.group.quaternion);
+  const eyes=[...[-.95,.95,-.6,.6,0].flatMap(side=>[1.7,1.4,2.1].map(d=>target.clone().addScaledVector(forward,d).addScaledVector(right,side)))];
+  const eye=eyes.find(v=>host.passageAt(v.x,-v.z));if(!eye)return false;
+  camera.position.set(eye.x,host.passageAt(eye.x,-eye.z)!.floor+1.67,eye.z);camera.lookAt(target);torch.intensity=18;view=name;return true;
+ }
+ if(name.startsWith('rail-')){
+  const m=host.mainline;if(m?.kind!=='ready')return false;
+  const damaged=name.startsWith('rail-damage-'),loaded=name.startsWith('rail-cargo-'),role=name.slice(damaged?12:loaded?11:5),route=m.route,work=route.work;
+  const marks:Record<string,number>={camp:0,sleepers:work.sleepers.chainage,gauge:work.gauge.chainage,curve:60,'turnout-rust':work['turnout-rust'].chainage,turnout:work.turnout.chainage,gate:route.length};
+  const at=marks[role];if(at===undefined)return false;
+  const rolling=role==='curve',chainage=at;
+  mainlineReview={revision:++mainlineRevision,lastAtMs:mainlineRevision*1000,mode:damaged?'repairing':rolling?'rolling':'stopped',chainage:damaged?0:chainage,
+   speed:rolling?1.4:0,brakeHeld:rolling,turnout:role==='turnout'?'gate':'unset',cargo:loaded?{oreId:'review-ore',pieces:12}:{oreId:'',pieces:0},faults:damaged?{sleepers:0,gauge:0,'turnout-rust':0}:{sleepers:3,gauge:3,'turnout-rust':4},...(rolling?{riderId:'review'}:{})};
+  host.mounted.sync();
+  const p=route.sample(at),f=p.position,shift=(side:number,along:number)=>({east:f.east+Math.cos(p.heading)*side-Math.sin(p.heading)*along,north:f.north+Math.sin(p.heading)*side+Math.cos(p.heading)*along,height:f.height});
+  const eye=[shift(1.25,-2.2),shift(-1.25,-2.2),shift(0,at===0?2.6:-2.6)].find(q=>host.passageAt(q.east,q.north));
+  if(!eye)return false;
+  camera.position.set(eye.east,eye.height+1.67,-eye.north);camera.lookAt(f.east,f.height+(damaged?.06:.7),-f.north);torch.intensity=35;view=name;return true;
+ }
+ mainlineReview=undefined;
+ const wallOpen=name==='pocketopen'||name==='shortcutopen';
+ reviewTargets=host.thinWalls.sites.map(s=>({...s,surface:'rock' as const,hits:wallOpen?s.strikes:2,open:wallOpen}));
+ host.mounted.sync();
+ const ride=host.mounted.shaftRide;
+ const lift=host.interlayerLift;
+ if(name.startsWith('deep-')){
+  ride?.hide();if(!lift)return false;
+  domain=name==='deep-lower'?interlayerSite.lower.domainId:interlayerSite.upper.domainId;
+  host.mounted.sync();
+  if(name==='deep-bore'){
+   const receipt:R30InterlayerRide={id:1,linkId:'mine1-mine2-lift',riderId:'review-fixture',fromDomain:interlayerSite.upper.domainId,toDomain:interlayerSite.lower.domainId,departedAt:0,travelMs:25000};
+   const cue=lift.present(receipt,12500,true);if(!cue)return false;
+   camera.position.set(cue.eye.east,cue.eye.height,-cue.eye.north);
+   camera.lookAt(camera.position.clone().add(new Vector3(.2,-.5,-1)));
+   torch.intensity=15;
+  }else{
+   lift.present(undefined,0,false);
+   const lower=domain===interlayerSite.lower.domainId,a=lower?interlayerSite.approach.lower:interlayerSite.approach.upper,p=lower?interlayerSite.lower.foot:interlayerSite.upper.foot;
+   if(!(lower?host.deepHost.passageAt(domain,a.east,a.north):host.passageAt(a.east,a.north)))return false;
+   camera.position.set(a.east,a.height+1.67,-a.north);camera.lookAt(p.east,p.height+1.2,-p.north);torch.intensity=35;
+  }
+  view=name;return true;
+ }
+ lift?.present(undefined,0,false);domain=interlayerSite.upper.domainId;host.mounted.sync();
+ if(name.startsWith('lift-')){
+  if(!ride)return false;
+  const at=name==='lift-upper'?4000:name==='lift-mid'?12500:20500;
+  const cue=ride.sample({id:1,first:true,departedAt:0,travelMs:25000,direction:'down'},at);
+  if(!cue)return false;
+  camera.position.set(cue.eye.east,cue.eye.height,-cue.eye.north);
+  camera.lookAt(camera.position.clone().add(new Vector3(.2,-.55,-1)));
+  torch.intensity=5;view=name;return true;
+ }
+ ride?.hide();torch.intensity=35;
+ const v=eyes[name];if(!v)return false;const p=vec(v.eye);
+ const posture=name==='crouchinside'?'crouching':'standing';
+ if(!host.passageAt(p.x,-p.z,posture))return false;
+ camera.position.copy(p).add(new Vector3(0,posture==='crouching'?1:1.67,0));camera.lookAt(vec(v.look));view=name;return true;
+}
+function step(seconds:number){
+ if(!keys.has('w')||seconds<=0||seconds>2)return false;
+ camera.getWorldDirection(direction);direction.y=0;direction.normalize();
+ const distance=seconds*2.7,count=Math.ceil(distance/.05);
+ for(let i=0;i<count;i++){
+  const next=camera.position.clone().addScaledVector(direction,distance/count),p=host.passageAt(next.x,-next.z);
+  if(!p){rejected++;return false}
+  camera.position.set(next.x,p.floor+1.67,next.z);walked+=distance/count;
+ }return true;
+}
+addEventListener('keydown',e=>{if(e.key.toLowerCase()==='w'){keys.add('w');if(e.isTrusted)trustedW++;e.preventDefault()}});
+addEventListener('keyup',e=>keys.delete(e.key.toLowerCase()));
+if(!setView('entry'))throw Error('camp entry blocked');
+function frame(){host.mounted.sync();render.render(scene,camera);frames++;requestAnimationFrame(frame)}requestAnimationFrame(frame);
+Object.assign(window,{campR30:{setView,step,reset:()=>{frames=0;stamp=performance.now()},inspect:()=>({view,frames,walked,rejected,trustedW,calls:render.info.render.calls,tris:render.info.render.triangles,fps:frames*1000/Math.max(1,performance.now()-stamp),roofParts:camp.r30Roof.parts.length,props:camp.props.length,interlayerParts:host.interlayerLift?.parts,galleryParts:host.mounted.galleryArt?.parts.length,workbayParts:host.mounted.workbay?.parts,annexParts:host.mounted.supportAnnex?.parts.length,returnBayParts:host.returnBay.parts.length,mainlineLength:host.mainline?.kind==='ready'?host.mainline.route.length:0,mainlineParts:host.mainline?.kind==='ready'?host.mainline.scene.r30Dressing?.parts:0,retiredCarts:host.mounted.workbay?.cartCount,deepStatus:host.deepHost.status()})}});

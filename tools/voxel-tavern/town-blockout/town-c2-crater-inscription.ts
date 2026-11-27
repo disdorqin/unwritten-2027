@@ -253,7 +253,20 @@ export function buildTownC2CraterInscription(ground: Ground): CraterInscriptionS
   };
 
   // 2.4 m is the west-face width (north-south); 1.6 m runs into the slab from that face.
-  const stoneGeometry = weatherStone(new BoxGeometry(spec.eastWest, spec.height, spec.northSouth));
+  // Recessed chipped corners and broken upper arris, leaving the
+  // central west face at its exact original engraving plane.
+  const slab = new BoxGeometry(spec.eastWest,spec.height,spec.northSouth,8,4,12);
+  const vertices=slab.getAttribute('position');
+  for(let i=0;i<vertices.count;i++){
+    const x=vertices.getX(i),y=vertices.getY(i),z=vertices.getZ(i);
+    const edge=Math.max(0,(Math.abs(z)-.98)/.22);
+    const top=Math.max(0,(y-.10)/.15);
+    const corner=edge*Math.max(0,(Math.abs(x)-.58)/.22);
+    const chip=.04+.025*Math.sin(z*11+x*8);
+    vertices.setXYZ(i,x-Math.sign(x)*corner*.055,y-top*(corner*.075+edge*chip),z-Math.sign(z)*corner*.045);
+  }
+  slab.computeVertexNormals();
+  const stoneGeometry=weatherStone(slab);
   geometries.add(stoneGeometry);
   const stone = new Mesh(stoneGeometry, stoneMaterial);
   stone.name = 'town-c2-crater-inscription/stone';
@@ -287,6 +300,7 @@ export function buildTownC2CraterInscription(ground: Ground): CraterInscriptionS
   group.add(table);
   addMerged('town-c2-crater-inscription/table-stone', [
     weatherStone(box(spec.tableWidth, .12, spec.tableDepth, 0, .74, 0)),
+    weatherStone(box(1.16,.045,.71,0,.6575,0)),
   ], stoneMaterial, table);
   addMerged('town-c2-crater-inscription/table-timber', [
     box(.14, .68, .14, -.48, .34, -.27),
@@ -295,6 +309,12 @@ export function buildTownC2CraterInscription(ground: Ground): CraterInscriptionS
     box(.14, .68, .14, .48, .34, .27),
     box(1.02, .09, .09, 0, .22, -.27),
     box(1.02, .09, .09, 0, .22, .27),
+    // Mortised apron, short end rails and foot shoes, same timber batch.
+    box(1.08,.12,.105,0,.60,-.27),
+    box(1.08,.12,.105,0,.60,.27),
+    box(.10,.10,.54,-.48,.60,0),
+    box(.10,.10,.54,.48,.60,0),
+    ...[-.48,.48].flatMap(x=>[-.27,.27].map(z=>box(.19,.065,.19,x,.0325,z))),
   ], woodMaterial, table);
 
   const blankStele = new Mesh(weatherStone(new BoxGeometry(.12, .62, .42)), stoneMaterial);
