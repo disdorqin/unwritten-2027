@@ -184,7 +184,8 @@ import { createTownSnowField } from './town-snow-field';
 import { createPlazaInformationActivity } from './plaza-information-activity';
 import { createPlazaSnowSupply, type PlazaSnowSupplySite } from './plaza-snow-supply';
 import { advanceWeatherCover, townSnowWeatherForFrame } from './town-weather';
-import { createTownNightWeatherSky } from './town-night-weather-sky';
+import { createTownNightWeatherSky, type TownNightWeatherSkyFrame } from './town-night-weather-sky';
+import { createSouthSummitWeatherHost } from './town-night-a-summit-weather-host';
 import { townNightWeatherDayMs, townNightWeatherDefaultDawnEpoch } from '../../../src/shared/town-night-weather-cycle';
 import { createSledRide, createSledWallCollider } from './sled-ride';
 import { createTownSledVisuals } from './sled-visuals';
@@ -915,6 +916,7 @@ const timeOfDay = element<HTMLButtonElement>('lighting');
 let nightMode = true;
 let ceremonyDim = 1;
 const nightSky = createTownNightWeatherSky({scene,ambient,sun,fog:weatherFog});
+const summitNightSky = createSouthSummitWeatherHost(cloudRoute.scene);
 // Keep the last authoritative calendar origin through reconnects. No second
 // clock: all samples still come from the existing Presence server clock.
 let weatherDawnEpoch = presence.getTownWeatherDawnEpoch() ?? townNightWeatherDefaultDawnEpoch;
@@ -925,7 +927,15 @@ function updateNightSky() {
   const now = localLightingReview && reviewNight !== undefined
     ? weatherDawnEpoch + (reviewNight ? .78 : .30) * townNightWeatherDayMs
     : presence.serverNow();
-  return nightSky.update(now,weatherDawnEpoch,{dim:ceremonyDim});
+  return cloudRoute.active() ? summitNightSky.update(now,weatherDawnEpoch,ceremonyDim)
+    : nightSky.update(now,weatherDawnEpoch,{dim:ceremonyDim});
+}
+function applyNightSide(skyFrame:TownNightWeatherSkyFrame){
+  // Preserve the existing night-window authority for discrete gameplay.
+  const nightWindowState=presence.getTownNightWindow();
+  const clockNight=localLightingReview&&reviewNight!==undefined?skyFrame.nightSide
+    :nightWindowState?nightWindowState.phase!=='day':skyFrame.nightSide;
+  if(clockNight!==nightMode)setNight(clockNight);
 }
 function setNight(night: boolean) {
   nightMode = night;
@@ -3854,6 +3864,9 @@ renderer.setAnimationLoop(now => {
   const dt = Math.min(.25, frameSeconds);
   previous = now;
   cloudRoute.update({ east: x, north: n, height: ground }, !!productionRidge?.transportReady && !sledRide.active());
+  // The mountain branch returns before the ordinary town weather block.
+  // Apply the same authoritative cycle here, before its scene is rendered.
+  if(cloudRoute.active())applyNightSide(updateNightSky());
   southEntryHost.sync(cloudRoute.assembly(),nightMode);
   updateGuardPosts();
   if (cloudRoute.active()) {
@@ -4218,12 +4231,7 @@ renderer.setAnimationLoop(now => {
   festival.update(dt, { listener: camera.position, ceremonyElapsed, musicLevel: townBgm.setDuck(duckMusic ? .3 : 1) });
   const weatherStartedAt = profileTown ? performance.now() : 0;
   const skyFrame = updateNightSky();
-  // Preserve the existing night-window authority for discrete gameplay.
-  // Its ordinary cycle uses the same epoch and .6 boundary as the sky.
-  const nightWindowState = presence.getTownNightWindow();
-  const clockNight = localLightingReview && reviewNight !== undefined ? skyFrame.nightSide
-    : nightWindowState ? nightWindowState.phase !== 'day' : skyFrame.nightSide;
-  if(clockNight!==nightMode)setNight(clockNight);
+  applyNightSide(skyFrame);
   // Do not attenuate scripted ceremony lamp bands by the ordinary day cycle.
   townLights.setDusk(ordinaryBellHours && skyFrame.lampLevel>0);
   townLights.setNightLevel(ordinaryBellHours ? Math.round(skyFrame.lampLevel*255)/255 : 1);
