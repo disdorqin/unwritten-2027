@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import {mkdir,writeFile} from 'node:fs/promises';
+import {mkdir,writeFile,rm} from 'node:fs/promises';
 import {existsSync} from 'node:fs';
 import {createRequire} from 'node:module';
 import {execFileSync} from 'node:child_process';
@@ -29,5 +29,5 @@ try{
  }
  assert.equal(errors.length,0);assert.ok(views.every(v=>v.cutCount>0&&v.lowered>0));
 }catch(e){failure=e.stack??String(e);}
-finally{await browser?.close();await server?.close();await writeFile(path.join(out,'report.json'),JSON.stringify({scope:'isolated west geometry, not production route or real phone',sha:execFileSync('git',['rev-parse','HEAD'],{cwd:repo,encoding:'utf8'}).trim(),views,errors,failure,complete:!failure},null,2));}
+finally{await browser?.close();await server?.close();await rm(path.join(out,'.vite-cache'),{recursive:true,force:true});await writeFile(path.join(out,'report.json'),JSON.stringify({scope:'isolated west geometry, not production route or real phone',sha:execFileSync('git',['rev-parse','HEAD'],{cwd:repo,encoding:'utf8'}).trim(),views,errors,failure,complete:!failure},null,2));}
 if(failure)throw Error(failure);
