@@ -20,7 +20,7 @@ export function createCraterGroundCells(source:Mesh,cellSize=28){
   const g=new BufferGeometry();for(const [name,a] of Object.entries(original.attributes))g.setAttribute(name,a);
   g.setIndex(bin.indices);g.boundingBox=bin.bounds.clone();g.boundingSphere=bin.bounds.getBoundingSphere(new Sphere());
   const m=new Mesh(g,source.material);m.name='p2-ground-cell';m.visible=false;m.matrixAutoUpdate=false;m.receiveShadow=source.receiveShadow;m.renderOrder=source.renderOrder;
-  m.layers.mask=0;source.add(m);cells.push({mesh:m,bounds:bin.bounds,triangles:bin.indices.length/3});
+  m.layers.mask=0;m.raycast=()=>{};source.add(m);cells.push({mesh:m,bounds:bin.bounds,triangles:bin.indices.length/3});
  }
  function restore(){if(mask!==undefined){source.layers.mask=mask;mask=undefined;}for(const c of active){c.mesh.visible=false;c.mesh.layers.mask=0;}active=[];}
  function begin(camera:Camera){

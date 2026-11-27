@@ -1,9 +1,9 @@
 import {Box3,BufferAttribute,Camera,Color,Frustum,InstancedBufferAttribute,InstancedMesh,Material,Matrix4,MeshBasicMaterial,MeshLambertMaterial,MeshStandardMaterial,Object3D,Sphere,StaticDrawUsage,Vector3} from 'three';
 import {sphereBehindCraterWall} from './town-r30-crater-perf-occlusion';
 type Ring=Parameters<typeof sphereBehindCraterWall>[0];
-type Chunk={mesh:InstancedMesh;box:Box3;count:number};
+type Chunk={mesh:InstancedMesh;box:Box3;count:number;worldBox?:Box3;worldSphere?:Sphere};
 type Snapshot={mesh:InstancedMesh;matrixVersion:number;colorVersion:number;count:number;geometry:InstancedMesh['geometry'];material:InstancedMesh['material'];matrixAttribute:InstancedMesh['instanceMatrix'];colorAttribute:InstancedMesh['instanceColor'];position:ReturnType<InstancedMesh['geometry']['getAttribute']>;positionVersion:number;index:InstancedMesh['geometry']['index'];indexVersion:number};
-type Source=Snapshot&{chunks:Chunk[]};
+type Source=Snapshot&{chunks:Chunk[];world?:Matrix4};
 type Build={snap:Snapshot;bins:Map<string,number[]>;cursor:number;entries?:number[][];part:number;chunks:Chunk[];current?:{mesh:InstancedMesh;box:Box3;cursor:number;indices:number[]}};
 const attrVersion=(a:ReturnType<InstancedMesh['geometry']['getAttribute']>)=>a instanceof BufferAttribute?a.version:a.data.version;
 const ordinary=(m:Material)=> (m instanceof MeshStandardMaterial||m instanceof MeshLambertMaterial||m instanceof MeshBasicMaterial)&&!m.transparent&&!m.wireframe&&m.depthTest&&m.depthWrite&&!(m as MeshStandardMaterial).displacementMap&&m.onBeforeCompile===Material.prototype.onBeforeCompile;
@@ -26,13 +26,14 @@ function unchanged(s:Snapshot){
  * on its original render path. Non-rendered proxies have layer zero. */
 export function createCraterInstanceCells(cellSize=32,maxExtraDraws=36){
  if(!Number.isFinite(cellSize)||cellSize<=0||!Number.isInteger(maxExtraDraws)||maxExtraDraws<0)throw Error('Invalid instance cell budget');
+ const allowedRoots=new Set<Object3D>();
  const sources:Source[]=[],seen=new Set<InstancedMesh>(),queue:InstancedMesh[]=[],masked:{object:InstancedMesh;mask:number}[]=[],active:InstancedMesh[]=[];
  const frustum=new Frustum(),vp=new Matrix4(),matrix=new Matrix4(),sphere=new Sphere(),box=new Box3(),eye=new Vector3(),center=new Vector3(),tint=new Color();
  let job:Build|undefined;
  let last={sources:0,submitted:0,savedInstances:0,extraDraws:0};
  function restore(){for(const m of masked)m.object.layers.mask=m.mask;masked.length=0;for(const m of active){m.visible=false;m.layers.mask=0;}active.length=0;}
  function enqueue(roots:readonly Object3D[]){
-  for(const root of roots)root.traverse(o=>{if(eligible(o)&&!seen.has(o)&&!o.userData.p2InstanceCell){seen.add(o);queue.push(o);}});
+  for(const root of roots){allowedRoots.add(root);root.traverse(o=>{if(eligible(o)&&!seen.has(o)&&!o.userData.p2InstanceCell){seen.add(o);queue.push(o);}});}
  }
  function discard(){
   if(!job)return;for(const c of job.chunks)c.mesh.dispose();job.current?.mesh.dispose();job=undefined;
@@ -63,7 +64,7 @@ export function createCraterInstanceCells(cellSize=32,maxExtraDraws=36){
   }
   if(!j.current){
    const indices=j.entries[j.part],mesh=new InstancedMesh(g,source.material,indices.length);
-   mesh.name='p2-instance-cell';mesh.userData.p2InstanceCell=true;mesh.layers.mask=0;mesh.receiveShadow=source.receiveShadow;mesh.renderOrder=source.renderOrder;mesh.matrixAutoUpdate=false;mesh.visible=false;
+   mesh.name='p2-instance-cell';mesh.userData.p2InstanceCell=true;mesh.layers.mask=0;mesh.receiveShadow=source.receiveShadow;mesh.renderOrder=source.renderOrder;mesh.matrixAutoUpdate=false;mesh.visible=false;mesh.raycast=()=>{};
    j.current={mesh,box:new Box3(),cursor:0,indices};
   }
   const c=j.current,i=c.cursor++;
@@ -93,15 +94,19 @@ export function createCraterInstanceCells(cellSize=32,maxExtraDraws=36){
   const choices:{s:Source;cells:Chunk[];saved:number;tris:number}[]=[];
   for(const s of sources){
    const m=s.mesh;if(!m.parent||!m.visible||!camera.layers.test(m.layers)||!unchanged(s))continue;
-   let ancestor:Object3D|null=m.parent;while(ancestor&&ancestor.visible)ancestor=ancestor.parent;if(ancestor)continue;
+   let ancestor:Object3D|null=m,approved=false;while(ancestor&&ancestor.visible){if(allowedRoots.has(ancestor))approved=true;ancestor=ancestor.parent;}if(ancestor||!approved)continue;
    if(!m.boundingSphere)m.computeBoundingSphere();
    if(m.boundingSphere&&!frustum.intersectsSphere(sphere.copy(m.boundingSphere).applyMatrix4(m.matrixWorld)))continue;
+   if(!s.world||!s.world.equals(m.matrixWorld)){
+    (s.world??=new Matrix4()).copy(m.matrixWorld);
+    for(const c of s.chunks){(c.worldBox??=new Box3()).copy(c.box).applyMatrix4(m.matrixWorld);c.worldBox.getBoundingSphere(c.worldSphere??=new Sphere());}
+   }
    const cells:Chunk[]=[];let n=0;
-   for(const c of s.chunks){box.copy(c.box).applyMatrix4(m.matrixWorld);if(!frustum.intersectsBox(box))continue;
-    if(ring&&sphereBehindCraterWall(ring,eye,box.getBoundingSphere(sphere)))continue;cells.push(c);n+=c.count;}
+   for(const c of s.chunks){if(!frustum.intersectsBox(c.worldBox!))continue;
+    if(ring&&sphereBehindCraterWall(ring,eye,c.worldSphere!))continue;cells.push(c);n+=c.count;}
    const saved=s.count-n,triangles=(m.geometry.index?.count??m.geometry.getAttribute('position').count)/3;
    const extra=Math.max(0,cells.length-1),savedTris=saved*triangles;
-   if(saved>0&&(extra===0||(saved>=s.count*.30&&savedTris>=extra*2500)))choices.push({s,cells,saved,tris:savedTris});
+   if(saved>0&&((extra===0&&(cells.length===0||savedTris>=2000))||(extra>0&&saved>=s.count*.30&&savedTris>=extra*2500)))choices.push({s,cells,saved,tris:savedTris});
   }
   choices.sort((a,b)=>b.tris-a.tris);
   for(const {s,cells,saved} of choices){
@@ -112,6 +117,14 @@ export function createCraterInstanceCells(cellSize=32,maxExtraDraws=36){
   }
   return last;
  }
- function dispose(){restore();discard();queue.length=0;for(const s of sources)for(const c of s.chunks){c.mesh.removeFromParent();c.mesh.dispose();}sources.length=0;seen.clear();}
- return {register,enqueue,warmStep,begin,restore,dispose,get sourceCount(){return sources.length;},get pendingSources(){return queue.length+Number(!!job);},get stats(){return last;}};
+ function dispose(){restore();discard();queue.length=0;for(const s of sources)for(const c of s.chunks){c.mesh.removeFromParent();c.mesh.dispose();}sources.length=0;seen.clear();allowedRoots.clear();}
+ function replaceRoots(roots:readonly Object3D[]){
+  restore();allowedRoots.clear();for(const r of roots)allowedRoots.add(r);
+  const approved=(o:Object3D)=>{let p:Object3D|null=o;while(p){if(allowedRoots.has(p))return true;p=p.parent;}return false;};
+  for(let i=sources.length-1;i>=0;i--){const s=sources[i];if(approved(s.mesh))continue;for(const c of s.chunks){c.mesh.removeFromParent();c.mesh.dispose();}seen.delete(s.mesh);sources.splice(i,1);}
+  for(let i=queue.length-1;i>=0;i--)if(!approved(queue[i])){seen.delete(queue[i]);queue.splice(i,1);}
+  if(job&&!approved(job.snap.mesh)){seen.delete(job.snap.mesh);discard();}
+  enqueue(roots);
+ }
+ return {register,enqueue,warmStep,begin,restore,dispose,replaceRoots,get sourceCount(){return sources.length;},get pendingSources(){return queue.length+Number(!!job);},get stats(){return last;}};
 }
