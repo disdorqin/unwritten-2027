@@ -71,6 +71,25 @@ test('D2-R02 cable towers honor custom rope and terrain without touching cabins'
   assert.ok(summitCableSpec.speedMetresPerSecond === 8);
 });
 
+test('D2-R3 tower masts block the player while open ground stays passable', context => {
+  const towers = cleanup(context, createTownD2R30CableTowers());
+  const mast = towers.group.children.find(child => child instanceof InstancedMesh && child.name.endsWith('-mast')) as InstancedMesh;
+  assert.ok(mast);
+  const matrix = new Matrix4(), position = new Vector3(), quaternion = new Quaternion(), scale = new Vector3();
+  mast.getMatrixAt(0, matrix);
+  matrix.decompose(position, quaternion, scale);
+  const east = position.x, north = -position.z;
+  const ground = sampleTownD2R30Height(east, north)!;
+  assert.equal(towers.blocked(east, north, ground), true, 'player walks through the mast');
+  assert.equal(towers.blocked(east + 2, north, ground), false, 'open ground falsely blocked');
+  // Above the mast top and below the ground the mast is not an obstacle.
+  assert.equal(towers.blocked(east, north, ground + scale.y + 5), false);
+  assert.throws(() => towers.blocked(NaN, north, ground), RangeError);
+  towers.dispose();
+  assert.throws(() => towers.blocked(east, north, ground), Error);
+  assert.equal(towers.group.userData.includesWorldCollision, true);
+});
+
 test('D2-R02 cable towers validate inputs and dispose GPU resources exactly once', context => {
   const parent = new Group();
   const towers = createTownD2R30CableTowers({ spacing: 80 });

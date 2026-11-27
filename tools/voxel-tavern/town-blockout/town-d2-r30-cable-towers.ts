@@ -145,14 +145,31 @@ export function createTownD2R30CableTowers(options: TownD2R30CableTowersOptions 
     skipNearStation: skipped,
   });
   group.userData = {
-    owner: 'D2-R02', visualOnly: true, includesWorldCollision: false,
+    owner: 'D2-R02', visualOnly: false, includesWorldCollision: true,
     modifiesHeightAt: false, modifiesCable: false, stats,
     coordinateConvention: 'x=east,y=height,z=-north',
   };
 
+  // The mast is a real solid cylinder of radius .62 (the unit mast is scaled
+  // from .28 top to .62 base). Reject a player capsule whose horizontal
+  // distance to any mast is smaller than its body radius plus the mast
+  // radius, at any standing height along the mast. No geometry is changed:
+  // B owns the tower bodies, D2 only exposes their collision so the shared
+  // production host can stop a player walking through them.
+  const MAST_RADIUS = .62;
   let disposed = false;
+  const blocked = (east: number, north: number, feet: number, radius = .27, bodyHeight = 1.8) => {
+    if (disposed) throw new Error('The D2-R02 cable towers are disposed.');
+    if (![east, north, feet, radius, bodyHeight].every(Number.isFinite) || radius < 0 || bodyHeight < 0) {
+      throw new RangeError('D2-R02 tower collision inputs must be finite.');
+    }
+    return towers.some(tower =>
+      feet + bodyHeight > tower.ground && feet < tower.ground + tower.height &&
+      Math.hypot(east - tower.east, north - tower.north) < MAST_RADIUS + radius);
+  };
   return {
     group,
+    blocked,
     stats: () => stats,
     setNight(value: boolean) {
       if (disposed) throw new Error('The D2-R02 cable towers are disposed.');

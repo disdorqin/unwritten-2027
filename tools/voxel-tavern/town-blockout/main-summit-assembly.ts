@@ -270,6 +270,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number,
         const slope = r30.collision.slopeAt(east, north);
         if (slope !== undefined && slope > (r30.northWall?.maxFootSlope ?? 55 * Math.PI / 180)) return true;
         if (r30.northWall?.blocked(east, north, feet, radius, bodyHeight)) return true;
+        if (r30.cableTowers?.blocked(east, north, feet, radius, bodyHeight)) return true;
       }
       const position = front ? summitWorldPoint(east, north, feet) : { east, north, height: feet };
       const boxes = front ? cloudRegistration.colliders : cabin.colliders;

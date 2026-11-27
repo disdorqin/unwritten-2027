@@ -62,6 +62,8 @@ export type TownD2R30Assembly = Readonly<{
   ropeway: ReturnType<typeof createTownD2R30Ropeway> | undefined;
   /** North-wall climb + landmark bodies, exposed so the production host can block them. */
   northWall: ReturnType<typeof createTownD2R30NorthWall> | undefined;
+  /** Cable tower masts, exposed so the production host can block solid masts. */
+  cableTowers: ReturnType<typeof createTownD2R30CableTowers> | undefined;
   /** Advance streaming LOD around a LOCAL observer point; no-op in static mode. */
   update(east: number, north: number, nowMs?: number): void;
   setNight(value: boolean): void;
@@ -134,6 +136,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   let updateRopeway: ((nowMs: number) => void) | undefined;
   let ropeway: ReturnType<typeof createTownD2R30Ropeway> | undefined;
   let northWall: ReturnType<typeof createTownD2R30NorthWall> | undefined;
+  let cableTowers: ReturnType<typeof createTownD2R30CableTowers> | undefined;
   if (terrainMode === 'static') {
     const massif = createTownD2R30Massif({ arrivalHeight });
     terrainStats = () => massif.stats();
@@ -184,6 +187,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
 
   if (includeCableTowers) {
     const towers = createTownD2R30CableTowers({ heightAt, arrivalHeight });
+    cableTowers = towers;
     children.push(towers.group);
     disposers.push(() => towers.dispose());
     nightHooks.push(value => towers.setNight(value));
@@ -295,6 +299,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
     collision,
     ropeway,
     northWall,
+    cableTowers,
     update(east: number, north: number, nowMs?: number) {
       if (disposed) return;
       if (!Number.isFinite(east) || !Number.isFinite(north)) {

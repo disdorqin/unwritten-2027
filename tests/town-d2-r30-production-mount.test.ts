@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test, { type TestContext } from 'node:test';
-import { Group, type Object3D } from 'three';
+import { Group, InstancedMesh, Matrix4, Vector3, type Object3D } from 'three';
 import { mountMainSummitAssembly } from '../tools/voxel-tavern/town-blockout/main-summit-assembly';
 import { mountMainSummitExtras } from '../tools/voxel-tavern/town-blockout/main-summit-extras';
 import { createMainSummitTrail } from '../tools/voxel-tavern/town-blockout/main-summit-trail';
@@ -122,6 +122,19 @@ test('D2-R3 production mount blocks R30 landmark bodies and terrain slopes for t
     'player can walk through the summit monument in the real mount');
   const open = sampleTownD2R30Height(0, 1000)!;
   assert.equal(assembly.blocked(0, 1000, open, .27, 1.7), false, 'open summit falsely blocked');
+  // Cable tower masts are solid in the real mount too (B supplies the tower
+  // bodies, D2 supplies the collision exposure).
+  assert.ok(assembly.r30.cableTowers, 'production host lost the tower collision set');
+  const towerGroup = assembly.r30.cableTowers.group;
+  const mastBatch = towerGroup.children.find(child => child instanceof InstancedMesh && child.name.endsWith('-mast')) as InstancedMesh | undefined;
+  assert.ok(mastBatch, 'production host lost the mast instance batch');
+  const matrix = new Matrix4(), position = new Vector3();
+  mastBatch.getMatrixAt(0, matrix);
+  position.setFromMatrixPosition(matrix);
+  const towerEast = position.x, towerNorth = -position.z;
+  const towerGround = sampleTownD2R30Height(towerEast, towerNorth)!;
+  assert.equal(assembly.blocked(towerEast, towerNorth, towerGround, .27, 1.8), true,
+    'player can walk through a cable tower mast in the real mount');
   // A point outside the R30 collision domain stays on the P-1 contract.
   assert.equal(assembly.trailSurfaceAt(-760, 520), undefined);
 });
