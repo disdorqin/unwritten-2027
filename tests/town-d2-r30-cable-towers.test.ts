@@ -28,8 +28,10 @@ test('D2-R02 cable towers densely support the canonical 1920 m line on R30 terra
   // D2-R10: the towers ship as three instanced batches, so the whole 1,920 m
   // line costs three draw calls instead of one mesh per tower part.
   const batches = towers.group.children.filter(child => child instanceof InstancedMesh);
-  assert.equal(batches.length, 3, 'mast, crossbar and brace batches');
-  assert.equal(stats.drawCalls, 3, JSON.stringify(stats));
+  assert.equal(batches.length, 5, 'mast, crossbar, brace, stone footing and snow cap batches');
+  assert.equal(stats.drawCalls, 5, JSON.stringify(stats));
+  assert.equal(stats.foundations,stats.towers);assert.ok(stats.westTowers>0);
+  for(const foot of towers.footprints){for(const x of [-1.2,-.6,0,.6,1.2])for(const z of [-1.2,-.6,0,.6,1.2]){const h=sampleTownD2R30Height(foot.east+x,foot.north+z)!;assert.ok(h>foot.bottom&&h<foot.top);}assert.ok(towers.blocked(foot.east,foot.north,foot.top-.1));}
   const mast = batches.find(batch => batch.name.endsWith('-mast'))!;
   const crossbar = batches.find(batch => batch.name.endsWith('-crossbar'))!;
   assert.ok(mast && crossbar);

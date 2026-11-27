@@ -1,6 +1,6 @@
 import {
   BoxGeometry, BufferGeometry, CylinderGeometry, Group, InstancedMesh, Matrix4, MeshLambertMaterial,
-  StaticDrawUsage,
+  StaticDrawUsage, Vector3,
 } from 'three';
 import { createMainSummitCable } from './main-summit-cable';
 import { sampleTownD2R30Height } from './town-d2-r30-domain';
@@ -36,6 +36,8 @@ export type TownD2R30CableTowersStats = Readonly<{
   drawCalls: number;
   triangles: number;
   skipNearStation: number;
+  westTowers: number;
+  foundations: number;
 }>;
 
 const DEFAULTS = Object.freeze({ spacing: 60, skipNearStation: 45, towerTop: .35, ropeHalfSpan: 3 });
@@ -58,30 +60,39 @@ export function createTownD2R30CableTowers(options: TownD2R30CableTowersOptions 
   const geometries = new Set<BufferGeometry>();
   const materials = new Set<MeshLambertMaterial>();
   const iron = new MeshLambertMaterial({ color: '#5a6268' });
+  const stone=new MeshLambertMaterial({color:'#7b858b'}),snow=new MeshLambertMaterial({color:'#d9e5e8'});materials.add(stone);materials.add(snow);
   iron.name = 'town-d2-r30-cable-tower-iron';
   materials.add(iron);
 
   // Unit-height shapes carry the per-tower scale in the instance matrix, so
   // one geometry serves every tower while the silhouette stays identical.
   const mastShape = new CylinderGeometry(.28, .62, 1, 6);
-  const barShape = new BoxGeometry(DEFAULTS.ropeHalfSpan * 2 + 1.5, .3, .35);
+  const barShape = new BoxGeometry(1,.3,.35);
+  const footingShape=new BoxGeometry(1,1,1),capShape=new BoxGeometry(1,1,1);geometries.add(footingShape);geometries.add(capShape);
   const braceShape = new BoxGeometry(.18, 1, .18);
   geometries.add(mastShape);
   geometries.add(barShape);
   geometries.add(braceShape);
 
-  const rope = cable.ropes[0];
+  const rope = cable.ropes[0],other=cable.ropes[1];
+  // Use corresponding segment fraction, not a length ratio, so the beam
+  // spans the actual pair at bends as well as on straight sections.
+  const cumulative=[0];for(let i=1;i<rope.points.length;i++){const a=rope.points[i-1]!,b=rope.points[i]!;cumulative.push(cumulative.at(-1)!+Math.hypot(b.east-a.east,b.north-a.north,b.height-a.height));}
+  function pairAt(distance:number){let i=1;while(i<cumulative.length-1&&distance>cumulative[i]!)i++;const t=(distance-cumulative[i-1]!)/(cumulative[i]!-cumulative[i-1]!);const a=rope.sample(distance),u=other.points[i-1]!,v=other.points[i]!;const b={east:u.east+(v.east-u.east)*t,north:u.north+(v.north-u.north)*t,height:u.height+(v.height-u.height)*t};return {east:(a.east+b.east)/2,north:(a.north+b.north)/2,height:(a.height+b.height)/2,heading:Math.atan2(b.north-a.north,b.east-a.east),width:Math.hypot(b.east-a.east,b.north-a.north)+1.5,ropeA:a,ropeB:b};}
   const ropeLength = rope.totalMetres;
-  const towers: Array<{ east: number; north: number; heading: number; ground: number; ropeHeight: number; height: number }> = [];
+  const towers: Array<{ east: number; north: number; heading: number; ground: number; ropeHeight: number; height: number; width:number;footBottom:number;footTop:number;west:boolean }> = [];
   let maxHeight = 0, minClearance = Infinity, skipped = 0;
   for (let distance = DEFAULTS.skipNearStation; distance < ropeLength - DEFAULTS.skipNearStation; distance += spacing) {
-    const at = rope.sample(distance);
+    const at = pairAt(distance);
     const ground = groundAt(at.east, at.north);
     if (ground === undefined) { skipped++; continue; }
-    const ropeHeight = at.height - DEFAULTS.towerTop;
+    const ropeHeight = at.height + DEFAULTS.towerTop;
+    const heights=[-1.2,-.6,0,.6,1.2].flatMap(x=>[-1.2,-.6,0,.6,1.2].map(z=>groundAt(at.east+x,at.north+z)));
+    if(!heights.every((h):h is number=>h!==undefined)){skipped++;continue;}
+    const footBottom=Math.min(...heights)-.4,footTop=Math.max(...heights)+.25;
     const height = ropeHeight - ground;
-    if (height <= 1) { skipped++; continue; }
-    towers.push({ east: at.east, north: at.north, heading: at.heading, ground, ropeHeight, height });
+    if (height <= 1 || footTop>=at.height-1) { skipped++; continue; }
+    towers.push({ east: at.east, north: at.north, heading: at.heading, ground, ropeHeight, height,width:at.width,footBottom,footTop,west:at.east< -300&&at.north>=480 });
     maxHeight = Math.max(maxHeight, height);
     minClearance = Math.min(minClearance, height);
   }
@@ -95,10 +106,10 @@ export function createTownD2R30CableTowers(options: TownD2R30CableTowersOptions 
   const addBatch = (
     name: string, shape: BufferGeometry,
     list: ReadonlyArray<(typeof towers)[number]>,
-    build: (tower: (typeof towers)[number], matrix: Matrix4) => void,
+    build: (tower: (typeof towers)[number], matrix: Matrix4) => void, material=iron,
   ) => {
     if (!list.length) return;
-    const mesh = new InstancedMesh(shape, iron, list.length);
+    const mesh = new InstancedMesh(shape, material, list.length);
     mesh.name = `town-d2-r30-cable-tower-${name}`;
     mesh.instanceMatrix.setUsage(StaticDrawUsage);
     const matrix = new Matrix4();
@@ -122,8 +133,9 @@ export function createTownD2R30CableTowers(options: TownD2R30CableTowersOptions 
   addBatch('crossbar', barShape, towers, (tower, matrix) => {
     towerPlacement.makeTranslation(tower.east, 0, -tower.north);
     matrix.copy(towerPlacement)
-      .multiply(new Matrix4().makeTranslation(0, tower.ropeHeight + .25, 0))
-      .multiply(new Matrix4().makeRotationY(-tower.heading));
+      .multiply(new Matrix4().makeTranslation(0, tower.ropeHeight, 0))
+      .multiply(new Matrix4().makeRotationY(tower.heading))
+      .multiply(new Matrix4().makeScale(tower.width,1,1));
   });
   addBatch('brace', braceShape, braces, (tower, matrix) => {
     towerPlacement.makeTranslation(tower.east, 0, -tower.north);
@@ -133,7 +145,11 @@ export function createTownD2R30CableTowers(options: TownD2R30CableTowersOptions 
       .multiply(new Matrix4().makeScale(1, tower.height * .45, 1));
   });
 
-  const triangles = towers.length * (mastTriangles + barTriangles) + braces.length * braceTriangles;
+  // Stone pier reaches below the lowest surveyed footprint; the upper
+  // course embeds the original mast instead of suspending it on a slope.
+  addBatch('footing',footingShape,towers,(t,m)=>m.makeTranslation(t.east,(t.footBottom+t.footTop)/2,-t.north).multiply(new Matrix4().makeScale(2.4,t.footTop-t.footBottom,2.4)),stone);
+  addBatch('snow-cap',capShape,towers,(t,m)=>m.makeTranslation(t.east,t.footTop+.045,-t.north).multiply(new Matrix4().makeScale(2.48,.09,2.48)),snow);
+  const triangles = towers.length * (mastTriangles + barTriangles+24) + braces.length * braceTriangles;
   const stats: TownD2R30CableTowersStats = Object.freeze({
     towers: towers.length,
     spacing,
@@ -143,6 +159,7 @@ export function createTownD2R30CableTowers(options: TownD2R30CableTowersOptions 
     drawCalls: batches.length,
     triangles,
     skipNearStation: skipped,
+    westTowers:towers.filter(t=>t.west).length,foundations:towers.length,
   });
   group.userData = {
     owner: 'D2-R02', visualOnly: true, includesWorldCollision: false,
@@ -154,15 +171,18 @@ export function createTownD2R30CableTowers(options: TownD2R30CableTowersOptions 
   return {
     group,
     stats: () => stats,
+    footprints:towers.map(t=>Object.freeze({east:t.east,north:t.north,bottom:t.footBottom,top:t.footTop+.09,halfWidth:1.24,mastTop:t.ropeHeight})),
+    blocked(e:number,n:number,h:number,r=.27){return towers.some(t=>h+1.8>t.footBottom&&h<t.footTop+.09&&Math.hypot(Math.max(0,Math.abs(e-t.east)-1.24),Math.max(0,Math.abs(n-t.north)-1.24))<r||h+1.8>t.ground&&h<t.ropeHeight&&Math.hypot(e-t.east,n-t.north)<.62+r);},
     setNight(value: boolean) {
       if (disposed) throw new Error('The D2-R02 cable towers are disposed.');
       if (typeof value !== 'boolean') throw new TypeError('setNight expects a boolean.');
-      iron.color.set(value ? '#414951' : '#5a6268');
+      iron.color.set(value ? '#414951' : '#5a6268');stone.color.set(value?'#53616c':'#7b858b');snow.color.set(value?'#93a9bd':'#d9e5e8');
     },
     dispose() {
       if (disposed) return;
       disposed = true;
       group.removeFromParent();
+      for(const b of batches)b.dispose();
       for (const geometry of geometries) geometry.dispose();
       for (const material of materials) material.dispose();
       group.clear();
