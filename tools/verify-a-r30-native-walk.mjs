@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','west-mountain','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','west-mountain','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review','night-r3-entry'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -348,7 +348,31 @@ const approach={
 try{
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:graphicsArgs});
  const {page,evidence,westWindow}=await openTown(segment);
- if(mobileReview){
+ if(segment==='night-r3-entry'){
+  const state=()=>page.evaluate(()=>window.__za22Frame);
+  await page.waitForFunction(()=>window.__za22Frame?.ridge?.roads===4,null,{timeout:15000});
+  const initial=await state();assert.equal(initial.ridge.transportReady,false);assert.equal(initial.ridge.cloudSeam.physicalReady,true);
+  assert.equal(initial.ridge.cloudSeam.domainReady,false);
+  const snapshots=[];
+  const take=async(label)=>{const f=await state();assert.equal(f.ridge.roads,4);assert.ok(f.calls>0&&f.triangles>0);snapshots.push({label,foot:f.ridge.foot,calls:f.calls,triangles:f.triangles,ridge:f.ridge});await picture(page,evidence,label);};
+  await take('normal-entry');
+  await page.locator('#town-panel-toggle').click();
+  await page.locator('#jump').selectOption({label:'山口站'});
+  if(await page.locator('#town-settings').evaluate(d=>d.open))await page.locator('#town-settings-close').click();
+  await page.waitForFunction(()=>{const f=window.__za22Frame?.ridge?.foot;return f&&Math.hypot(f[0]-296,f[1]-520)<1.2;},null,{timeout:20000});
+  await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-296,p.north-520)<1.2);
+  await face(page,evidence,0);
+  await take('mountain-foot-north');
+  await page.locator('#town-panel-toggle').click();await page.locator('#lighting').click();await page.locator('#town-settings-close').click();
+  await take('mountain-foot-other-light');
+  // The existing actual station approach is safe and near, not a claim
+  // of the full 1268m road. Use ordinary keys and real wire poses.
+  await walkTo(page,evidence,[296,516],'station-out',.35);
+  await walkTo(page,evidence,[296,520],'station-return',.35);
+  const returned=await readPose(page);await take('mountain-foot-return');
+  report.entry={scope:'normal root, actual four-road geometry and closed transport; menu station arrival then native 4m out/back',snapshots};
+  report.traversal={top:returned,returned};
+ }else if(mobileReview){
   const cdp=await page.context().newCDPSession(page),touch=async(type,points)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:points});
   assert.equal(await page.evaluate(()=>matchMedia('(pointer: coarse)').matches),true);
   await page.locator('#touch-walk').waitFor({state:'visible',timeout:12000});
