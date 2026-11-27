@@ -24,6 +24,14 @@ export function mountSouthEntry(heightAt:SouthGround){
    const n=-9.55+j+.24*(row%2);
    box(row%3===0?ash:stone,side*3.53,n,.55+row*.42,.09,.94,.39);
   }
+  // Front/rear masonry faces with staggered visible mortar. Stay entirely
+  // outside the original ±2m aperture.
+  for(const n of [-10.055,.055])for(let row=0;row<10;row++){
+   for(let col=0;col<3;col++){
+    const e=side*(2.26+col*.46+(row%2?.045:0));
+    box(row%4===0?ash:stone,e,n,.47+row*.44,.435,.115,.405,true);
+   }
+  }
   for(const n of [-9.92,-.08]){
    box(wood,side*3.20,n,.5,.46,.22,4.5);
    box(bronze,side*3.20,n,2.0,.52,.28,.12);
@@ -48,6 +56,17 @@ export function mountSouthEntry(heightAt:SouthGround){
   box(wood,0,n,5.52,4.65,.30,.58);
   box(bronze,0,n,5.65,2.3,.32,.27);
  }
+ // Timber gable bracing and snow-shedding fascia on both ends of the
+ // original stone tunnel. The diagonal members are above the lintel.
+ for(const n of [-10.34,.34]){
+  for(const s of [-1,1]){
+   const len=Math.hypot(3.9,1.42);
+   add(wood,new BoxGeometry(len,.19,.19).rotateZ(-s*Math.atan2(1.42,3.9)).translate(s*1.95,floor+7.03,-n));
+   add(warm,new BoxGeometry(.20,1.15,.18).translate(s*1.2,floor+6.85,-n));
+  }
+  box(wood,0,n,6.36,8.1,.22,.20);
+  box(warm,0,n,6.63,.23,.22,1.22);
+ }
  // Preserve existing guardroom doorway at E4.5, N7 and station on west.
  // Exterior timber uprights and eave brackets only, no second shell.
  for(const n of [2.7,5.2,8.8,11.3]){
@@ -57,6 +76,15 @@ export function mountSouthEntry(heightAt:SouthGround){
  for(const n of [2.25,11.75])for(const e of [5.0,8.0,11.5]){
   box(wood,e,n,.1,.23,.16,2.50);
  }
+ // Furniture on the guardroom's rear/east walls. Existing registration
+ // desk and the E4.5/N7 entrance remain clear. All reachable solid parts
+ // are added to the same host collider list.
+ for(const n of [8.95,10.65])for(const e of [11.12,11.68])box(wood,e,n,.04,.13,.14,2.02,true);
+ for(const y of [.18,.83,1.45])box(warm,11.4,9.8,y,.72,1.96,.13,true);
+ for(let i=0;i<4;i++)box(i%2?ash:warm,11.42,9.06+i*.46,.98,.36,.35,.36,true);
+ for(const e of [7.25,8.75])box(stone,e,10.68,0,.24,.45,.40,true);
+ box(warm,8,10.68,.40,2.1,.56,.14,true);
+ box(wood,8,10.93,.54,2.1,.12,.47,true);
  // 60x40 arrival plaza remains the true ground. Low stone strips and
  // benches sit outside the central trail/door/boarding reservations.
  for(const side of [-1,1]){

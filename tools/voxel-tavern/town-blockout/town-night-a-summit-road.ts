@@ -30,6 +30,7 @@ export function mountSouthTrailWorks(points:readonly P[],groundAt:SouthGround){
  const chunks=new Map<string,{p:number[];c:number[]}>();
  const gravel=new Color('#a49b89'),packed=new Color('#c3bbb0'),edge=new Color('#889191');
  const links:{from:number;to:number;metres:number}[]=[];let length=0,posts=0,bridged=0;
+ const markers:{east:number;north:number;height:number}[]=[];
  const tri=(bin:{p:number[];c:number[]},verts:number[][],colors:Color[])=>{for(let i=0;i<3;i++){bin.p.push(...verts[i]!);const c=colors[i]!;bin.c.push(c.r,c.g,c.b);}};
  const vertex=(s:Section,t:number,y:number)=>[s.p.east+s.ex*t,y,-s.p.north-s.nn*t];
  const box=(m:Material,e:number,n:number,y:number,w:number,h:number,d:number,yaw=0)=>add(m,new BoxGeometry(w,h,d).rotateY(yaw).translate(e,y,-n));
@@ -59,7 +60,7 @@ export function mountSouthTrailWorks(points:readonly P[],groundAt:SouthGround){
    // centreline; choose only an actual ground shoulder below the tread.
    const side=1,t=2.4,e=a.p.east+a.ex*t,n=a.p.north+a.nn*t,h=a.right;
    if(Math.abs(a.p.height-h)<1.4){
-    box(wallMat,e,n,h+.35,.40,.9,.40);box(wood,e,n,h+.98,.14,.48,.14);box(snow,e,n,h+1.23,.24,.09,.24);posts++;
+    box(wallMat,e,n,h+.35,.40,.9,.40);box(wood,e,n,h+.98,.14,.48,.14);box(snow,e,n,h+1.23,.24,.09,.24);markers.push({east:e,north:n,height:h});posts++;
    }
   }
   length+=span;links.push({from:a.index,to:b.index,metres:span});
@@ -71,6 +72,6 @@ export function mountSouthTrailWorks(points:readonly P[],groundAt:SouthGround){
  mountAR30StaticBatches(root,batches,'south-trail-marker');
  const runs:{first:number;last:number;metres:number}[]=[];
  for(const l of links){const tail=runs.at(-1);if(tail&&tail.last===l.from){tail.last=l.to;tail.metres+=l.metres;}else runs.push({first:l.from,last:l.to,metres:l.metres});}
- return {group:root,runs,sections,stats:{total,length,unbuilt:total-length,minGap,maxGap,posts,bridged,runs:runs.length},
+ return {group:root,runs,sections,markers,blocked(e:number,n:number,h:number,r=.27,body=1.8){return markers.some(m=>h+body-.025>m.height-.1&&h+.025<m.height+1.28&&Math.hypot(Math.max(0,Math.abs(m.east-e)-.2),Math.max(0,Math.abs(m.north-n)-.2))<r);},stats:{total,length,unbuilt:total-length,minGap,maxGap,posts,bridged,runs:runs.length},
  dispose(){root.removeFromParent();root.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});for(const m of [roadMat,wallMat,wood,snow])m.dispose();root.clear();}};
 }
