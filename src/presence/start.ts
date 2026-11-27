@@ -38,6 +38,7 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
   const cableLineAuthority = createCableLineAuthority();
   const server = await createPresenceServer({
     cableLineAuthority,
+    requireSummitCableRelease:true,
     host,
     port: Number(process.env.PRESENCE_PORT ?? 8090),
     tiers: process.env.PRESENCE_TIERS ? JSON.parse(process.env.PRESENCE_TIERS) : undefined,
@@ -65,7 +66,7 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
         townOutdoorWeatherFeed: server.townOutdoorWeatherFeed,
         // The mountain has the same repair state as the outdoor town. Other
         // isolated gameplay rooms retain their previous independent behavior.
-        ...(bounds === mountainPresenceBounds || bounds === westPresenceBounds ? { cableLineAuthority } : {}),
+        ...(bounds === mountainPresenceBounds || bounds === westPresenceBounds ? { cableLineAuthority, requireSummitCableRelease:true } : {}),
         // Only the mine room follows the river state; the other rooms
         // never see a water field.
         ...(bounds === minePresenceBounds

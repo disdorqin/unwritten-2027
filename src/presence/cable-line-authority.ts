@@ -32,6 +32,8 @@ export type CableLineFrame = Readonly<{
   openedNow: boolean;
   /** Server wall epoch at the only transition to full-line, retained on hello. */
   openedAt: number | null;
+  /** Server epoch of the first accepted wake/release, immutable across rooms. */
+  wokeAt: number | null;
   flags: CableLineFlags;
 }>;
 
@@ -42,6 +44,7 @@ export function createCableLineAuthority(now:()=>number=Date.now) {
   } as const;
 
   const openedAt:Record<Za36CableRepairLine,number|null>={1:null,2:null};
+  const wokeAt:Record<Za36CableRepairLine,number|null>={1:null,2:null};
   const listeners = new Set<(frame: CableLineFrame) => void>();
   function flags(): CableLineFlags {
     return {
@@ -52,7 +55,7 @@ export function createCableLineAuthority(now:()=>number=Date.now) {
 
   function frame(line: Za36CableRepairLine, openedNow: boolean): CableLineFrame {
     const state = lines[line].snapshot();
-    return { type: 'cable-line', line, version: state.version, stage: state.stage, openedNow, openedAt:openedAt[line], flags: flags() };
+    return { type: 'cable-line', line, version: state.version, stage: state.stage, openedNow, openedAt:openedAt[line], wokeAt:wokeAt[line], flags: flags() };
   }
 
   return {
@@ -74,6 +77,7 @@ export function createCableLineAuthority(now:()=>number=Date.now) {
       if(!Number.isSafeInteger(epoch)||epoch<0)return undefined;
       const result = lines[line].apply(event);
       if (!result.accepted) return undefined;
+      if(event.kind==='wake')wokeAt[line]=epoch;
       if(result.opened)openedAt[line]=epoch;
       const accepted = frame(line, result.opened);
       for (const listener of [...listeners]) listener(accepted);

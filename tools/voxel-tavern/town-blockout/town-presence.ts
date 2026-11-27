@@ -152,7 +152,8 @@ export function createTownPresence(
   let cableLineSupported = false;
   const cableLineStates = new Map<Za36CableRepairLine, Za36CableRepairState>();
   const cableOpenedAt = new Map<Za36CableRepairLine,number>();
-  function clearCableFrames(){cableLineStates.clear();cableOpenedAt.clear();cableLineFlags={cableLine1Open:false,cableLine2Open:false};}
+  const cableWokeAt = new Map<Za36CableRepairLine,number>();
+  function clearCableFrames(){cableLineStates.clear();cableOpenedAt.clear();cableWokeAt.clear();cableLineFlags={cableLine1Open:false,cableLine2Open:false};}
   let cableLineFlags: CableLineFlags = { cableLine1Open: false, cableLine2Open: false };
   let icePalaceSupported = false;
   const icePalaceRiteClosed: IcePalaceRiteState = { frozen: false, leverAvailable: false, harvestAvailable: false, solsticeRite: 'closed' };
@@ -485,7 +486,7 @@ export function createTownPresence(
         kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown; plazaPhoto?: boolean; sentAt?: number; reason?: string;
         fireworks?: boolean; firecrackers?: boolean; bell?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number; totalMs?: unknown; at?: unknown;
         nonce?: string; accepted?: boolean; iceThrone?: boolean; crowned?: boolean; summitPassport?: boolean;
-        cableLine?: boolean; line?: unknown; flags?: unknown; openedAt?: unknown;
+        cableLine?: boolean; line?: unknown; flags?: unknown; openedAt?: unknown; wokeAt?: unknown;
         icePalaceRites?: boolean; present?: unknown; requestId?: unknown;
         townNightWindow?: unknown; townOutdoorWeather?: unknown; townOutdoorWeatherDawnEpoch?: unknown; state?: unknown;
         undergroundWater?: unknown;
@@ -519,6 +520,8 @@ export function createTownPresence(
           cableLineStates.set(line, state);
           if(state.stage==='full-line'&&typeof message.openedAt==='number'&&Number.isSafeInteger(message.openedAt)&&message.openedAt>=0)cableOpenedAt.set(line,message.openedAt);
           else cableOpenedAt.delete(line);
+          if(state.stage!=='dormant'&&typeof message.wokeAt==='number'&&Number.isSafeInteger(message.wokeAt)&&message.wokeAt>=0)cableWokeAt.set(line,message.wokeAt);
+          else cableWokeAt.delete(line);
           const flags = message.flags as CableLineFlags | undefined;
           if (flags && typeof flags.cableLine1Open === 'boolean' && typeof flags.cableLine2Open === 'boolean') {
             cableLineFlags = { cableLine1Open: flags.cableLine1Open, cableLine2Open: flags.cableLine2Open };
@@ -986,11 +989,13 @@ export function createTownPresence(
      * when the room predates the cable authority or no frame arrived yet. */
     getCableLineState: (line: Za36CableRepairLine) => haveId&&cableLineSupported ? cableLineStates.get(line) : undefined,
     getCableLineOpenedAt: (line:Za36CableRepairLine)=>haveId&&cableLineSupported?cableOpenedAt.get(line):undefined,
+    getCableLineWokeAt: (line:Za36CableRepairLine)=>haveId&&cableLineSupported?cableWokeAt.get(line):undefined,
     getCableLineFlags: (): CableLineFlags => haveId&&cableLineSupported?cableLineFlags:{cableLine1Open:false,cableLine2Open:false},
     /** Submit one repair event; the authority's broadcast frame is the
      * only state change a client ever applies. Returns false offline. */
     sendCableRepair: (line: Za36CableRepairLine, event: Za36CableRepairEvent) =>
       haveId && cableLineSupported && sendEvent(JSON.stringify({ type: 'event', kind: 'cable-repair', line, event })),
+    sendSummitCableRelease:()=>haveId&&cableLineSupported&&sendEvent(JSON.stringify({type:'event',kind:'cable-release-summit'})),
     /** Latest per-peer ice-palace rite snapshot from the room authority;
      * every rite reads unavailable until its policy store exists. */
     getIcePalaceRiteState: (): IcePalaceRiteState => icePalaceRiteState,

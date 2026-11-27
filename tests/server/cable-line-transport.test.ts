@@ -16,6 +16,7 @@ type Message = {
   flags?: { cableLine1Open: boolean; cableLine2Open: boolean };
   state?: CableState;
   openedAt?:number|null;
+  wokeAt?:number|null;
 };
 
 async function connected(t: TestContext, server: Awaited<ReturnType<typeof createPresenceServer>>, name: string) {
@@ -154,7 +155,29 @@ test('town and mountain rooms share both cable versions, without duplicate broad
  b.socket.terminate();const rejoined=await connected(t,mountain,'山上乙');
  const first=await rejoined.next(f=>f.type==='cable-line'&&f.line===1);
  const second=await rejoined.next(f=>f.type==='cable-line'&&f.line===2);
- assert.equal(first.state?.version,1);assert.equal(first.openedAt,null);assert.equal(second.state?.version,version);assert.equal(second.stage,'full-line');assert.equal(second.openedNow,false);assert.equal(second.openedAt,authority.hello(2).openedAt);assert.ok(typeof second.openedAt==='number'&&Number.isSafeInteger(second.openedAt));
+ assert.equal(first.state?.version,1);assert.equal(first.openedAt,null);assert.equal(second.state?.version,version);assert.equal(second.stage,'full-line');assert.equal(second.openedNow,false);assert.equal(first.wokeAt,authority.hello(1).wokeAt);assert.equal(second.wokeAt,authority.hello(2).wokeAt);assert.equal(second.openedAt,authority.hello(2).openedAt);assert.ok(typeof second.openedAt==='number'&&Number.isSafeInteger(second.openedAt));
  await mountain.close();a.socket.send(JSON.stringify({type:'event',kind:'cable-repair',line:1,event:{kind:'strike-rust'}}));
  assert.equal((await a.next(f=>f.type==='cable-line'&&f.line===1)).state?.version,2);
+});
+
+test('production release requires the summit host and its accepted pose, never a client impact claim',{timeout:10000},async t=>{
+ const authority=createCableLineAuthority();
+ const town=await createPresenceServer({cableLineAuthority:authority,requireSummitCableRelease:true,connectionLog(){}});
+ t.after(()=>town.close());
+ // Isolated wire fixture; real 800m domain encoding is the host's responsibility.
+ const mountain=await createPresenceServer({cableLineAuthority:authority,requireSummitCableRelease:true,authorizeSummitCableRelease:p=>p.east===30000&&p.north===24000&&p.height===40000,connectionLog(){}});
+ t.after(()=>mountain.close());
+ const a=await connected(t,town,'镇上甲'),b=await connected(t,mountain,'山上乙');
+ for(const p of [a,b])for(const line of [1,2])await p.next(f=>f.type==='cable-line'&&f.line===line);
+ const release=JSON.stringify({type:'event',kind:'cable-release-summit'});
+ const impact=JSON.stringify({type:'event',kind:'cable-repair',line:2,event:{kind:'wake',impact:'sled'}});
+ a.socket.send(release);a.socket.send(impact);b.socket.send(release);b.socket.send(impact);
+ await sleep(80);assert.equal(authority.snapshot(2).stage,'dormant');
+ const pose=(east:number,north:number,height:number,seq:number)=>{const buf=Buffer.alloc(12);[999,east,north,height,0,seq].forEach((v,i)=>buf.writeUInt16LE(v,i*2));return buf};
+ b.socket.send(pose(10000,10000,2000,1));b.socket.send(release);
+ await sleep(80);assert.equal(authority.snapshot(2).stage,'dormant');
+ b.socket.send(pose(30000,24000,40000,2));b.socket.send(release);
+ const frames=await Promise.all([a,b].map(p=>p.next(f=>f.type==='cable-line'&&f.line===2&&f.stage==='one-station')));
+ assert.deepEqual(frames[0],frames[1]);assert.ok(Number.isSafeInteger(frames[0]!.wokeAt));assert.equal(frames[0]!.openedAt,null);
+ b.socket.send(release);await sleep(50);assert.equal(authority.snapshot(2).version,1);
 });

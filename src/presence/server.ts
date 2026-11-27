@@ -110,6 +110,9 @@ type Options = {
   townNightFeed?: TownNightFeed;
   /** One server-owned cable authority for the town and connected mountain rooms. */
   cableLineAuthority?: ReturnType<typeof createCableLineAuthority>;
+  /** Production forbids line-2 impact wake. Only the summit host may authorize release from its accepted wire pose. */
+  requireSummitCableRelease?: boolean;
+  authorizeSummitCableRelease?: (record: Readonly<PresenceRecord>) => boolean;
   /** Author weather only in the primary room, using the same wall clock and dawn anchor as ZB-17. */
   townOutdoorWeather?: TownWeatherOptions;
   /** Secondary rooms relay primary-town weather rather than running a second schedule. */
@@ -1244,10 +1247,18 @@ export async function createPresenceServer(options: Options = {}) {
       return;
     }
     if (message.type === 'event' && 'kind' in message && peer.name) {
+      if (message.kind === 'cable-release-summit') {
+        if (allowEvent(peer, now()) && peer.record && options.authorizeSummitCableRelease?.(peer.record) === true) {
+          cableLine.applyEvent(2, {kind:'wake',impact:'night-window'});
+        }
+        return;
+      }
       if (message.kind === 'cable-repair') {
         const line = 'line' in message ? message.line : undefined;
         const event = 'event' in message ? message.event : undefined;
         if (allowEvent(peer, now()) && isCableRepairLine(line) && isCableRepairEvent(event)) {
+          // The production summit route must first be released by the verified summit host.
+          if (line===2 && event.kind==='wake' && options.requireSummitCableRelease) return;
           // The shared authority publishes once to every attached room, including this one.
           cableLine.applyEvent(line, event);
         }
