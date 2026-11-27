@@ -8,7 +8,7 @@ const exteriorStatic=new WeakMap<Group,ReturnType<typeof createCraterStaticMeshB
 const exteriorCells=new WeakMap<Group,ReturnType<typeof createCraterInstanceCells>>();
 const exteriorSessions=new WeakMap<Group,ReturnType<typeof createCraterExteriorOcclusion>>();
 /** D registers explicitly approved exterior roots after normal scene assembly. */
-export function setCraterExteriorRenderRoots(root:Group,roots:readonly Object3D[]){const session=exteriorSessions.get(root);if(!session)return false;session.refresh(roots);session.prepare();exteriorCells.get(root)?.replaceRoots(roots);exteriorStatic.get(root)?.register(roots);return !!session.ring;}
+export function setCraterExteriorRenderRoots(root:Group,roots:readonly Object3D[]){const session=exteriorSessions.get(root);if(!session)return false;session.refresh(roots);session.prepare();exteriorCells.get(root)?.replaceRoots(roots);return !!session.ring;}
 
 const comparison=()=>typeof location!=='undefined'&&new URLSearchParams(location.search).has('profile')&&new URLSearchParams(location.search).has('pPerfCompare');
 type Batch={original:Mesh[];mesh:Mesh};
@@ -101,15 +101,16 @@ export function installCraterRenderPerf(root:Group,lod:Lod,room?:Group,ground?:G
  const frustum=new Frustum(),matrix=new Matrix4(),sphere=new Sphere(),lights:PointLight[]=[],masked:{light:PointLight;mask:number}[]=[];
  let started=0,gpu:WebGL2RenderingContext|undefined,ext:TimerExtension|null|undefined,active:WebGLQuery|null=null,pending:GPUQuery[]=[],lastGpu:number|null=null,generation=0;
  let breakdown:ReturnType<typeof renderBreakdown>|undefined;
- const profile=compare;
+ const profile=compare||(typeof location!=='undefined'&&new URLSearchParams(location.search).has('profile')&&new URLSearchParams(location.search).has('pPerfMeasure'));
  const onControl=(event:Event)=>{
   const d=(event as CustomEvent<Profile>).detail;
   if(!d||typeof d.enabled!=='boolean')return;
+  if(!compare){probe=d.camera;generation++;breakdown=undefined;lastGpu=null;return;}
   enabled=d.enabled;p2Enabled=d.p2Enabled??d.enabled;p3Enabled=d.p3Enabled??p2Enabled;batch?.enable(enabled);probe=d.camera;crosslineProbe=!!d.crosslineProbe&&!!probe;
   if(compare&&exterior&&scene){const roots=crosslineProbe?scene.children.filter(o=>o!==root&&o.name!=='underground-domain-host'):[];exterior.refresh(roots);externalCells.replaceRoots(roots);if(crosslineProbe){exterior.prepare();if(p2Enabled)externalCells.register(roots);}if(p3Enabled&&crosslineProbe){externalStatic.register(roots);externalStatic.warmAll();}else externalStatic.dispose();}
   generation++;breakdown=undefined;lastGpu=null;
  };
- if(compare)document.addEventListener('town-p1-perf-control',onControl);
+ if(profile)document.addEventListener('town-p1-perf-control',onControl);
  function restoreLights(){for(const p of masked)p.light.layers.mask=p.mask;masked.length=0;}
  function before(renderer:WebGLRenderer,s:Scene,camera:Camera,target:unknown){
   (previousBefore as ((...args:unknown[])=>void)|undefined)?.call(s,renderer,s,camera,target);
@@ -135,7 +136,7 @@ export function installCraterRenderPerf(root:Group,lod:Lod,room?:Group,ground?:G
   // closed surface-domain presentation; D must supply real domain state.
   if(compare&&crosslineProbe&&probe&&ground){const p=camera.position,h=ground.heightAt(p.x,-p.z);if(Math.hypot(p.x-ground.anchor.east,p.z+ground.anchor.north)<50&&h!==undefined&&p.y>=h+.05&&p.y<=h+4){const u=s.getObjectByName('underground-domain-host');if(u){undergroundProbe={object:u,visible:u.visible};u.visible=false;}}}
   if(p2Enabled){const ring=externalCells.sourceCount?exterior?.ringForCamera(camera):undefined;localCells.begin(camera);if(!compare||crosslineProbe)externalCells.begin(camera,ring);groundCells?.begin(camera);}
-  if(p3Enabled){localStatic.begin(camera);if(!compare||crosslineProbe)externalStatic.begin(camera);}
+  if(compare&&p3Enabled){localStatic.begin(camera);if(crosslineProbe)externalStatic.begin(camera);}
   restoreLights();
   frustum.setFromProjectionMatrix(matrix.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
   for(const l of lights){
@@ -154,7 +155,7 @@ export function installCraterRenderPerf(root:Group,lod:Lod,room?:Group,ground?:G
    document.dispatchEvent(new CustomEvent('town-p1-render-profile',{detail:{enabled,p2Enabled,p3Enabled,localStatic:p3Enabled?localStatic.stats:null,externalStatic:p3Enabled&&(!compare||crosslineProbe)?externalStatic.stats:null,localCells:p2Enabled?localCells.stats:null,externalCells:p2Enabled&&(!compare||crosslineProbe)?externalCells.stats:null,pendingCells:localCells.pendingSources+externalCells.pendingSources,groundSaved:p2Enabled?groundCells?.savedTriangles:0,renderCpuMs,gpuMs:lastGpu,breakdown,draws:info.render.calls,tris:info.render.triangles,geometries:info.memory.geometries,textures:info.memory.textures,excludedLights:excluded,culledExterior,undergroundHidden,crosslineProbe,ringHeight:exterior?.ring?.minHeight,lightCount:lights.length,roomBefore:batch?.before,roomAfter:batch?.after,probe:!!probe,canvas:[renderer.domElement.width,renderer.domElement.height]}}));
   }
   if(savedPosition&&savedQuaternion){camera.position.copy(savedPosition);camera.quaternion.copy(savedQuaternion);camera.updateMatrixWorld(true);savedPosition=undefined;savedQuaternion=undefined;}
-  if(!compare){if(localCells.pendingSources)localCells.warmStep(800,1);else if(externalCells.pendingSources)externalCells.warmStep(1400,2);else if(localStatic.pending)localStatic.warmStep();else if(externalStatic.pending)externalStatic.warmStep();}
+  if(!compare){if(localCells.pendingSources)localCells.warmStep(800,1);else if(externalCells.pendingSources)externalCells.warmStep(1400,2);}
   (previousAfter as ((...args:unknown[])=>void)|undefined)?.call(s,renderer,s,camera);
  }
  function detach(){
@@ -167,10 +168,10 @@ export function installCraterRenderPerf(root:Group,lod:Lod,room?:Group,ground?:G
   if(!(root.parent instanceof Scene)||scene===root.parent)return;
   detach();scene=root.parent;root.traverse(o=>{if(o instanceof PointLight)lights.push(o);});
   if(compare)localCells.register([root]);else localCells.enqueue([root]);
-  localStatic.register(root.children.filter(o=>['crater-outer-works','crater-mouth-works'].includes(o.name)));if(compare)localStatic.warmAll();if(ground&&!groundCells)groundCells=createCraterGroundCells(ground.mesh);
+  if(compare){localStatic.register(root.children.filter(o=>['crater-outer-works','crater-mouth-works'].includes(o.name)));localStatic.warmAll();}if(ground&&!groundCells)groundCells=createCraterGroundCells(ground.mesh);
   previousBefore=scene.onBeforeRender;previousAfter=scene.onAfterRender;
   scene.onBeforeRender=before;scene.onAfterRender=after;
  }
  root.addEventListener('added',attach);root.addEventListener('removed',detach);attach();
- return {batch,enabled:()=>enabled,dispose(){detach();localCells.dispose();externalCells.dispose();localStatic.dispose();externalStatic.dispose();groundCells?.dispose();exteriorSessions.delete(root);exteriorCells.delete(root);exteriorStatic.delete(root);root.removeEventListener('added',attach);root.removeEventListener('removed',detach);if(compare)document.removeEventListener('town-p1-perf-control',onControl);}};
+ return {batch,enabled:()=>enabled,dispose(){detach();localCells.dispose();externalCells.dispose();localStatic.dispose();externalStatic.dispose();groundCells?.dispose();exteriorSessions.delete(root);exteriorCells.delete(root);exteriorStatic.delete(root);root.removeEventListener('added',attach);root.removeEventListener('removed',detach);if(profile)document.removeEventListener('town-p1-perf-control',onControl);}};
 }

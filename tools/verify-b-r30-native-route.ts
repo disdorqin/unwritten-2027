@@ -1,3 +1,8 @@
+import {buildCraterRailExtension} from './voxel-tavern/town-blockout/town-crater-rail-extension';
+import {buildTownRailRoute} from './voxel-tavern/town-blockout/town-railway';
+import {ar30SurfacePort} from './voxel-tavern/town-blockout/town-a-r30-surface-port';
+import {createAR30RimAccessSurvey} from './voxel-tavern/town-blockout/town-a-r30-rim-access';
+import {rimPublicAccessFootway} from './voxel-tavern/town-blockout/town-a-r30-west-landscape';
 import {createTerrainGrid,worldBounds} from './voxel-tavern/town-blockout/terrain';
 import {mountWestCraterRoad} from './voxel-tavern/town-blockout/town-za22-crater-road';
 import {createMeteorCrater,meteorCraterFixturePlan,meteorCraterFloorRadius,meteorCraterDepth} from './voxel-tavern/town-blockout/meteor-crater';
@@ -6,7 +11,10 @@ import {createMeteorCrater,meteorCraterFixturePlan,meteorCraterFloorRadius,meteo
  * The survey is only used to aim actual keyboard/mouse movement; no pose
  * writes or authority bypass. Dense entry knots retain the tight turn. */
 export function buildBR30NativeRoute(){
-  const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
+  const grid=createTerrainGrid(),port=ar30SurfacePort(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n),{unifiedStory:port.story});
+  const rail=buildCraterRailExtension(grid,road,buildTownRailRoute(grid).points);
+  const assembly=port.attach(road,rail);
+  const approach=createAR30RimAccessSurvey(road,rail,.40).trace(rimPublicAccessFootway);
   const a=road.anchor,c=Math.cos(a.yaw),s=Math.sin(a.yaw);
   const fixture=createMeteorCrater(meteorCraterFixturePlan);
   const point=(t:number)=>{
@@ -22,5 +30,5 @@ export function buildBR30NativeRoute(){
   if(height===undefined||Math.abs(height-(a.rimHeight-meteorCraterDepth))>.12)throw Error('Actual bottom datum mismatch');
   const floor={east,north,height};
   const view=road.midgroundS5.crystalViews.find(v=>v.cluster==='r30-crystal-4-1')?.view;
-  return {anchor:a,lip:points[0],points,floor,floorYaw:Math.atan2(east-a.east,north-a.north),view};
+  return {approach,anchor:a,lip:points[0],points,floor,floorYaw:Math.atan2(east-a.east,north-a.north),view};
 }
