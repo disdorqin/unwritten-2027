@@ -486,8 +486,8 @@ const summitSkylinePeak = new Vector3(mainSummitLayout.summit.east, mainSummitSp
   -mainSummitLayout.summit.north).add(summitSkylineOrigin);
 const summitSkylinePeakNdc = new Vector3();
 let summitSkylineDraws = 0;
-const summitSkylineDayMaterial = new MeshLambertMaterial({side:DoubleSide,fog:false,vertexColors:true});
-const summitSkylineNightMaterial = new MeshBasicMaterial({side:DoubleSide,fog:false,vertexColors:true});
+const summitSkylineDayMaterial = new MeshLambertMaterial({fog:true,vertexColors:true});
+const summitSkylineNightMaterial = new MeshLambertMaterial({fog:true,vertexColors:true});
 const summitSkylineMesh: Mesh<BufferGeometry, MeshLambertMaterial | MeshBasicMaterial> =
   new Mesh(buildR30TownSkyline(),summitSkylineDayMaterial);
 const {summitHeight}=mainSummitSpec;
