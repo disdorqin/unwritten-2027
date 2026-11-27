@@ -1,7 +1,7 @@
-import {BoxGeometry,BufferAttribute,Camera,Frustum,InstancedMesh,Material,Matrix4,Mesh,MeshLambertMaterial,Object3D,Sphere,Vector3} from 'three';
+import {BoxGeometry,BufferAttribute,Camera,Color,Frustum,InstancedMesh,Material,Matrix4,Mesh,MeshLambertMaterial,Object3D,Sphere,Vector3} from 'three';
 const approved=new Set(['town-fill-lake-east','za32-street-props','town-fill-rime-grove','town-fill-south-gate','town-fill-reed-marsh','town-fill-plum-slope','town-fill-north-west']);
-type Leaf={mesh:Mesh;matrix:Matrix4;world:Matrix4;sphere:Sphere;geometry:BoxGeometry;material:MeshLambertMaterial;mask:number;position:BufferAttribute;version:number;index:BufferAttribute;indexVersion:number};
-type Job={root:Object3D;world:Matrix4;leaves:Leaf[]};
+type Leaf={mesh:Mesh;matrix:Matrix4;world:Matrix4;sphere:Sphere;geometry:BoxGeometry;material:MeshLambertMaterial;mask:number;position:BufferAttribute;version:number;index:BufferAttribute;indexVersion:number;color?:Color};
+type Job={root:Object3D;world:Matrix4;leaves:Leaf[];colored:boolean};
 type Batch=Job&{proxy:InstancedMesh};
 function eligible(o:Object3D):o is Mesh<BoxGeometry,MeshLambertMaterial>{
  if(!(o instanceof Mesh)||o instanceof InstancedMesh||o.children.length||o.castShadow||o.receiveShadow||o.renderOrder!==0||!o.frustumCulled||o.onBeforeRender!==Object3D.prototype.onBeforeRender||o.onAfterRender!==Object3D.prototype.onAfterRender)return false;
@@ -19,9 +19,18 @@ function orthogonal(m:Matrix4){
 export function createCraterPropBatches(cell=48){
  const jobs:Job[]=[],batches:Batch[]=[],masked:{m:Mesh;mask:number}[]=[],active:InstancedMesh[]=[];
  const inverse=new Matrix4(),relative=new Matrix4(),frustum=new Frustum(),vp=new Matrix4();
+ const white=new MeshLambertMaterial(),plainCache=new Map<MeshLambertMaterial,boolean>();
+ const ignored=new Set(['uuid','name','userData','version','color']);
+ const keys=Object.keys(white).filter(k=>!ignored.has(k));
+ function plain(m:MeshLambertMaterial){
+  const old=plainCache.get(m);if(old!==undefined)return old;
+  const a=m as unknown as Record<string,unknown>,b=white as unknown as Record<string,unknown>;
+  const same=Object.getPrototypeOf(m)===MeshLambertMaterial.prototype&&Object.keys(m).every(k=>ignored.has(k)||keys.includes(k))&&keys.every(k=>{const x=a[k],y=b[k];return x===y||(!!x&&!!y&&typeof x==='object'&&typeof (x as {equals?:unknown}).equals==='function'&&(x as {equals:(v:unknown)=>boolean}).equals(y));});
+  plainCache.set(m,same);return same;
+ }
  let stats={batches:0,savedDraws:0,extraTriangles:0};
  function restore(){for(const x of masked)x.m.layers.mask=x.mask;masked.length=0;for(const p of active){p.visible=false;p.layers.mask=0;}active.length=0;}
- function dispose(){restore();for(const b of batches){b.proxy.removeFromParent();b.proxy.dispose();}batches.length=0;jobs.length=0;}
+ function dispose(){restore();for(const b of batches){b.proxy.removeFromParent();b.proxy.dispose();}batches.length=0;jobs.length=0;plainCache.clear();white.dispose();}
  function register(roots:readonly Object3D[]){
   dispose();const targets=new Set<Object3D>();
   for(const r of roots){if(approved.has(r.name))targets.add(r);for(const child of r.children)if(approved.has(child.name))targets.add(child);}
@@ -32,22 +41,22 @@ export function createCraterPropBatches(cell=48){
     const g=o.geometry,p=g.getAttribute('position') as BufferAttribute,index=g.index!;if(!g.boundingSphere)g.computeBoundingSphere();if(!g.boundingSphere)return;
     if(!orthogonal(relative.multiplyMatrices(inverse,o.matrixWorld)))return;
     const s=g.boundingSphere.clone().applyMatrix4(o.matrixWorld);if(![s.center.x,s.center.y,s.center.z,s.radius].every(Number.isFinite)||s.radius>cell*.3)return;
-    const key=[Math.floor(s.center.x/cell),Math.floor(s.center.z/cell),g.uuid,o.material.uuid,o.layers.mask].join('/');
-    const a=bins.get(key)??[];a.push({mesh:o,matrix:relative.clone(),world:o.matrixWorld.clone(),sphere:s,geometry:g,material:o.material,mask:o.layers.mask,position:p,version:p.version,index,indexVersion:index.version});bins.set(key,a);
+    const colored=plain(o.material),key=[Math.floor(s.center.x/cell),Math.floor(s.center.z/cell),g.uuid,colored?'plain-lambert-color':o.material.uuid,o.layers.mask].join('/');
+    const a=bins.get(key)??[];a.push({mesh:o,matrix:relative.clone(),world:o.matrixWorld.clone(),sphere:s,geometry:g,material:o.material,mask:o.layers.mask,position:p,version:p.version,index,indexVersion:index.version,color:colored?o.material.color.clone():undefined});bins.set(key,a);
    });
-   for(const list of bins.values())for(let i=0;i<list.length;i+=96){const leaves=list.slice(i,i+96);if(leaves.length>=2)jobs.push({root,world:root.matrixWorld.clone(),leaves});}
+   for(const list of bins.values())for(let i=0;i<list.length;i+=96){const leaves=list.slice(i,i+96);if(leaves.length>=2)jobs.push({root,world:root.matrixWorld.clone(),leaves,colored:!!leaves[0].color});}
   }
  }
- function valid(l:Leaf,root:Object3D){const m=l.mesh;return eligible(m)&&pathVisible(m,root)&&m.layers.mask===l.mask&&m.geometry===l.geometry&&m.material===l.material&&m.matrixWorld.equals(l.world)&&m.geometry.getAttribute('position')===l.position&&l.position.version===l.version&&m.geometry.index===l.index&&l.index.version===l.indexVersion;}
+ function valid(l:Leaf,root:Object3D){const m=l.mesh;return eligible(m)&&pathVisible(m,root)&&m.layers.mask===l.mask&&m.geometry===l.geometry&&m.material===l.material&&m.matrixWorld.equals(l.world)&&m.geometry.getAttribute('position')===l.position&&l.position.version===l.version&&m.geometry.index===l.index&&l.index.version===l.indexVersion&&(!l.color||(plain(l.material)&&l.color.equals(l.material.color)));}
  function warmStep(maxJobs=2,maxMs=1){
-  const start=performance.now();let n=0;
+  plainCache.clear();const start=performance.now();let n=0;
   while(jobs.length&&n<maxJobs&&performance.now()-start<maxMs){const j=jobs.shift()!;n++;if(!j.root.matrixWorld.equals(j.world)||!j.leaves.every(l=>valid(l,j.root)))continue;
-   const first=j.leaves[0],p=new InstancedMesh(first.geometry,first.material,j.leaves.length);p.name='p4-static-prop-instances';p.userData.p4PropBatch=true;p.visible=false;p.layers.mask=0;p.matrixAutoUpdate=false;p.raycast=()=>{};
-   j.leaves.forEach((l,i)=>p.setMatrixAt(i,l.matrix));p.instanceMatrix.needsUpdate=true;p.computeBoundingSphere();j.root.add(p);p.updateWorldMatrix(true,false);batches.push({...j,proxy:p});
+   const first=j.leaves[0],p=new InstancedMesh(first.geometry,j.colored?white:first.material,j.leaves.length);p.name='p4-static-prop-instances';p.userData.p4PropBatch=true;p.visible=false;p.layers.mask=0;p.matrixAutoUpdate=false;p.raycast=()=>{};
+   j.leaves.forEach((l,i)=>{p.setMatrixAt(i,l.matrix);if(l.color)p.setColorAt(i,l.color);});p.instanceMatrix.needsUpdate=true;if(p.instanceColor)p.instanceColor.needsUpdate=true;p.computeBoundingSphere();j.root.add(p);p.updateWorldMatrix(true,false);batches.push({...j,proxy:p});
   }return n;
  }
  function begin(camera:Camera){
-  restore();stats={batches:0,savedDraws:0,extraTriangles:0};frustum.setFromProjectionMatrix(vp.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
+  restore();plainCache.clear();stats={batches:0,savedDraws:0,extraTriangles:0};frustum.setFromProjectionMatrix(vp.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
   for(const b of batches){
    if(!b.root.matrixWorld.equals(b.world)||!pathVisible(b.root,b.root)||!(camera.layers.mask&b.leaves[0].mask))continue;
    let seen=0;for(const l of b.leaves)if(frustum.intersectsSphere(l.sphere))seen++;
