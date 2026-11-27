@@ -12,16 +12,16 @@ import {readWalkGeometry} from '../tools/voxel-tavern/town-blockout/landmark-kit
 import {buildRailwayStation} from '../tools/voxel-tavern/town-blockout/landmark-station';
 import {auditRidgeCableSweep} from '../tools/voxel-tavern/town-blockout/town-d-r30-cable-facilities';
 import {ridgeCloudHandoff,productionCloudSeam} from '../tools/voxel-tavern/town-blockout/town-d-r30-cloud-terrace';
-test('production ridge consumes real railway mask and replaces only owned terrain cells',()=>{
+for(const candidate of [false,true])test('production ridge consumes real railway mask and replaces only owned terrain cells; rear connector '+candidate,()=>{
  const grid=createTerrainGrid(),before=grid.elevation.slice(),root=new Group();
  const west=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
  const rail=createTownRailway(grid,()=>0),branch=buildCraterRailExtension(grid,west,rail.route.points);
- const ridge=mountProductionRidge(root,grid,{loop:rail.route.points,branch:branch.samples});
- assert.ok(ridge.changedVertices>100000);assert.equal(ridge.roads.length,3);assert.equal(ridge.stationReady,true);
+ const ridge=mountProductionRidge(root,grid,{loop:rail.route.points,branch:branch.samples,rearConnectorCandidate:candidate});
+ assert.ok(ridge.changedVertices>100000);assert.equal(ridge.roads.length,candidate?4:3);assert.equal(ridge.rearConnected,candidate);assert.equal(ridge.stationReady,true);
  assert.equal(ridge.transportReady,false);
  const lowerEnd=ridge.roads.at(-1)!.route.at(-1)!;
  const midEnd=ridge.roads[1]!.route.at(-1)!;
- assert.equal(ridge.roadTerminalAction(lowerEnd.east,lowerEnd.north,lowerEnd.height)?.title,'后坡施工终点');
+ assert.equal(ridge.roadTerminalAction(lowerEnd.east,lowerEnd.north,lowerEnd.height)?.title,candidate?undefined:'后坡施工终点');
  assert.equal(ridge.roadTerminalAction(midEnd.east,midEnd.north,midEnd.height)?.title,'中山施工终点');
  assert.equal(ridge.roadTerminalAction(526,305,26),undefined);
  assert.equal(ridge.cloudSeam.physicalReady,true);assert.equal(ridge.cloudSeam.domainReady,false);

@@ -11,6 +11,8 @@ await mkdir(out,{recursive:true});
 let server,browser,page,failure,presence;
 const frames=[],errors=[],mobileResults=[],roadWalk=[];
 const longRoad=process.argv.includes('--long-road'),outboundOnly=longRoad&&process.argv.includes('--outbound-only'),roadSprint=longRoad&&process.argv.includes('--sprint-road');
+const rearConnector=process.argv.includes('--rear-connector');
+if(rearConnector&&(!longRoad||!outboundOnly))throw Error('rear connector proof requires --long-road --outbound-only');
 const buildPath=process.argv[3]?resolve(process.argv[3]):undefined;
 let received=0,sent=0;
 try{
@@ -45,7 +47,7 @@ try{
  page.on('pageerror',e=>errors.push('page:'+e.message));
  page.on('console',m=>{if(m.type()==='error')errors.push('console:'+m.text()+' '+m.location().url)});
  page.on('response',r=>{if(r.status()>=400)errors.push('http:'+r.status()+':'+r.url())});
- await page.goto('http://127.0.0.1:'+server.httpServer.address().port+'/town-blockout.html?profile'+(longRoad?'&mRoadSurvey':'')+(process.argv.includes('--terrain-off')?'&mTerrainCullOff':'')+(process.argv.includes('--ridge-distant-off')?'&mRidgeDistantOff':''),{waitUntil:'domcontentloaded',timeout:65000});
+ await page.goto('http://127.0.0.1:'+server.httpServer.address().port+'/town-blockout.html?profile'+(longRoad?'&mRoadSurvey':'')+(rearConnector?'&mRearConnector':'')+(process.argv.includes('--terrain-off')?'&mTerrainCullOff':'')+(process.argv.includes('--ridge-distant-off')?'&mRidgeDistantOff':''),{waitUntil:'domcontentloaded',timeout:65000});
  await page.waitForFunction(()=>document.querySelector('#town-entry')?.hidden||!document.querySelector('#town-entry-continue')?.hidden||!document.querySelector('#town-entry-error')?.hidden,null,{timeout:60000});
  if(await page.locator('#town-entry-error').isVisible())throw Error('Entry failed: '+await page.locator('#town-entry-error').innerText());
  if(await page.locator('#town-entry-continue').isVisible())await page.locator('#town-entry-continue').click();
@@ -97,6 +99,7 @@ try{
  if(longRoad){
   const path=await page.evaluate(()=>window.__m1Frame.ridge.roadGuide);
   assert.ok(path.at(-1).cum>280);
+  if(rearConnector){assert.equal(await page.evaluate(()=>window.__m1Frame.ridge.rearConnected),true);assert.ok(path.at(-1).cum>1268);}
   const project=f=>{
    let best={dist:Infinity,cum:0};
    for(let i=1;i<path.length;i++){
@@ -139,6 +142,7 @@ try{
    throw Error('long road input budget');
   }
   await follow(1,total);await snap('long-road-end');
+  if(rearConnector){const foot=frames.at(-1).frame.ridge.foot;assert.ok(Math.hypot(foot[0]-440,foot[1]-516)<1&&Math.abs(foot[2]-140)<.15,'actual middle station arrival');}
   if(outboundOnly){await follow(-1,Math.max(5.5,total-25));await snap('long-road-rear-turnback');}
   else{await follow(-1,5.5);await snap('long-road-return');
    const r=await page.evaluate(()=>window.__m1Frame.ridge);
@@ -188,7 +192,7 @@ try{
 finally{
  await browser?.close();await server?.close();
  if(presence&&presence.exitCode===null){presence.kill();await Promise.race([once(presence,'exit'),new Promise(r=>setTimeout(r,3000))])}
- const report={passed:!failure,frames,mobileResults,roadWalk,errors,failure,realPresence:!!buildPath&&received>0&&sent>0,received,sent,scope:outboundOnly?'normal town entry; full base road outbound and 25m rear turnback; no full return':longRoad?'normal town entry; full base road native input round trip; not full mountain traversal':'normal town entry; menu locations and native keyboard movement; not full mountain traversal'};
+ const report={passed:!failure,frames,mobileResults,roadWalk,errors,failure,realPresence:!!buildPath&&received>0&&sent>0,received,sent,scope:rearConnector?'local explicit rear-landform candidate; native base-to-middle traversal and 25m return; not full mountain traversal':outboundOnly?'normal town entry; full base road outbound and 25m rear turnback; no full return':longRoad?'normal town entry; full base road native input round trip; not full mountain traversal':'normal town entry; menu locations and native keyboard movement; not full mountain traversal'};
  await writeFile(join(out,'report.json'),JSON.stringify(report,null,2));
  console.log(JSON.stringify({passed:report.passed,frames:frames.length,realPresence:report.realPresence,received,sent,errors:errors.slice(0,10),failure}));
  if(failure)process.exitCode=1;

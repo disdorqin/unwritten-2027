@@ -834,7 +834,8 @@ function stationViewCamera() {
 scene.add(railway.group);
 const railExtension = buildCraterRailExtension(grid, ensureWestCraterRoad(),railway.route.points);
 scene.add(railExtension.group);
-productionRidge=mountProductionRidge(scene,grid,{loop:railway.route.points,branch:railExtension.samples});
+productionRidge=mountProductionRidge(scene,grid,{loop:railway.route.points,branch:railExtension.samples,
+  rearConnectorCandidate:previewOptions.has('mRearConnector')&&['127.0.0.1','localhost'].includes(location.hostname)});
 if(westSurfacePort){
   westSurfaceAssembly=westSurfacePort.attach(ensureWestCraterRoad(),railExtension);
   try{assertAR30SurfaceAttachment(ensureWestCraterRoad(),railExtension);}
@@ -4378,7 +4379,7 @@ renderer.setAnimationLoop(now => {
         weatherMs, weatherTier: weather.tier, snowIntensity: effectiveSnowIntensity, snowCover: visualSnowCover,
         fogNear: weatherFog.near, fogFar: weatherFog.far, points: renderer.info.render.points,
         craterPerf:{exteriorCertified:craterExteriorCertified,undergroundVisible:undergroundRenderParent?.visible},
-        ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],heading:yaw,...(previewOptions.has('mRoadSurvey')?{roadGuide:productionRidge.roads.at(-1)?.route,moveReject:ridgeMoveReject}:{}),surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities,cableInstances:productionRidge.facilities?.visibleInstances(),terraceMounted:!!productionRidge.terrace,cloudSeam:productionRidge.cloudSeam},
+        ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],heading:yaw,...(previewOptions.has('mRoadSurvey')?{roadGuide:productionRidge.baseToMiddleGuide,rearConnected:productionRidge.rearConnected,moveReject:ridgeMoveReject}:{}),surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities,cableInstances:productionRidge.facilities?.visibleInstances(),terraceMounted:!!productionRidge.terrace,cloudSeam:productionRidge.cloudSeam},
         ...(skylinePeak ? { summitSkyline: { draws: summitSkylineDraws, peakNdc: skylinePeak.toArray(),
           camera: camera.position.toArray(), far: camera.far } } : {}),
       } }));
