@@ -109,7 +109,7 @@ function servePreview(ports, commit) {
       else createReadStream(file).on('error', () => outgoing.destroy()).pipe(outgoing);
     }).catch(() => outgoing.writeHead(404).end());
   });
-  server.on('connection', socket => { sockets.add(socket); socket.on('close', () => sockets.delete(socket)); });
+  server.on('connection', socket => { sockets.add(socket); socket.on('error', () => socket.destroy()); socket.on('close', () => sockets.delete(socket)); });
   server.on('upgrade', (incoming, downstream, head) => {
     const route = routePresence(incoming.url, ports);
     if (!route) { downstream.destroy(); return; }
@@ -122,6 +122,7 @@ function servePreview(ports, commit) {
       downstream.pipe(upstream).pipe(downstream);
     });
     upstream.on('error', () => downstream.destroy());
+    downstream.on('error', () => upstream.destroy());
     downstream.on('close', () => upstream.destroy());
   });
   return server;

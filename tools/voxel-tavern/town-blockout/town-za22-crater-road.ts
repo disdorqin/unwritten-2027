@@ -455,7 +455,7 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     staticGroup.updateMatrixWorld(true);
     staticGroup.traverse(object => { if (object instanceof Mesh) object.matrixAutoUpdate = false; });
   }
-  const renderPerf=installCraterRenderPerf(group,camera=>{updateLod(camera);if(moltenBeads.group.visible)updateMolten(camera);},lampRoom?.group);
+  const renderPerf=installCraterRenderPerf(group,camera=>{updateLod(camera);if(moltenBeads.group.visible)updateMolten(camera);},lampRoom?.group,{mesh:surface as Mesh,anchor,heightAt:road.heightAt});
   return { ...road, winch, lampRoom, mouthWorks, outerWorks, ejecta, midground, densityA2, ropeStay, surveyM1,
     centralMound, brokenCircle, moltenBeads, inscription, warmLightChain, midgroundS5, moundPlanting, craterActions };
 }
