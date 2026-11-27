@@ -1,10 +1,11 @@
-import {Box3,BufferGeometry,Camera,Frustum,Matrix4,Mesh,Sphere,Vector3} from 'three';
+import {Box3,BufferAttribute,BufferGeometry,Camera,Frustum,Matrix4,Mesh,Sphere,Vector3} from 'three';
 type Cell={mesh:Mesh;bounds:Box3;triangles:number};
 /** Render cells retain the exact final ground indices, local attributes,
  * material and transformation. The authoritative full mesh remains the
  * only collision, height, cut and seam input; never decimate the road. */
 export function createCraterGroundCells(source:Mesh,cellSize=28){
  const original=source.geometry,idx=original.index,p=original.getAttribute('position'),cells:Cell[]=[];
+ const indexVersion=idx?.version,positionVersion=p instanceof BufferAttribute?p.version:p?.data.version;
  const frustum=new Frustum(),vp=new Matrix4(),box=new Box3(),v=new Vector3(),sphere=new Sphere();
  let mask:number|undefined,active:Cell[]=[],saved=0;
  if(!idx||!p||Array.isArray(source.material)||original.drawRange.start!==0||original.drawRange.count<idx.count||cellSize<=0)return;
@@ -19,12 +20,12 @@ export function createCraterGroundCells(source:Mesh,cellSize=28){
   const g=new BufferGeometry();for(const [name,a] of Object.entries(original.attributes))g.setAttribute(name,a);
   g.setIndex(bin.indices);g.boundingBox=bin.bounds.clone();g.boundingSphere=bin.bounds.getBoundingSphere(new Sphere());
   const m=new Mesh(g,source.material);m.name='p2-ground-cell';m.visible=false;m.matrixAutoUpdate=false;m.receiveShadow=source.receiveShadow;m.renderOrder=source.renderOrder;
-  m.layers.mask=source.layers.mask;source.add(m);cells.push({mesh:m,bounds:bin.bounds,triangles:bin.indices.length/3});
+  m.layers.mask=0;source.add(m);cells.push({mesh:m,bounds:bin.bounds,triangles:bin.indices.length/3});
  }
- function restore(){if(mask!==undefined){source.layers.mask=mask;mask=undefined;}for(const c of active)c.mesh.visible=false;active=[];}
+ function restore(){if(mask!==undefined){source.layers.mask=mask;mask=undefined;}for(const c of active){c.mesh.visible=false;c.mesh.layers.mask=0;}active=[];}
  function begin(camera:Camera){
   restore();saved=0;
-  if(!source.visible||!camera.layers.test(source.layers)||source.geometry!==original||source.material!==cells[0]?.mesh.material||source.castShadow)return 0;
+  if(!source.visible||!camera.layers.test(source.layers)||source.geometry!==original||original.index!==idx||idx?.version!==indexVersion||original.getAttribute('position')!==p||(p instanceof BufferAttribute?p.version:p.data.version)!==positionVersion||original.drawRange.start!==0||original.drawRange.count<idx!.count||source.material!==cells[0]?.mesh.material||source.castShadow)return 0;
   const total=idx!.count/3,chosen:Cell[]=[];let count=0;
   frustum.setFromProjectionMatrix(vp.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
   if(!original.boundingSphere)original.computeBoundingSphere();

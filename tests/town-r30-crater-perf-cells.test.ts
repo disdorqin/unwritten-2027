@@ -9,13 +9,13 @@ test('instance cells preserve every transform and tint; mutations fall back to o
  const m=new InstancedMesh(new BoxGeometry(),new MeshStandardMaterial(),32),matrix=new Matrix4(),c=new Color();
  for(let i=0;i<32;i++){m.setMatrixAt(i,matrix.makeTranslation(i<16?-100+i*.1:100+i*.1,0,-10));m.setColorAt(i,c.setRGB(i/32,.5,.7));}
  m.instanceMatrix.needsUpdate=true;m.instanceColor!.needsUpdate=true;m.computeBoundingSphere();root.add(m);
- const sys=createCraterInstanceCells(24,8);sys.register([root]);
+ const sys=createCraterInstanceCells(24,8);sys.enqueue([root]);assert.equal(sys.sourceCount,0);assert.equal(sys.pendingSources,1);sys.warmStep(8,Infinity);assert.equal(sys.sourceCount,0);assert.equal(m.children.length,0);while(sys.pendingSources)sys.warmStep(8,Infinity);
  assert.equal(sys.sourceCount,1);assert.equal(m.children.length,2);
  const keys=(batch:InstancedMesh)=>Array.from({length:batch.count},(_,i)=>{batch.getMatrixAt(i,matrix);batch.getColorAt(i,c);return JSON.stringify([...matrix.elements,...c.toArray()]);});
  assert.deepEqual(m.children.flatMap(o=>keys(o as InstancedMesh)).sort(),keys(m).sort());
  scene.updateMatrixWorld(true);const cam=new PerspectiveCamera(45,1,.1,500);cam.position.set(-100,0,0);cam.lookAt(-100,0,-10);cam.updateMatrixWorld(true);
  const stats=sys.begin(cam);assert.equal(stats.savedInstances,16);assert.equal(stats.submitted,1);assert.equal(m.layers.mask,0);
- sys.restore();assert.equal(m.layers.mask,1);assert.ok(m.children.every(o=>!o.visible));
+ sys.restore();assert.equal(m.layers.mask,1);assert.ok(m.children.every(o=>!o.visible&&o.layers.mask===0));
  m.setMatrixAt(0,matrix.makeTranslation(0,0,-10));m.instanceMatrix.needsUpdate=true;
  assert.equal(sys.begin(cam).sources,0);assert.equal(m.layers.mask,1);
  sys.dispose();assert.equal(m.children.length,0);
