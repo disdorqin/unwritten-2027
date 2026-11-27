@@ -7,7 +7,11 @@ import {buildBR30NativeRoute} from './verify-b-r30-native-route.ts';
 const [origin,out]=process.argv.slice(2);
 const route=buildBR30NativeRoute(),rim=route.lip,road=route.points.find(p=>p.t>=.58),floor=route.floor;
 const hardware=process.env.ZA22_HARDWARE==='1',production=process.env.P_PRODUCTION==='1';
-const report={scope:production?'normal production gates; render-only camera probes explicitly marked; no state overrides or player-pose write':'production town-preview normal entry; paired render-only camera probes explicitly marked; no player-pose write; same browser/raster/quality',production,hardwareRequested:hardware,cpu:cpus()[0]?.model,logicalCpus:cpus().length,memoryGB:totalmem()/1024**3,viewport:process.env.P_VIEWPORT==='mobile'?{width:390,height:844}:{width:960,height:540},deviceScaleFactor:1,quality:process.env.P_QUALITY??'smooth',samples:[],errors:[],startup:[],movement:[]};
+const mobile=process.env.P_VIEWPORT==='mobile';
+const [width,height]=(mobile?'390x844':process.env.P_VIEWPORT??'960x540').split('x').map(Number),dpr=Number(process.env.P_DPR??1);
+assert.ok(Number.isInteger(width)&&width>=320&&Number.isInteger(height)&&height>=240&&Number.isFinite(dpr)&&dpr>0&&dpr<=2,'Invalid profile viewport or DPR');
+assert.ok(['smooth','balanced','fine'].includes(process.env.P_QUALITY??'smooth'),'Invalid explicit quality');
+const report={scope:production?'normal production gates; render-only camera probes explicitly marked; no state overrides or player-pose write':'production town-preview normal entry; paired render-only camera probes explicitly marked; no player-pose write; same browser/raster/quality',production,hardwareRequested:hardware,cpu:cpus()[0]?.model,logicalCpus:cpus().length,memoryGB:totalmem()/1024**3,viewport:{width,height},deviceScaleFactor:dpr,quality:process.env.P_QUALITY??'smooth',samples:[],errors:[],startup:[],movement:[]};
 let browser,page;
 const vec=p=>[p.east,p.height+1.65,-p.north];
 const target=[route.anchor.east,route.anchor.rimHeight-24,-route.anchor.north];
@@ -47,7 +51,7 @@ async function sample(id,enabled,camera,move=false,crosslineProbe=false,p2Enable
 }
 try{
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:hardware?['--use-gl=angle','--use-angle=d3d11']:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
- report.browser=browser.version();const context=await browser.newContext({viewport:report.viewport,deviceScaleFactor:1,locale:'zh-CN',isMobile:process.env.P_VIEWPORT==='mobile',hasTouch:process.env.P_VIEWPORT==='mobile'});page=await context.newPage();
+ report.browser=browser.version();const context=await browser.newContext({viewport:report.viewport,deviceScaleFactor:dpr,locale:'zh-CN',isMobile:mobile,hasTouch:mobile});page=await context.newPage();
  await page.addInitScript(quality=>{Object.defineProperty(Element.prototype,'requestPointerLock',{value:undefined});localStorage.setItem('unwritten.quality.tier.v1',quality);window.__pStartup=[];document.addEventListener('town-p1-render-profile',e=>{window.__pLatest=e.detail;if(window.__pStartup.length<150)window.__pStartup.push(e.detail)});},report.quality);
  page.on('pageerror',e=>report.errors.push('page:'+e.message));page.on('console',m=>{if(m.type()==='error')report.errors.push('console:'+m.text())});page.on('response',r=>{if(r.status()>=400)report.errors.push('http:'+r.status()+':'+r.url())});
  const begin=Date.now();await page.goto(new URL(production?'/?profile&pPerfMeasure':'/?profile&pPerfCompare',origin).href,{waitUntil:'domcontentloaded',timeout:90000});
@@ -79,8 +83,8 @@ try{
  }
  await page.evaluate(()=>document.dispatchEvent(new CustomEvent('town-p1-perf-control',{detail:{enabled:true}})));
  if(!floorOnly){
-  if(process.env.P_VIEWPORT==='mobile')await sample('actual-mouth-touch',true,undefined,'touch');
-  else{await page.locator('#scene canvas').click({position:{x:420,y:270}});await sample('actual-mouth-movement',true,undefined,true);}
+  if(mobile)await sample('actual-mouth-touch',true,undefined,'touch');
+  else{await page.locator('#scene canvas').click({position:{x:Math.round(width*.44),y:Math.round(height*.5)}});await sample('actual-mouth-movement',true,undefined,true);}
  }
  report.complete=true;
 }catch(e){report.failure=e.stack??String(e);process.exitCode=1;console.log(report.failure);}
