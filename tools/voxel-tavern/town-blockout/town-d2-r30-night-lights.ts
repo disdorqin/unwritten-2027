@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, Color, Group, InstancedMesh, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial,
+  BoxGeometry, Color, Group, InstancedMesh, IcosahedronGeometry, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial,
   Object3D, PointLight, type Material,
 } from 'three';
 
@@ -166,7 +166,10 @@ export function createTownD2R30NightLights(options: TownD2R30NightLightsOptions 
   }
 
   const postShape = new BoxGeometry(.13, 1.55, .13);
-  const coreShape = new BoxGeometry(.17, .17, .17);
+  // R4: a rounded icosahedral lamp core reads as a real glowing bulb at night
+  // rather than a flat box, while keeping the same .17 m footprint so the
+  // fixture footprint and lamp-height contract are unchanged.
+  const coreShape = new IcosahedronGeometry(.085, 0);
   disposers.push(() => postShape.dispose());
   disposers.push(() => coreShape.dispose());
   const postMaterial = new MeshLambertMaterial({ color: POST_COLOUR });
