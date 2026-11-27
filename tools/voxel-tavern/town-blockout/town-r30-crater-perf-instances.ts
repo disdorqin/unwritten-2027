@@ -3,7 +3,9 @@ import {sphereBehindCraterWall} from './town-r30-crater-perf-occlusion';
 type Ring=Parameters<typeof sphereBehindCraterWall>[0];
 type Chunk={mesh:InstancedMesh;box:Box3;count:number;worldBox?:Box3;worldSphere?:Sphere};
 type Snapshot={mesh:InstancedMesh;matrixVersion:number;colorVersion:number;count:number;geometry:InstancedMesh['geometry'];material:InstancedMesh['material'];matrixAttribute:InstancedMesh['instanceMatrix'];colorAttribute:InstancedMesh['instanceColor'];position:ReturnType<InstancedMesh['geometry']['getAttribute']>;positionVersion:number;index:InstancedMesh['geometry']['index'];indexVersion:number};
-type Source=Snapshot&{chunks:Chunk[];world?:Matrix4;whole?:Box3;worldWhole?:Sphere};
+type CompactRequest={key:string;cells:Chunk[];count:number};
+type CompactBuild={request:CompactRequest;chunk:Chunk;cell:number;cursor:number;written:number};
+type Source=Snapshot&{chunks:Chunk[];world?:Matrix4;whole?:Box3;worldWhole?:Sphere;selection?:string;stable?:number;request?:CompactRequest;compact?:{key:string;chunk:Chunk};building?:CompactBuild};
 type Build={snap:Snapshot;bins:Map<string,number[]>;cursor:number;entries?:number[][];part:number;chunks:Chunk[];single:Box3;current?:{mesh:InstancedMesh;box:Box3;cursor:number;indices:number[]}};
 const attrVersion=(a:ReturnType<InstancedMesh['geometry']['getAttribute']>)=>a instanceof BufferAttribute?a.version:a.data.version;
 const ordinary=(m:Material)=> (m instanceof MeshStandardMaterial||m instanceof MeshLambertMaterial||m instanceof MeshBasicMaterial)&&!m.transparent&&!m.wireframe&&m.depthTest&&m.depthWrite&&!(m as MeshStandardMaterial).displacementMap&&m.onBeforeCompile===Material.prototype.onBeforeCompile;
@@ -30,7 +32,7 @@ export function createCraterInstanceCells(cellSize=32,maxExtraDraws=36){
  const sources:Source[]=[],seen=new Set<InstancedMesh>(),queue:InstancedMesh[]=[],masked:{object:InstancedMesh;mask:number}[]=[],active:InstancedMesh[]=[];
  const frustum=new Frustum(),vp=new Matrix4(),matrix=new Matrix4(),sphere=new Sphere(),box=new Box3(),eye=new Vector3(),center=new Vector3(),tint=new Color();
  let job:Build|undefined;
- let last={sources:0,submitted:0,savedInstances:0,extraDraws:0};
+ let last={sources:0,submitted:0,savedInstances:0,extraDraws:0,compactSources:0};
  function restore(){for(const m of masked)m.object.layers.mask=m.mask;masked.length=0;for(const m of active){m.visible=false;m.layers.mask=0;}active.length=0;}
  function enqueue(roots:readonly Object3D[]){
   for(const root of roots){allowedRoots.add(root);root.traverse(o=>{if(eligible(o)&&!seen.has(o)&&!o.userData.p2InstanceCell){seen.add(o);queue.push(o);}});}
@@ -94,11 +96,12 @@ export function createCraterInstanceCells(cellSize=32,maxExtraDraws=36){
  }
  // Synchronous only for tests and explicitly warmed diagnostic sessions.
  function register(roots:readonly Object3D[]){enqueue(roots);while(queue.length||job)warmStep(Infinity,Infinity);}
- function begin(camera:Camera,ring?:Ring,wholeEnabled=true){
-  restore();last={sources:0,submitted:0,savedInstances:0,extraDraws:0};eye.setFromMatrixPosition(camera.matrixWorld);
+ function begin(camera:Camera,ring?:Ring,wholeEnabled=true,compactEnabled=true){
+  restore();last={sources:0,submitted:0,savedInstances:0,extraDraws:0,compactSources:0};eye.setFromMatrixPosition(camera.matrixWorld);
   frustum.setFromProjectionMatrix(vp.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
-  const choices:{s:Source;cells:Chunk[];saved:number;tris:number}[]=[];
+  const choices:{s:Source;cells:Chunk[];saved:number;tris:number;compact?:boolean}[]=[];
   for(const s of sources){
+   const previous=s.selection;s.request=undefined;s.selection=undefined;
    const m=s.mesh;if(!m.parent||!m.visible||!camera.layers.test(m.layers)||!unchanged(s))continue;
    let ancestor:Object3D|null=m,approved=false;while(ancestor&&ancestor.visible){if(allowedRoots.has(ancestor))approved=true;ancestor=ancestor.parent;}if(ancestor||!approved)continue;
    if(!m.boundingSphere)m.computeBoundingSphere();
@@ -112,30 +115,63 @@ export function createCraterInstanceCells(cellSize=32,maxExtraDraws=36){
     if(wholeEnabled&&ring&&s.worldWhole&&sphereBehindCraterWall(ring,eye,s.worldWhole))choices.push({s,cells:[],saved:s.count,tris:s.count*(m.geometry.index?.count??m.geometry.getAttribute('position').count)/3});
     continue;
    }
-   const cells:Chunk[]=[];let n=0;
-   for(const c of s.chunks){if(!frustum.intersectsBox(c.worldBox!))continue;
-    if(ring&&sphereBehindCraterWall(ring,eye,c.worldSphere!))continue;cells.push(c);n+=c.count;}
+   const cells:Chunk[]=[],ids:number[]=[];let n=0;
+   for(let i=0;i<s.chunks.length;i++){const c=s.chunks[i];if(!frustum.intersectsBox(c.worldBox!))continue;
+    if(ring&&sphereBehindCraterWall(ring,eye,c.worldSphere!))continue;cells.push(c);ids.push(i);n+=c.count;}
    const saved=s.count-n,triangles=(m.geometry.index?.count??m.geometry.getAttribute('position').count)/3;
    const extra=Math.max(0,cells.length-1),savedTris=saved*triangles;
+   // A stable visible subset can be copied once into one compact instance
+   // stream, avoiding the previous extra-draw tradeoff. Never upload in
+   // begin(); until ready use the original proven cell-selection policy.
+   if(compactEnabled&&cells.length>=2&&n<=2048&&saved>=s.count*.20&&savedTris>=2000){
+    const key=ids.join(',');s.selection=key;s.stable=previous===key?(s.stable??0)+1:1;
+    if(s.compact?.key===key){choices.push({s,cells:[s.compact.chunk],saved,tris:savedTris,compact:true});continue;}
+    if(s.stable>=6)s.request={key,cells,count:n};
+   }else{s.stable=0;}
    if(saved>0&&((extra===0&&(cells.length===0||savedTris>=2000))||(extra>0&&saved>=s.count*.30&&savedTris>=extra*2500)))choices.push({s,cells,saved,tris:savedTris});
   }
   choices.sort((a,b)=>b.tris-a.tris);
-  for(const {s,cells,saved} of choices){
+  for(const {s,cells,saved,compact} of choices){
    const extra=Math.max(0,cells.length-1);if(last.extraDraws+extra>maxExtraDraws)continue;
    masked.push({object:s.mesh,mask:s.mesh.layers.mask});s.mesh.layers.mask=0;
    for(const c of cells){c.mesh.layers.mask=masked.at(-1)!.mask;c.mesh.visible=true;active.push(c.mesh);}
-   last.sources++;last.submitted+=cells.length;last.savedInstances+=saved;last.extraDraws+=extra;
+   last.sources++;last.submitted+=cells.length;last.savedInstances+=saved;last.extraDraws+=extra;if(compact)last.compactSources++;
   }
   return last;
  }
- function dispose(){restore();discard();queue.length=0;for(const s of sources)for(const c of s.chunks){c.mesh.removeFromParent();c.mesh.dispose();}sources.length=0;seen.clear();allowedRoots.clear();}
+ function dropCompact(s:Source){if(s.building){s.building.chunk.mesh.dispose();s.building=undefined;}if(s.compact){s.compact.chunk.mesh.removeFromParent();s.compact.chunk.mesh.dispose();s.compact=undefined;}}
+ function warmCompacts(maxWork=256,maxMs=1){
+  const started=performance.now();let work=0;
+  for(const s of sources){
+   if(work>=maxWork||performance.now()-started>=maxMs)break;
+   const r=s.request;
+   if(s.building&&(!r||s.building.request.key!==r.key||!unchanged(s))){s.building.chunk.mesh.dispose();s.building=undefined;}
+   if(!r||s.compact?.key===r.key||!unchanged(s))continue;
+   if(!s.building){
+    const m=new InstancedMesh(s.geometry,s.material,r.count);m.name='p2-instance-cell-compact';m.userData.p2InstanceCell=true;m.visible=false;m.layers.mask=0;m.matrixAutoUpdate=false;m.receiveShadow=s.mesh.receiveShadow;m.renderOrder=s.mesh.renderOrder;m.raycast=()=>{};
+    const b=new Box3();for(const c of r.cells)b.union(c.box);m.boundingBox=b.clone();m.boundingSphere=b.getBoundingSphere(new Sphere());
+    s.building={request:r,chunk:{mesh:m,box:b,count:r.count},cell:0,cursor:0,written:0};
+   }
+   const b=s.building;
+   while(b.cell<b.request.cells.length&&work<maxWork&&performance.now()-started<maxMs){
+    const c=b.request.cells[b.cell];c.mesh.getMatrixAt(b.cursor,matrix);b.chunk.mesh.setMatrixAt(b.written,matrix);
+    if(s.colorAttribute){c.mesh.getColorAt(b.cursor,tint);b.chunk.mesh.setColorAt(b.written,tint);}
+    b.written++;b.cursor++;work++;if(b.cursor===c.count){b.cursor=0;b.cell++;}
+   }
+   if(b.written===b.request.count){
+    if(s.compact){s.compact.chunk.mesh.removeFromParent();s.compact.chunk.mesh.dispose();}
+    const m=b.chunk.mesh;m.instanceMatrix.needsUpdate=true;if(m.instanceColor)m.instanceColor.needsUpdate=true;s.mesh.add(m);m.updateWorldMatrix(true,false);s.compact={key:b.request.key,chunk:b.chunk};s.building=undefined;
+   }
+  }return work;
+ }
+ function dispose(){restore();discard();queue.length=0;for(const s of sources){dropCompact(s);for(const c of s.chunks){c.mesh.removeFromParent();c.mesh.dispose();}}sources.length=0;seen.clear();allowedRoots.clear();}
  function replaceRoots(roots:readonly Object3D[]){
   restore();allowedRoots.clear();for(const r of roots)allowedRoots.add(r);
   const approved=(o:Object3D)=>{let p:Object3D|null=o;while(p){if(allowedRoots.has(p))return true;p=p.parent;}return false;};
-  for(let i=sources.length-1;i>=0;i--){const s=sources[i];if(approved(s.mesh))continue;for(const c of s.chunks){c.mesh.removeFromParent();c.mesh.dispose();}seen.delete(s.mesh);sources.splice(i,1);}
+  for(let i=sources.length-1;i>=0;i--){const s=sources[i];if(approved(s.mesh))continue;dropCompact(s);for(const c of s.chunks){c.mesh.removeFromParent();c.mesh.dispose();}seen.delete(s.mesh);sources.splice(i,1);}
   for(let i=queue.length-1;i>=0;i--)if(!approved(queue[i])){seen.delete(queue[i]);queue.splice(i,1);}
   if(job&&!approved(job.snap.mesh)){seen.delete(job.snap.mesh);discard();}
   enqueue(roots);
  }
- return {register,enqueue,warmStep,begin,restore,dispose,replaceRoots,get sourceCount(){return sources.length;},get pendingSources(){return queue.length+Number(!!job);},get stats(){return last;}};
+ return {register,enqueue,warmStep,warmCompacts,begin,restore,dispose,replaceRoots,get sourceCount(){return sources.length;},get pendingSources(){return queue.length+Number(!!job);},get stats(){return last;}};
 }
