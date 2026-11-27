@@ -23,10 +23,10 @@ test('full rear domain preserves west coordinates, 800m summit and both true rel
  assert.equal(toSummitPresencePose({east:1400.1,north:660,height:350}),undefined);
  assert.equal(toSummitPresencePose({east:0,north:660,height:851}),undefined);
 });
-async function connect(t:TestContext,server:Awaited<ReturnType<typeof createPresenceServer>>,name:string){
+async function connect(t:TestContext,server:Awaited<ReturnType<typeof createPresenceServer>>,name:string,frame?:string){
  const socket=new WebSocket('ws://127.0.0.1:'+server.address().port+'/presence'),frames:Frame[]=[],snapshots:Map<number,Point>[]=[];
  socket.on('message',(raw,binary)=>{if(binary){const b=Buffer.from(raw as Buffer),s=new Map<number,Point>();visitPresenceSnapshot(b.buffer.slice(b.byteOffset,b.byteOffset+b.byteLength) as ArrayBuffer,(id,east,north,height)=>{const p=fromSummitPresencePose({east,north,height});if(p)s.set(id,p)});snapshots.push(s)}else frames.push(JSON.parse(raw.toString()))});
- t.after(()=>socket.terminate());await once(socket,'open');socket.send(JSON.stringify({type:'join',name}));
+ t.after(()=>socket.terminate());await once(socket,'open');socket.send(JSON.stringify({type:'join',name,presenceFrame:frame}));
  async function until<T>(fn:()=>T|undefined){for(let i=0;i<100;i++){const p=fn();if(p!==undefined)return p;await sleep(25)}throw Error('summit room timeout')}
  const join=await until(()=>frames.find(f=>f.type==='join'&&f.self));
  return {socket,frames,snapshots,join,until,pose:(p:Point,seq:number)=>socket.send(encode(p,seq)),event:(kind:string,extra:object={})=>socket.send(JSON.stringify({type:'event',kind,...extra}))};
@@ -35,7 +35,16 @@ test('real summit room wire preserves interest distances and authorizes release 
  const authority=createCableLineAuthority(),summit=await createPresenceServer({...summitPresenceBounds,summitRoom:true,cableLineAuthority:authority,requireSummitCableRelease:true,authorizeSummitCableRelease:isSummitCableReleaseRecord,connectionLog(){}});
  t.after(()=>summit.close());
  const town=await createPresenceServer({cableLineAuthority:authority,requireSummitCableRelease:true,connectionLog(){}});t.after(()=>town.close());
- const a=await connect(t,summit,'西峰甲'),b=await connect(t,summit,'西峰乙'),c=await connect(t,town,'镇上丙');
+ const a=await connect(t,summit,'西峰甲',summitPresenceFrame),b=await connect(t,summit,'西峰乙',summitPresenceFrame),c=await connect(t,town,'镇上丙');
+ const joinUrl='http://127.0.0.1:'+summit.address().port+'/presence/poll/join';
+ const post=(url:string,body:unknown,session?:string)=>fetch(url,{method:'POST',headers:{'content-type':'application/json',...(session?{'x-presence-session':session}:{})},body:JSON.stringify(body)});
+ assert.equal((await post(joinUrl,{name:'旧客户端'})).status,400);
+ const poll=await post(joinUrl,{name:'轮询丁',presenceFrame:summitPresenceFrame});assert.equal(poll.status,200);
+ const pollJoin=await poll.json() as {session:string;id:number;messages:{t:string;d:string}[]};
+ assert.ok(pollJoin.messages.some(m=>m.t==='text'&&JSON.parse(m.d).presenceFrame===summitPresenceFrame));
+ const pollURL=joinUrl.replace('/join','');
+ assert.equal((await post(pollURL,{state:Buffer.from(encode({east:-480,north:1400,height:560},1)).toString('base64')},pollJoin.session)).status,200);
+ await post(pollURL+'/leave',{},pollJoin.session);
  assert.equal(a.join.presenceFrame,summitPresenceFrame);assert.equal(c.join.presenceFrame,undefined);
  const near={east:-500,north:1400,height:560};
  a.pose(near,1);b.pose({...near,east:near.east+60},1);
@@ -48,6 +57,6 @@ test('real summit room wire preserves interest distances and authorizes release 
  const accepted=await a.until(()=>a.frames.find(f=>f.type==='cable-line'&&f.line===2&&f.stage==='one-station'));
  const other=await c.until(()=>c.frames.find(f=>f.type==='cable-line'&&f.line===2&&f.stage==='one-station'));assert.equal(accepted.wokeAt,other.wokeAt);
  a.socket.send(JSON.stringify({type:'clock',sentAt:123}));await a.until(()=>a.frames.find(f=>f.type==='clock'&&f.sentAt===123));
- a.socket.terminate();const rejoin=await connect(t,summit,'西峰甲');const hello=await rejoin.until(()=>rejoin.frames.find(f=>f.type==='cable-line'&&f.line===2));
+ a.socket.terminate();const rejoin=await connect(t,summit,'西峰甲',summitPresenceFrame);const hello=await rejoin.until(()=>rejoin.frames.find(f=>f.type==='cable-line'&&f.line===2));
  assert.equal(hello.wokeAt,accepted.wokeAt);assert.equal(hello.stage,'one-station');
 });

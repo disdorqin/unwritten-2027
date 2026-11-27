@@ -523,7 +523,7 @@ export async function createPresenceServer(options: Options = {}) {
         return;
       }
     }
-    let body: { name?: unknown; state?: unknown; events?: unknown };
+    let body: { name?: unknown; state?: unknown; events?: unknown; presenceFrame?:unknown };
     try { body = JSON.parse(await readBody(req) || '{}') as typeof body; }
     catch {
       if (req.url === POLL_JOIN_PATH) connLog('poll', '-', 'attempt', 'body');
@@ -540,7 +540,7 @@ export async function createPresenceServer(options: Options = {}) {
       connLog('poll', '-', 'attempt', 'accepted');
       const peer = createPeer('poll');
       connLog('poll', peer.id, 'session', 'ok');
-      receiveText(peer, Buffer.from(JSON.stringify({ type: 'join', name: body.name }), 'utf8'));
+      receiveText(peer, Buffer.from(JSON.stringify({ type: 'join', name: body.name, presenceFrame:body.presenceFrame }), 'utf8'));
       if (!peer.name || !peers.has(peer.id)) { reply(400, { error: 'name' }); return; }
       const session = randomBytes(16).toString('hex');
       peer.session = session;
@@ -576,7 +576,7 @@ export async function createPresenceServer(options: Options = {}) {
         if (frame.t === 'text' && typeof frame.d === 'string') {
           const pending = receiveText(peer, Buffer.from(frame.d, 'utf8'));
           if (pending) await pending;
-        } else if (frame.t === 'bin' && typeof frame.d === 'string') {
+        } else if (!options.summitRoom&&frame.t === 'bin' && typeof frame.d === 'string') {
           const bytes = Buffer.from(frame.d, 'base64');
           if (bytes.byteLength === RECORD_BYTES && bytes.readUInt16LE(0) === MASCOT_ACTOR_ID) {
             receiveState(peer, bytes);
@@ -1353,6 +1353,8 @@ export async function createPresenceServer(options: Options = {}) {
       failPeer(peer);
       return;
     }
+    const requestedFrame='presenceFrame' in message?message.presenceFrame:undefined;
+    if((options.summitRoom&&requestedFrame!=='summit-v1')||(!options.summitRoom&&requestedFrame!==undefined)){failPeer(peer);return;}
     const name = validName(message.name);
     if (!name) { peer.dropReason ??= 'invalid-name'; failPeer(peer); return; }
     clearTimeout(peer.joinTimer);
@@ -1511,6 +1513,7 @@ export async function createPresenceServer(options: Options = {}) {
         if (!peers.has(peer.id)) return;
         const bytes = bytesOf(data);
         if (!binary) receiveText(peer, bytes);
+        else if(options.summitRoom){if(bytes.byteLength===RECORD_BYTES)receiveState(peer,bytes);}
         else if (bytes.byteLength === RECORD_BYTES || bytes[0] !== SNOWBALL_EVENT_PREFIX) receiveState(peer, bytes);
         else if (bytes[1] === SNOWFIGHT_PLACE || bytes[1] === SNOWFIGHT_WALL_HIT ||
           bytes[1] === SNOWFIGHT_SLED_SMASH) receiveSnowfight(peer, bytes);

@@ -321,7 +321,7 @@ export function createTownPresence(
     try {
       const response = await fetch(presencePath(POLL_JOIN_URL), {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: getName() }),
+        body: JSON.stringify({ name: getName(), ...(domain==='summit'?{presenceFrame:summitPresenceFrame}:{}) }),
       });
       if (!response.ok) return false;
       const data = await response.json() as { session?: unknown };
@@ -363,6 +363,7 @@ export function createTownPresence(
         // 会话已被服务端回收（超时/重启）：事件未被处理，塞回队列并重新入镇。
         requeuePollEvents(channel.outEvents, events);
         channel.session = '';
+        haveId=false;cableClockReady=false;cableLineSupported=false;clearCableFrames();
         townNight.disconnect();
         townWeather.disconnect();
         if (!await pollJoin(channel) && poll === channel) {
@@ -814,7 +815,7 @@ export function createTownPresence(
       ws.onopen = () => {
         if (socket === ws) {
           link.socketOpened();
-          try { ws.send(JSON.stringify({ type: 'join', name: getName() })); }
+          try { ws.send(JSON.stringify({ type: 'join', name: getName(), ...(domain==='summit'?{presenceFrame:summitPresenceFrame}:{}) })); }
           catch { connectionLost(); }
         }
       };
@@ -994,6 +995,34 @@ export function createTownPresence(
     disconnect(true);
   });
 
+  function sampleLocal(active: boolean, east: number, north: number, height: number, yaw: number, visible = active) {
+      show = visible;
+      if (active) {
+        local.east = east;
+        local.north = north;
+        local.height = height;
+        local.yaw = yaw;
+        const indoors = isSharedHomePosition(east, north, height);
+        if (insideSharedHome !== indoors) {
+          insideSharedHome = indoors;
+          actors.clear();
+          renderList.length = 0;
+          avatars?.clear();
+          remaining = 0;
+        }
+      }
+      if (inTown === active) return;
+      inTown = active;
+      if (active) {
+        link.enterTown();
+        scheduleConnection();
+      } else {
+        link.leaveTown();
+        resetRetry();
+        disconnect(true);
+      }
+  }
+
   return {
     serverNow: clock.now,
     cableServerNow:()=>haveId&&cableLineSupported&&cableClockReady?clock.now():undefined,
@@ -1159,32 +1188,19 @@ export function createTownPresence(
       bellHolderId = id;
       avatars?.setHighlight(id);
     },
-    sample(active: boolean, east: number, north: number, height: number, yaw: number, visible = active) {
-      show = visible;
-      if (active) {
-        local.east = east;
-        local.north = north;
-        local.height = height;
-        local.yaw = yaw;
-        const indoors = isSharedHomePosition(east, north, height);
-        if (insideSharedHome !== indoors) {
-          insideSharedHome = indoors;
-          actors.clear();
-          renderList.length = 0;
-          avatars?.clear();
-          remaining = 0;
-        }
-      }
-      if (inTown === active) return;
-      inTown = active;
-      if (active) {
-        link.enterTown();
-        scheduleConnection();
-      } else {
-        link.leaveTown();
-        resetRetry();
-        disconnect(true);
-      }
+    sample:sampleLocal,
+    /** Keep the connection and publish the physical cabin's foot position.
+     * Host selects the actual scene/room on its validated transfer; never
+     * silently clamp or change rooms while the player is aboard. */
+    sampleCableRide(frame:{line:1|2;feet:{east:number;north:number;height:number};synchronized:boolean},yaw:number){
+      const p=frame.feet;
+      if(![p.east,p.north,p.height,yaw].every(Number.isFinite))return false;
+      if(frame.line===2?(domain!=='summit'||!toSummitPresencePose(p)):
+        domain==='mountain'?!isMountainPresenceFoot(p.east,p.north,p.height):
+        domain!=='town'||p.east<0||p.east>640||p.north<0||p.north>655.35||p.height<0||p.height>655.35)return false;
+      activityPose=5;
+      sampleLocal(true,p.east,p.north,p.height,yaw,true);
+      return true;
     },
     update(dt: number) {
       if (!socket && !poll) return;
