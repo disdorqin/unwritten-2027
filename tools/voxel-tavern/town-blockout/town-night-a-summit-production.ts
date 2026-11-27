@@ -1,4 +1,4 @@
-import type {BufferGeometry,Group,Mesh} from 'three';
+import type {BufferGeometry,Group,Mesh,Object3D} from 'three';
 import type {MainSummitTrailPoint} from './main-summit-trail';
 import type {SouthGround,SouthProtection} from './town-night-a-summit-landform';
 import {mountSouthEarthworks} from './town-night-a-summit-road-earthworks';
@@ -31,6 +31,16 @@ export function mountSouthProduction(input:Input){
  if(!input.legacySouthVegetationExcluded||!input.legacyTreadExcluded)throw Error('South production requires exclusive asset ownership');
  if(input.owner.getObjectByName('night-a-south-sector'))throw Error('South sector already mounted');
  if(!input.nearTiles.length||new Set(input.nearTiles).size!==input.nearTiles.length)throw Error('Missing or duplicate canonical near tiles');
+ // Meshes and every intermediate parent must use the exact owner-local
+ // EN frame. A translated LOD container would silently cut the wrong hill.
+ for(const tile of input.nearTiles){
+  let node:Object3D|null=tile;
+  while(node&&node!==input.owner){
+   if(node.position.lengthSq()!==0||node.rotation.x!==0||node.rotation.y!==0||node.rotation.z!==0||node.scale.x!==1||node.scale.y!==1||node.scale.z!==1)throw Error('Unexpected near tile transform');
+   node=node.parent;
+  }
+  if(node!==input.owner)throw Error('Canonical near tile not owned by host');
+ }
  const road=mountSouthEarthworks(input.trail,input.first,input.last,input.groundAt),cuts:Cut[]=[];
  let sector:ReturnType<typeof mountSouthSector>|undefined;
  let disposed=false;
@@ -56,7 +66,6 @@ export function mountSouthProduction(input:Input){
    if(!original.boundingBox)original.computeBoundingBox();
    const b=original.boundingBox!;
    if(b.max.x<bounds.min.x||b.min.x>bounds.max.x||b.max.z<bounds.min.z||b.min.z>bounds.max.z)continue;
-   if(mesh.position.lengthSq()!==0||mesh.rotation.x!==0||mesh.rotation.y!==0||mesh.rotation.z!==0||mesh.scale.x!==1||mesh.scale.y!==1||mesh.scale.z!==1)throw Error('Unexpected near tile transform');
    const pos=original.getAttribute('position');
    if(!original.getIndex()||!pos)throw Error('Missing indexed canonical top tile');
    for(let i=0;i<pos.count;i++){
@@ -97,13 +106,17 @@ export function mountSouthProduction(input:Input){
   input.owner.add(sector.group);
  }catch(error){sector?.dispose();if(!sector)road.dispose();restore();throw error;}
  const mounted=sector;
- return {sector:mounted,group:mounted.group,groundAt,cutChunks:cuts.length,
+ const live=()=>!disposed&&mounted.group.parent===input.owner;
+ return {sector:mounted,group:mounted.group,groundAt:(e:number,n:number)=>live()?groundAt(e,n):undefined,cutChunks:cuts.length,
   supportAt(e:number,n:number){
+   if(!live())return;
    const h=groundAt(e,n);if(h===undefined)return;
    const tread=mounted.supportAt(e,n);return tread===undefined?h:Math.max(h,tread);
   },
-  blocked(e:number,n:number,h:number,r=.27,body=1.8){return !disposed&&mounted.blocked(e,n,h,r,body);},
-  updateView:mounted.updateView,setNight:mounted.setNight,
+  blocked(e:number,n:number,h:number,r=.27,body=1.8){return live()&&mounted.blocked(e,n,h,r,body);},
+  updateView(e:number,n:number){if(live())mounted.updateView(e,n);},
+  setNight(night:boolean){if(live())mounted.setNight(night);},
+  updateSnow(...args:Parameters<typeof mounted.updateSnow>){if(live())mounted.updateSnow(...args);},
   dispose(){if(disposed)return;disposed=true;mounted.dispose();restore();}
  };
 }

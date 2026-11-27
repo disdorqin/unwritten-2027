@@ -3,6 +3,13 @@ import {test} from 'node:test';
 import {BufferGeometry,Float32BufferAttribute,Group,Mesh,MeshBasicMaterial,DoubleSide,Raycaster,Vector3} from 'three';
 import {buildMainSummitTrailCut} from '../tools/voxel-tavern/town-blockout/main-summit-trail-cut';
 import {mountSouthProduction} from '../tools/voxel-tavern/town-blockout/town-night-a-summit-production';
+import {createTownD2R30Massif} from '../tools/voxel-tavern/town-blockout/town-d2-r30-massif';
+import {createTownD2R30Collision} from '../tools/voxel-tavern/town-blockout/town-d2-r30-collision';
+import {createMainSummitBlock,mainSummitLayout} from '../tools/voxel-tavern/town-blockout/main-summit-block';
+import {createMainSummitTrail} from '../tools/voxel-tavern/town-blockout/main-summit-trail';
+import {createMainSummitCable} from '../tools/voxel-tavern/town-blockout/main-summit-cable';
+import {createSouthReservation} from '../tools/voxel-tavern/town-blockout/town-night-a-summit-reservation';
+import {proposeSouthRoadGrade} from '../tools/voxel-tavern/town-blockout/town-night-a-summit-road-grade';
 
 /** Independent test index: intersect the actual cut triangle mesh.
  * Production D2 injects B's canonical color-preserving cutter and index,
@@ -43,12 +50,67 @@ test('southern production replaces the real near mesh and releases it atomically
    }
    assert.equal(s.groundAt(90,100),347);
    assert.throws(()=>mountSouthProduction(f.input),/already mounted/);
+   s.group.removeFromParent();
+   assert.equal(s.supportAt(110,100),undefined);
+   assert.equal(s.blocked(24,23,347),false);
+   s.updateSnow(1,()=>{throw Error('Detached sector must not sample weather');});
+   f.owner.add(s.group);assert.ok(s.supportAt(110,100)!>346.6);
   }finally{s.dispose();s.dispose();}
   assert.equal(f.tile.geometry,f.original);assert.equal(f.disposals(),1);
   assert.equal(f.owner.getObjectByName('night-a-south-sector'),undefined);
   assert.equal(s.supportAt(110,100),undefined);assert.equal(s.blocked(24,23,347),false);
  }finally{f.original.dispose();f.mat.dispose();}
 });
+test('full 833m A assembly replaces actual D2 8m tiles and restores them, not just a flat fixture',()=>{
+ const owner=new Group(),massif=createTownD2R30Massif(),collision=createTownD2R30Collision();
+ owner.add(massif.group);
+ const block=createMainSummitBlock(mainSummitLayout,347,100);
+ const old=createMainSummitTrail(block.heightAt,347).points,cable=createMainSummitCable(0,10000,347);
+ const reserved=createSouthReservation([{points:old,radius:18},...cable.ropes.map(r=>({points:r.points,radius:40}))],[{west:-42,east:42,south:-10,north:55}]);
+ const topTiles=massif.group.children.filter(o=>o.name.startsWith('town-d2-r30-top-')) as Mesh[];
+ const originals=topTiles.map(m=>m.geometry);
+ const mat=new MeshBasicMaterial({side:DoubleSide}),ray=new Raycaster(new Vector3(),new Vector3(0,-1,0));
+ try{
+  const profile=proposeSouthRoadGrade(old,1,834,collision.surfaceAt);
+  assert.ok(profile.ok);if(!profile.ok)throw Error('The current D2 terrain requires reprofile');
+  const points=[...old.slice(0,1),...profile.profile,...old.slice(835)];
+  const south=mountSouthProduction({owner,groundAt:collision.surfaceAt,reserved,trail:points,first:1,last:834,
+   nearTiles:topTiles,legacySouthVegetationExcluded:true,legacyTreadExcluded:true,
+   cutTerrain(source,tread){
+    const result=buildMainSummitTrailCut(source,tread);
+    if(!result.refinedTriangles){result.geometry.dispose();return {geometry:source};}
+    return result;
+   },
+   createCutSurface(g){
+    g.computeBoundingBox();const b=g.boundingBox!,m=new Mesh(g,mat);m.updateMatrixWorld(true);
+    const covers=(e:number,n:number)=>e>=b.min.x&&e<=b.max.x&&-n>=b.min.z&&-n<=b.max.z;
+    return {covers,surfaceAt(e,n){ray.ray.origin.set(e,900,-n);return ray.intersectObject(m,false)[0]?.point.y;},dispose(){}};
+   }
+  });
+  try{
+   assert.ok(south.cutChunks>1);
+   assert.equal(south.cutChunks,topTiles.filter((m,i)=>m.geometry!==originals[i]).length);
+   let samples=0;
+   for(let i=2;i<=834;i++){
+    const a=points[i-1]!,b=points[i]!,prev=points[i-2]!,next=points[i+1]!;
+    const side=(p:typeof a,l:typeof a,r:typeof a,t:number)=>{
+     const de=r.east-l.east,dn=r.north-l.north,d=Math.hypot(de,dn);
+     return {e:p.east-dn/d*t,n:p.north+de/d*t};
+    };
+    for(const t of [-1,0,1]){
+     const u=side(a,prev,b,t),v=side(b,a,next,t),e=(u.e+v.e)/2,n=(u.n+v.n)/2,h=south.supportAt(e,n),road=south.sector.road!.supportAt(e,n);
+     assert.ok(h!==undefined&&road!==undefined&&Math.abs(h-road)<.001,JSON.stringify({i,e,n,h,road}));
+     assert.equal(south.blocked(e,n,h),false,JSON.stringify({i,e,n,h}));samples++;
+    }
+   }
+   south.updateView(0,0);south.setNight(true);
+   console.log(JSON.stringify({length:profile.length,cutChunks:south.cutChunks,samples,topTiles:topTiles.length,forest:south.sector.forest.stats}));
+  }finally{south.dispose();}
+  assert.ok(topTiles.every((m,i)=>m.geometry===originals[i]));
+  assert.equal(owner.getObjectByName('night-a-south-sector'),undefined);
+ }finally{block.dispose();collision.dispose();massif.dispose();mat.dispose();}
+});
+
 test('missing near-ground coverage rolls back cut buffers and does not mount any duplicate sector',()=>{
  const f=fixture();
  try{
@@ -56,5 +118,11 @@ test('missing near-ground coverage rolls back cut buffers and does not mount any
   assert.equal(f.tile.geometry,f.original);assert.equal(f.owner.getObjectByName('night-a-south-sector'),undefined);
   assert.equal(f.disposals(),1);
   assert.throws(()=>mountSouthProduction({...f.input,legacyTreadExcluded:false}),/exclusive/);
+  f.tile.parent!.position.x=1;
+  assert.throws(()=>mountSouthProduction(f.input),/transform/);
+  f.tile.parent!.position.x=0;
+  f.tile.removeFromParent();
+  assert.throws(()=>mountSouthProduction(f.input),/not owned/);
+  assert.equal(f.tile.geometry,f.original);
  }finally{f.original.dispose();f.mat.dispose();}
 });
