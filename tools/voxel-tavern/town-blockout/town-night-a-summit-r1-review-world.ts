@@ -11,6 +11,7 @@ import {createSouthReservation} from './town-night-a-summit-reservation';
 import {createSouthHeightDelta,southComposedCandidate} from './town-night-a-summit-landform';
 import {mountSouthEntry} from './town-night-a-summit-entry';
 import {mountSouthGully} from './town-night-a-summit-gully';
+import {mountSouthForest} from './town-night-a-summit-forest';
 export function buildSouthReviewWorld(){
  const group=new Group(),block=createMainSummitBlock(mainSummitLayout,347,100);
  const trail=createMainSummitTrail(block.heightAt,347),cable=createMainSummitCable(0,10000,347);
@@ -43,7 +44,7 @@ export function buildSouthReviewWorld(){
  const apron=new BufferGeometry();apron.setAttribute('position',new Float32BufferAttribute(p,3));apron.setAttribute('color',new Float32BufferAttribute(c,3));apron.setIndex(idx);apron.computeVertexNormals();terrain.add(new Mesh(apron,mat));
  group.add(terrain);
  const station=mountMainSummitCableStations(group,cable,{heightAt:collision.surfaceAt,enter:owner=>block.enter(owner),leave:block.leave});
- const entry=mountSouthEntry(collision.surfaceAt),gully=mountSouthGully(collision.surfaceAt,protectedAt);group.add(entry.group,gully.group);
+ const entry=mountSouthEntry(collision.surfaceAt),gully=mountSouthGully(collision.surfaceAt,protectedAt),forest=mountSouthForest(collision.surfaceAt,protectedAt);group.add(entry.group,gully.group,forest.group);
  const ground=(e:number,n:number)=>n< -10&&n>=-30&&Math.abs(e)<=32?sampleNorthRidge350(e+300,n+676):collision.surfaceAt(e,n);
- return {group,collision,ground,protectedAt,delta,entry,gully,station,trail,stats:{changed,min,max,triangles,gully:gully.triangles,entryMeshes:entry.group.children.length},blocked:(e:number,n:number,h:number)=>entry.blocked(e,n,h)||station.blocked(e,n,h),dispose(){entry.dispose();gully.dispose();station.dispose();block.dispose();collision.dispose();terrain.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});mat.dispose();group.clear();}};
+ return {group,collision,ground,protectedAt,delta,entry,gully,forest,station,trail,stats:{changed,min,max,triangles,gully:gully.triangles,entryMeshes:entry.group.children.length,forest:forest.stats},blocked:(e:number,n:number,h:number)=>entry.blocked(e,n,h)||station.blocked(e,n,h)||forest.blocked(e,n,h),dispose(){entry.dispose();gully.dispose();forest.dispose();station.dispose();block.dispose();collision.dispose();terrain.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});mat.dispose();group.clear();}};
 }
