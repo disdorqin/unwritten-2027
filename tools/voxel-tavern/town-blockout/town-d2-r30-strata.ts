@@ -45,6 +45,26 @@ const roadSurveys = new Map<number, RoadSurvey>();
 const clamp01 = (value: number) => Math.max(0, Math.min(1, value));
 const outside = (value: number, minimum: number, maximum: number) => Math.max(minimum - value, value - maximum, 0);
 
+function hashNoise(east: number, north: number) {
+  const value = Math.sin(east * 127.1 + north * 311.7) * 43_758.5453;
+  return value - Math.floor(value);
+}
+
+function valueNoise(east: number, north: number) {
+  const x = Math.floor(east), n = Math.floor(north);
+  const tx = east - x, tn = north - n;
+  const sx = tx * tx * (3 - 2 * tx), sn = tn * tn * (3 - 2 * tn);
+  const a = hashNoise(x, n), b = hashNoise(x + 1, n), c = hashNoise(x, n + 1), d = hashNoise(x + 1, n + 1);
+  return (a + (b - a) * sx) * (1 - sn) + (c + (d - c) * sx) * sn;
+}
+
+/** Fractal noise for glacier drape: replaces uniform sine meander/width/streak
+ *  so each ice rib follows its own valley terrain instead of repeating a wave. */
+function fractalNoise(east: number, north: number) {
+  return valueNoise(east, north) * .58 + valueNoise(east * 2.07 + 17, north * 2.07 - 11) * .28 +
+    valueNoise(east * 4.13 - 23, north * 4.13 + 31) * .14;
+}
+
 function rectangleDistance(east: number, north: number, rectangle: {
   west: number; east: number; south: number; north: number;
 }) {
@@ -261,7 +281,9 @@ function buildContours(
 }
 
 function valleyPoint(valley: (typeof townD2R30Anchors.valleys)[number], along: number, across: number) {
-  const meander = -Math.sin(along * .011) * 24;
+  // Per-valley meander from fractal noise: each glacier follows its own valley
+  // terrain instead of repeating one uniform sine wave across all four ribs.
+  const meander = (fractalNoise(along * .011 + valley.east * .004, valley.north * .004) - .5) * 48;
   const offset = meander + across;
   return {
     east: valley.east + Math.cos(valley.heading) * along - Math.sin(valley.heading) * offset,
@@ -287,7 +309,7 @@ function buildGlacier(
   for (let row = 0; row <= alongSteps; row++) {
     const along = townD2R30StrataSpec.glacierAlongFrom +
       (townD2R30StrataSpec.glacierAlongTo - townD2R30StrataSpec.glacierAlongFrom) * row / alongSteps;
-    const width = 18 + 5 * Math.sin(along * .013 + valleyIndex * 1.7);
+    const width = 18 + 6 * (fractalNoise(along * .013 + valley.east * .006, valley.north * .006 + valleyIndex) - .5) * 2;
     minimumWidth = Math.min(minimumWidth, width);
     maximumWidth = Math.max(maximumWidth, width);
     for (let column = 0; column <= acrossSteps; column++) {
@@ -296,8 +318,10 @@ function buildGlacier(
       const height = groundAt(point.east, point.north);
       if (height === undefined || !Number.isFinite(height) || protectedAt(point.east, point.north)) continue;
       const edge = Math.pow(Math.abs(fraction), 1.7);
-      const streak = .5 + .5 * Math.sin(along * .043 + valleyIndex * 1.9 + fraction * 5);
-      const snow = clamp01(edge * .7 + Math.max(0, streak - .72) * 1.4);
+      // Streak and snow line from fractal noise so the ice surface reads as
+      // terrain-draped flow, not a uniform sine wave repeated on every rib.
+      const streak = fractalNoise(along * .043 + valley.east * .008, fraction * 5 + valley.north * .008 + valleyIndex);
+      const snow = clamp01(edge * .7 + Math.max(0, streak - .62) * 1.6);
       tint.copy(ICE_BLUE).lerp(ICE_LIGHT, .35 + streak * .3).lerp(SNOW_WHITE, snow * .85);
       samples[row * columns + column] = {
         ...point, height: height + townD2R30StrataSpec.glacierGroundOffset,
