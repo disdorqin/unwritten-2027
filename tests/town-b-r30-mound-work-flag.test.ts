@@ -1,0 +1,34 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {createTerrainGrid,worldBounds} from '../tools/voxel-tavern/town-blockout/terrain';
+import {mountWestCraterRoad} from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
+import {buildCraterRailExtension} from '../tools/voxel-tavern/town-blockout/town-crater-rail-extension';
+import {attachBR30PhysicalKit} from '../tools/voxel-tavern/town-blockout/town-b-r30-physical-kit';
+import {installBR30MoundPlanting} from '../tools/voxel-tavern/town-blockout/town-b-r30-mound-planting';
+import {installBR30MoundWorkFlag,createBR30MoundControls,type BR30MoundPose} from '../tools/voxel-tavern/town-blockout/town-b-r30-mound-work-flag';
+import {createMound} from '../tools/voxel-tavern/town-blockout/town-crater-points-play';
+test('old work flag has separate physical mount and changes only on accepted old rule facts',async()=>{
+ const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
+ const kit=attachBR30PhysicalKit(road,buildCraterRailExtension(grid,road)),forest=installBR30MoundPlanting(road);
+ const prior=road.group.userData.colliders.slice(),flag=installBR30MoundWorkFlag(road);
+ assert.equal(flag.group.parent,forest.group.parent);assert.equal(flag.boxes.length,2);assert.ok(flag.parts>25);
+ assert.throws(()=>installBR30MoundWorkFlag(road),/already mounted/);
+ let rule=createMound(false),known=false,online=true,allow=false,pose:BR30MoundPose|undefined;
+ const facts=()=>online?{flagStraight:rule.flagStraight,overlookKnown:known}:undefined;
+ const controls=createBR30MoundControls(flag,{facts,pose:()=>pose,async request(intent){
+  if(!allow)return {accepted:false};
+  if(intent.kind==='reach-overlook')known=rule.reachSummit().atlasFirstTime||known;
+  else rule.straightenFlag();
+  return {accepted:true};
+ }});
+ const aim=()=>{const q=flag.target(),f=flag.foot,de=q.east-f.east,dn=q.north-f.north;return {...f,heading:Math.atan2(de,dn),pitch:Math.atan2(q.height-f.height-1.65,Math.hypot(de,dn)),eyeHeight:1.65};};
+ pose={...aim(),east:flag.foot.east+10};assert.equal(controls.action('reach-overlook'),undefined);assert.equal(controls.action('straighten-flag'),undefined);
+ pose=aim();assert.equal(flag.aimed(pose),true);
+ assert.equal((await controls.interact('straighten-flag')).accepted,false);assert.equal(flag.straight,false);
+ allow=true;assert.equal((await controls.interact('reach-overlook')).accepted,true);assert.equal(controls.action('reach-overlook'),undefined);
+ assert.equal((await controls.interact('straighten-flag')).accepted,true);assert.equal(flag.straight,true);
+ assert.equal(controls.action('straighten-flag'),undefined);
+ online=false;assert.equal(controls.action('reach-overlook'),undefined);controls.refresh();assert.equal(flag.straight,true);
+ online=true;rule=createMound(true);controls.refresh();assert.equal(flag.straight,true);
+ flag.dispose();flag.dispose();assert.deepEqual(road.group.userData.colliders,prior);forest.dispose();kit.dispose();
+});

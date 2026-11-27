@@ -1,13 +1,28 @@
 import {BoxGeometry,Color,DataTexture,Group,InstancedMesh,MeshLambertMaterial,NearestFilter,Object3D,PointLight,SRGBColorSpace} from 'three';
 import {createStaticFootIndex} from './town-c-static-foot-index.js';
+import {c2R30DeepMouths,type C2R30DeepMouth} from './town-c2-r30-deep-mouths.js';
 import {warriorSafetyPocket} from '../../../src/shared/town-c-warrior-safety-pocket.js';
 /** U10 city ENY local frame. Existing houses, statue, forge, arcade and wall remain separate reusable modules.
  * This shell supplies only missing street, gates, tavern, square paving and enclosing rock. No registration/loot/teleport. */
 type Family='stone'|'shade'|'tan'|'wood'|'moss'|'rust'|'crystal'|'moon';
 type Piece={id:string;family:Family;e:number;n:number;y:number;w:number;h:number;d:number;solid:boolean};
+type Box=Readonly<{min:readonly number[];max:readonly number[]}>;
 const colors:Record<Family,number>={stone:0x8a8378,shade:0x2c3648,tan:0xa98a56,wood:0x5d4630,moss:0x44503c,rust:0x8a4a34,crystal:0x7fd4c8,moon:0xe8ecf0};
 const pieces:Piece[]=[];
 function p(id:string,family:Family,e:number,n:number,y:number,w:number,h:number,d:number,solid=false){pieces.push({id,family,e,n,y,w,h,d,solid})}
+const cityMouths:readonly C2R30DeepMouth[]=Object.freeze([
+ c2R30DeepMouths['minus140-to-minus165'].to,
+ c2R30DeepMouths['minus165-to-minus190'].from,
+]);
+function pieceBox(piece:Piece):Box{return {min:[piece.e-piece.w/2,piece.y-piece.h/2,-piece.n-piece.d/2],max:[piece.e+piece.w/2,piece.y+piece.h/2,-piece.n+piece.d/2]}}
+function matchesMouth(mouth:unknown,expected:C2R30DeepMouth):mouth is C2R30DeepMouth{
+ if(!mouth||typeof mouth!=='object')return false;
+ const m=mouth as Record<string,unknown>;
+ return m.layer===expected.layer&&m.axis===expected.axis&&m.at===expected.at&&m.centre===expected.centre&&m.width===expected.width&&m.height===expected.height;
+}
+function circleTouches(box:Box,e:number,n:number,r:number){
+ return Math.hypot(Math.max(0,box.min[0]-e,e-box.max[0]),Math.max(0,box.min[2]+n,-n-box.max[2]))<r;
+}
 export const warriorCityShellPlan={
   depth:-165,length:180,
   segments:[['gate',0,25],['homes',25,80],['square',80,120],['workshops',120,170],['cold-exit',170,180]] as const,
@@ -33,7 +48,14 @@ for(const side of [-1,1])for(let e=1;e<180;e+=2){
     const n=side*(30.9+(row%3)*.35+Math.sin(e*.17+row)*.28);
     p('cave-wall/'+side+'/'+e+'/'+row,(row+e)%5?'shade':'stone',e,n,1+row*2,2.03,2.06,2.4,true);
   }
-  for(let r=0;r<5;r++)p('roof/'+side+'/'+e+'/'+r,'shade',e,side*(3+r*6),19+(r%3)*.55,2.04,2.2,6.2);
+  for(let r=0;r<5;r++)p('roof/'+side+'/'+e+'/'+r,'shade',e,side*(3+r*6),19+(r%3)*.55,2.04,2.2,6.2,true);
+}
+// Real E0/E180 receiving walls. The exact N[-30,-1.7]/[1.7,30] jambs
+// leave the C contract's 3.4 m opening; the lintel starts at its 3.24 m datum.
+for(const e of [0,180]){
+ for(const s of [-1,1])p('end-wall/'+e+'/jamb/'+s,'stone',e,s*15.85,9.5,2.4,19,28.3,true);
+ // Centre rounded up one ULP: the binary AABB bottom must not undercut 3.24.
+ p('end-wall/'+e+'/lintel','shade',e,0,11.120000000000003,2.4,15.76,3.4,true);
 }
 // Tall stone gateway, half-open leaf outside a protected 5.6 m central opening.
 // The second gate is the end of this local level, not a fake teleport to the palace.
@@ -161,12 +183,39 @@ export function createWarriorCityShell(){
     const mesh=new InstancedMesh(geo,mat,chunk.length);chunk.forEach((p,i)=>{pose.position.set(p.e,p.y,-p.n);pose.scale.set(p.w,p.h,p.d);pose.updateMatrix();mesh.setMatrixAt(i,pose.matrix)});mesh.computeBoundingSphere();group.add(mesh);resources.push({mesh,mat,map});
    }
  }
- const solids=pieces.filter(p=>p.solid);
- const collisionIndex=createStaticFootIndex(solids.map(p=>({min:[p.e-p.w/2,p.y-p.h/2,-p.n-p.d/2],max:[p.e+p.w/2,p.y+p.h/2,-p.n+p.d/2]})));
+ const solids=pieces.filter(p=>p.solid),solidBoxes=solids.map(pieceBox);
+ const collisionIndex=createStaticFootIndex(solidBoxes);
  function canStand(e:number,n:number,y=0,r=.27){
-   if(![e,n,y,r].every(Number.isFinite)||e-r<0||e+r>180||n-r< -30||n+r>30)return false;
+   // Mouth centres lie on the E boundary; their circles still use exact solid collision.
+   if(![e,n,y,r].every(Number.isFinite)||e<0||e>180||n-r< -30||n+r>30)return false;
    return !collisionIndex.blocks(e,n,y,r);
  }
+ function passageLocal(e:number,n:number,radius=.27,height=1.8){
+   if(![e,n,radius,height].every(Number.isFinite)||radius<=0||height<=0||!canStand(e,n,0,radius))return;
+   let clearance=Infinity;
+   for(const box of collisionIndex.candidates(e,n,radius)){
+    if(box.min[1]>0&&circleTouches(box,e,n,radius))clearance=Math.min(clearance,box.min[1]);
+   }
+   return Number.isFinite(clearance)?{floor:0,clearance}:undefined;
+ }
+ function acceptsMouth(mouth:unknown){
+   const expected=cityMouths.find(m=>matchesMouth(mouth,m));
+   if(!expected)return false;
+   const eps=1e-9,{minN,maxN}=warriorCityShellPlan.floor;
+   const wall=pieces.filter(p=>p.solid&&p.id.startsWith('end-wall/'+expected.at+'/'));
+   const jambs=wall.filter(p=>p.id.includes('/jamb/')),heads=wall.filter(p=>p.id.endsWith('/lintel'));
+   if(jambs.length!==2||heads.length!==1)return false;
+   const left=jambs.find(p=>p.n<expected.centre),right=jambs.find(p=>p.n>expected.centre),head=heads[0];
+   if(!left||!right)return false;
+   const near=(a:number,b:number)=>Math.abs(a-b)<=eps;
+   if(!near(left.n-left.d/2,minN)||!near(left.n+left.d/2,expected.centre-expected.width/2)||
+      !near(right.n-right.d/2,expected.centre+expected.width/2)||!near(right.n+right.d/2,maxN)||
+      !near(head.n-head.d/2,expected.centre-expected.width/2)||!near(head.n+head.d/2,expected.centre+expected.width/2)||
+      !near(head.y-head.h/2,expected.height)||head.y+head.h/2<19-eps)return false;
+   const passage=passageLocal(expected.at,expected.centre,.27,expected.height);
+   return !!passage&&passage.floor===0&&passage.clearance>=expected.height-eps&&
+    !collisionIndex.blocks(expected.at,expected.centre,0,.27,expected.height);
+ }
  const lamp=new PointLight(new Color(colors.crystal),13,15,2);lamp.position.set(98.1,1.2,9.65);group.add(lamp);
- return {group,canStand,solids,plan:warriorCityShellPlan,count:pieces.length,dispose(){group.removeFromParent();for(const {mesh} of resources)mesh.dispose();for(const mat of new Set(resources.map(r=>r.mat)))mat.dispose();for(const map of new Set(resources.map(r=>r.map)))map.dispose();geo.dispose();}};
+ return {group,canStand,passageLocal,acceptsMouth,solids,plan:warriorCityShellPlan,count:pieces.length,dispose(){group.removeFromParent();for(const {mesh} of resources)mesh.dispose();for(const mat of new Set(resources.map(r=>r.mat)))mat.dispose();for(const map of new Set(resources.map(r=>r.map)))map.dispose();geo.dispose();}};
 }

@@ -79,6 +79,8 @@ test('the winch refuses a player standing away from the handle', () => {
   const ctx = makeChain();
   ctx.setFoot({ east: -100, north: 185, height: -24.2227 });
   assert.equal(ctx.chain.holdWinch().kind, 'unreachable');
+  for(let i=0;i<200;i++){ctx.chain.crankWinch(.25);ctx.advance(250)}
+  assert.equal(ctx.chain.winchProgress(),0,'unreachable player cannot bank crank progress');
 });
 
 test('first fall: the opener walks into the bore, falls, and wakes in the mine', async () => {
@@ -90,7 +92,12 @@ test('first fall: the opener walks into the bore, falls, and wakes in the mine',
   const fall = ctx.chain.requestFirstFall();
   assert.ok(fall);
   assert.equal(fall.trip.first, true);
+  assert.equal(ctx.chain.requestFirstFall(),undefined,'one fall in flight');
+  assert.equal(await ctx.chain.requestLanding(fall.trip.id),undefined,'cannot land before travel ends');
+  ctx.advance(25_000);
+  assert.equal(await ctx.chain.requestLanding(fall.trip.id+1),undefined,'wrong trip cannot consume first fall');
   const landing = await ctx.chain.requestLanding(fall.trip.id);
+  assert.deepEqual(await ctx.chain.requestLanding(fall.trip.id),mineLanding,'accepted retry must not consume another fall');
   assert.deepEqual(landing, mineLanding);
   assert.equal(ctx.chain.phase(), 'mine');
   assert.equal(ctx.chain.firstFallPending(), false);
@@ -102,6 +109,7 @@ test('cage rides run both ways through the lift and the domain handoff', async (
   windOpen(ctx);
   ctx.setFoot({ ...shaftFoot });
   const fall = ctx.chain.requestFirstFall()!;
+  ctx.advance(25_000);
   await ctx.chain.requestLanding(fall.trip.id);
 
   // Up: the cage still stands at the crater floor after the fall, so the
@@ -116,9 +124,12 @@ test('cage rides run both ways through the lift and the domain handoff', async (
   const up = upEvent.trip;
   assert.equal(up.direction, 'up');
   const upLanding = ctx.chain.requestLanding(up.id);
+  const duplicate=ctx.chain.requestLanding(up.id);
+  assert.equal(upLanding,duplicate,'duplicate waits share a single receipt');
   ctx.advance(26_000);
   ctx.chain.update();
   assert.deepEqual(await upLanding, shaftFoot);
+  assert.deepEqual(await duplicate,shaftFoot);
   assert.equal(ctx.chain.phase(), 'surface');
 
   // Down again as a cage ride (no second first fall); the cage is at the
@@ -127,10 +138,12 @@ test('cage rides run both ways through the lift and the domain handoff', async (
   const down = ctx.chain.requestCageRide('down');
   assert.ok(down);
   assert.equal(down.first, false);
-  const downLanding = ctx.chain.requestLanding(down.id);
+  assert.equal(await ctx.chain.requestLanding(up.id),undefined,'prior trip must not move newer ride');
   ctx.advance(26_000);
   ctx.chain.update();
-  assert.deepEqual(await downLanding, mineLanding);
+  // The frame tick commonly arrives before the cinematic's black-frame callback.
+  assert.deepEqual(await ctx.chain.requestLanding(down.id), mineLanding);
+  assert.deepEqual(await ctx.chain.requestLanding(down.id), mineLanding);
   assert.equal(ctx.chain.phase(), 'mine');
 });
 

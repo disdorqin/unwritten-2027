@@ -16,6 +16,13 @@ import { mountUndergroundExpeditionCampScene } from './underground-expedition-ca
 import { mountUndergroundMainlineScene } from './underground-mainline-scene.js';
 import {mountFirstMineWorkfaces} from './town-c-first-mine-workfaces.js';
 import {mountFirstMineDeepWorks} from './town-c-first-mine-deep-works.js';
+import {applyR30CampRock} from './town-c-r30-camp-art.js';
+import {mountR30LiftPresentation,mountR30LiftWreck} from './town-c-r30-lift-presentation.js';
+import {cutR30UpperLiftFloor} from './town-c-r30-upper-aperture.js';
+import {cutR30CrystalEndWall} from './town-c-r30-crystal-support.js';
+import {mountR30MainGallery} from './town-c-r30-main-gallery.js';
+import {mountR30Workbay} from './town-c-r30-workbay.js';
+import {mountR30SupportAnnex} from './town-c-r30-support-annex.js';
 import {
   mountTownC2UndergroundWaterMinus90,
   type UndergroundWater90OreVisual,
@@ -148,10 +155,14 @@ export function mountUndergroundMineDomain(host: Host) {
   };
   const geometries: BufferGeometry[] = [];
   let waterMesh: Mesh | undefined;
+  let rockMesh:Mesh|undefined;
+  let upperLiftAperture=false,crystalMouth=false,rockVertices=mine.mesh.rock;
+  let campRock:ReturnType<typeof applyR30CampRock>|undefined;
   for (const surface of ['rock', 'rail', 'water'] as const) {
     const vertices = mine.mesh[surface];
     if (!(vertices instanceof Float32Array) || vertices.length < 9 || vertices.length % 9 !== 0 ||
         !vertices.every(Number.isFinite)) {
+      campRock?.dispose();
       for (const geometry of geometries) geometry.dispose();
       for (const material of Object.values(materials)) material.dispose();
       throw new RangeError('Mine scene requires validated rock, rail and water triangles');
@@ -160,10 +171,15 @@ export function mountUndergroundMineDomain(host: Host) {
     geometry.setAttribute('position', new BufferAttribute(vertices, 3));
     geometry.computeVertexNormals();
     geometries.push(geometry);
-    const mesh = new Mesh(geometry, materials[surface]);
+    // Preserve the original rock geometry and use a second material only
+    // inside the sample camp. Other tunnels keep their prior visual style.
+    const campStart=mine.route.at(-2)?.from[2];
+    if(surface==='rock'&&campStart!==undefined)campRock=applyR30CampRock(geometry,materials.rock,campStart,campStart+campSpec.length,mine.expansion?.deepWorks===true);
+    const mesh = new Mesh(geometry, surface==='rock'&&campRock?campRock.materials:materials[surface]);
     mesh.name = 'underground-mine-' + surface;
     root.add(mesh);
     if (surface === 'water') waterMesh = mesh;
+    if(surface==='rock')rockMesh=mesh;
   }
 
   let staticCamp: ReturnType<typeof createUndergroundCampRemains> | undefined;
@@ -182,6 +198,7 @@ export function mountUndergroundMineDomain(host: Host) {
       staticCampLights.sync(new Set(), 0, 0);
     }
   } catch (error) {
+    campRock?.dispose();
     for (const geometry of geometries) geometry.dispose();
     for (const material of Object.values(materials)) material.dispose();
     throw error;
@@ -210,6 +227,9 @@ export function mountUndergroundMineDomain(host: Host) {
   }
   const workfaces=mountFirstMineWorkfaces(root,mine.workfaces,mine.supportStation);
   const deepWorks=mountFirstMineDeepWorks(root,mine.expansion?.deepWorks===true);
+  const galleryArt=mountR30MainGallery(root,mine);
+  const workbay=mountR30Workbay(root,mine);
+  const supportAnnex=mountR30SupportAnnex(root,mine.expansion?.hasSupportAnnex===true);
   const waterOverlay = host.waterRuntime && waterMesh
     ? mountTownC2UndergroundWaterMinus90({
       parent: root, mine, waterMesh,
@@ -218,6 +238,14 @@ export function mountUndergroundMineDomain(host: Host) {
       oreVisuals: host.waterRuntime.oreVisuals,
     })
     : undefined;
+  const opening=mine.anchors.poolShaftOpening;
+  // The existing surveyed pool supplies the aperture and dimensions. A
+  // noncanonical fixture must not get the permanent accident set dressing.
+  const wreckProbe=mine.queryPassage(2.7,1.5,.2,1.8);
+  const wreck=opening&&pool[2]===2&&wreckProbe?.zone==='pool'&&Math.abs(wreckProbe.waterDepth-1.2)<.001
+    ?mountR30LiftWreck(root,pool,6,4,1.2):undefined;
+  const shaftRide=opening&&shaftFoot.height>opening.roofY+root.position.y+3?
+    mountR30LiftPresentation(root,shaftFoot,landing,mineYaw,opening.roofY+root.position.y):undefined;
   parent.add(root);
   // The pump room uses a distinct certified ENY site in the between-layer passage,
   // not the mine-local pool frame. Missing site/foot approval leaves it unmounted.
@@ -239,6 +267,41 @@ export function mountUndergroundMineDomain(host: Host) {
     camp: interactiveCamp?.camp ?? staticCamp,
     workfaces,
     deepWorks,
+    galleryArt,workbay,supportAnnex,
+    wreck,
+    shaftRide,
+    /** Called only after the C-owned actual seam and C2 ceiling are certified.
+     * The composed host must keep the physical hatch closed outside a ride. */
+    installUpperLiftAperture(){
+      if(disposed||!rockMesh)return false;
+      if(upperLiftAperture)return true;
+      const cut=cutR30UpperLiftFloor(rockVertices);
+      if(cut.kind!=='ready')return false;
+      const previous=rockMesh.geometry;
+      const g=new BufferGeometry();
+      g.setAttribute('position',new BufferAttribute(cut.vertices,3));g.computeVertexNormals();
+      const campStart=mine.route.at(-2)?.from[2];
+      const next=campStart!==undefined?applyR30CampRock(g,materials.rock,campStart,campStart+campSpec.length,mine.expansion?.deepWorks===true):undefined;
+      const index=geometries.indexOf(previous);if(index>=0)geometries[index]=g;else geometries.push(g);
+      rockMesh.geometry=g;rockMesh.material=next?.materials??materials.rock;
+      previous.dispose();campRock?.dispose();campRock=next;
+      rockVertices=cut.vertices;upperLiftAperture=true;return true;
+    },
+    hasUpperLiftAperture:()=>upperLiftAperture,
+    installCrystalMouth(){
+      if(disposed||!rockMesh)return false;
+      if(crystalMouth)return true;
+      const cut=cutR30CrystalEndWall(rockVertices);
+      if(cut.kind!=='ready')return false;
+      const previous=rockMesh.geometry,g=new BufferGeometry();
+      g.setAttribute('position',new BufferAttribute(cut.vertices,3));g.computeVertexNormals();
+      const campStart=mine.route.at(-2)?.from[2];
+      const next=campStart!==undefined?applyR30CampRock(g,materials.rock,campStart,campStart+campSpec.length,mine.expansion?.deepWorks===true):undefined;
+      const index=geometries.indexOf(previous);if(index>=0)geometries[index]=g;else geometries.push(g);
+      rockMesh.geometry=g;rockMesh.material=next?.materials??materials.rock;
+      previous.dispose();campRock?.dispose();campRock=next;rockVertices=cut.vertices;crystalMouth=true;return true;
+    },
+    hasCrystalMouth:()=>crystalMouth,
     pumpHouse: pumpHouse?.kind === 'ready' ? pumpHouse : undefined,
     pumpHouseStatus: pumpHouse?.kind ?? 'unregistered',
     expedition,
@@ -298,7 +361,10 @@ export function mountUndergroundMineDomain(host: Host) {
       for (const vein of veins.values()) vein.dispose();
       staticCamp?.dispose();
       workfaces.dispose();
-      deepWorks.dispose();
+      deepWorks.dispose();galleryArt.dispose();workbay.dispose();supportAnnex.dispose();
+      wreck?.dispose();
+      shaftRide?.dispose();
+      campRock?.dispose();
       for (const geometry of geometries) geometry.dispose();
       for (const material of Object.values(materials)) material.dispose();
     },

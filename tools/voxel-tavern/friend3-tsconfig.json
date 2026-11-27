@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "types": ["node", "vite/client"],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"]
+  },
+  "include": [
+    "town-blockout/town-friend3-*.ts",
+    "friend3-*.ts",
+    "friend3-vite*.ts",
+    "../../tests/town-friend3-*.test.ts"
+  ]
+}

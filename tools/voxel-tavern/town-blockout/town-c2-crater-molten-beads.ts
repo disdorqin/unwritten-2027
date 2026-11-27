@@ -1,7 +1,7 @@
 import {
-  BoxGeometry, BufferGeometry, Color, DataTexture, Float32BufferAttribute, Group,
+  BufferGeometry, Color, DataTexture, Float32BufferAttribute, Group,
   InstancedMesh, Mesh, MeshLambertMaterial, NearestFilter, Object3D, RepeatWrapping,
-  SRGBColorSpace, StaticDrawUsage,
+  SRGBColorSpace, StaticDrawUsage, Quaternion, Vector3,
 } from 'three';
 import { meteorCraterRimRadius } from './meteor-crater';
 import type { AtlasSpeciesEntry } from './town-atlas-species';
@@ -259,6 +259,16 @@ function scatter(ground: MoltenBeadsGround, reserved: readonly MoltenBeadsReserv
     if (height === undefined || !Number.isFinite(height)) {
       throw new Error(`C2-03 has no host terrain height at E${east}/N${north}.`);
     }
+    // The reworked wall contains sharp cut seams. Reject a tiny shard
+    // which would straddle a step much larger than its own dimensions.
+    // Retry the original seeded scatter until the canonical count holds.
+    let minSupport=height,maxSupport=height,valid=true;
+    for(const de of [-.88,0,.88])for(const dn of [-.88,0,.88]){
+      const h=ground.heightAt(east+de*size,north+dn*size);
+      if(h===undefined||!Number.isFinite(h)){valid=false;continue;}
+      minSupport=Math.min(minSupport,h);maxSupport=Math.max(maxSupport,h);
+    }
+    if(!valid||maxSupport-minSupport>size*1.6)continue;
     placements.push({ east, north, height, size });
   }
   if (placements.length !== count) {
@@ -267,22 +277,73 @@ function scatter(ground: MoltenBeadsGround, reserved: readonly MoltenBeadsReserv
   return placements;
 }
 
-function stampInstances(geometry: BoxGeometry, material: MeshLambertMaterial,
-  placements: readonly Scatter[], embedded: number, gravel: boolean) {
+/** Angular, cut-corner voxel fragments, with distinct silhouette for
+ * cooled impact glass versus opaque basalt. Each stays inside the old
+ * unit cube's reservation; no extra material or scatter instance. */
+function buildImpactFragment(gravel:boolean){
+  const rim=[[-.5,-.28],[-.29,-.5],[.28,-.5],[.5,-.28],[.5,.29],[.29,.5],[-.28,.5],[-.5,.28]];
+  const levels=gravel?[[-.5,.68,-.035,.02],[-.08,1,0,0],[.5,.53,.09,-.055]]:[[-.5,.70,0,0],[-.12,1,0,0],[.5,.73,.055,-.035]];
+  const points=levels.flatMap(([y,r,dx,dz])=>rim.map(([x,z],i)=>new Vector3(x*r+dx,y+(gravel&&y===.5&&i%3===0?-.10:0),z*r+dz)));
+  const top=new Vector3(gravel?.09:.055,.5,gravel?-.055:-.035),bottom=new Vector3(0,-.5,0);
+  const positions:number[]=[],uv:number[]=[];
+  function tri(a:Vector3,b:Vector3,c:Vector3){
+    const n=b.clone().sub(a).cross(c.clone().sub(a)),nx=Math.abs(n.x),ny=Math.abs(n.y),nz=Math.abs(n.z);
+    for(const p of [a,b,c]){
+      positions.push(p.x,p.y,p.z);
+      if(ny>=nx&&ny>=nz)uv.push(p.x+.5,p.z+.5);
+      else if(nx>=nz)uv.push(p.z+.5,p.y+.5);
+      else uv.push(p.x+.5,p.y+.5);
+    }
+  }
+  for(let i=0;i<8;i++){
+    const j=(i+1)%8;
+    for(let k=0;k<2;k++){
+      const a=points[k*8+i],b=points[k*8+j],c=points[(k+1)*8+i],d=points[(k+1)*8+j];
+      tri(a,c,b);tri(b,c,d);
+    }
+    tri(bottom,points[i],points[j]);
+    tri(top,points[16+j],points[16+i]);
+  }
+  const geometry=new BufferGeometry();
+  geometry.setAttribute('position',new Float32BufferAttribute(positions,3));
+  geometry.setAttribute('uv',new Float32BufferAttribute(uv,2));
+  geometry.computeVertexNormals();geometry.computeBoundingSphere();
+  return geometry;
+}
+function stampInstances(geometry: BufferGeometry, material: MeshLambertMaterial,
+  placements: readonly Scatter[], embedded: number, gravel: boolean,ground:MoltenBeadsGround) {
   const mesh = new InstancedMesh(geometry, material, placements.length);
-  const dummy = new Object3D();
+  const dummy = new Object3D(),up=new Vector3(0,1,0),v=new Vector3(),normal=new Vector3();
+  const align=new Quaternion(),yaw=new Quaternion(),tilt=new Quaternion();
+  const positions=geometry.getAttribute('position'),topHeights:number[]=[];
   const random = randomSource(gravel ? 47021 : 47047);
   placements.forEach((piece, index) => {
     dummy.position.set(piece.east, piece.height + piece.size * embedded, -piece.north);
-    dummy.rotation.set((random() - .5) * .14, random() * tau, (random() - .5) * .14);
-    dummy.scale.setScalar(piece.size);
-    dummy.updateMatrix();
+    const step=.07,west=ground.heightAt(piece.east-step,piece.north),east=ground.heightAt(piece.east+step,piece.north);
+    const south=ground.heightAt(piece.east,piece.north-step),north=ground.heightAt(piece.east,piece.north+step);
+    normal.set(((west??piece.height)-(east??piece.height))/(step*2),1,((north??piece.height)-(south??piece.height))/(step*2)).normalize();
+    align.setFromUnitVectors(up,normal);yaw.setFromAxisAngle(up,random()*tau);
+    tilt.setFromAxisAngle(new Vector3(1,0,0),(random()-.5)*.12);
+    dummy.quaternion.copy(align).multiply(yaw).multiply(tilt);
+    dummy.scale.setScalar(piece.size);dummy.updateMatrix();
+    // Use real triangle heights beneath transformed vertices. A point
+    // contact must be embedded rather than float above a cut slope.
+    let minGap=Infinity,maxHeight=-Infinity;
+    for(let i=0;i<positions.count;i++){
+      v.fromBufferAttribute(positions,i).applyMatrix4(dummy.matrix);
+      const support=ground.heightAt(v.x,-v.z);
+      if(support===undefined||!Number.isFinite(support))throw Error('Missing impact-fragment ground support');
+      minGap=Math.min(minGap,v.y-support);maxHeight=Math.max(maxHeight,v.y);
+    }
+    const lower=Math.max(0,minGap+piece.size*.035);
+    dummy.position.y-=lower;dummy.updateMatrix();
     mesh.setMatrixAt(index, dummy.matrix);
+    topHeights.push(maxHeight-lower);
   });
   mesh.instanceMatrix.setUsage(StaticDrawUsage);
   mesh.instanceMatrix.needsUpdate = true;
   mesh.computeBoundingSphere();
-  return mesh;
+  return {mesh,topHeights};
 }
 
 export function mountC2CraterMoltenBeads(ground: MoltenBeadsGround,
@@ -325,7 +386,7 @@ export function mountC2CraterMoltenBeads(ground: MoltenBeadsGround,
   });
   installNearReadGate(glassMaterial);
   const gravelMaterial = new MeshLambertMaterial({ map: gravelMap, flatShading: true });
-  const cube = new BoxGeometry(1, 1, 1);
+  const glassForm=buildImpactFragment(false),gravelForm=buildImpactFragment(true);
 
   const earthGeometry = buildScorchedEarth(ground, reserved);
   const earth = new Mesh(earthGeometry, earthMaterial);
@@ -335,7 +396,7 @@ export function mountC2CraterMoltenBeads(ground: MoltenBeadsGround,
 
   const beads = scatter(ground, reserved, c2CraterMoltenBeadsPlan.beadCount,
     c2CraterMoltenBeadsPlan.minBeadSize, c2CraterMoltenBeadsPlan.maxBeadSize, 9503, .105);
-  const beadMesh = stampInstances(cube, glassMaterial, beads, .42, false);
+  const {mesh:beadMesh,topHeights}=stampInstances(glassForm, glassMaterial, beads, .42, false,ground);
   beadMesh.name = 'c2-molten-beads-impact-glass';
   beadMesh.visible = false;
   beadMesh.receiveShadow = true;
@@ -354,7 +415,7 @@ export function mountC2CraterMoltenBeads(ground: MoltenBeadsGround,
 
   const gravel = scatter(ground, reserved, c2CraterMoltenBeadsPlan.gravelCount,
     .045, .13, 9521, .08);
-  const gravelMesh = stampInstances(cube, gravelMaterial, gravel, .24, true);
+  const {mesh:gravelMesh}=stampInstances(gravelForm, gravelMaterial, gravel, .24, true,ground);
   gravelMesh.name = 'c2-molten-beads-basalt-gravel';
   gravelMesh.receiveShadow = true;
   const gravelRandom = randomSource(47061);
@@ -375,7 +436,7 @@ export function mountC2CraterMoltenBeads(ground: MoltenBeadsGround,
     atlasDiscovery: 'seen',
     east: hostBead.east,
     north: hostBead.north,
-    height: hostBead.height + hostBead.size * .92,
+    height: topHeights[beads.indexOf(hostBead)],
     range: 2.4,
   });
 
@@ -415,7 +476,7 @@ export function mountC2CraterMoltenBeads(ground: MoltenBeadsGround,
     group.removeFromParent();
     group.clear();
     earthGeometry.dispose();
-    cube.dispose();
+    beadMesh.dispose();gravelMesh.dispose();glassForm.dispose();gravelForm.dispose();
     earthMaterial.dispose();
     glassMaterial.dispose();
     gravelMaterial.dispose();
@@ -445,7 +506,7 @@ export function mountC2CraterMoltenBeads(ground: MoltenBeadsGround,
         emissiveIntensity: glassMaterial.emissiveIntensity,
         materialFamilies,
         drawCalls: 3,
-        triangles: earthGeometry.index!.count / 3 + (beads.length + gravel.length) * 12,
+        triangles: earthGeometry.index!.count / 3 + beads.length*glassForm.getAttribute('position').count/3 + gravel.length*gravelForm.getAttribute('position').count/3,
         reservedSites: reserved,
       });
     },

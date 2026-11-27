@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>FR-05 雪夜翻牌 · 独立预览</title>
+  <link rel="stylesheet" href="./friend3-card-game.css">
+</head>
+<body>
+  <main class="f3-game" id="game">
+    <header class="f3-header">
+      <div>
+        <p class="f3-kicker">UNWRITTEN 2027 · FR-05 独立预览</p>
+        <h1>雪夜翻牌</h1>
+        <p class="f3-sub">记住每一对冬日物件，在雪夜熄灯前全部配对。纯本地单机，无联网排行、星石或经济依赖。</p>
+      </div>
+      <div class="f3-hud" aria-live="polite" aria-label="牌局状态">
+        <span id="hud-difficulty">雪夜标准</span>
+        <span id="hud-timer">00:00</span>
+        <span id="hud-attempts">步数 0</span>
+        <span id="hud-pairs">配对 0/8</span>
+      </div>
+    </header>
+
+    <section id="start-screen" class="f3-screen" aria-labelledby="start-title">
+      <h2 id="start-title">选择今晚的牌局</h2>
+      <p class="f3-note">三档难度均为 4 列；牌面越大，记忆压力越高。键鼠与触控均可操作。</p>
+      <div id="difficulty-list" class="f3-difficulties" role="group" aria-label="难度选择"></div>
+      <button id="start-button" class="f3-primary" type="button">开始翻牌 · 雪夜标准（8 对）</button>
+      <p class="f3-note">操作：点击牌面翻开两张；相同即配对，不同会短暂展示后翻回。可用 Tab 聚焦、Enter/Space 翻牌。</p>
+    </section>
+
+    <section id="play-screen" class="f3-screen" aria-label="翻牌棋盘" hidden>
+      <div class="f3-toolbar">
+        <button id="restart-button" type="button">重开本局</button>
+        <button id="exit-button" type="button">退出到选局</button>
+      </div>
+      <div id="board" class="f3-board" role="group" aria-label="翻牌棋盘"></div>
+      <p id="board-status" class="f3-status" role="status" aria-live="polite"></p>
+    </section>
+
+    <section id="win-screen" class="f3-screen" aria-labelledby="win-title" hidden>
+      <p class="f3-win-mark" aria-hidden="true">✦</p>
+      <h2 id="win-title">雪夜配对完成</h2>
+      <p id="win-summary"></p>
+      <div class="f3-win-actions">
+        <button id="again-button" class="f3-primary" type="button">再来一局</button>
+        <button id="change-button" type="button">换难度</button>
+        <button id="win-exit-button" type="button">退出</button>
+      </div>
+    </section>
+
+    <footer class="f3-footer">原创程序化牌面 · MIT · 不接主线存档、经济、星石或排行</footer>
+  </main>
+  <script type="module" src="./friend3-card-game-preview.ts"></script>
+</body>
+</html>

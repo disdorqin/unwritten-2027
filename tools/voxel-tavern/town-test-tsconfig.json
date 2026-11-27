@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "baseUrl": "../..",
+    "paths": {
+      "three": ["./tools/voxel-tavern/node_modules/three/build/three.module.js"],
+      "three/addons/*": ["./tools/voxel-tavern/node_modules/three/examples/jsm/*"]
+    }
+  }
+}
