@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const [segment, evidencePath] = process.argv.slice(2);
-assert.ok(['descent','roundtrip','rim-return'].includes(segment)&&evidencePath,'Usage: node tools/verify-b-r30-native-local.mjs <descent|roundtrip|rim-return> <fresh evidence directory>');
+assert.ok(['descent','roundtrip','rim-return','perf'].includes(segment)&&evidencePath,'Usage: node tools/verify-b-r30-native-local.mjs <descent|roundtrip|rim-return> <fresh evidence directory>');
 const run = promisify(execFile);
 const repo = fileURLToPath(new URL('../', import.meta.url));
 const viewer = join(repo, 'tools', 'voxel-tavern');
@@ -166,7 +166,7 @@ try {
     TOWN_NIGHT_BEACON_RECEIPT: join(temporary, 'town-night-beacon-receipt.json'),
   });
   await Promise.all(Object.values(ports).map(assigned => waitForPresence(assigned, presence)));
-  driver = startNode(['--import','tsx',join(repo,'tools','verify-b-r30-native-walk.mjs'),base,output,segment], {
+  driver = startNode(['--import','tsx',join(repo,'tools',segment==='perf'?'verify-p-r30-performance.mjs':'verify-b-r30-native-walk.mjs'),base,output,segment], {
     ...(chrome ? { CHROMIUM_PATH: chrome } : {}), ZA22_HARDWARE: hardware ? '1' : '0',
   });
   await finish(driver);

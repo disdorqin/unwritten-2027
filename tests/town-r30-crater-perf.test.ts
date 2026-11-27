@@ -1,0 +1,54 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import {BoxGeometry,Group,Mesh,MeshBasicMaterial,MeshStandardMaterial,PerspectiveCamera,PointLight,Scene,Vector3,type WebGLRenderer} from 'three';
+import {mountZa31CraterLampRoom} from '../tools/voxel-tavern/town-blockout/town-za31-crater-lamp-room';
+import {createTerrainGrid,worldBounds} from '../tools/voxel-tavern/town-blockout/terrain';
+import {mountWestCraterRoad} from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
+import {batchCraterLampRoom,installCraterRenderPerf} from '../tools/voxel-tavern/town-blockout/town-r30-crater-perf';
+
+function geometry(root:Group){
+ root.updateMatrixWorld(true);let draws=0,tris=0;const positions:string[]=[];
+ const p=new Vector3();
+ root.traverse(o=>{if(!(o instanceof Mesh))return;draws++;const g=o.geometry,a=g.getAttribute('position'),n=g.index?.count??a.count;tris+=n/3;
+  for(let i=0;i<n;i++){p.fromBufferAttribute(a,g.index?g.index.getX(i):i).applyMatrix4(o.matrixWorld);positions.push(p.toArray().map(x=>x.toFixed(3)).join(','));}});
+ return {draws,tris,positions:positions.sort()};
+}
+test('actual lamp-room static batching retains world triangles, sign and light',()=>{
+ const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
+ const room=mountZa31CraterLampRoom(road)!;assert.ok(room);
+ const sign=new Mesh(new BoxGeometry(.1,.1,.1),new MeshBasicMaterial());room.group.add(sign);
+ const lights:PointLight[]=[];room.group.traverse(o=>{if(o instanceof PointLight)lights.push(o);});
+ const before=geometry(room.group),boxes=structuredClone(room.boxes),result=batchCraterLampRoom(room.group);
+ const after=geometry(room.group);
+ assert.ok(result.before>90&&result.after<15);
+ assert.ok(after.draws<before.draws*.25);
+ assert.equal(after.tris,before.tris);
+ // Float32 merged coordinates may round differently at exactly half a
+ // millimetre: compare sorted quantized coordinates by geometric tolerance.
+ const points=(a:string[])=>a.map(s=>s.split(',').map(Number)).sort((a,b)=>a[0]-b[0]||a[1]-b[1]||a[2]-b[2]);
+ const x=points(before.positions),y=points(after.positions);
+ assert.equal(x.length,y.length);
+ // Compare a multiset using rounded bins with nearest adjacent bin fallback.
+ const bins=new Map<string,number>();const key=(v:number[])=>v.map(n=>Math.round(n*1000)).join(',');
+ for(const v of x)bins.set(key(v),(bins.get(key(v))??0)+1);
+ for(const v of y){let found=false;
+  for(const de of [0,-1,1])for(const dh of [0,-1,1])for(const dn of [0,-1,1]){if(found)continue;const k=[Math.round(v[0]*1000)+de,Math.round(v[1]*1000)+dh,Math.round(v[2]*1000)+dn].join(',');if((bins.get(k)??0)>0){bins.set(k,bins.get(k)!-1);found=true;}}
+  assert.ok(found,'No matching authored vertex');
+ }
+ assert.ok([...bins.values()].every(n=>n===0));assert.deepEqual(room.boxes,boxes);
+ assert.equal(sign.parent,room.group);assert.equal(lights.length,1);assert.equal(lights[0].parent,room.group);
+ room.setNightOrdinal(1);assert.ok(room.signLines().length>0);
+});
+test('pre-render scope excludes only zero-contribution finite lights and restores authored state',()=>{
+ const scene=new Scene(),root=new Group(),camera=new PerspectiveCamera(60,1,.1,100);
+ camera.position.set(0,0,0);camera.lookAt(0,0,-10);camera.updateMatrixWorld(true);
+ const lamp=(x:number,z:number,d:number,intensity=1)=>{const l=new PointLight(0xffffff,intensity,d);l.position.set(x,0,z);root.add(l);return l;};
+ const close=lamp(0,-4,5),outside=lamp(40,-4,2),dark=lamp(0,-4,5,0),unbounded=lamp(40,-4,0),shadow=lamp(50,-4,2);shadow.castShadow=true;
+ let lod=0,previous=0;const original=()=>{previous++};scene.onBeforeRender=original;
+ const hook=installCraterRenderPerf(root,()=>lod++);scene.add(root);scene.updateMatrixWorld(true);
+ const renderer={} as WebGLRenderer,call=(f:unknown)=>(f as (...a:unknown[])=>void).call(scene,renderer,scene,camera,null);
+ call(scene.onBeforeRender);
+ assert.equal(previous,1);assert.equal(lod,1);assert.equal(close.layers.mask,1);assert.equal(outside.layers.mask,0);assert.equal(dark.layers.mask,0);assert.equal(unbounded.layers.mask,1);assert.equal(shadow.layers.mask,1);assert.ok(outside.visible);
+ call(scene.onAfterRender);assert.equal(outside.layers.mask,1);assert.equal(dark.layers.mask,1);assert.equal(dark.intensity,0);
+ hook.dispose();assert.equal(scene.onBeforeRender,original);
+});
