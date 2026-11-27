@@ -1,6 +1,9 @@
 import {
-  BoxGeometry, Color, Group, InstancedMesh, MeshLambertMaterial, MeshBasicMaterial, Object3D, PointLight,
+  BoxGeometry, Color, Group, InstancedMesh, Mesh, MeshLambertMaterial, MeshBasicMaterial, Object3D, PointLight, TorusGeometry,
 } from 'three';
+
+import {createCableRepairHost, type RepairAnchors} from './town-cable-repair-host';
+import type {Za36CableRepairState} from './town-za36-cable-repair';
 
 type GroundAt = (east: number, north: number) => number | undefined;
 type Family = 'stone' | 'wood' | 'tile' | 'bronze' | 'iron' | 'snow' | 'glow';
@@ -171,13 +174,47 @@ export function mountMainSummitCableWorkshop(owner: Group, groundAt: GroundAt) {
     lights.push(point);
     group.add(point);
   }
+  // Repair pieces are independent of the static instance batches: the
+  // authority drives the handle, pulley lift, and each actual weight.
+  const faultMaterial=new MeshLambertMaterial({color:'#a56e41'}),weightMaterial=new MeshLambertMaterial({color:'#7e8589'});
+  const wheelGeometry=new TorusGeometry(.58,.075,6,16);
+  const brake=new Mesh(wheelGeometry,faultMaterial);brake.name='night-b-line2-rust-brake';brake.position.set(-1.92,1.48,-2.28);group.add(brake);
+  const pulley=new Mesh(wheelGeometry,faultMaterial);pulley.name='night-b-line2-slack-pulley';pulley.position.set(-1.92,1.65,1.25);group.add(pulley);
+  const weightMesh=new InstancedMesh(cube,weightMaterial,4);weightMesh.name='night-b-line2-repair-weights';weightMesh.frustumCulled=false;group.add(weightMesh);
+  const global=(x:number,z:number)=>({east:anchor.east+z,north:anchor.north+x});
+  const repairAnchors:RepairAnchors=Object.freeze({brake:global(-1.25,-2.28),cableWheel:global(-1.25,1.25),weightTower:global(1.25,2.2),weightFrame:global(.8,-2.8)});
+  const repair=createCableRepairHost(2,repairAnchors);
+  let state:Za36CableRepairState|undefined;
+  function sync(next:Za36CableRepairState|undefined){
+    if(next?.line!==2)next=undefined;
+    if(state&&next&&next.version<state.version)return;
+    state=next;if(next)repair.sync(next);
+    brake.rotation.z=-(next?.impacts??0)*.12-(next?.brakePulled?1.15:0);
+    faultMaterial.color.set(next?.brakePulled?'#b8a077':'#a56e41');
+    pulley.position.y=1.65+.58*(next?.cableHeight??0);
+    pulley.rotation.set(0,0,.38*(1-(next?.cableHeight??0))+(next?.cableTurns??0)*Math.PI*2/3);
+    for(let i=0;i<4;i++){
+      const hung=next?.weightMounted[i],carried=next?.carriedWeight===i;
+      transform.position.set(hung?2.06:2.48+i*.60,hung?.55+i*.43:.30,hung?-3.18:2.95);
+      transform.rotation.set(0,0,0);transform.scale.set(carried?0:.48,carried?0:.42,carried?0:.49);transform.updateMatrix();weightMesh.setMatrixAt(i,transform.matrix);
+    }
+    weightMesh.instanceMatrix.needsUpdate=true;
+  }
+  sync(undefined);
   function coordinates(east: number, north: number) {
     // Workshop yaw=PI/2, so +local Z is east and +local X is north.
     return { x: north - anchor.north, z: east - anchor.east };
   }
   let disposed = false;
   return {
-    group, lights, pieceCount: Object.values(buckets).reduce((sum, v) => sum + v.length, 0),
+    group, lights, repairAnchors, sync,
+    repairActions(feet:{east:number;north:number;height:number}){
+      if(!state||!Number.isFinite(feet.height)||Math.abs(feet.height-anchor.floor)>.43)return [];
+      const {x,z}=coordinates(feet.east,feet.north);
+      if(Math.abs(x)>4.85||Math.abs(z)>4.1||solids.some(w=>Math.abs(x-w.x)<w.w/2+.27&&Math.abs(z-w.z)<w.d/2+.27&&w.low<1.8&&w.high>.065))return [];
+      return repair.actions(state,feet);
+    },
+    pieceCount: Object.values(buckets).reduce((sum, v) => sum + v.length, 0),
     drawBudget: meshes.length, text: crateText,
     surfaceAt(east: number, north: number, radius = .27) {
       if (![east, north, radius].every(Number.isFinite) || radius < 0 || radius > .5) return;
@@ -204,6 +241,7 @@ export function mountMainSummitCableWorkshop(owner: Group, groundAt: GroundAt) {
         if (Array.isArray(material)) for (const value of material) value.dispose();
         else (material as MeshLambertMaterial).dispose();
       }
+      weightMesh.dispose();wheelGeometry.dispose();faultMaterial.dispose();weightMaterial.dispose();
       cube.dispose();
       group.removeFromParent();
       group.clear();
