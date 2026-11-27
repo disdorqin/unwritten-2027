@@ -68,7 +68,7 @@ try{
   if(await page.locator('#town-settings-close').isVisible())await page.locator('#town-settings-close').click();
   await page.waitForFunction(([e,n])=>{const f=window.__m1Frame?.ridge?.foot;return f&&Math.hypot(f[0]-e,f[1]-n)<12},[e,n],{timeout:12000});
  };
- await snap('spawn-night');await day();await snap('spawn-day');
+ if(!longRoad){await snap('spawn-night');await day();await snap('spawn-day');
  await go('山口',290,300);await snap('mountain-foot-day');await day();await snap('mountain-foot-night');await day();
  await go('山口站',296,520);await snap('west-side-day');await day();await snap('west-side-night');await day();
  // Normal keyboard locomotion, not synthetic camera position injection.
@@ -80,6 +80,7 @@ try{
  }
  await snap('west-side-walk');
  const last=frames.at(-1).frame.ridge.foot;assert.ok(Math.hypot(last[0]-before[0],last[1]-before[1])>.5,'normal player moved');
+ }else await day();
  await go('火车站',526,305);await snap('east-side-station-day');await day();await snap('east-side-station-night');await day();
  const travel=async(key,condition)=>{
   await page.keyboard.down(key);
@@ -119,19 +120,20 @@ try{
    }
   }
   const total=path.at(-1).cum;
+  const checkpoint=()=>writeFile(join(out,'road-checkpoints.json'),JSON.stringify({roadWalk,frames:frames.map(({name,position})=>({name,position}))},null,2));
   async function follow(direction,target){
    const begin=Date.now();let lastProgress=-Infinity,stalled=0;
    for(let k=0;k<1300;k++){
     const r=await page.evaluate(()=>window.__m1Frame.ridge),p=project(r.foot);
     roadWalk.push({direction,cum:p.cum,dist:p.dist,foot:r.foot,surface:r.surface,moveReject:r.moveReject});
     if(p.dist>1.35||Math.abs(r.foot[2]-r.surface)>.12)throw Error('road deviation '+JSON.stringify(roadWalk.at(-1)));
-    if(direction*(p.cum-target)>=-.45){console.log('long road checkpoint',JSON.stringify({direction,cum:p.cum,foot:r.foot,seconds:(Date.now()-begin)/1000}));return;}
+    if(direction*(p.cum-target)>=-.45){console.log('long road checkpoint',JSON.stringify({direction,cum:p.cum,foot:r.foot,seconds:(Date.now()-begin)/1000}));await checkpoint();return;}
     if(direction*p.cum>lastProgress+.1){lastProgress=direction*p.cum;stalled=0;}else if(++stalled>14)throw Error('road movement stalled '+JSON.stringify(roadWalk.at(-1)));
-    const aim=at(Math.min(total,Math.max(0,p.cum+direction*2.2)));
+    const aim=at(Math.min(total,Math.max(0,p.cum+direction*2.8)));
     const heading=Math.atan2(aim[0]-r.foot[0],aim[1]-r.foot[1]);
     await steer(Math.atan2(Math.sin(heading-r.heading),Math.cos(heading-r.heading)));
-    await page.keyboard.down('w');try{await page.waitForTimeout(Math.min(210,Math.max(65,Math.abs(target-p.cum)*90)))}finally{await page.keyboard.up('w')}
-    if(k%40===0)console.log('long road progress',JSON.stringify(roadWalk.at(-1)));
+    await page.keyboard.down('w');try{await page.waitForTimeout(Math.min(295,Math.max(65,Math.abs(target-p.cum)*90)))}finally{await page.keyboard.up('w')}
+    if(k%25===0){await checkpoint();console.log('long road progress',JSON.stringify(roadWalk.at(-1)));}
    }
    throw Error('long road input budget');
   }
