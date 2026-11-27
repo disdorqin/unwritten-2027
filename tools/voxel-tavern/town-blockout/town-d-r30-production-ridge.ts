@@ -36,7 +36,7 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
  const roadAt=(e:number,n:number)=>roads.some(r=>r.roadAt?.(e,n)===true);
  const model=mountFrontRidgeR30(field,roadAt,patch.ownsCell);owner.add(model.group);
  const clearance=ridgeForestRouteClearance(roads.map(r=>r.route));
- const forest=mountRidgeForest(field,(e,n,r)=>ownership.distance(e,n)>r+3&&clearance(e,n,r));owner.add(forest.group);
+ const forest=mountRidgeForest(field,(e,n,r)=>ownership.distance(e,n)>r+3&&clearance(e,n,r)&&!(e+r>=284&&e-r<=355&&n+r>=628&&n-r<=670));owner.add(forest.group);
  const furniture=roads.map(r=>mountRidgeRoadFurniture(field,r.route,allowed));
  const banks=roads.map(r=>mountRidgeRetainingBanks(field,r.route,allowed));
  for(const asset of [...furniture,...banks])owner.add(asset.group);
@@ -52,7 +52,7 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
  const facilities=stationReady&&cableAudit.groundHits===0&&cableAudit.minMoving>=.25
   ?mountRidgeCableFacilities(owner,field,true,true,serviceExit):undefined;
  const cloudSeam=auditProductionCloudSeam(field);
- const terrace=cloudSeam.physicalReady?mountRidgeCloudTerrace(owner,field,(e,n,y,r)=>!!facilities?.blocked(e,n,y,r),true):undefined;
+ const terrace=cloudSeam.physicalReady?mountRidgeCloudTerrace(owner,field,(e,n,y,r)=>forest.blocked(e,n,y,r)||!!facilities?.blocked(e,n,y,r)||!!station?.blocked(e,n,y,r)||furniture.some(f=>f.blocked(e,n,y,r))||banks.some(b=>b.blocked(e,n,y,r)),true):undefined;
  function heightAt(e:number,n:number){
   return patch.ownsCell(Math.floor(e),Math.floor(n))?grid.heightAt(e,n):undefined;
  }

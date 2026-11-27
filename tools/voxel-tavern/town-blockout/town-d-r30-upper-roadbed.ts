@@ -27,7 +27,13 @@ export const middleEastNorthControls=Object.freeze([...middleEastExtendedControl
 // The whole previous low service corridor is replaced, not stacked.
 export const lowerEastServiceControls=Object.freeze([
  {east:522,north:355},{east:515,north:355},{east:508,north:357},{east:503,north:364},
- {east:503,north:374},{east:504,north:386},{east:514,north:397},{east:507,north:408}
+ {east:503,north:374},{east:504,north:386},{east:514,north:397},{east:507,north:408},
+ // M4 east foothill contour extension: full continuous ground road.
+ {east:522,north:414},{east:528,north:408},{east:540,north:414},{east:546,north:420},
+ {east:558,north:426},{east:564,north:432},{east:570,north:444},{east:576,north:456},
+ {east:588,north:462},{east:594,north:474},{east:600,north:486},{east:594,north:492},
+ {east:600,north:504},{east:606,north:516},{east:606,north:522},{east:606,north:528},
+ {east:600,north:540},{east:606,north:552},{east:600,north:564}
 ]);
 // Separate south exit candidate. This is the first west-facing descent
 // section, not a finished base-station connection.

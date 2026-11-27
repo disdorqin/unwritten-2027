@@ -13,7 +13,22 @@ function distanceToSegment(e:number,n:number,a:P,b:P){
  return Math.hypot(e-a.east-t*dx,n-a.north-t*dn);
 }
 export function ridgeForestRouteClearance(routes:readonly (readonly P[])[]):Clearance{
- return (e,n,r)=>routes.every(points=>points.every((a,i)=>i===0||distanceToSegment(e,n,points[i-1]!,a)>=8+r));
+ // Bound candidate checks to road segments in nearby spatial bins.
+ const size=16,bins=new Map<string,{a:P;b:P}[]>();
+ for(const points of routes)for(let i=1;i<points.length;i++){
+  const a=points[i-1]!,b=points[i]!;
+  for(let x=Math.floor(Math.min(a.east,b.east)/size);x<=Math.floor(Math.max(a.east,b.east)/size);x++)
+   for(let z=Math.floor(Math.min(a.north,b.north)/size);z<=Math.floor(Math.max(a.north,b.north)/size);z++){
+    const k=x+','+z,list=bins.get(k)??[];list.push({a,b});bins.set(k,list);
+   }
+ }
+ return (e,n,r)=>{
+  const d=8+r;
+  for(let x=Math.floor((e-d)/size);x<=Math.floor((e+d)/size);x++)
+   for(let z=Math.floor((n-d)/size);z<=Math.floor((n+d)/size);z++)
+    for(const s of bins.get(x+','+z)??[])if(distanceToSegment(e,n,s.a,s.b)<d)return false;
+  return true;
+ };
 }
 const pads=[{east:526,north:329,w:19,d:16},{east:440,north:520,w:20,d:17},{east:336,north:640,w:36,d:34}];
 /** Same support field as the R01 mesh. Caller supplies a certified route/
