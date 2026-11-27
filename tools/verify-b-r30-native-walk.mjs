@@ -25,7 +25,7 @@ const positionPattern = /东\s*(-?[\d.]+)\s*m\s*·\s*北\s*(-?[\d.]+)\s*m/;
 const hardware = process.env.ZA22_HARDWARE === '1';
 const graphicsArgs = hardware ? (process.platform === 'win32' ? ['--use-gl=angle', '--use-angle=d3d11'] : [])
   : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
-const report = { url: url.href, segment, viewport, quality: 'smooth', gpu: null, paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [] };
+const report = { url: url.href, segment, viewport, deviceScaleFactor, quality: 'smooth', gpu: null, paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [] };
 
 await mkdir(output, { recursive: true });
 let browser;
@@ -95,7 +95,11 @@ async function openTown(name) {
     Object.defineProperty(Element.prototype, 'requestPointerLock', { value: undefined });
     // This is the viewer's ordinary saved graphics setting. It does not change the world or movement.
     localStorage.setItem('unwritten.quality.tier.v1', 'smooth');
-    document.addEventListener('town-frame-profile', event => { window.__za22Frame = event.detail; }, true);
+    window.__za22Stage='entry';window.__za22Samples=[];
+    document.addEventListener('town-frame-profile', event => {
+      const f=event.detail;window.__za22Frame=f;
+      if(window.__za22Samples.length<30000&&Number.isFinite(f.frameMs)&&f.frameMs>0)window.__za22Samples.push([window.__za22Stage,f.frameMs,f.calls,f.triangles,f.movementMs,f.detailMs,f.weatherMs]);
+    }, true);
   });
   const response = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 90_000 });
   assert.equal(response?.status(), 200);
@@ -314,7 +318,9 @@ try{
   await page.locator('#jump').selectOption({label:'陨石坑口'});
   if(await page.locator('#town-settings').evaluate(d=>d.open))await page.locator('#town-settings-close').click();
   await page.waitForFunction(pattern=>{const m=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');return m&&Math.hypot(+m[1]-2,+m[2]-159)<1.2;},positionPattern.source,{timeout:45000});
+  await page.evaluate(()=>{window.__za22Stage='approach';});
   await follow(page,evidence,[[-12,159],[-40,159],[-67,159]],'approach');
+  await page.evaluate(()=>{window.__za22Stage='night-permission';});
   const deadline=Math.min(Date.now()+120000,runDeadline-1000);
   while(Date.now()<deadline){
     const f=westWindow();
@@ -329,6 +335,7 @@ try{
   await waitForWire(page,evidence,p=>p?.area==='west'&&p.east<-70.55);
   await snapshot(page,evidence,'rim-night');await save();
   async function traverse(knots,key){
+    await page.evaluate(stage=>{window.__za22Stage=stage;},key);
     for(let i=0;i<knots.length;i++){
       const q=knots[i];
       await walkTo(page,evidence,[q.east,q.north],key+'-'+q.t.toFixed(3));
@@ -372,6 +379,11 @@ try{
 }finally{
   measuring=false;
   report.errors=report.pageErrors.length+report.consoleErrors.length+report.requestFailures.length+report.httpErrors.length;
+  if(lastPage&&!lastPage.isClosed()&&!bare){try{
+    const data=await lastPage.evaluate(()=>({rows:window.__za22Samples??[],canvas:[document.querySelector('#scene canvas')?.width,document.querySelector('#scene canvas')?.height]}));
+    const stats=a=>{a=a.filter(Number.isFinite).sort((x,y)=>x-y);return a.length?{median:a[Math.floor((a.length-1)/2)],p95:a[Math.max(0,Math.ceil(a.length*.95)-1)]}:null;};
+    report.nativePerformance={canvas:data.canvas,scope:'actual normal entrance; native player keyboard and pointer route, includes turning/checkpoints, not fixed-camera A/B',stages:[...new Set(data.rows.map(r=>r[0]))].map(stage=>{const rows=data.rows.filter(r=>r[0]===stage),get=i=>stats(rows.map(r=>r[i]));return {stage,frames:rows.length,fps:1000*rows.length/rows.reduce((a,r)=>a+r[1],0),frameMs:get(1),draws:get(2),triangles:get(3),movementMs:get(4),detailMs:get(5),weatherMs:get(6)};})};
+  }catch(e){report.nativePerformanceError=String(e);}}
   await writeFile(join(output,'za22-live-walk.json'),JSON.stringify(report,null,2));
   console.log(JSON.stringify({segment,down:report.bR30?.down,up:report.bR30?.up,complete:report.bR30?.complete,errors:report.errors,failure:report.failure,poses:report.paths[0]?.poses.length}));
   await browser?.close();
