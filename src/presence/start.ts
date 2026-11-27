@@ -2,6 +2,7 @@ import { createPresenceServer } from './server.js';
 import { createCableLineAuthority } from './cable-line-authority.js';
 import type { RequestListener } from 'node:http';
 import { mountainPresenceBounds } from '../shared/za22-mountain-domain.js';
+import { summitPresenceBounds,isSummitCableReleaseRecord } from '../shared/za22-summit-presence-domain.js';
 import { westPresenceBounds } from '../shared/za22-west-domain.js';
 import { skyCityPresenceBounds } from '../shared/sky-city-presence-domain.js';
 import { minePresenceBounds } from '../shared/underground-mine-presence-domain.js';
@@ -58,6 +59,7 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
   try {
     for (const [port, bounds] of [[process.env.PRESENCE_MOUNTAIN_PORT, mountainPresenceBounds],
       [process.env.PRESENCE_WEST_PORT, westPresenceBounds],
+      [process.env.PRESENCE_SUMMIT_PORT, summitPresenceBounds],
       [process.env.PRESENCE_SKY_PORT, skyCityPresenceBounds],
       [process.env.PRESENCE_MINE_PORT, minePresenceBounds],
       [process.env.PRESENCE_MINE2_PORT, secondMinePresenceBounds]] as const) {
@@ -67,6 +69,9 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
         // The mountain has the same repair state as the outdoor town. Other
         // isolated gameplay rooms retain their previous independent behavior.
         ...(bounds === mountainPresenceBounds || bounds === westPresenceBounds ? { cableLineAuthority, requireSummitCableRelease:true } : {}),
+        ...(bounds===summitPresenceBounds?{summitRoom:true,cableLineAuthority,requireSummitCableRelease:true,
+          // Release remains off until total-control certifies the walking route and full sweep.
+          ...(process.env.PRESENCE_SUMMIT_RELEASE==='on'?{authorizeSummitCableRelease:isSummitCableReleaseRecord}:{})}:{}),
         // Only the mine room follows the river state; the other rooms
         // never see a water field.
         ...(bounds === minePresenceBounds

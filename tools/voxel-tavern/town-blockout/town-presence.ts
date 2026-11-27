@@ -40,6 +40,7 @@ import { isGrandPrixResult, type GrandPrixResult } from './town-grand-prix';
 import {
   readSummitPassportReply, type SummitPassportAction, type SummitPassportReply,
 } from '../../../src/shared/summit-passport';
+import {summitPresenceEndpoint,summitPresenceFrame,toSummitPresencePose,fromSummitPresencePose} from '../../../src/shared/za22-summit-presence-domain';
 import {
   isMountainPresenceFoot, mountainPresenceNorthOrigin, mountainPresencePath,
 } from '../../../src/shared/za22-mountain-domain';
@@ -208,16 +209,18 @@ export function createTownPresence(
   let retryAt: number | undefined;
   let retryIndex = 0;
   let inTown = false;
-  let domain: 'town' | 'mountain' | 'west' | 'sky' | 'mine' = 'town';
+  let domain: 'town' | 'mountain' | 'summit' | 'west' | 'sky' | 'mine' = 'town';
   function presencePath(path: string) {
     if (domain === 'town') return path;
     if (domain === 'sky') return skyCityPresenceEndpoint(path);
+    if (domain === 'summit') return summitPresenceEndpoint(path);
     if (domain === 'mine') return minePresenceEndpoint(path);
     const room = domain === 'mountain' ? mountainPresencePath : westPresencePath;
     return room + path.slice('/presence'.length);
   }
   let show = false;
   let haveId = false;
+  let cableClockReady=false;
   let insideSharedHome = false;
   let epoch = 0;
   let seq = 0;
@@ -401,6 +404,7 @@ export function createTownPresence(
     socket = undefined;
     socketJoined = false;
     haveId = false;
+    cableClockReady=false;
     cableLineSupported=false;clearCableFrames();
     townNight.disconnect();
     townWeather.disconnect();
@@ -486,7 +490,7 @@ export function createTownPresence(
         kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown; plazaPhoto?: boolean; sentAt?: number; reason?: string;
         fireworks?: boolean; firecrackers?: boolean; bell?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number; totalMs?: unknown; at?: unknown;
         nonce?: string; accepted?: boolean; iceThrone?: boolean; crowned?: boolean; summitPassport?: boolean;
-        cableLine?: boolean; line?: unknown; flags?: unknown; openedAt?: unknown; wokeAt?: unknown;
+        cableLine?: boolean; line?: unknown; flags?: unknown; openedAt?: unknown; wokeAt?: unknown; presenceFrame?:unknown;
         icePalaceRites?: boolean; present?: unknown; requestId?: unknown;
         townNightWindow?: unknown; townOutdoorWeather?: unknown; townOutdoorWeatherDawnEpoch?: unknown; state?: unknown;
         undergroundWater?: unknown;
@@ -663,6 +667,7 @@ export function createTownPresence(
       const id = message.id!;
       if (message.type === 'join' && typeof message.name === 'string') {
         if (message.self) {
+          if((domain==='summit')!==(message.presenceFrame===summitPresenceFrame)){connectionLost();return;}
           if (receivingFrom === 'ws') {
             socketJoined = true;
             if (poll) promoteFromPoll();
@@ -682,6 +687,7 @@ export function createTownPresence(
             for (const settle of [...icePalacePending.values()]) settle(false);
           }
           haveId = true;
+          cableClockReady=Number.isSafeInteger(message.epochMs)&&message.epochMs!>0;
           link.joined(roster.size + 1);
           joinedId = id;
           fireworksSupported = message.fireworks === true;
@@ -764,6 +770,8 @@ export function createTownPresence(
     const valid = visitPresenceSnapshot(data, (id, localEast, localNorth, localHeight, yaw, sequence) => {
       const received = domain === 'sky'
         ? fromSkyCityPresencePose({ east: localEast, north: localNorth, height: localHeight })
+        : domain === 'summit'
+          ? fromSummitPresencePose({east:localEast,north:localNorth,height:localHeight})
         : domain === 'mine'
           ? fromMinePresencePose({ east: localEast, north: localNorth, height: localHeight })
           : { east: localEast + (domain === 'west' ? westPresenceEastOrigin : 0),
@@ -826,6 +834,9 @@ export function createTownPresence(
     if (domain === 'mountain') {
       if (!isMountainPresenceFoot(local.east, local.north, local.height)) return;
       writePresencePose({ ...local, north: local.north - mountainPresenceNorthOrigin }, seq, outgoing);
+    } else if (domain === 'summit') {
+      const safe=toSummitPresencePose(local);if(!safe)return;
+      writePresencePose(safe,seq,outgoing);
     } else if (domain === 'west') {
       if (!isWestPresenceFoot(local.east, local.north, local.height)) return;
       writePresencePose({
@@ -985,6 +996,7 @@ export function createTownPresence(
 
   return {
     serverNow: clock.now,
+    cableServerNow:()=>haveId&&cableLineSupported&&cableClockReady?clock.now():undefined,
     /** Latest server-authored cable repair state for a line, or undefined
      * when the room predates the cable authority or no frame arrived yet. */
     getCableLineState: (line: Za36CableRepairLine) => haveId&&cableLineSupported ? cableLineStates.get(line) : undefined,
@@ -995,7 +1007,7 @@ export function createTownPresence(
      * only state change a client ever applies. Returns false offline. */
     sendCableRepair: (line: Za36CableRepairLine, event: Za36CableRepairEvent) =>
       haveId && cableLineSupported && sendEvent(JSON.stringify({ type: 'event', kind: 'cable-repair', line, event })),
-    sendSummitCableRelease:()=>haveId&&cableLineSupported&&sendEvent(JSON.stringify({type:'event',kind:'cable-release-summit'})),
+    sendSummitCableRelease:()=>domain==='summit'&&haveId&&cableLineSupported&&sendEvent(JSON.stringify({type:'event',kind:'cable-release-summit'})),
     /** Latest per-peer ice-palace rite snapshot from the room authority;
      * every rite reads unavailable until its policy store exists. */
     getIcePalaceRiteState: (): IcePalaceRiteState => icePalaceRiteState,
@@ -1020,8 +1032,12 @@ export function createTownPresence(
       if (enabled) switchDomain('mountain', mountainScene);
       else if (domain === 'mountain') switchDomain('town');
     },
+    setSummitDomain(enabled:boolean,summitScene?:Scene){
+      if(enabled&&summitScene)switchDomain('summit',summitScene);
+      else if(!enabled&&domain==='summit')switchDomain('town');
+    },
     setWestDomain(enabled: boolean) {
-      if (enabled && domain !== 'mountain' && domain !== 'sky' && domain !== 'mine') switchDomain('west');
+      if (enabled && domain !== 'mountain' && domain !== 'summit' && domain !== 'sky' && domain !== 'mine') switchDomain('west');
       else if (!enabled && domain === 'west') switchDomain('town');
     },
     /** Only the dream-chain transition may call this, at the descent blackout / return landing. */
@@ -1047,7 +1063,7 @@ export function createTownPresence(
     ownerFollowsMascot: () => ownerVerified && !!ownerFollow?.checked,
     sendMascot(pose: PresencePose) {
       const time = performance.now();
-      if (!ownerVerified || !ownerFollow?.checked || time < nextMascotSample) return;
+      if (domain==='summit'||!ownerVerified || !ownerFollow?.checked || time < nextMascotSample) return;
       writePresencePose(pose, mascotSeq, mascotWire);
       mascotWire.setUint16(0, MASCOT_ACTOR_ID, true);
       if (sendEvent(new Uint8Array(mascotWire.buffer))) {
