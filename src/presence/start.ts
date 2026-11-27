@@ -1,4 +1,5 @@
 import { createPresenceServer } from './server.js';
+import { createCableLineAuthority } from './cable-line-authority.js';
 import type { RequestListener } from 'node:http';
 import { mountainPresenceBounds } from '../shared/za22-mountain-domain.js';
 import { westPresenceBounds } from '../shared/za22-west-domain.js';
@@ -34,7 +35,9 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
   );
   const townWeather = readTownWeatherOptions(townNight!.dawnEpoch!,
     process.env.TOWN_WEATHER_WARNING_RECEIPT || join(tmpdir(), 'unwritten-town-weather-warning-receipt.json'));
+  const cableLineAuthority = createCableLineAuthority();
   const server = await createPresenceServer({
+    cableLineAuthority,
     host,
     port: Number(process.env.PRESENCE_PORT ?? 8090),
     tiers: process.env.PRESENCE_TIERS ? JSON.parse(process.env.PRESENCE_TIERS) : undefined,
@@ -60,6 +63,9 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
       if (port) separateRooms.push(await createPresenceServer({
         host, port: Number(port), ...bounds, ceremonyStartAt: 0, townNightFeed: server.townNightFeed,
         townOutdoorWeatherFeed: server.townOutdoorWeatherFeed,
+        // The mountain has the same repair state as the outdoor town. Other
+        // isolated gameplay rooms retain their previous independent behavior.
+        ...(bounds === mountainPresenceBounds || bounds === westPresenceBounds ? { cableLineAuthority } : {}),
         // Only the mine room follows the river state; the other rooms
         // never see a water field.
         ...(bounds === minePresenceBounds

@@ -39,6 +39,7 @@ export function createCableLineAuthority() {
     2: createZa36CableRepair(2),
   } as const;
 
+  const listeners = new Set<(frame: CableLineFrame) => void>();
   function flags(): CableLineFlags {
     return {
       cableLine1Open: lines[1].snapshot().stage === 'full-line',
@@ -53,6 +54,10 @@ export function createCableLineAuthority() {
 
   return {
     flags,
+    subscribe(listener: (frame: CableLineFrame) => void) {
+      listeners.add(listener);
+      return () => { listeners.delete(listener); };
+    },
     snapshot: (line: Za36CableRepairLine) => lines[line].snapshot(),
     /** The frame a newly connected client needs for one line. */
     hello: (line: Za36CableRepairLine) => frame(line, false),
@@ -64,7 +69,9 @@ export function createCableLineAuthority() {
     applyEvent(line: Za36CableRepairLine, event: Za36CableRepairEvent): CableLineFrame | undefined {
       const result = lines[line].apply(event);
       if (!result.accepted) return undefined;
-      return frame(line, result.opened);
+      const accepted = frame(line, result.opened);
+      for (const listener of [...listeners]) listener(accepted);
+      return accepted;
     },
   };
 }

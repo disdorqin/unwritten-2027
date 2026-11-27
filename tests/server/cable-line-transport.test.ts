@@ -3,6 +3,7 @@ import { once } from 'node:events';
 import { test, type TestContext } from 'node:test';
 import { WebSocket } from 'ws';
 import { createPresenceServer } from '../../src/presence/server';
+import { createCableLineAuthority } from '../../src/presence/cable-line-authority';
 
 type CableState = {
   line: number; stage: string; version: number; impacts: number; brakePulled: boolean;
@@ -128,4 +129,31 @@ test('cable repair events flow through the real server: hello, broadcast, full-l
   assert.equal(lateHello.stage, 'full-line');
   assert.equal(lateHello.state?.stage, 'full-line');
   assert.equal(lateHello.flags?.cableLine1Open, true);
+});
+
+test('town and mountain rooms share both cable versions, without duplicate broadcasts, through reconnect', {timeout:15000}, async t=>{
+ const authority=createCableLineAuthority();
+ const town=await createPresenceServer({cableLineAuthority:authority,connectionLog(){}});
+ t.after(()=>town.close());
+ const mountain=await createPresenceServer({cableLineAuthority:authority,connectionLog(){}});
+ t.after(()=>mountain.close());
+ const a=await connected(t,town,'镇上甲'), b=await connected(t,mountain,'山上乙');
+ for(const p of [a,b])for(const line of [1,2])await p.next(f=>f.type==='cable-line'&&f.line===line);
+ const send=async(p:typeof a,line:number,event:unknown,version:number)=>{
+  p.socket.send(JSON.stringify({type:'event',kind:'cable-repair',line,event}));
+  const frames=await Promise.all([a,b].map(p=>p.next(f=>f.type==='cable-line'&&f.line===line&&f.state?.version===version)));
+  assert.deepEqual(frames[0],frames[1]);return frames[0]!;
+ };
+ await send(a,1,{kind:'wake',impact:'sled'},1);
+ await send(b,2,{kind:'wake',impact:'sled'},1);
+ const events=[...Array.from({length:9},()=>({kind:'strike-rust'})),{kind:'pull-brake'},{kind:'pry-cable',effort:1},...Array.from({length:3},()=>({kind:'tighten-cable'})),...[0,1,2,3].flatMap(index=>[{kind:'take-weight',index},{kind:'hang-weight',index}])];
+ let version=1;for(const event of events)await send(b,2,event,++version);
+ assert.equal(authority.flags().cableLine2Open,true);assert.equal(authority.flags().cableLine1Open,false);
+ await sleep(100);assert.equal(cableFrames(a.pending()).length,0);assert.equal(cableFrames(b.pending()).length,0);
+ b.socket.terminate();const rejoined=await connected(t,mountain,'山上乙');
+ const first=await rejoined.next(f=>f.type==='cable-line'&&f.line===1);
+ const second=await rejoined.next(f=>f.type==='cable-line'&&f.line===2);
+ assert.equal(first.state?.version,1);assert.equal(second.state?.version,version);assert.equal(second.stage,'full-line');assert.equal(second.openedNow,false);
+ await mountain.close();a.socket.send(JSON.stringify({type:'event',kind:'cable-repair',line:1,event:{kind:'strike-rust'}}));
+ assert.equal((await a.next(f=>f.type==='cable-line'&&f.line===1)).state?.version,2);
 });

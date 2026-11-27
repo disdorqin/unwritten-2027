@@ -108,6 +108,8 @@ type Options = {
   townNight?: PresenceTownNightOptions;
   /** Secondary rooms consume the primary town's committed frames. */
   townNightFeed?: TownNightFeed;
+  /** One server-owned cable authority for the town and connected mountain rooms. */
+  cableLineAuthority?: ReturnType<typeof createCableLineAuthority>;
   /** Author weather only in the primary room, using the same wall clock and dawn anchor as ZB-17. */
   townOutdoorWeather?: TownWeatherOptions;
   /** Secondary rooms relay primary-town weather rather than running a second schedule. */
@@ -348,7 +350,7 @@ export async function createPresenceServer(options: Options = {}) {
   // per line, this server the only writer. The wire frame is B's
   // CableLineFrame plus the full snapshot the client repair host syncs
   // from; flags stay derived inside the authority, never set here.
-  const cableLine = createCableLineAuthority();
+  const cableLine = options.cableLineAuthority ?? createCableLineAuthority();
   const cableLineWire = (frame: CableLineFrame) =>
     JSON.stringify({ ...frame, state: cableLine.snapshot(frame.line) });
   // Ice palace rites: the authority validates the caller's alcove pose and
@@ -1246,8 +1248,8 @@ export async function createPresenceServer(options: Options = {}) {
         const line = 'line' in message ? message.line : undefined;
         const event = 'event' in message ? message.event : undefined;
         if (allowEvent(peer, now()) && isCableRepairLine(line) && isCableRepairEvent(event)) {
-          const frame = cableLine.applyEvent(line, event);
-          if (frame) broadcast(cableLineWire(frame));
+          // The shared authority publishes once to every attached room, including this one.
+          cableLine.applyEvent(line, event);
         }
         return;
       }
@@ -1504,6 +1506,7 @@ export async function createPresenceServer(options: Options = {}) {
       resolve();
     });
   });
+  const stopFollowingCable = cableLine.subscribe(frame => broadcast(cableLineWire(frame)));
   const stopFollowingNight = options.townNightFeed?.subscribe(frame => broadcast(frame));
   const stopFollowingWater = options.undergroundWaterFeed?.subscribe(frame => broadcast(frame));
   const stopFollowingWeather = options.townOutdoorWeatherFeed?.subscribe(frame => broadcast(frame));
@@ -1565,6 +1568,7 @@ export async function createPresenceServer(options: Options = {}) {
       closing = true;
       clearInterval(tick);
       clearInterval(heartbeat);
+      stopFollowingCable();
       stopFollowingNight?.();
       stopFollowingWater?.();
       stopFollowingWeather?.();
