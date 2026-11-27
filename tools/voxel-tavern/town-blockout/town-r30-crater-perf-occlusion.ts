@@ -93,23 +93,26 @@ export function createCraterExteriorOcclusion(mesh:Mesh,anchor:{east:number;nort
   for(const root of roots)root.traverse(o=>{if(o!==mesh&&opaqueMesh(o))set.add(o);});
   objects=[...set];
  }
- function begin(camera:Camera){
-  restore();eye.setFromMatrixPosition(camera.matrixWorld);
-  if(Math.hypot(eye.x-anchor.east,eye.z+anchor.north)>=50||!mesh.visible||!camera.layers.test(mesh.layers)||Array.isArray(mesh.material)||!mesh.material.visible||mesh.material.clippingPlanes?.length)return 0;
-  const h=heightAt(eye.x,-eye.z);if(h===undefined||eye.y<h+.05||eye.y>h+4)return 0;
-  let node:Object3D|null=mesh;while(node){if(!node.visible)return 0;node=node.parent;}
+ function ringForCamera(camera:Camera){
+  eye.setFromMatrixPosition(camera.matrixWorld);
+  if(Math.hypot(eye.x-anchor.east,eye.z+anchor.north)>=50||!mesh.visible||!camera.layers.test(mesh.layers)||Array.isArray(mesh.material)||!mesh.material.visible||mesh.material.clippingPlanes?.length)return;
+  const h=heightAt(eye.x,-eye.z);if(h===undefined||eye.y<h+.05||eye.y>h+4)return;
+  let node:Object3D|null=mesh;while(node){if(!node.visible)return;node=node.parent;}
   prepare();
-  if(!ring||eye.y>=ring.minHeight-.35)return 0;
+  if(ring&&eye.y<ring.minHeight-.35)return ring;
+ }
+ function begin(camera:Camera){
+  restore();const activeRing=ringForCamera(camera);if(!activeRing)return 0;
   for(const o of objects){
    if(!o.parent||!o.visible||!camera.layers.test(o.layers)||!opaqueMesh(o))continue;
    const g=o.geometry;if(!g.boundingBox)g.computeBoundingBox();
    if(!g.boundingBox)continue;
    box.copy(g.boundingBox).applyMatrix4(o.matrixWorld).getBoundingSphere(sphere);
-   if(sphereBehindCraterWall(ring,eye,sphere)){masked.push({mesh:o,mask:o.layers.mask});o.layers.mask=0;}
+   if(sphereBehindCraterWall(activeRing,eye,sphere)){masked.push({mesh:o,mask:o.layers.mask});o.layers.mask=0;}
   }
   return masked.length;
  }
- return {refresh,begin,restore,prepare,get ring(){return ring;},get candidates(){return objects.length;}};
+ return {refresh,begin,restore,prepare,ringForCamera,get ring(){return ring;},get candidates(){return objects.length;}};
 }
 
 /** M calls this with real domain/transition/cover state, never a camera
