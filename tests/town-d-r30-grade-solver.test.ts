@@ -18,5 +18,5 @@ test('bounded fallback solves mixed intervals without violating real face or fix
   const h=.1*x+.04*z;core.set(z*width+x,x===1||x===20?{lo:h,hi:h}:{lo:h-.02,hi:h+.02});
  }
  const r=solveRidgeGradeCore(core,width,{forceTriangle:true});assert.ok(r.ok);
- for(const [id,p]of core){const h=r.heights.get(id)!;assert.ok(h>=p.lo-1e-8&&h<=p.hi+1e-8);const a=r.heights.get(id+1),b=r.heights.get(id+width);if(a!==undefined&&b!==undefined)assert.ok(Math.hypot(a-h,b-h)<=.12);}
+ for(const [id,p]of core){const h:number=r.heights.get(id)!;assert.ok(h>=p.lo-1e-8&&h<=p.hi+1e-8);const a=r.heights.get(id+1),b=r.heights.get(id+width);if(a!==undefined&&b!==undefined)assert.ok(Math.hypot(a-h,b-h)<=.12);}
 });
