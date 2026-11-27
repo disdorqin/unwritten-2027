@@ -45,7 +45,7 @@ try{
  page.on('pageerror',e=>errors.push('page:'+e.message));
  page.on('console',m=>{if(m.type()==='error')errors.push('console:'+m.text()+' '+m.location().url)});
  page.on('response',r=>{if(r.status()>=400)errors.push('http:'+r.status()+':'+r.url())});
- await page.goto('http://127.0.0.1:'+server.httpServer.address().port+'/town-blockout.html?profile'+(longRoad?'&mRoadSurvey':''),{waitUntil:'domcontentloaded',timeout:65000});
+ await page.goto('http://127.0.0.1:'+server.httpServer.address().port+'/town-blockout.html?profile'+(longRoad?'&mRoadSurvey':'')+(process.argv.includes('--terrain-off')?'&mTerrainCullOff':''),{waitUntil:'domcontentloaded',timeout:65000});
  await page.waitForFunction(()=>document.querySelector('#town-entry')?.hidden||!document.querySelector('#town-entry-continue')?.hidden||!document.querySelector('#town-entry-error')?.hidden,null,{timeout:60000});
  if(await page.locator('#town-entry-error').isVisible())throw Error('Entry failed: '+await page.locator('#town-entry-error').innerText());
  if(await page.locator('#town-entry-continue').isVisible())await page.locator('#town-entry-continue').click();

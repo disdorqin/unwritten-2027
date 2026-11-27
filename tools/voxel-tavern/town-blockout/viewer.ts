@@ -4094,7 +4094,9 @@ renderer.setAnimationLoop(now => {
   const detailStartedAt = profileTown ? performance.now() : 0;
   snowCover.update(dt, nightMode);
   if (!homeReturn) {
-    prepareTerrain(camera.position.x, -camera.position.z, false, false, visualSnowCover, cullCamera);
+    const walkingTerrainCull=walking&&!boardingGround&&!plazaPhoto.active()&&!museumInspection.active&&!museumLaunch.active&&
+      !previewOptions.has('pPerfCompare')&&!previewOptions.has('mTerrainCullOff');
+    prepareTerrain(camera.position.x,-camera.position.z,false,false,visualSnowCover,walkingTerrainCull?camera:cullCamera,walkingTerrainCull);
     productionRidge?.updateView(camera.position.x,-camera.position.z);
   }
   const terrainMs = profileTown ? performance.now() - detailStartedAt : 0;
