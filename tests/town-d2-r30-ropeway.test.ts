@@ -35,6 +35,13 @@ test('D2-R09 mounts the canonical rope, cabins, stations and the arrival gate', 
     'the canonical station module requires the R30 arrival datum to coincide exactly');
 });
 
+test('both cabin docks have supported exact floors and rails clear of cabin sweep',context=>{
+ const r=cleanup(context,createTownD2R30Ropeway({controlPointSupports:false}));assert.equal(r.decks.length,4);assert.ok(r.decks.every(d=>!d.interference));
+ for(const d of r.decks){const dock=r.cable.ropes[d.cabin]!.dock(d.station);for(const p of [dock.approach,dock.board]){assert.equal(r.supportAt(p.east,p.north),p.height);assert.equal(r.blocked(p.east,p.north,p.height),false);}
+ const world=(x:number,z:number)=>({e:d.east+x*Math.cos(d.yaw)+z*Math.sin(d.yaw),n:d.north+x*Math.sin(d.yaw)-z*Math.cos(d.yaw)});const side=d.cabin===0?1:-1;
+ for(const z of [-2.38,2.38]){const rail=world(side*1.22,z),lane=world(-side*1.6,z);assert.ok(r.blocked(rail.e,rail.n,d.height));assert.equal(r.blocked(lane.e,lane.n,d.height),false);}
+ }
+});
 test('D2-R09 leaves the canonical rope survey and the ride rules untouched', context => {
   const reference = createMainSummitCable(0, 10_000, 347);
   const pointsBefore = reference.ropes[0].points.map(point => ({ ...point }));

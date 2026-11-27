@@ -49,6 +49,8 @@ export type TownD2R30RopewayOptions = Readonly<{
   epochMs?: number;
   /** How long a cabin waits at a terminal. */
   terminalDwellMs?: number;
+  /** False only when the canonical dense tower package is mounted. */
+  controlPointSupports?:boolean;
 }>;
 
 const DEFAULTS = Object.freeze({ arrivalHeight: 347, epochMs: 0, terminalDwellMs: 10_000 });
@@ -71,7 +73,7 @@ export function createTownD2R30Ropeway(options: TownD2R30RopewayOptions = {}) {
 
   // The rope, the two cabins and the dock decks. The ground sampler is the
   // R30 massif, so the line's clearance is real.
-  const cableView = mountMainSummitCable(group, cable, heightAt);
+  const cableView = mountMainSummitCable(group, cable, heightAt,{controlPointSupports:options.controlPointSupports});
 
   // The arrival gate is the surveyed P-1 gate rebuilt on the R30 arrival
   // datum. The canonical station module owns it through the summit contract,
@@ -141,6 +143,9 @@ export function createTownD2R30Ropeway(options: TownD2R30RopewayOptions = {}) {
     /** The canonical cable and stations, so the legacy host can keep its rules. */
     cable,
     stations,
+    decks:cableView.decks,
+    supportAt:cableView.supportAt,
+    blocked(e:number,n:number,h:number,r=.27){return stations.blocked(e,n,h,r)||cableView.deckBlocked(e,n,h,r);},
     stats: () => stats,
     /** Advances the two cabins along the rope. */
     update(nowMs: number) {
