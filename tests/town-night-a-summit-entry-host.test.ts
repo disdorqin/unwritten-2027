@@ -23,6 +23,16 @@ test('real main summit assembly consumes the A entrance once and keeps existing 
   const full=new Group();full.name='night-a-south-sector';a.group.add(full);
   host.sync(a,true);assert.equal(host.mounted(),false);assert.equal(first.parent,null);
   full.removeFromParent();host.sync(a,false);assert.equal(host.mounted(),true);
+  // Detaching a real domain must disable the old colliders immediately,
+  // even before the next animation-frame sync.
+  const beforeDetach=a.group.getObjectByName('night-a-south-entry');assert.ok(beforeDetach);
+  a.group.removeFromParent();assert.equal(host.mounted(),false);assert.equal(host.blocked(324,699,347),false);
+  host.sync(a,true);assert.equal(beforeDetach.parent,null);
+  owner.add(a.group);host.sync(a,true);assert.equal(host.mounted(),true);
+  const remounted=a.group.getObjectByName('night-a-south-entry');assert.ok(remounted);assert.notEqual(remounted,beforeDetach);
+  assert.ok(host.blocked(324,699,347));
+  remounted.removeFromParent();assert.equal(host.blocked(324,699,347),false);
+  host.sync(a,true);assert.equal(host.mounted(),true);assert.notEqual(a.group.getObjectByName('night-a-south-entry'),remounted);
   host.sync(undefined,false);assert.equal(host.mounted(),false);assert.equal(host.blocked(324,699,347),false);
  }finally{host.dispose();gate.dispose();a.dispose();}
 });

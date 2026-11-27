@@ -9,9 +9,12 @@ export function createSouthEntryHost(){
  const detach=()=>{entry?.dispose();entry=undefined;current=undefined;nightApplied=undefined;};
  function sync(assembly:Assembly|undefined,night:boolean){
   if(current!==assembly){detach();current=assembly;}
-  if(!assembly?.r30||!assembly.group.parent)return;
+  if(!assembly?.r30||!assembly.group.parent){detach();return;}
   const already=assembly.group.getObjectByName('night-a-south-sector');
-  if(already){entry?.dispose();entry=undefined;return;}
+  if(already){entry?.dispose();entry=undefined;nightApplied=undefined;return;}
+  // A host can be temporarily detached/reused or have its child removed
+  // during domain cleanup. Rebuild only the missing leaf, never a duplicate.
+  if(entry&&entry.group.parent!==assembly.group){entry.dispose();entry=undefined;nightApplied=undefined;}
   if(!entry){
    // Fixed existing gate and plaza were certified by the canonical
    // surface; fail closed for any future incompatible datum.
@@ -23,9 +26,10 @@ export function createSouthEntryHost(){
   }
   if(nightApplied!==night){entry.setNight(night);nightApplied=night;}
  }
- return {sync,mounted:()=>!!entry?.group.parent,
+ const mounted=()=>!!(current?.group.parent&&entry&&entry.group.parent===current.group);
+ return {sync,mounted,
   blocked(e:number,n:number,h:number,r=.27,body=1.8){
-   if(!entry||!current)return false;
+   if(!entry||!current||!mounted())return false;
    return entry.blocked(e-current.group.position.x,n+current.group.position.z,h-current.group.position.y,r,body);
   },dispose:detach};
 }
