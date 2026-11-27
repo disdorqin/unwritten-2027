@@ -305,6 +305,7 @@ async function picture(page,evidence,label){
 import {buildCraterRailExtension} from './voxel-tavern/town-blockout/town-crater-rail-extension.ts';
 import {buildTownRailRoute} from './voxel-tavern/town-blockout/town-railway.ts';
 import {mountWestMountainGround,westMountainTrackProtection} from './voxel-tavern/town-blockout/town-night-a-summit-west-ground.ts';
+import {westMountainFootway} from './voxel-tavern/town-blockout/town-night-a-summit-west-footway.ts';
 const grid=createTerrainGrid(), road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
 const rail=['kengkou','freight','shankou','transfer-dock','ore-yard-dock','rail-valley','rail-buffer','inscription-access','west-mountain'].includes(segment)?buildCraterRailExtension(grid,road,['rail-buffer','west-mountain'].includes(segment)?buildTownRailRoute(grid).points:undefined):undefined;
 const westMountain=segment==='west-mountain'?mountWestMountainGround(road.heightAt,{west:-240,east:0,south:336,north:worldBounds.depth},westMountainTrackProtection([rail.samples,rail.narrowSamples,rail.sidingSamples])):undefined;
@@ -462,7 +463,7 @@ try{
  ]:null;
  const path=jointInscription??joint?.points??salvagePath??ruinsPath??(segment==='inscription-access'?[...rail.stationWalkRoutes.find(r=>r.id==='transfer-dock').points.slice(0,5),...rail.stationWalkRoutes.find(r=>r.id==='inscription-access').points]:segment==='rail-buffer'?[[526,305],[526,312],[526,320],[526,338],[526,347],[514,352],[500,362],[482,371]].map(([east,north])=>({east,north,height:grid.heightAt(east,north)})):segment==='rail-valley'?[[296,520],[291,530],[288,531],[243,515]].map(([east,north])=>({east,north,height:grid.heightAt(east,north)})):scenic?(reverseScenic?[...scenic.points].reverse():scenic.points):segment==='outerclusters'?[[-68,220],[-68,232],[-83,235],[-98,243],[-95,261],[-90,265]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
    segment==='outcrop'?[[-60,55],[-147,52],[-155,51],[-164,51]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
-   segment==='west-mountain'?[[-90,265],[-90,310],[-90,335],[-90,350]].map(([east,north])=>({east,north,height:westMountain.heightAt(east,north)??road.heightAt(east,north)})):
+   segment==='west-mountain'?westMountainFootway.map(([east,north])=>({east,north,height:westMountain.heightAt(east,north)??road.heightAt(east,north)})):
    segment==='northwalk'?[[-12,320],[-12,336],[-12,400],[-12,450],[-9,470],[-4,485],[2,490]].map(([east,north])=>({east,north,height:east<0?road.heightAt(east,north):grid.heightAt(east,north)})):
    segment==='wall'?[-9,-15,-21,-28].map(east=>({east,north:159,height:road.heightAt(east,159)})):
    tower?[tower.entry,...tower.stairs]:segment==='supply'?road.mouthWorks.supplyDeckRoute:
@@ -562,7 +563,7 @@ try{
      await wallView('ore-yard-'+i,Math.atan2(site.east-point.east,site.north-point.north));
    }
    if(segment==='shankou'&&i===0)await wallView('shankou-arrival',Math.PI);
-   if(segment==='west-mountain'&&(i===3||i===6))await wallView('west-mountain-'+i,Math.PI/4);
+   if(segment==='west-mountain'&&i===path.length-1)await wallView('west-mountain-'+i,Math.PI/4);
    if(segment==='northwalk'&&(i===1||i===2))await wallView('northwalk-'+(i===1?'seam':'mid'),0);
    if(segment==='wall'&&i===0)await wallView('wall-town-face',-Math.PI/2);
    if(segment==='wall'&&i===path.length-1)await wallView('wall-crater-face',Math.PI/2);

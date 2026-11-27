@@ -30,6 +30,7 @@ import { addTerrainMeshes } from './terrain-mesh';
 import {mountWestMountainGround,westMountainTrackProtection} from './town-night-a-summit-west-ground';
 import {westPresenceBounds} from '../../../src/shared/za22-west-domain';
 import {createSouthEntryHost} from './town-night-a-summit-entry-host';
+import {mountWestMountainFootway} from './town-night-a-summit-west-footway';
 import { createTerrainSupportContract } from './town-a-r30-terrain-contract';
 import { supportFootprintOverlaps } from './town-a-r30-oriented-support';
 import { mainSummitLayout, mainSummitSpec } from './main-summit-block';
@@ -845,6 +846,7 @@ scene.add(railExtension.group);
 // Preserve the complete three-track reservation outside old rendering.
 westMountainGround=mountWestMountainGround(ensureWestCraterRoad().heightAt,{west:craterWestSurvey.west,east:0,south:ensureWestCraterRoad().terrainBoundary.renderNorth,north:worldBounds.depth},westMountainTrackProtection([railExtension.samples,railExtension.narrowSamples,railExtension.sidingSamples]));
 scene.add(westMountainGround.group);
+scene.add(mountWestMountainFootway(westGroundAt).group);
 productionRidge=mountProductionRidge(scene,grid,{loop:railway.route.points,branch:railExtension.samples,
   // The normal candidate entry now attempts the independently audited four-road
   // field. mountProductionRidge retains the original three roads if its
