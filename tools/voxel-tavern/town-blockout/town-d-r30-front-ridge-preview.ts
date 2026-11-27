@@ -7,15 +7,15 @@ import {mountNorthRidgeMiddleStation} from './north-ridge-middle-station';
 import {solveLowerRidgeRoad,tryConstrainedLowerRoadbed} from './town-d-r30-roadbed';
 import {mountRidgeRoadFurniture} from './town-d-r30-road-furniture';
 import {mountRidgeRetainingBanks} from './town-d-r30-retaining-banks';
-import {buildMiddleEastRoadbed,middleEastExtendedControls} from './town-d-r30-upper-roadbed';
+import {buildMiddleEastRoadbed,middleEastExtendedControls,middleSouthRoadControls} from './town-d-r30-upper-roadbed';
 const grid=createTerrainGrid();
 // Explicit review-only ownership fixture. A must supply the production
 // protected footprint/river/track mask before installing this field.
 const natural=buildFrontRidgeR30Field(grid.groundHeightAt,()=>1);
-const params=new URLSearchParams(location.search),extendedMode=params.has('extended'),middleMode=params.has('middle')||extendedMode,roadMode=params.has('road')||middleMode;
+const params=new URLSearchParams(location.search),extendedMode=params.has('extended'),southMode=params.has('south'),middleMode=params.has('middle')||extendedMode||southMode,roadMode=params.has('road')||middleMode;
 const lowerRoute=roadMode&&!middleMode?solveLowerRidgeRoad(natural,()=>true).route:[];
 const lower=lowerRoute.length?tryConstrainedLowerRoadbed(natural,lowerRoute,()=>true):undefined;
-const middle=middleMode?buildMiddleEastRoadbed(natural,()=>true,extendedMode?middleEastExtendedControls:undefined):undefined;
+const middle=middleMode?buildMiddleEastRoadbed(natural,()=>true,southMode?middleSouthRoadControls:extendedMode?middleEastExtendedControls:undefined):undefined;
 const graded=middle??lower;
 if(graded&&!graded.ok)throw new Error('Road candidate failed raster slope gate');
 const route=middle?.route??lowerRoute;
@@ -40,7 +40,7 @@ const originalViews=[
  {name:'云海台南坡',e:336,n:600,yaw:Math.PI,pitch:-.65},
  {name:'东北山背',e:610,n:775,yaw:-1.98,pitch:.48},
 ] as const;
-const views=middleMode?[{name:'中山站北出口实体道路往返',e:440,n:520,yaw:0,pitch:.02}]:roadMode?[.04,.24,.42,.65,.90].map((f,i)=>{
+const views=middleMode?[{name:southMode?'中山站南出口实体道路往返':'中山站北出口实体道路往返',e:440,n:520,yaw:southMode?Math.PI:0,pitch:.02}]:roadMode?[.04,.24,.42,.65,.90].map((f,i)=>{
  const k=Math.min(route.length-2,Math.max(1,route.findIndex(p=>p.cum>=f*route.at(-1)!.cum)));
  const a=route[k]!,b=route[k+1]!;
  return {name:'下段实体路基 '+(i+1),e:a.east,n:a.north,yaw:Math.atan2(b.east-a.east,b.north-a.north),pitch:-.08};
