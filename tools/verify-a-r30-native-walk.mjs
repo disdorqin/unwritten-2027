@@ -10,7 +10,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','west-mountain','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review','night-r3-entry','night-r3-bare-weather'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','west-mountain','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review','night-r3-entry','night-r3-bare-weather','night-r3-bare-west'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -351,7 +351,22 @@ const approach={
 try{
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:graphicsArgs});
  const {page,evidence,westWindow}=await openTown(segment);
- if(segment==='night-r3-bare-weather'){
+ if(segment==='night-r3-bare-west'){
+  assert.ok(bare);
+  const start=await readPose(page);
+  const path=[...westShore,[2,159]];
+  // The public town route must start at birth, not the jump menu.
+  for(const [i,p] of path.entries())await walkTo(page,evidence,p,'birth-west-'+i,.65);
+  const mouth=await readPose(page);await picture(page,evidence,'birth-crater-mouth');
+  for(const [i,p] of approach['west-mountain'].entries())await walkTo(page,evidence,p,'birth-mountain-approach-'+i,.46);
+  for(const [i,p] of westMountainFootway.slice(1).entries())await walkTo(page,evidence,p,'birth-mountain-foot-'+i,.46);
+  const top=await readPose(page);await waitForWire(page,evidence,p=>p?.area==='west'&&Math.hypot(p.east+90,p.north-350)<.8);
+  await picture(page,evidence,'birth-mountain-foot');
+  for(const [i,p] of [...westMountainFootway.slice(0,-1).reverse(),...approach['west-mountain'].slice(0,-1).reverse(),[2,159],...path.slice(0,-1).reverse(),spawn].entries())await walkTo(page,evidence,p,'birth-return-'+i,.55);
+  const returned=await readPose(page);await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-223,p.north-180)<.8);
+  await picture(page,evidence,'birth-returned');
+  report.traversal={start,mouth,top,returned};
+ }else if(segment==='night-r3-bare-weather'){
   assert.ok(bare,'The ordinary settings verification must use the bare root');
   assert.equal(new URL(page.url()).search,'');
   const menu=page.locator('#town-settings'),toggle=page.locator('#town-panel-toggle');
