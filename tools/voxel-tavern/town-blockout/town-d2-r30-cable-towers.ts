@@ -4,6 +4,7 @@ import {
 } from 'three';
 import { createMainSummitCable } from './main-summit-cable';
 import { sampleTownD2R30Height } from './town-d2-r30-domain';
+import {surveyNightBLatticeFoot,buildNightBLatticeMembers,nightBLatticeBlocked,type LatticeFoot} from './town-night-b-summit-lattice';
 
 type SummitCable = ReturnType<typeof createMainSummitCable>;
 
@@ -38,6 +39,7 @@ export type TownD2R30CableTowersStats = Readonly<{
   skipNearStation: number;
   westTowers: number;
   foundations: number;
+  latticeMembers:number;
 }>;
 
 const DEFAULTS = Object.freeze({ spacing: 60, skipNearStation: 45, towerTop: .35, ropeHalfSpan: 3 });
@@ -80,24 +82,21 @@ export function createTownD2R30CableTowers(options: TownD2R30CableTowersOptions 
   const cumulative=[0];for(let i=1;i<rope.points.length;i++){const a=rope.points[i-1]!,b=rope.points[i]!;cumulative.push(cumulative.at(-1)!+Math.hypot(b.east-a.east,b.north-a.north,b.height-a.height));}
   function pairAt(distance:number){let i=1;while(i<cumulative.length-1&&distance>cumulative[i]!)i++;const t=(distance-cumulative[i-1]!)/(cumulative[i]!-cumulative[i-1]!);const a=rope.sample(distance),u=other.points[i-1]!,v=other.points[i]!;const b={east:u.east+(v.east-u.east)*t,north:u.north+(v.north-u.north)*t,height:u.height+(v.height-u.height)*t};return {east:(a.east+b.east)/2,north:(a.north+b.north)/2,height:(a.height+b.height)/2,heading:Math.atan2(b.north-a.north,b.east-a.east),width:Math.hypot(b.east-a.east,b.north-a.north)+1.5,ropeA:a,ropeB:b};}
   const ropeLength = rope.totalMetres;
-  const towers: Array<{ east: number; north: number; heading: number; ground: number; ropeHeight: number; height: number; width:number;footBottom:number;footTop:number;west:boolean }> = [];
+  const towers: Array<LatticeFoot&{ east: number; north: number; heading: number; ground: number; ropeHeight: number; height: number; width:number;west:boolean }> = [];
   let maxHeight = 0, minClearance = Infinity, skipped = 0;
   for (let distance = DEFAULTS.skipNearStation; distance < ropeLength - DEFAULTS.skipNearStation; distance += spacing) {
     const at = pairAt(distance);
     const ground = groundAt(at.east, at.north);
     if (ground === undefined) { skipped++; continue; }
     const ropeHeight = at.height + DEFAULTS.towerTop;
-    const heights=[-1.2,-.6,0,.6,1.2].flatMap(x=>[-1.2,-.6,0,.6,1.2].map(z=>groundAt(at.east+x,at.north+z)));
-    if(!heights.every((h):h is number=>h!==undefined)){skipped++;continue;}
-    const footBottom=Math.min(...heights)-.4,footTop=Math.max(...heights)+.25;
-    const height = ropeHeight - ground;
-    if (height <= 1 || footTop>=at.height-1) { skipped++; continue; }
-    towers.push({ east: at.east, north: at.north, heading: at.heading, ground, ropeHeight, height,width:at.width,footBottom,footTop,west:at.east< -300&&at.north>=480 });
+    const height = ropeHeight - ground,foot=surveyNightBLatticeFoot(at.east,at.north,ground,ropeHeight,groundAt);
+    if(!foot){skipped++;continue;}
+    towers.push({ east: at.east, north: at.north, heading: at.heading, ground, ropeHeight, height,width:at.width,...foot,west:at.east< -300&&at.north>=480 });
     maxHeight = Math.max(maxHeight, height);
     minClearance = Math.min(minClearance, height);
   }
 
-  const braces = towers.filter(tower => tower.height > 12);
+  const memberMatrices=buildNightBLatticeMembers(towers);
   const mastTriangles = (mastShape.getIndex()?.count ?? mastShape.getAttribute('position').count) / 3;
   const barTriangles = (barShape.getIndex()?.count ?? barShape.getAttribute('position').count) / 3;
   const braceTriangles = (braceShape.getIndex()?.count ?? braceShape.getAttribute('position').count) / 3;
@@ -137,19 +136,16 @@ export function createTownD2R30CableTowers(options: TownD2R30CableTowersOptions 
       .multiply(new Matrix4().makeRotationY(tower.heading))
       .multiply(new Matrix4().makeScale(tower.width,1,1));
   });
-  addBatch('brace', braceShape, braces, (tower, matrix) => {
-    towerPlacement.makeTranslation(tower.east, 0, -tower.north);
-    matrix.copy(towerPlacement)
-      .multiply(new Matrix4().makeTranslation(0, tower.ground + tower.height * .3, 0))
-      .multiply(new Matrix4().makeRotationZ(.32))
-      .multiply(new Matrix4().makeScale(1, tower.height * .45, 1));
-  });
+  if(memberMatrices.length){
+    const mesh=new InstancedMesh(braceShape,iron,memberMatrices.length);mesh.name='town-d2-r30-cable-tower-brace';mesh.instanceMatrix.setUsage(StaticDrawUsage);
+    memberMatrices.forEach((m,i)=>mesh.setMatrixAt(i,m));mesh.instanceMatrix.needsUpdate=true;mesh.computeBoundingSphere();group.add(mesh);batches.push(mesh);
+  }
 
   // Stone pier reaches below the lowest surveyed footprint; the upper
   // course embeds the original mast instead of suspending it on a slope.
-  addBatch('footing',footingShape,towers,(t,m)=>m.makeTranslation(t.east,(t.footBottom+t.footTop)/2,-t.north).multiply(new Matrix4().makeScale(2.4,t.footTop-t.footBottom,2.4)),stone);
-  addBatch('snow-cap',capShape,towers,(t,m)=>m.makeTranslation(t.east,t.footTop+.045,-t.north).multiply(new Matrix4().makeScale(2.48,.09,2.48)),snow);
-  const triangles = towers.length * (mastTriangles + barTriangles+24) + braces.length * braceTriangles;
+  addBatch('footing',footingShape,towers,(t,m)=>m.makeTranslation(t.east,(t.footBottom+t.footTop)/2,-t.north).multiply(new Matrix4().makeScale(t.footHalf*2,t.footTop-t.footBottom,t.footHalf*2)),stone);
+  addBatch('snow-cap',capShape,towers,(t,m)=>m.makeTranslation(t.east,t.footTop+.045,-t.north).multiply(new Matrix4().makeScale(t.footHalf*2+.08,.09,t.footHalf*2+.08)),snow);
+  const triangles = towers.length * (mastTriangles + barTriangles+24) + memberMatrices.length * braceTriangles;
   const stats: TownD2R30CableTowersStats = Object.freeze({
     towers: towers.length,
     spacing,
@@ -159,7 +155,7 @@ export function createTownD2R30CableTowers(options: TownD2R30CableTowersOptions 
     drawCalls: batches.length,
     triangles,
     skipNearStation: skipped,
-    westTowers:towers.filter(t=>t.west).length,foundations:towers.length,
+    westTowers:towers.filter(t=>t.west).length,foundations:towers.length,latticeMembers:memberMatrices.length,
   });
   group.userData = {
     owner: 'D2-R02', visualOnly: true, includesWorldCollision: false,
@@ -171,8 +167,8 @@ export function createTownD2R30CableTowers(options: TownD2R30CableTowersOptions 
   return {
     group,
     stats: () => stats,
-    footprints:towers.map(t=>Object.freeze({east:t.east,north:t.north,bottom:t.footBottom,top:t.footTop+.09,halfWidth:1.24,mastTop:t.ropeHeight})),
-    blocked(e:number,n:number,h:number,r=.27){return towers.some(t=>h+1.8>t.footBottom&&h<t.footTop+.09&&Math.hypot(Math.max(0,Math.abs(e-t.east)-1.24),Math.max(0,Math.abs(n-t.north)-1.24))<r||h+1.8>t.ground&&h<t.ropeHeight&&Math.hypot(e-t.east,n-t.north)<.62+r);},
+    footprints:towers.map(t=>Object.freeze({east:t.east,north:t.north,bottom:t.footBottom,top:t.footTop+.09,halfWidth:t.footHalf+.04,mastTop:t.ropeHeight,latticeTop:t.latticeTop,legHalf:t.legHalf})),
+    blocked(e:number,n:number,h:number,r=.27){return towers.some(t=>nightBLatticeBlocked(t,e,n,h,r)||h+1.8>t.ground&&h<t.ropeHeight&&Math.hypot(e-t.east,n-t.north)<.62+r);},
     setNight(value: boolean) {
       if (disposed) throw new Error('The D2-R02 cable towers are disposed.');
       if (typeof value !== 'boolean') throw new TypeError('setNight expects a boolean.');

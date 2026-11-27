@@ -30,7 +30,15 @@ test('D2-R02 cable towers densely support the canonical 1920 m line on R30 terra
   const batches = towers.group.children.filter(child => child instanceof InstancedMesh);
   assert.equal(batches.length, 5, 'mast, crossbar, brace, stone footing and snow cap batches');
   assert.equal(stats.drawCalls, 5, JSON.stringify(stats));
-  assert.equal(stats.foundations,stats.towers);assert.ok(stats.westTowers>0);
+  assert.equal(stats.foundations,stats.towers);assert.ok(stats.westTowers>0);assert.ok(stats.latticeMembers>stats.towers*20);
+  const lattice=batches.find(batch=>batch.name.endsWith('-brace'))!;assert.equal(lattice.count,stats.latticeMembers);
+  for(const foot of towers.footprints.filter(f=>f.legHalf>0)){
+    assert.ok(foot.halfWidth>=foot.legHalf+.7);assert.ok(foot.mastTop-foot.latticeTop>=3.64);
+    for(const x of [-foot.halfWidth+.04,0,foot.halfWidth-.04])for(const z of [-foot.halfWidth+.04,0,foot.halfWidth-.04]){
+      const h=sampleTownD2R30Height(foot.east+x,foot.north+z)!;assert.ok(h>foot.bottom&&h<foot.top);
+    }
+    assert.ok(towers.blocked(foot.east+foot.legHalf*.8,foot.north,foot.top+.4));
+  }
   for(const foot of towers.footprints){for(const x of [-1.2,-.6,0,.6,1.2])for(const z of [-1.2,-.6,0,.6,1.2]){const h=sampleTownD2R30Height(foot.east+x,foot.north+z)!;assert.ok(h>foot.bottom&&h<foot.top);}assert.ok(towers.blocked(foot.east,foot.north,foot.top-.1));}
   const mast = batches.find(batch => batch.name.endsWith('-mast'))!;
   const crossbar = batches.find(batch => batch.name.endsWith('-crossbar'))!;
