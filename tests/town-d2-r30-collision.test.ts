@@ -232,3 +232,47 @@ test('D2-R30 collision rejects invalid construction and sweep parameters', () =>
     collision.dispose();
   }
 });
+
+test('D2-R30 collision keeps normals and slopes finite at every domain boundary vertex', () => {
+  const collision = createTownD2R30Collision();
+  try {
+    const { west, east, south, north } = mainSummitBounds;
+    const corners = [
+      { east: west, north: south }, { east: east, north: south },
+      { east: west, north: north }, { east: east, north: north },
+    ];
+    for (const point of corners) {
+      const surface = collision.surfaceAt(point.east, point.north);
+      assert.ok(surface !== undefined && Number.isFinite(surface),
+        `surface at boundary corner ${point.east},${point.north} must be finite`);
+      const normal = collision.normalAt(point.east, point.north);
+      assert.ok(normal !== undefined && normal.every(Number.isFinite),
+        `normal at boundary corner ${point.east},${point.north} must be finite`);
+      assert.ok(normal !== undefined && Math.abs(Math.hypot(...normal) - 1) < 1e-6,
+        `normal at boundary corner ${point.east},${point.north} must be a unit vector`);
+      const slope = collision.slopeAt(point.east, point.north);
+      assert.ok(slope !== undefined && Number.isFinite(slope),
+        `slope at boundary corner ${point.east},${point.north} must be finite`);
+    }
+    // Edge midpoints: walk along each edge and verify the surface, normal
+    // and slope are all well-defined at grid-aligned vertices.
+    const eastAxis = townD2R30GridAxis(west, east, 8);
+    for (const e of [eastAxis[0]!, eastAxis[eastAxis.length - 1]!]) {
+      for (const n of [south, north, 500, 1_000]) {
+        assert.ok(collision.surfaceAt(e, n) !== undefined, `surface at edge ${e},${n}`);
+        assert.ok(collision.normalAt(e, n) !== undefined, `normal at edge ${e},${n}`);
+        assert.ok(collision.slopeAt(e, n) !== undefined, `slope at edge ${e},${n}`);
+      }
+    }
+    const northAxis = townD2R30GridAxis(south, north, 8);
+    for (const n of [northAxis[0]!, northAxis[northAxis.length - 1]!]) {
+      for (const e of [west, east, 0, 50]) {
+        assert.ok(collision.surfaceAt(e, n) !== undefined, `surface at edge ${e},${n}`);
+        assert.ok(collision.normalAt(e, n) !== undefined, `normal at edge ${e},${n}`);
+        assert.ok(collision.slopeAt(e, n) !== undefined, `slope at edge ${e},${n}`);
+      }
+    }
+  } finally {
+    collision.dispose();
+  }
+});

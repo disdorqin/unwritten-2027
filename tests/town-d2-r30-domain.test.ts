@@ -86,3 +86,38 @@ test('D2-R01 render chunks cover the full extent without overlap or holes', () =
     [8, 8, 16, 16, 32, 32, 64],
   );
 });
+
+test('D2-R30 normals stay finite unit vectors on every domain boundary edge', () => {
+  const { west, east, south, north } = mainSummitBounds;
+  const edges = [
+    { east: west, north: 500 }, { east: east, north: 500 },
+    { east: 0, north: south }, { east: 0, north: north },
+    { east: west, north: south }, { east: east, north: north },
+    { east: west, north: north }, { east: east, north: south },
+  ] as const;
+  for (const point of edges) {
+    const normal = sampleTownD2R30Normal(point.east, point.north);
+    assert.ok(Math.abs(Math.hypot(...normal) - 1) < 1e-9,
+      `normal at ${point.east},${point.north} must be a unit vector`);
+    assert.ok(normal.every(component => Number.isFinite(component)),
+      `normal at ${point.east},${point.north} must be finite, got ${normal}`);
+    const band = townD2R30SurfaceBand(point.east, point.north);
+    assert.ok(band.length > 0, `band at ${point.east},${point.north} must be classified`);
+  }
+});
+
+test('D2-R30 normal and surface-band samplers fail closed on out-of-bounds and non-finite input', () => {
+  const outside = [
+    [mainSummitBounds.west - .01, 0], [mainSummitBounds.east + .01, 0],
+    [0, mainSummitBounds.south - .01], [0, mainSummitBounds.north + .01],
+    [NaN, 0], [0, NaN], [Infinity, 0], [0, -Infinity],
+  ] as const;
+  for (const [east, north] of outside) {
+    assert.throws(() => sampleTownD2R30Normal(east, north), RangeError,
+      `normal must reject ${east},${north}`);
+    assert.throws(() => townD2R30SurfaceBand(east, north), RangeError,
+      `surface band must reject ${east},${north}`);
+  }
+  assert.throws(() => sampleTownD2R30Normal(0, 0, NaN), RangeError);
+  assert.throws(() => townD2R30SurfaceBand(0, 0, Infinity), RangeError);
+});
