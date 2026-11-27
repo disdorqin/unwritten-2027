@@ -9,6 +9,7 @@ import { sampleTownD2R30Height, townD2R30Spec } from './town-d2-r30-domain';
 import { createTownD2R30FacilityFoundations } from './town-d2-r30-facility-foundations';
 import { createTownD2R30Massif } from './town-d2-r30-massif';
 import { createTownD2R30NightLights } from './town-d2-r30-night-lights';
+import { createTownD2R30NorthWall } from './town-d2-r30-north-wall';
 import { createTownD2R30Ropeway } from './town-d2-r30-ropeway';
 import { createTownD2R30SledGateSupport } from './town-d2-r30-sled-gate-support';
 import { createTownD2R30SnowRockHost } from './town-d2-r30-snow-rock-host';
@@ -50,6 +51,8 @@ export type TownD2R30AssemblyOptions = Readonly<{
   includeRopeway?: boolean;
   /** Epoch used by the canonical ropeway clock when includeRopeway is true. */
   ropewayEpochMs?: number;
+  /** D2-R2: include the north-wall via-ferrata, monument, great flag and lookout (default false). */
+  includeNorthWall?: boolean;
 }>;
 
 export type TownD2R30Assembly = Readonly<{
@@ -82,9 +85,10 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   const includeNightLights = options.includeNightLights ?? false;
   const includeRopeway = options.includeRopeway ?? false;
   const ropewayEpochMs = options.ropewayEpochMs ?? 0;
+  const includeNorthWall = options.includeNorthWall ?? false;
   if ([includeSnowRock, includeStrata, includeCloudTerrace, includeTrailSupport, includeCableTowers,
     includeFacilityFoundations, includeSledGateSupport, includeSummitFacilities, includeNightLights,
-    includeRopeway]
+    includeRopeway, includeNorthWall]
     .some(value => typeof value !== 'boolean')) {
     throw new TypeError('D2-R30 inclusion flags must be booleans.');
   }
@@ -227,6 +231,16 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
     disposers.push(() => nextRopeway.dispose());
     nightHooks.push(value => nextRopeway.setNight(value));
     updateRopeway = nowMs => nextRopeway.update(nowMs);
+  }
+
+  if (includeNorthWall) {
+    // D2-R2: the central-sector climb + four summit landmarks, on the same
+    // height field as the massif; canonical hut/icefall/glide are the R07
+    // package's job and are deliberately not duplicated here.
+    const northWall = createTownD2R30NorthWall({ heightAt, arrivalHeight });
+    children.push(northWall.group);
+    disposers.push(() => northWall.dispose());
+    nightHooks.push(value => northWall.setNight(value));
   }
 
   for (const child of children) group.add(child);

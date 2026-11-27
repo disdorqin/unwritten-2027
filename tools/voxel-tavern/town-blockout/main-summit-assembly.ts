@@ -196,6 +196,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number,
     includeSummitFacilities: true,
     includeNightLights: true,
     includeRopeway: true,
+    includeNorthWall: true,
     ropewayEpochMs: epochMs,
   });
   let activeCable = cable;
