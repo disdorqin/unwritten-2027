@@ -3,6 +3,7 @@ import {
   MeshStandardMaterial, NearestFilter, PlaneGeometry, Ray, SRGBColorSpace, Vector3, type Object3D,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import {instanceWorkshopParts} from './town-r30-crater-perf-workshop';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import type { buildCraterRailExtension } from './town-crater-rail-extension';
 
@@ -366,6 +367,9 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
       joined.computeBoundingSphere();g.add(new Mesh(joined,mat));
     }
   }
+  const compare=typeof location!=='undefined'&&new URLSearchParams(location.search).has('profile')&&new URLSearchParams(location.search).has('pPerfCompare');
+  const repeated=instanceWorkshopParts(root,new Set<Object3D>([...orePiles.flat(),...tallyPegs.flat(),...pressureSteps,...dialKnobs,...[bellowsGrip,leverGrip].filter((o):o is Mesh=>!!o)]),new Set([...allMaterials,pressureStepMaterial]),compare);
+  root.userData.p2InstanceStats={before:repeated.before,after:repeated.after};
   const ray=new Ray(),point=new Vector3(),delta=new Vector3();
   type ControlTarget={station:CraterWorkstationId;index?:0|1|2;point:Point;radius:number};
   const targets:ControlTarget[]=sites.flatMap<ControlTarget>(s=>{
@@ -437,7 +441,6 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
     lever!.rotation.z=view.turnout==='branch'?.44:-.44;
     // Both physically moving grips use actual matrix positions; a press
     // after a pressure stroke must still target the real handle.
-    root.updateWorldMatrix(true,true);
     for(const [id,grip] of [['turnout',leverGrip],['bellows',bellowsGrip]] as const){
       if(!grip)continue;
       const v=grip.getWorldPosition(new Vector3());
@@ -465,6 +468,7 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
   setAvailable(false);
   function dispose(){
     root.removeFromParent();
+    repeated.dispose();
     const geometries=new Set<import('three').BufferGeometry>();
     root.traverse(o=>{if(o instanceof Mesh){geometries.add(o.geometry);if(o.material instanceof MeshBasicMaterial){o.material.map?.dispose();o.material.dispose();}}});
     for(const geo of geometries)geo.dispose();
