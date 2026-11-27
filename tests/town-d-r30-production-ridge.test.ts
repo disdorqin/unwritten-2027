@@ -19,6 +19,11 @@ test('production ridge consumes real railway mask and replaces only owned terrai
  const ridge=mountProductionRidge(root,grid,{loop:rail.route.points,branch:branch.samples});
  assert.ok(ridge.changedVertices>100000);assert.equal(ridge.roads.length,3);assert.equal(ridge.stationReady,true);
  assert.equal(ridge.transportReady,false);
+ const lowerEnd=ridge.roads.at(-1)!.route.at(-1)!;
+ const midEnd=ridge.roads[1]!.route.at(-1)!;
+ assert.equal(ridge.roadTerminalAction(lowerEnd.east,lowerEnd.north,lowerEnd.height)?.title,'后坡施工终点');
+ assert.equal(ridge.roadTerminalAction(midEnd.east,midEnd.north,midEnd.height)?.title,'中山施工终点');
+ assert.equal(ridge.roadTerminalAction(526,305,26),undefined);
  assert.equal(ridge.cloudSeam.physicalReady,true);assert.equal(ridge.cloudSeam.domainReady,false);
  assert.equal(ridge.cloudSeam.seamNorth,663.25);assert.equal(ridge.cloudSeam.gateNorth,666);
  assert.ok(ridge.terrace);const terrace=ridge.terrace!;
