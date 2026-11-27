@@ -10,7 +10,7 @@ export function mountSouthGully(heightAt:SouthGround,protectedAt:SouthProtection
  const group=new Group();group.name='night-a-south-frozen-gully';
  const mat=new MeshLambertMaterial({vertexColors:true});
  const bins=new Map<number,{p:number[];c:number[]}>();
- const ice=new Color('#7897aa'),shale=new Color('#576970'),snow=new Color('#bbcbd1'),tint=new Color();
+ const ice=new Color('#7897aa'),shale=new Color('#576970'),snow=new Color('#bbcbd1'),tint=new Color(),deepIce=new Color('#486b83'),frost=new Color('#dce7eb');
  let triangles=0;
  function clip(poly:Point[],sign:number){
   const result:Point[]=[];
@@ -38,7 +38,14 @@ export function mountSouthGully(heightAt:SouthGround,protectedAt:SouthProtection
      if(hs.some(h=>h===undefined||!Number.isFinite(h))||vertices.some(p=>protectedAt(p.e,p.n)))continue;
      for(const [j,p] of vertices.entries()){
       const bank=Math.max(0,Math.min(1,(distance(p)+3)/6));
-      tint.copy(ice).lerp(shale,.35+.18*Math.sin(p.e*.19+p.n*.37)).lerp(snow,bank*.88);
+      // Layered frozen current: dark narrow central channel, longitudinal
+      // bluish ice bands and broken frost at the shallow banks. The tint
+      // follows the actual meander, without a second flat water plane.
+      const offset=p.n-southGullyNorth(p.e),relative=Math.abs(offset)/width(p.e);
+      const current=.5+.5*Math.sin(offset*.78+Math.sin(p.e*.046)*1.4);
+      const cracks=Math.pow(.5+.5*Math.cos(p.e*.83+offset*1.9),12);
+      tint.copy(ice).lerp(deepIce,Math.max(0,1-relative)*(.25+.35*current))
+       .lerp(shale,.13+.22*bank).lerp(frost,cracks*.23*(1-bank)).lerp(snow,bank*.88);
       bin.p.push(p.e,hs[j]!+.022,-p.n);bin.c.push(tint.r,tint.g,tint.b);
      }
      triangles++;
@@ -46,10 +53,38 @@ export function mountSouthGully(heightAt:SouthGround,protectedAt:SouthProtection
    }
   }
  }
+ // Ground-conforming ice shelves and shale chips along the frozen banks.
+ // Subdivide at <=2m, use the exact canonical ground for every vertex,
+ // keep them below the step threshold and out of road/transport reserves.
+ // They share the bed's six spatial batches and add no blocking layer.
+ let shelfCount=0;
+ for(let e=-610;e<=116;e+=7){
+  for(const side of [-1,1]){
+   const n=southGullyNorth(e)+side*(width(e)-1.5);
+   const angle=.35*Math.sin(e*.23+side),rx=1.1+.45*Math.cos(e*.17),rn=.55+.15*Math.sin(e*.31);
+   const vertices=[{e,n},...Array.from({length:6},(_,i)=>{
+    const t=i*Math.PI/3;
+    return {e:e+rx*Math.cos(t)*Math.cos(angle)-rn*Math.sin(t)*Math.sin(angle),n:n+rx*Math.cos(t)*Math.sin(angle)+rn*Math.sin(t)*Math.cos(angle)};
+   })];
+   if(vertices.some(p=>protectedAt(p.e,p.n)||distance(p)>1||p.n<182||p.n>446))continue;
+   const heights=vertices.map(p=>heightAt(p.e,p.n));
+   if(heights.some(h=>h===undefined||!Number.isFinite(h))||Math.max(...heights as number[])-Math.min(...heights as number[])>1.1)continue;
+   const key=Math.floor(e/128),bin=bins.get(key)??{p:[],c:[]};bins.set(key,bin);
+   for(let i=0;i<6;i++){
+    for(const j of [0,i+1,(i+1)%6+1]){
+     const p=vertices[j]!,h=heights[j]!;
+     tint.copy(j===0?frost:ice).lerp(shale,j===0?.10:.38+.12*Math.sin(e));
+     bin.p.push(p.e,h+(j===0?.17:.038),-p.n);bin.c.push(tint.r,tint.g,tint.b);
+    }
+    triangles++;
+   }
+   shelfCount++;
+  }
+ }
  for(const [k,{p,c}] of bins){if(!p.length)continue;
   const geo=new BufferGeometry();geo.setAttribute('position',new Float32BufferAttribute(p,3));geo.setAttribute('color',new Float32BufferAttribute(c,3));geo.computeVertexNormals();geo.computeBoundingSphere();
   const m=new Mesh(geo,mat);m.name='south-gully-bed:'+k;group.add(m);
  }
  let disposed=false;
- return {group,triangles,dispose(){if(disposed)return;disposed=true;group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});mat.dispose();group.clear();}};
+ return {group,triangles,shelfCount,dispose(){if(disposed)return;disposed=true;group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});mat.dispose();group.clear();}};
 }
