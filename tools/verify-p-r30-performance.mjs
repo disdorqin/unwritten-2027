@@ -54,7 +54,7 @@ try{
  report.browser=browser.version();const context=await browser.newContext({viewport:report.viewport,deviceScaleFactor:dpr,locale:'zh-CN',isMobile:mobile,hasTouch:mobile});page=await context.newPage();
  await page.addInitScript(quality=>{Object.defineProperty(Element.prototype,'requestPointerLock',{value:undefined});localStorage.setItem('unwritten.quality.tier.v1',quality);window.__pStartup=[];document.addEventListener('town-p1-render-profile',e=>{window.__pLatest=e.detail;if(window.__pStartup.length<150)window.__pStartup.push(e.detail)});},report.quality);
  page.on('pageerror',e=>report.errors.push('page:'+e.message));page.on('console',m=>{if(m.type()==='error')report.errors.push('console:'+m.text())});page.on('response',r=>{if(r.status()>=400)report.errors.push('http:'+r.status()+':'+r.url())});
- const begin=Date.now();await page.goto(new URL(production?'/?profile&pPerfMeasure':'/?profile&pPerfCompare',origin).href,{waitUntil:'domcontentloaded',timeout:90000});
+ const begin=Date.now();await page.goto(new URL(production?'/?profile&pPerfMeasure'+(process.env.P_COALESCE_AB==='1'?'&pCoalesceCandidate':''):'/?profile&pPerfCompare',origin).href,{waitUntil:'domcontentloaded',timeout:90000});
  await page.waitForFunction(()=>document.querySelector('#town-entry')?.hidden===true||document.querySelector('#town-entry-continue')?.hidden===false||document.querySelector('#town-entry-error')?.hidden===false,{timeout:90000});
  assert.notEqual(await page.locator('#town-entry-error').evaluate(x=>x.hidden),false,'entry error');
  if(await page.locator('#town-entry-continue').isVisible())await page.locator('#town-entry-continue').click();
