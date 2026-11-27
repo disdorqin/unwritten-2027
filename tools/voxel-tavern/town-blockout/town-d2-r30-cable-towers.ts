@@ -168,7 +168,7 @@ export function createTownD2R30CableTowers(options: TownD2R30CableTowersOptions 
     group,
     stats: () => stats,
     footprints:towers.map(t=>Object.freeze({east:t.east,north:t.north,bottom:t.footBottom,top:t.footTop+.09,halfWidth:t.footHalf+.04,mastTop:t.ropeHeight,latticeTop:t.latticeTop,legHalf:t.legHalf})),
-    blocked(e:number,n:number,h:number,r=.27){return towers.some(t=>nightBLatticeBlocked(t,e,n,h,r)||h+1.8>t.ground&&h<t.ropeHeight&&Math.hypot(e-t.east,n-t.north)<.62+r);},
+    blocked(e:number,n:number,h:number,r=.27,body=1.8){if(![e,n,h,r,body].every(Number.isFinite)||r<0||body<=0)return true;return towers.some(t=>nightBLatticeBlocked(t,e,n,h,r,body)||h+body>t.ground&&h<t.ropeHeight&&Math.hypot(e-t.east,n-t.north)<.62+r);},
     setNight(value: boolean) {
       if (disposed) throw new Error('The D2-R02 cable towers are disposed.');
       if (typeof value !== 'boolean') throw new TypeError('setNight expects a boolean.');

@@ -147,7 +147,7 @@ export function createTownD2R30Ropeway(options: TownD2R30RopewayOptions = {}) {
     stations,
     decks:cableView.decks,
     supportAt:cableView.supportAt,
-    blocked(e:number,n:number,h:number,r=.27){return stations.blocked(e,n,h,r)||cableView.deckBlocked(e,n,h,r);},
+    blocked(e:number,n:number,h:number,r=.27,body=1.8){return stations.blocked(e,n,h,r,body)||cableView.deckBlocked(e,n,h,r,body);},
     stats: () => stats,
     /** Advances the two cabins along the rope. */
     update(nowMs: number) {

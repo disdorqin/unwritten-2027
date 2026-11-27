@@ -20,7 +20,7 @@ test('R30 western compound keeps real machinery out of both rope sweeps and prov
  const body=(p:SummitSweepProbe)=>{
   let found=false;for(let i=0;i<=6;i++)for(let j=0;j<=8;j++){
    const x=(i/3-1)*p.halfWidth,z=(j/4-1)*p.halfLength,e=p.feet.east+x*Math.cos(p.heading)+z*Math.sin(p.heading),n=p.feet.north-x*Math.sin(p.heading)+z*Math.cos(p.heading);
-   for(const [key,hit] of [['rope',r.blocked(e,n,p.feet.height,.025)],['tower',tower.blocked(e,n,p.feet.height,.025)],['west',w.blocked(e,n,p.feet.height,.025,2.48)],['workshop',m.blocked(e,n,p.feet.height,.025,2.48)]] as const)if(hit){hits[key]=(hits[key]??0)+1;found=true;}
+   for(const [key,hit] of [['rope',r.blocked(e,n,p.feet.height,.025,p.bodyTop)],['tower',tower.blocked(e,n,p.feet.height,.025,p.bodyTop)],['west',w.blocked(e,n,p.feet.height,.025,2.48)],['workshop',m.blocked(e,n,p.feet.height,.025,2.48)]] as const)if(hit){hits[key]=(hits[key]??0)+1;found=true;}
   }return found;
  };
  const a=auditNightBSummitCable(r,g.surfaceAt,body);assert.equal(a.groundHits,0);assert.equal(a.obstacleHits,0,JSON.stringify({a,hits}));assert.ok(a.candidateEnvelopeClear);

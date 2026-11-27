@@ -105,7 +105,7 @@ export function mountMainSummitCable(owner: Group, cable: Cable, groundAt: (east
   return {
     decks:Object.freeze(decks.map(d=>Object.freeze({...d}))),
     supportAt(e:number,n:number,r=.27){for(const d of decks){if(d.interference)continue;const p=local(d,e,n);if(Math.abs(p.x)<=2.4-r&&Math.abs(p.z)<=2.5-r)return d.height;}},
-    deckBlocked(e:number,n:number,h:number,r=.27){return decks.some(d=>{const p=local(d,e,n);return h+1.8>d.height&&h<d.height+1.02&&p.x*(d.cabin===0?1:-1)>.16-r&&p.x*(d.cabin===0?1:-1)<2.29+r&&Math.abs(Math.abs(p.z)-2.38)<.07+r;});},
+    deckBlocked(e:number,n:number,h:number,r=.27,body=1.8){return decks.some(d=>{const p=local(d,e,n);return h+body>d.height&&h<d.height+1.02&&p.x*(d.cabin===0?1:-1)>.16-r&&p.x*(d.cabin===0?1:-1)<2.29+r&&Math.abs(Math.abs(p.z)-2.38)<.07+r;});},
     update(nowMs: number) { return updateStates(cable.cabinsAt(nowMs)); },
     updateStates,
     dispose() {
