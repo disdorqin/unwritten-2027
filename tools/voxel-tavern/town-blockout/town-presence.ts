@@ -632,7 +632,11 @@ export function createTownPresence(
       }
       if (message.type === 'clock') {
         if (haveId && clockRequest !== undefined && message.sentAt === clockRequest && typeof message.epochMs === 'number') {
-          clock.accept(message.epochMs, clockRequest);
+          const rtt=performance.now()-clockRequest;
+          if(Number.isSafeInteger(message.epochMs)&&message.epochMs>0&&rtt>=0&&rtt<=2000){
+            clock.accept(message.epochMs,clockRequest);
+            if(receivingFrom==='ws'?socketJoined:!socketJoined)cableLease.renew();
+          }
           clockRequest = undefined;
           if (ceremonyArrival) scheduleCeremonyArrival();
         }
@@ -707,7 +711,7 @@ export function createTownPresence(
           if (typeof message.epochMs === 'number' && Number.isFinite(message.epochMs)) {
             serverEpochOffset = message.epochMs - performance.now();
             clock.accept(message.epochMs);
-            if (photoSupported || message.townNightWindow !== undefined) nextClockSample = 0;
+            if (cableLineSupported || photoSupported || message.townNightWindow !== undefined) nextClockSample = 0;
           }
           townNight.join(message.epochMs, message.townNightWindow);
           if (message.undergroundWater !== undefined) {
@@ -906,11 +910,14 @@ export function createTownPresence(
   }
 
   function samplePhotoClock() {
-    if (!haveId || (!photoSupported && !townNight.state())) return;
+    if (!haveId || (!cableLineSupported && !photoSupported && !townNight.state())) return;
     const sentAt = performance.now();
     if (sentAt < nextClockSample || !sendEvent(JSON.stringify({ type: 'clock', sentAt }))) return;
     clockRequest = sentAt;
-    nextClockSample = sentAt + 60_000;
+    // Presence snapshots coalesce while everyone is stationary, including
+    // solo rooms. Use the existing server rate-limited clock echo as a
+    // bounded WS heartbeat; poll already has a validated 2Hz round trip.
+    nextClockSample = sentAt + (cableLineSupported&&!poll?1000:60_000);
   }
 
   function syncActivityPoses() {
