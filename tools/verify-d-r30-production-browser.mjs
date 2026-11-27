@@ -10,7 +10,7 @@ const root=resolve('.'),out=resolve(process.argv[2]??'.evidence/d-r30-m1');
 await mkdir(out,{recursive:true});
 let server,browser,page,failure,presence;
 const frames=[],errors=[],mobileResults=[],roadWalk=[];
-const longRoad=process.argv.includes('--long-road');
+const longRoad=process.argv.includes('--long-road'),outboundOnly=longRoad&&process.argv.includes('--outbound-only'),roadSprint=longRoad&&process.argv.includes('--sprint-road');
 const buildPath=process.argv[3]?resolve(process.argv[3]):undefined;
 let received=0,sent=0;
 try{
@@ -129,22 +129,26 @@ try{
     if(p.dist>1.35||Math.abs(r.foot[2]-r.surface)>.12)throw Error('road deviation '+JSON.stringify(roadWalk.at(-1)));
     if(direction*(p.cum-target)>=-.45){console.log('long road checkpoint',JSON.stringify({direction,cum:p.cum,foot:r.foot,seconds:(Date.now()-begin)/1000}));await checkpoint();return;}
     if(direction*p.cum>lastProgress+.1){lastProgress=direction*p.cum;stalled=0;}else if(++stalled>14)throw Error('road movement stalled '+JSON.stringify(roadWalk.at(-1)));
-    const aim=at(Math.min(total,Math.max(0,p.cum+direction*2.8)));
+    const aim=at(Math.min(total,Math.max(0,p.cum+direction*(roadSprint?3.2:2.8))));
     const heading=Math.atan2(aim[0]-r.foot[0],aim[1]-r.foot[1]);
     await steer(Math.atan2(Math.sin(heading-r.heading),Math.cos(heading-r.heading)));
-    await page.keyboard.down('w');try{await page.waitForTimeout(Math.min(295,Math.max(65,Math.abs(target-p.cum)*90)))}finally{await page.keyboard.up('w')}
+    if(roadSprint)await page.keyboard.down('ShiftLeft');
+    await page.keyboard.down('w');try{await page.waitForTimeout(Math.min(roadSprint?230:295,Math.max(65,Math.abs(target-p.cum)*90)))}finally{await page.keyboard.up('w');if(roadSprint)await page.keyboard.up('ShiftLeft')}
     if(k%25===0){await checkpoint();console.log('long road progress',JSON.stringify(roadWalk.at(-1)));}
    }
    throw Error('long road input budget');
   }
-  await follow(1,total);await snap('long-road-end');await follow(-1,5.5);await snap('long-road-return');
-  const r=await page.evaluate(()=>window.__m1Frame.ridge);
-  await steer(Math.atan2(Math.sin(-r.heading),Math.cos(-r.heading)));
+  await follow(1,total);await snap('long-road-end');
+  if(outboundOnly){await follow(-1,Math.max(5.5,total-25));await snap('long-road-rear-turnback');}
+  else{await follow(-1,5.5);await snap('long-road-return');
+   const r=await page.evaluate(()=>window.__m1Frame.ridge);
+   await steer(Math.atan2(Math.sin(-r.heading),Math.cos(-r.heading)));}
+  await checkpoint();
  }
- await travel('d',()=>window.__m1Frame.ridge.foot[0]>=525.9);
+ if(!outboundOnly){await travel('d',()=>window.__m1Frame.ridge.foot[0]>=525.9);
  await snap('native-ground-road-to-dock');
  await travel('s',()=>window.__m1Frame.ridge.foot[1]<=306);
- await snap('station-dock-return');
+ await snap('station-dock-return');}
  await go('陨石坑口',2,159);await snap('crater-mouth-production');
  const samples=await page.evaluate(()=>new Promise(resolve=>{const times=[],draws=[],tris=[];let prior,start;function tick(t){start??=t;if(prior!==undefined)times.push(t-prior);prior=t;if(window.__m1Frame){draws.push(window.__m1Frame.calls);tris.push(window.__m1Frame.triangles)}if(t-start<3500){requestAnimationFrame(tick);return}const q=(a,p)=>a.sort((x,y)=>x-y)[Math.max(0,Math.ceil(a.length*p)-1)];const gl=document.querySelector('#scene canvas').getContext('webgl2'),ext=gl.getExtension('WEBGL_debug_renderer_info');resolve({frames:times.length,p95:q(times,.95),median:q(times,.5),fps:times.length*1000/(t-start),draws:q(draws,.5),triangles:q(tris,.5),gpu:ext&&gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)});}requestAnimationFrame(tick)}));
  console.log('normal crater mouth frame samples',JSON.stringify(samples));frames.at(-1).timing=samples;
@@ -184,7 +188,7 @@ try{
 finally{
  await browser?.close();await server?.close();
  if(presence&&presence.exitCode===null){presence.kill();await Promise.race([once(presence,'exit'),new Promise(r=>setTimeout(r,3000))])}
- const report={passed:!failure,frames,mobileResults,roadWalk,errors,failure,realPresence:!!buildPath&&received>0&&sent>0,received,sent,scope:'normal town entry; menu locations and native keyboard movement; not full mountain traversal'};
+ const report={passed:!failure,frames,mobileResults,roadWalk,errors,failure,realPresence:!!buildPath&&received>0&&sent>0,received,sent,scope:outboundOnly?'normal town entry; full base road outbound and 25m rear turnback; no full return':longRoad?'normal town entry; full base road native input round trip; not full mountain traversal':'normal town entry; menu locations and native keyboard movement; not full mountain traversal'};
  await writeFile(join(out,'report.json'),JSON.stringify(report,null,2));
  console.log(JSON.stringify({passed:report.passed,frames:frames.length,realPresence:report.realPresence,received,sent,errors:errors.slice(0,10),failure}));
  if(failure)process.exitCode=1;
