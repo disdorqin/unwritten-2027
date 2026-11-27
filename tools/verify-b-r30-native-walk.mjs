@@ -32,8 +32,11 @@ let browser;
 let lastPage;
 let lastEvidence;
 let measuring = true;
-// Keep the browser run inside the local execution tool's time budget.
-const runDeadline=Date.now()+225_000;
+// A complete 824m descent plus return needs more time than the previous
+// single-descent evidence budget. Keep an explicit bounded deadline.
+const budget=Number(process.env.ZA22_ROUTE_BUDGET_MS??(segment==='roundtrip'?480_000:225_000));
+assert.ok(Number.isInteger(budget)&&budget>=225_000&&budget<=600_000,'Invalid native route budget');
+const runDeadline=Date.now()+budget;report.routeBudgetMs=budget;
 function remaining(){const left=runDeadline-Date.now();assert.ok(left>1000,'Native route evidence budget exhausted');return left;}
 
 async function openTown(name) {
