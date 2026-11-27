@@ -38,7 +38,7 @@ const camera=new PerspectiveCamera(63,innerWidth/innerHeight,.15,4800),renderer=
 renderer.setPixelRatio(1);renderer.setSize(innerWidth,innerHeight);document.body.appendChild(renderer.domElement);
 const p=west.pavilion.site;
 const tower=towers.footprints.filter(f=>f.legHalf>=2&&f.east< -300&&f.north>480).sort((a,b)=>Math.hypot(a.east+675,a.north-554)-Math.hypot(b.east+675,b.north-554))[0]!;
-const towerMid=(tower.footTop+tower.mastTop)/2;
+const towerMid=(tower.top+tower.mastTop)/2;
 const towerEye=Array.from({length:12},(_,i)=>{const theta=i*Math.PI/6,e=tower.east+65*Math.cos(theta),n=tower.north+65*Math.sin(theta),h=collision.surfaceAt(e,n)??Infinity;return {e,n,h};}).sort((a,b)=>a.h-b.h)[0]!;
 const towerCamera:[number,number,number]=[towerEye.e,Math.max(towerEye.h+28,towerMid+25),-towerEye.n];
 type Shot={label:string;eye:[number,number,number];look:[number,number,number]};
@@ -51,7 +51,7 @@ const shots:Shot[]=[
  {label:'二线维修机房',eye:[-17.1,348.75,-7],look:[-23,348.3,-8.5]},
 ];
 let selected=0,frame=0;const frameTimes:number[]=[];let last=performance.now();
-function select(index:number){selected=Math.max(0,Math.min(shots.length-1,index));const s=shots[selected]!;camera.position.set(...s.eye);camera.lookAt(new Vector3(...s.look));west.updateView(camera.position.x,-camera.position.z,950);frameTimes.length=0;}
+function select(index:number){selected=Math.max(0,Math.min(shots.length-1,index));const s=shots[selected]!;if(![...s.eye,...s.look].every(Number.isFinite))throw Error('Invalid review camera '+s.label);camera.position.set(...s.eye);camera.lookAt(new Vector3(...s.look));west.updateView(camera.position.x,-camera.position.z,950);frameTimes.length=0;}
 select(0);
 addEventListener('keydown',e=>{if(/^[1-5]$/.test(e.key))select(Number(e.key)-1)});
 addEventListener('resize',()=>{camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();renderer.setSize(innerWidth,innerHeight)});
