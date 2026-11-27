@@ -17,7 +17,7 @@ export function mountSouthEarthworks(points:readonly Point[],first:number,last:n
  const chunks=new Map<string,{road:number[];roadColor:number[];walls:number[];wallColor:number[]}>();
  const triangleCells=new Map<string,Tri[]>(),verts:number[]=[],idx:number[]=[],lookup=new Map<string,number>();
  const railSegments:{a:Point;b:Point}[]=[];
- const roadColor=new Color('#aba496'),edgeColor=new Color('#8c948d'),wallColor=new Color('#747d7e'),fillColor=new Color('#8a8e85'),railColor=new Color('#6b5241');
+ const roadColor=new Color('#aba496'),edgeColor=new Color('#8c948d'),wallColor=new Color('#747d7e'),fillColor=new Color('#8a8e85'),railColor=new Color('#6b5241'),frostColor=new Color('#d2dee4'),guideColor=new Color('#c9a66d'),masonry=new Color(),gravel=new Color();
  const get=(p:Point)=>{const key=Math.floor(p.east/96)+','+Math.floor(p.north/96);let c=chunks.get(key);if(!c){c={road:[],roadColor:[],walls:[],wallColor:[]};chunks.set(key,c);}return c;};
  const keys=(w:number,e:number,s:number,n:number)=>{const out:string[]=[];for(let i=Math.floor(w/cell);i<=Math.floor(e/cell);i++)for(let j=Math.floor(s/cell);j<=Math.floor(n/cell);j++)out.push(i+','+j);return out;};
  const put=(p:Point)=>{const xyz=[Math.fround(p.east),Math.fround(p.height),Math.fround(-p.north)],key=xyz.join(',');let i=lookup.get(key);if(i===undefined){i=verts.length/3;lookup.set(key,i);verts.push(...xyz);}return i;};
@@ -53,7 +53,14 @@ export function mountSouthEarthworks(points:readonly Point[],first:number,last:n
   const corners=[point(p.east-ex-tx,p.north-nx-tn,h-.13),point(p.east+ex-tx,p.north+nx-tn,h-.13),point(p.east+ex+tx,p.north+nx+tn,h-.13),point(p.east-ex+tx,p.north-nx+tn,h-.13)];
   const top=corners.map(q=>point(q.east,q.north,h+1.04));
   for(let i=0;i<4;i++){const j=(i+1)%4;quad(corners[i]!,corners[j]!,top[i]!,top[j]!,false,railColor);}
-  quad(top[0]!,top[1]!,top[3]!,top[2]!,false,railColor);railPosts++;
+  // Pale snow cap and intermittent warm survey-post bands, recognizable
+  // in snow haze. Use the same physical post dimensions/collider.
+  quad(top[0]!,top[1]!,top[3]!,top[2]!,false,frostColor);
+  if(railPosts%5===0){
+   const band=top.map(q=>point(q.east,q.north,h+.85));
+   for(let i=0;i<4;i++){const j=(i+1)%4;quad(band[i]!,band[j]!,top[i]!,top[j]!,false,guideColor);}
+  }
+  railPosts++;
  }
  // Check every intermediate cross-section before creating a renderable object.
  // The route is finely sampled; midpoint probes catch changes between vertices.
@@ -69,15 +76,27 @@ export function mountSouthEarthworks(points:readonly Point[],first:number,last:n
  if(Math.max(maxCut,maxFill)>cap+.1)throw Error('Earthwork exceeds certified envelope');
  for(let i=1;i<sections.length;i++){
   const a=sections[i-1]!,b=sections[i]!,span=Math.hypot(a.p.east-b.p.east,a.p.north-b.p.north);
-  for(const [l,r,color] of [[-half,-1.15,edgeColor],[-1.15,1.15,roadColor],[1.15,half,edgeColor]] as const)quad(a.at(l),a.at(r),b.at(l),b.at(r),true,color);
+  // Subtle worn gravel variation follows the authored distance along
+  // the road, not a texture atlas or extra walking surface.
+  gravel.copy(roadColor).multiplyScalar(.95+.035*Math.sin(a.p.east*.29+a.p.north*.18));
+  for(const [l,r,color] of [[-half,-1.15,edgeColor],[-1.15,1.15,gravel],[1.15,half,edgeColor]] as const)quad(a.at(l),a.at(r),b.at(l),b.at(r),true,color);
   for(const sign of [-1,1]){
    const l=a.at(sign*half),r=b.at(sign*half),g0=ground(l),g1=ground(r);
    // Continuous stone bearing wall embeds 0.2m in real ground; the
    // shared cut removes only the ground covering the walking surface.
    const base=(p:Point,h:number)=>point(p.east,p.north,Math.min(h-.2,p.height-.18));
-   quad(l,base(l,g0),r,base(r,g1),false,wallColor);
+   // Embed irregular stacked stone courses into the existing retaining
+   // profile. Identical exterior plane and feet, no extra collision shell.
+   const lowL=base(l,g0),lowR=base(r,g1);
+   const courses=Math.max(1,Math.ceil(Math.max(l.height-lowL.height,r.height-lowR.height)/.48));
+   for(let j=0;j<courses;j++){
+    const lerp=(a:Point,b:Point,t:number)=>point(a.east+(b.east-a.east)*t,a.north+(b.north-a.north)*t,a.height+(b.height-a.height)*t);
+    const t=j/courses,u=(j+1)/courses;
+    masonry.copy(wallColor).multiplyScalar(.88+.13*(.5+.5*Math.sin(i*1.9+j*2.3+sign)));
+    quad(lerp(lowL,l,t),lerp(lowL,l,u),lerp(lowR,r,t),lerp(lowR,r,u),false,masonry);
+   }
    const ol=a.at(sign*1.84,l.height-.13),orr=b.at(sign*1.84,r.height-.13),og0=ground(ol),og1=ground(orr);
-   quad(l,ol,r,orr,false,fillColor);
+   quad(l,ol,r,orr,false,(i%7===0||i%7===1)?frostColor:fillColor);
    quad(ol,base(ol,og0),orr,base(orr,og1),false,wallColor);
    // Do not leave a one-metre unguarded drop where a fill starts/ends.
    if(Math.max(l.height-g0,r.height-g1)>.9){
