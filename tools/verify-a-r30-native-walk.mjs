@@ -38,6 +38,7 @@ const hardware = process.env.ZA22_HARDWARE === '1';
 const graphicsArgs = hardware ? (process.platform === 'win32' ? ['--use-gl=angle', '--use-angle=d3d11'] : [])
   : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
 const mobileReview=segment==='mobile-review';
+const menuTouch=segment==='night-r3-bare-weather'&&process.env.ZA22_MENU_TOUCH==='1';
 const sampleFrames=process.env.ZA22_PROFILE_SAMPLE==='1'||mobileReview;
 const report = { url: url.href, segment, viewport, deviceScaleFactor, quality: 'smooth', gpu: null, paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [], performanceSamples:[] };
 
@@ -48,7 +49,7 @@ let lastEvidence;
 let measuring = true;
 
 async function openTown(name) {
-  const context = await browser.newContext({ viewport, deviceScaleFactor, locale: 'zh-CN',...(mobileReview?{isMobile:true,hasTouch:true}: {}) });
+  const context = await browser.newContext({ viewport, deviceScaleFactor, locale: 'zh-CN',...((mobileReview||menuTouch)?{isMobile:true,hasTouch:true}: {}) });
   const page = await context.newPage();
   lastPage = page;
   const evidence = { name, checkpoints: [], sockets: [], poses: [] };
@@ -352,7 +353,32 @@ try{
  if(segment==='night-r3-bare-weather'){
   assert.ok(bare,'The ordinary settings verification must use the bare root');
   assert.equal(new URL(page.url()).search,'');
-  await page.locator('#town-panel-toggle').click();
+  const menu=page.locator('#town-settings'),toggle=page.locator('#town-panel-toggle');
+  const activate=locator=>menuTouch?locator.tap():locator.click();
+  const hiddenIds=['#town-settings','#town-music-toggle','#town-chat','#fullscreen-toggle','#museum-map-button','#snowball-board'];
+  for(const id of hiddenIds)assert.equal(await page.locator(id).isVisible(),false,id+' must not obscure ordinary exploration');
+  assert.ok(await toggle.isVisible());
+  assert.equal(await toggle.getAttribute('aria-expanded'),'false');
+  await activate(toggle);
+  assert.equal(await toggle.getAttribute('aria-expanded'),'true');
+  const bounds=await menu.boundingBox();
+  assert.ok(bounds&&bounds.x>=0&&bounds.y>=0&&bounds.x+bounds.width<=viewport.width+1&&bounds.y+bounds.height<=viewport.height+1);
+  assert.ok(bounds.x+bounds.width>=viewport.width-32,'Drawer must be anchored at right edge');
+  assert.ok(await page.locator('#town-music-toggle').isVisible());
+  assert.ok(await page.locator('#snowball-board').isVisible());
+  const advanced=page.locator('#town-advanced-settings');
+  assert.equal(await advanced.evaluate(el=>el.open),false);
+  await activate(advanced.locator('summary'));assert.ok(await page.locator('#quality-tier').isVisible());
+  await activate(advanced.locator('summary'));assert.equal(await page.locator('#quality-tier').isVisible(),false);
+  const chat=page.locator('#town-chat-toggle');
+  await chat.waitFor({state:'visible'});
+  assert.equal(await chat.getAttribute('aria-expanded'),'false');
+  await activate(chat);assert.ok(await page.locator('#town-chat-text').isVisible());
+  await page.locator('#town-chat-text').fill('菜单原生验收');
+  await page.locator('#town-chat-form button[type=submit]').click();
+  await page.waitForFunction(()=>document.querySelector('#town-chat-log')?.textContent?.includes('菜单原生验收'));
+  await activate(chat);
+  assert.equal(await page.locator('#town-chat-text').isVisible(),false);
   const status=page.locator('#town-regional-weather');
   await status.waitFor({state:'visible'});
   await page.waitForFunction(()=>/能见度约/.test(document.querySelector('#town-regional-weather')?.textContent??''),null,{timeout:15000});
@@ -367,15 +393,39 @@ try{
   assert.equal(await snow.getAttribute('aria-pressed'),before);
   assert.ok((await status.textContent()).includes('能见度约'));
   await picture(page,evidence,'bare-weather-settings');
-  await page.locator('#town-settings-close').click();
+  await activate(page.locator('#town-settings-close'));
+  await page.waitForFunction(()=>document.querySelector('#town-panel-toggle')?.getAttribute('aria-expanded')==='false');
+  if(!menuTouch){
+   await page.keyboard.press('Enter');
+   await page.waitForFunction(()=>document.querySelector('#town-settings')?.open&&document.activeElement?.id==='town-chat-text');
+   await page.keyboard.press('Escape'); // blurs chat input
+   await page.keyboard.press('Escape'); // closes menu
+   await menu.waitFor({state:'hidden'});
+  }
+  await activate(toggle);
+  // Backdrop click is a real native interaction outside the drawer.
+  const drawer=await menu.boundingBox();
+  if(drawer.x>4){if(menuTouch)await page.touchscreen.tap(2,Math.floor(height/2));else await page.mouse.click(2,Math.floor(height/2));}
+  else await activate(page.locator('#town-settings-close'));
+  await menu.waitFor({state:'hidden'});
   await page.locator('#scene canvas').click({position:{x:Math.round(width*.35),y:dragY}});
   const start=await readPose(page);
-  await page.keyboard.down('w');try{await page.waitForTimeout(500);}finally{await page.keyboard.up('w');}
+  if(menuTouch){
+   await page.locator('#touch-walk').waitFor({state:'visible'});
+   const pad=await page.locator('#touch-walk').boundingBox();
+   const cdp=await page.context().newCDPSession(page);
+   const touch=(type,touchPoints)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints});
+   const p={x:pad.x+pad.width/2,y:pad.y+pad.height/2,id:1};
+   await touch('touchStart',[p]);try{await touch('touchMove',[{...p,y:p.y-37}]);await page.waitForTimeout(650);}finally{await touch('touchEnd',[]);}
+   await page.waitForTimeout(200);
+  }else{
+   await page.keyboard.down('w');try{await page.waitForTimeout(500);}finally{await page.keyboard.up('w');}
+  }
   const moved=await readPose(page);
   assert.ok(Math.hypot(moved.east-start.east,moved.north-start.north)>.3,'Native keyboard walking must remain available');
   await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-moved.east,p.north-moved.north)<1);
   await picture(page,evidence,'bare-weather-walk');
-  report.entry={scope:'ordinary bare root, live weather settings, clock read-only, snow display toggle and native movement',weather,lightingDisabled:true,snowToggleRestored:true,start,moved};
+  report.entry={scope:'ordinary bare root, single corner menu, nested settings, chat send, close and native movement',weather,lightingDisabled:true,snowToggleRestored:true,menuTouch,drawer:bounds,hiddenIds,chatSent:true,start,moved};
   report.traversal={top:moved,returned:moved};
  }else if(segment==='night-r3-entry'){
   const state=()=>page.evaluate(()=>window.__za22Frame);
