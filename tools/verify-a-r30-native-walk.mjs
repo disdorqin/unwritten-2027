@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','west-mountain','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review','night-r3-entry'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','west-mountain','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review','night-r3-entry','night-r3-bare-weather'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -349,7 +349,35 @@ const approach={
 try{
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:graphicsArgs});
  const {page,evidence,westWindow}=await openTown(segment);
- if(segment==='night-r3-entry'){
+ if(segment==='night-r3-bare-weather'){
+  assert.ok(bare,'The ordinary settings verification must use the bare root');
+  assert.equal(new URL(page.url()).search,'');
+  await page.locator('#town-panel-toggle').click();
+  const status=page.locator('#town-regional-weather');
+  await status.waitFor({state:'visible'});
+  await page.waitForFunction(()=>/能见度约/.test(document.querySelector('#town-regional-weather')?.textContent??''),null,{timeout:15000});
+  const weather=await status.textContent();
+  const lighting=page.locator('#lighting'),snow=page.locator('#snow');
+  assert.ok(await lighting.isDisabled(),'The ordinary clock must not be manually overrideable');
+  const before=await snow.getAttribute('aria-pressed');
+  assert.ok(before==='true'||before==='false');
+  await snow.click();
+  assert.notEqual(await snow.getAttribute('aria-pressed'),before);
+  await snow.click();
+  assert.equal(await snow.getAttribute('aria-pressed'),before);
+  assert.ok((await status.textContent()).includes('能见度约'));
+  await picture(page,evidence,'bare-weather-settings');
+  await page.locator('#town-settings-close').click();
+  await page.locator('#scene canvas').click({position:{x:Math.round(width*.35),y:dragY}});
+  const start=await readPose(page);
+  await page.keyboard.down('w');try{await page.waitForTimeout(500);}finally{await page.keyboard.up('w');}
+  const moved=await readPose(page);
+  assert.ok(Math.hypot(moved.east-start.east,moved.north-start.north)>.3,'Native keyboard walking must remain available');
+  await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-moved.east,p.north-moved.north)<1);
+  await picture(page,evidence,'bare-weather-walk');
+  report.entry={scope:'ordinary bare root, live weather settings, clock read-only, snow display toggle and native movement',weather,lightingDisabled:true,snowToggleRestored:true,start,moved};
+  report.traversal={top:moved,returned:moved};
+ }else if(segment==='night-r3-entry'){
   const state=()=>page.evaluate(()=>window.__za22Frame);
   await page.waitForFunction(()=>window.__za22Frame?.ridge?.roads===4,null,{timeout:15000});
   const initial=await state();assert.equal(initial.ridge.transportReady,false);assert.equal(initial.ridge.cloudSeam.physicalReady,true);
