@@ -1,0 +1,608 @@
+{
+  "scope": "isolated actual two browsers, real Presence client/server and E controls; seeded repaired lines, server clock jumps via real reconnect, fixed dock starting points; not continuous or normal town entry",
+  "sha": "5ca5dfc8e9a8810d4ea75ac1daaf61424233876f",
+  "results": [
+    {
+      "line": 1,
+      "name": "board",
+      "states": [
+        {
+          "line": 1,
+          "legMs": 125737.58195361312,
+          "cycleMs": 251475.16390722623,
+          "actions": 1,
+          "lastAction": "board",
+          "frame": 244,
+          "ride": {
+            "line": 1,
+            "cabin": 0,
+            "feet": {
+              "east": 524.45,
+              "north": 354,
+              "height": 26
+            },
+            "whiteout": false,
+            "station": "base",
+            "synchronized": true
+          },
+          "feet": {
+            "east": 524.45,
+            "north": 351.9,
+            "height": 26
+          },
+          "visual": {
+            "east": 524.45,
+            "north": 354,
+            "height": 26
+          },
+          "bound": true,
+          "clock": 1767225601047.2,
+          "epoch": 1767225600000,
+          "dawn": 1767225600000,
+          "self": 6,
+          "people": [
+            {
+              "id": 6,
+              "east": 524.45,
+              "north": 354,
+              "height": 26
+            },
+            {
+              "id": 5,
+              "east": 524.45,
+              "north": 351.9,
+              "height": 26
+            }
+          ],
+          "draws": 94,
+          "tris": 492396
+        },
+        {
+          "line": 1,
+          "legMs": 125737.58195361312,
+          "cycleMs": 251475.16390722623,
+          "actions": 1,
+          "lastAction": "board",
+          "frame": 245,
+          "ride": {
+            "line": 1,
+            "cabin": 0,
+            "feet": {
+              "east": 524.45,
+              "north": 354,
+              "height": 26
+            },
+            "whiteout": false,
+            "station": "base",
+            "synchronized": true
+          },
+          "feet": {
+            "east": 524.45,
+            "north": 351.9,
+            "height": 26
+          },
+          "visual": {
+            "east": 524.45,
+            "north": 354,
+            "height": 26
+          },
+          "bound": true,
+          "clock": 1767225601048.45,
+          "epoch": 1767225600000,
+          "dawn": 1767225600000,
+          "self": 5,
+          "people": [
+            {
+              "id": 5,
+              "east": 524.45,
+              "north": 354,
+              "height": 26
+            },
+            {
+              "id": 6,
+              "east": 524.45,
+              "north": 351.9,
+              "height": 26
+            }
+          ],
+          "draws": 94,
+          "tris": 492396
+        }
+      ]
+    },
+    {
+      "line": 1,
+      "name": "moving-reconnected",
+      "states": [
+        {
+          "line": 1,
+          "legMs": 125737.58195361312,
+          "cycleMs": 251475.16390722623,
+          "actions": 2,
+          "lastAction": "blocked-exit",
+          "frame": 429,
+          "ride": {
+            "line": 1,
+            "cabin": 0,
+            "feet": {
+              "east": 484.9285266929172,
+              "north": 430.28563452297374,
+              "height": 78.38892973264461
+            },
+            "whiteout": false,
+            "station": null,
+            "synchronized": true
+          },
+          "feet": {
+            "east": 524.45,
+            "north": 351.9,
+            "height": 26
+          },
+          "visual": {
+            "east": 484.9401125463578,
+            "north": 430.26327113144896,
+            "height": 78.37357174087458
+          },
+          "bound": true,
+          "clock": 1767225630125.6501,
+          "epoch": 1767225600000,
+          "dawn": 1767225600000,
+          "self": 9,
+          "people": [
+            {
+              "id": 9,
+              "east": 484.9399164603668,
+              "north": 430.2636496230129,
+              "height": 78.37383166881607
+            },
+            {
+              "id": 10,
+              "east": 485.16,
+              "north": 429.84,
+              "height": 78.09
+            }
+          ],
+          "draws": 86,
+          "tris": 432748
+        },
+        {
+          "line": 1,
+          "legMs": 125737.58195361312,
+          "cycleMs": 251475.16390722623,
+          "actions": 2,
+          "lastAction": "blocked-exit",
+          "frame": 429,
+          "ride": {
+            "line": 1,
+            "cabin": 0,
+            "feet": {
+              "east": 484.95081577312516,
+              "north": 430.2426114146654,
+              "height": 78.35938374260155
+            },
+            "whiteout": false,
+            "station": null,
+            "synchronized": true
+          },
+          "feet": {
+            "east": 524.45,
+            "north": 351.9,
+            "height": 26
+          },
+          "visual": {
+            "east": 484.9549393320692,
+            "north": 430.23465198693617,
+            "height": 78.35391762958268
+          },
+          "bound": true,
+          "clock": 1767225630114.2998,
+          "epoch": 1767225600000,
+          "dawn": 1767225600000,
+          "self": 10,
+          "people": [
+            {
+              "id": 10,
+              "east": 484.9549393320692,
+              "north": 430.23465198693617,
+              "height": 78.35391762958268
+            },
+            {
+              "id": 9,
+              "east": 485.01,
+              "north": 430.12,
+              "height": 78.28
+            }
+          ],
+          "draws": 86,
+          "tris": 432748
+        }
+      ]
+    },
+    {
+      "line": 1,
+      "name": "arrival",
+      "states": [
+        {
+          "line": 1,
+          "legMs": 125737.58195361312,
+          "cycleMs": 251475.16390722623,
+          "actions": 3,
+          "lastAction": "exit",
+          "frame": 569,
+          "feet": {
+            "east": 334.45,
+            "north": 637.9,
+            "height": 347
+          },
+          "visual": {
+            "east": 334.45,
+            "north": 640,
+            "height": 347
+          },
+          "bound": true,
+          "clock": 1767225726852.8,
+          "epoch": 1767225600000,
+          "dawn": 1767225600000,
+          "self": 13,
+          "people": [
+            {
+              "id": 13,
+              "east": 334.45,
+              "north": 637.9,
+              "height": 347
+            },
+            {
+              "id": 14,
+              "east": 334.45,
+              "north": 640,
+              "height": 347
+            }
+          ],
+          "draws": 57,
+          "tris": 197922
+        },
+        {
+          "line": 1,
+          "legMs": 125737.58195361312,
+          "cycleMs": 251475.16390722623,
+          "actions": 3,
+          "lastAction": "exit",
+          "frame": 568,
+          "feet": {
+            "east": 334.45,
+            "north": 637.9,
+            "height": 347
+          },
+          "visual": {
+            "east": 334.45,
+            "north": 640,
+            "height": 347
+          },
+          "bound": true,
+          "clock": 1767225726848.6501,
+          "epoch": 1767225600000,
+          "dawn": 1767225600000,
+          "self": 14,
+          "people": [
+            {
+              "id": 14,
+              "east": 334.45,
+              "north": 637.9,
+              "height": 347
+            },
+            {
+              "id": 13,
+              "east": 334.45,
+              "north": 640,
+              "height": 347
+            }
+          ],
+          "draws": 57,
+          "tris": 197922
+        }
+      ]
+    },
+    {
+      "line": 1,
+      "name": "return-board",
+      "states": [
+        {
+          "line": 1,
+          "legMs": 125737.58195361312,
+          "cycleMs": 251475.16390722623,
+          "actions": 4,
+          "lastAction": "board",
+          "frame": 799,
+          "ride": {
+            "line": 1,
+            "cabin": 0,
+            "feet": {
+              "east": 334.45,
+              "north": 640,
+              "height": 347
+            },
+            "whiteout": false,
+            "station": "summit",
+            "synchronized": true
+          },
+          "feet": {
+            "east": 334.45,
+            "north": 637.9,
+            "height": 347
+          },
+          "visual": {
+            "east": 334.45,
+            "north": 640,
+            "height": 347
+          },
+          "bound": true,
+          "clock": 1767225726781.25,
+          "epoch": 1767225600000,
+          "dawn": 1767225600000,
+          "self": 18,
+          "people": [
+            {
+              "id": 18,
+              "east": 334.45,
+              "north": 640,
+              "height": 347
+            },
+            {
+              "id": 17,
+              "east": 334.45,
+              "north": 637.9,
+              "height": 347
+            }
+          ],
+          "draws": 55,
+          "tris": 187426
+        },
+        {
+          "line": 1,
+          "legMs": 125737.58195361312,
+          "cycleMs": 251475.16390722623,
+          "actions": 4,
+          "lastAction": "board",
+          "frame": 797,
+          "ride": {
+            "line": 1,
+            "cabin": 0,
+            "feet": {
+              "east": 334.45,
+              "north": 640,
+              "height": 347
+            },
+            "whiteout": false,
+            "station": "summit",
+            "synchronized": true
+          },
+          "feet": {
+            "east": 334.45,
+            "north": 637.9,
+            "height": 347
+          },
+          "visual": {
+            "east": 334.45,
+            "north": 640,
+            "height": 347
+          },
+          "bound": true,
+          "clock": 1767225726782.1,
+          "epoch": 1767225600000,
+          "dawn": 1767225600000,
+          "self": 17,
+          "people": [
+            {
+              "id": 17,
+              "east": 334.45,
+              "north": 640,
+              "height": 347
+            },
+            {
+              "id": 18,
+              "east": 334.45,
+              "north": 637.9,
+              "height": 347
+            }
+          ],
+          "draws": 55,
+          "tris": 187426
+        }
+      ]
+    },
+    {
+      "line": 1,
+      "name": "return-moving",
+      "states": [
+        {
+          "line": 1,
+          "legMs": 125737.58195361312,
+          "cycleMs": 251475.16390722623,
+          "actions": 4,
+          "lastAction": "board",
+          "frame": 985,
+          "ride": {
+            "line": 1,
+            "cabin": 0,
+            "feet": {
+              "east": 382.11649381736777,
+              "north": 585.0001994414987,
+              "height": 310.7540696994474
+            },
+            "whiteout": false,
+            "station": null,
+            "synchronized": true
+          },
+          "feet": {
+            "east": 334.45,
+            "north": 637.9,
+            "height": 347
+          },
+          "visual": {
+            "east": 382.1146764096944,
+            "north": 585.0022964503526,
+            "height": 310.7631561453845
+          },
+          "bound": true,
+          "clock": 1767225755774.7002,
+          "epoch": 1767225600000,
+          "dawn": 1767225600000,
+          "self": 21,
+          "people": [
+            {
+              "id": 21,
+              "east": 382.1146764096944,
+              "north": 585.0022964503526,
+              "height": 310.7631561453845
+            },
+            {
+              "id": 22,
+              "east": 382.08,
+              "north": 585.04,
+              "height": 310.93
+            }
+          ],
+          "draws": 63,
+          "tris": 267884
+        },
+        {
+          "line": 1,
+          "legMs": 125737.58195361312,
+          "cycleMs": 251475.16390722623,
+          "actions": 4,
+          "lastAction": "board",
+          "frame": 982,
+          "ride": {
+            "line": 1,
+            "cabin": 0,
+            "feet": {
+              "east": 382.1174500404723,
+              "north": 584.9990961071474,
+              "height": 310.7492888956298
+            },
+            "whiteout": false,
+            "station": null,
+            "synchronized": true
+          },
+          "feet": {
+            "east": 334.45,
+            "north": 637.9,
+            "height": 347
+          },
+          "visual": {
+            "east": 382.11209379002753,
+            "north": 585.0052763961221,
+            "height": 310.77606840184916
+          },
+          "bound": true,
+          "clock": 1767225755775.7,
+          "epoch": 1767225600000,
+          "dawn": 1767225600000,
+          "self": 22,
+          "people": [
+            {
+              "id": 22,
+              "east": 382.11209379002753,
+              "north": 585.0052763961221,
+              "height": 310.77606840184916
+            },
+            {
+              "id": 21,
+              "east": 382.08,
+              "north": 585.04,
+              "height": 310.92
+            }
+          ],
+          "draws": 63,
+          "tris": 267884
+        }
+      ]
+    },
+    {
+      "line": 1,
+      "name": "return-arrival",
+      "states": [
+        {
+          "line": 1,
+          "legMs": 125737.58195361312,
+          "cycleMs": 251475.16390722623,
+          "actions": 5,
+          "lastAction": "exit",
+          "frame": 1115,
+          "feet": {
+            "east": 524.45,
+            "north": 351.9,
+            "height": 26
+          },
+          "visual": {
+            "east": 524.45,
+            "north": 354,
+            "height": 26
+          },
+          "bound": true,
+          "clock": 1767225852516.55,
+          "epoch": 1767225600000,
+          "dawn": 1767225600000,
+          "self": 26,
+          "people": [
+            {
+              "id": 26,
+              "east": 524.45,
+              "north": 351.9,
+              "height": 26
+            },
+            {
+              "id": 25,
+              "east": 524.45,
+              "north": 354,
+              "height": 26
+            }
+          ],
+          "draws": 94,
+          "tris": 492396
+        },
+        {
+          "line": 1,
+          "legMs": 125737.58195361312,
+          "cycleMs": 251475.16390722623,
+          "actions": 5,
+          "lastAction": "exit",
+          "frame": 1111,
+          "feet": {
+            "east": 524.45,
+            "north": 351.9,
+            "height": 26
+          },
+          "visual": {
+            "east": 524.45,
+            "north": 354,
+            "height": 26
+          },
+          "bound": true,
+          "clock": 1767225852520.2998,
+          "epoch": 1767225600000,
+          "dawn": 1767225600000,
+          "self": 25,
+          "people": [
+            {
+              "id": 25,
+              "east": 524.45,
+              "north": 351.9,
+              "height": 26
+            },
+            {
+              "id": 26,
+              "east": 524.45,
+              "north": 354,
+              "height": 26
+            }
+          ],
+          "draws": 94,
+          "tris": 492396
+        }
+      ]
+    }
+  ],
+  "errors": [],
+  "complete": true
+}
