@@ -394,6 +394,15 @@ try{
   assert.equal(await snow.getAttribute('aria-pressed'),before);
   assert.ok((await status.textContent()).includes('能见度约'));
   await picture(page,evidence,'bare-weather-settings');
+  // The menu's actual activity button must open only one modal and
+  // leave the game operable when that activity closes.
+  await activate(page.locator('#town-passport-button'));
+  await page.locator('#place-card[open]').waitFor({state:'visible'});
+  assert.equal(await menu.evaluate(el=>el.open),false);
+  assert.equal(await page.locator('dialog[open]').count(),1);
+  await activate(page.locator('#place-card .close-card'));
+  await page.locator('#place-card').waitFor({state:'hidden'});
+  await activate(toggle);
   await activate(page.locator('#town-settings-close'));
   await page.waitForFunction(()=>document.querySelector('#town-panel-toggle')?.getAttribute('aria-expanded')==='false');
   // A genuine second Presence client sends a town message while the

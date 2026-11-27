@@ -1437,6 +1437,8 @@ function museumPosition() {
 museumMapButton.onclick = () => {if(townSettings.open)townSettings.close();museumVisit.openMap(museumPosition());};
 
 function openPlace(title: string, description: string) {
+  // The corner menu is a launcher, not a second modal behind an activity.
+  if(townSettings.open)townSettings.close();
   pauseForPanel();
   element('place-title').textContent = title;
   element('place-text').textContent = description;
