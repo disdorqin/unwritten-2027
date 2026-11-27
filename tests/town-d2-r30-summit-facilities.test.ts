@@ -188,3 +188,71 @@ test('D2-R4/R5 mounts the summit five-piece polish overlay with night response',
   facilities.setNight(false);
   assert.equal(group.userData.night, false, 'setNight(false) must restore the day state');
 });
+
+test('D2-R4/R5 deepens the hut shell, monument and terrace with stacked detail', context => {
+  const facilities = cleanup(context, createTownD2R30SummitFacilities());
+  const group = facilities.group;
+
+  const hutPolish = group.getObjectByName('summit-hut-monument-polish');
+  assert.ok(hutPolish instanceof Group, 'the hut/monument polish overlay must mount');
+
+  // Hut shell: the deepened wall plinth, eave cap, chimney, west window and
+  // door canopy each mount as named batches so the stacked wood-and-stone
+  // shell the reference shows is verifiable, not just implied.
+  for (const name of [
+    'hut-monument-hut-wall-plinth',
+    'hut-monument-hut-wall-cap',
+    'hut-monument-hut-chimney',
+    'hut-monument-hut-west-window',
+    'hut-monument-hut-west-window-frame',
+    'hut-monument-hut-door-canopy',
+  ]) {
+    const mesh = hutPolish.getObjectByName(name) as Mesh | undefined;
+    assert.ok(mesh, `the hut shell detail ${name} must mount`);
+  }
+
+  // Monument: the flag-pole base, finial, banner folds, carved grooves,
+  // inscription plate and plinth steps each mount, so the carved stone reads
+  // as a fitted, inscribed memorial rather than a bare slab.
+  for (const name of [
+    'hut-monument-monument-flagpole-base',
+    'hut-monument-monument-flag-finial',
+    'hut-monument-monument-flag',
+    'hut-monument-monument-slab-grooves',
+    'hut-monument-monument-inscription-plate',
+    'hut-monument-monument-plinth-steps',
+  ]) {
+    const mesh = hutPolish.getObjectByName(name) as Mesh | undefined;
+    assert.ok(mesh, `the monument detail ${name} must mount`);
+  }
+
+  // The deepened monument flag carries four fold segments, not one flat quad.
+  const monFlag = hutPolish.getObjectByName('hut-monument-monument-flag') as
+    { count: number } | undefined;
+  assert.ok(monFlag, 'the monument banner must mount');
+  assert.equal(monFlag.count, 4, 'the banner must mount as four fold segments');
+
+  // Terrace: the rail posts, end posts and glide launch marker mount, so the
+  // vantage reads as a built gallery with a marked takeoff point.
+  const terracePolish = group.getObjectByName('summit-terrace-polish');
+  assert.ok(terracePolish instanceof Group, 'the terrace polish overlay must mount');
+  for (const name of [
+    'terrace-terrace-rail-posts',
+    'terrace-terrace-end-posts',
+    'terrace-terrace-glide-launch-ring',
+    'terrace-terrace-glide-launch-cap',
+  ]) {
+    const mesh = terracePolish.getObjectByName(name) as Mesh | undefined;
+    assert.ok(mesh, `the terrace detail ${name} must mount`);
+  }
+
+  // The deepened overlay adds real triangles on top of the R4 baseline without
+  // touching the canonical facility reports.
+  const reports = facilities.reports();
+  assert.ok(reports.length >= 30, `expected the canonical facility set, got ${reports.length}`);
+  const hut = reports.find(report => report.id === 'registration-hut');
+  assert.ok(hut);
+  assert.equal(hut.status, 'grounded');
+  assert.equal(hut.height, 800);
+  assert.equal(hut.delta, 0);
+});
