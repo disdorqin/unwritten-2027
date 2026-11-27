@@ -19,7 +19,7 @@ export function buildSouthReviewWorld(){
  const protectedAt=createSouthReservation([{points:trail.points,radius:18},...cable.ropes.map(r=>({points:r.points,radius:40}))],[{west:-42,east:42,south:-10,north:55}]);
  const delta=createSouthHeightDelta(protectedAt),candidate=southComposedCandidate(sampleTownD2R30Height,protectedAt);
  const collision=createTownD2R30Collision({heightAt:candidate});
- const terrain=new Group(),mat=new MeshLambertMaterial({vertexColors:true});
+ const terrain=new Group(),mat=new MeshLambertMaterial({vertexColors:true});terrain.name='night-a-review-canonical-terrain';
  const ice=new Color('#cbd9df'),grass=new Color('#849080'),stone=new Color('#747d83'),tint=new Color();
  let changed=0,min=0,max=0,triangles=0;
  // Exact canonical 8m grid, including read-only northern context.
