@@ -25,7 +25,7 @@ try{
  const shared={wallNow,cableLineAuthority:auth,requireSummitCableRelease:true,connectionLog(){}};
  town=await createPresenceServer({...shared,townNight:{dawnEpoch:epoch,scheduleAt},townOutdoorWeather:{dawnEpoch:epoch}});
  summit=await createPresenceServer({...shared,...summitPresenceBounds,summitRoom:true,townNightFeed:town.townNightFeed,townOutdoorWeatherFeed:town.townOutdoorWeatherFeed});
- web=await createServer({root,configFile:path.join(root,'vite.config.ts'),cacheDir:path.join(out,'.vite-cache'),optimizeDeps:{noDiscovery:true,include:[]},logLevel:'error',server:{host:'127.0.0.1',port:0,hmr:false,fs:{allow:[repo]},proxy:{'^/presence-summit(?:/|$)':{target:'http://127.0.0.1:'+summit.address().port,ws:true,rewrite:p=>p.replace('/presence-summit','/presence')},'^/presence(?:/|$)':{target:'http://127.0.0.1:'+town.address().port,ws:true}}}}});await web.listen();
+ web=await createServer({root,configFile:path.join(root,'vite.config.ts'),cacheDir:path.join(out,'.vite-cache'),optimizeDeps:{noDiscovery:true,include:[]},logLevel:'error',server:{host:'127.0.0.1',port:0,hmr:false,fs:{allow:[repo]},proxy:{'^/presence-summit(?:/|$)':{target:'http://127.0.0.1:'+summit.address().port,ws:true,rewrite:p=>p.replace('/presence-summit','/presence')},'^/presence(?:/|$)':{target:'http://127.0.0.1:'+town.address().port,ws:true}}}});await web.listen();
  const chrome=['C:/Program Files/Google/Chrome/Application/chrome.exe','C:/Program Files (x86)/Google/Chrome/Application/chrome.exe'].find(existsSync);
  browser=await chromium.launch({headless:true,executablePath:chrome,args:['--use-gl=angle','--use-angle=d3d11','--disable-background-timer-throttling','--disable-renderer-backgrounding']});
  for(const line of [1,2]){
