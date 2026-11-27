@@ -15,10 +15,13 @@ import {townOutdoorWeatherFieldAt} from './town-weather-field-outdoor';
  * town rectangle as the edge of every newly mounted domain. */
 export function sampleSouthRegionalWeather(state:TownOutdoorWeatherState,east:number,north:number,elevation:number,mountain:boolean){
  const anchor=summitAssemblyAnchor;
- const bounds=mountain&&north>=anchor.north+mainSummitBounds.south
-  ? {west:anchor.east+mainSummitBounds.west,east:anchor.east+mainSummitBounds.east,south:anchor.north+mainSummitBounds.south,north:anchor.north+mainSummitBounds.north}
-  : {west:craterWestSurvey.west,east:worldBounds.width,south:0,north:worldBounds.depth};
- const edgeDistance=Math.max(0,Math.min(east-bounds.west,bounds.east-east,north-bounds.south,bounds.north-north));
+ const townDistance=Math.max(0,Math.min(east-craterWestSurvey.west,worldBounds.width-east,north,worldBounds.depth-north));
+ const summitDistance=Math.max(0,Math.min(east-anchor.east-mainSummitBounds.west,anchor.east+mainSummitBounds.east-east,
+  north-anchor.north-mainSummitBounds.south,anchor.north+mainSummitBounds.north-north));
+ // The connected front deck overlaps the independent summit domain.
+ // Its shared entry is not an outer edge. Max of the two interior
+ // distances is continuous at that seam and conservative near the union.
+ const edgeDistance=mountain?Math.max(townDistance,summitDistance):townDistance;
  const exposure=townWeatherExposureFor(mountain?'open-ground':townWeatherAreaAt(east,north));
  return {weather:townOutdoorWeatherFieldAt(state,{east,north,elevation,edgeDistance},{exposure,nightFogFar:Infinity}),exposure};
 }

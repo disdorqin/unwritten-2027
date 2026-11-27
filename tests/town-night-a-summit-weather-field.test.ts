@@ -15,6 +15,15 @@ test('production domain weather respects actual west ground and summit bounds, a
  assert.deepEqual(at(350,1676,800,true),summit);assert.equal(JSON.stringify(state),before);
  for(const v of [plaza,west,crater,summit])assert.ok(v.fogNear<v.fogFar);
 });
+test('connected front and summit weather do not create an artificial storm wall at the mountain gate',()=>{
+ const state:TownOutdoorWeatherState={weather:'whiteout',startedAt:0,nextChangeAt:600000,windEast:1,windNorth:0,windStrength:1};
+ const at=(e:number,n:number,h:number,m:boolean)=>sampleSouthRegionalWeather(state,e,n,h,m).weather;
+ const before=at(300,665.99,347,true),after=at(300,666.01,347,true),town=at(300,666.01,347,false);
+ assert.ok(Math.abs(before.severity-after.severity)<.001);
+ assert.ok(Math.abs(before.visibilityMeters-after.visibilityMeters)<.1);
+ assert.equal(after.severity,town.severity);
+ const outer=at(-799,900,170,true);assert.equal(outer.region,'map-edge');assert.ok(outer.severity>.95);
+});
 test('regional haze is non-accumulating and light snow actually thins the existing particle budget',()=>{
  const scene=new Scene(),fog=new Fog(0,1,100);scene.background=new Color();
  const sample=townNightWeatherAt(Date.UTC(2026,0,1)+180000);
