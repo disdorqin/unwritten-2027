@@ -46,11 +46,11 @@ test('pre-render scope excludes only zero-contribution finite lights and restore
  const lamp=(x:number,z:number,d:number,intensity=1)=>{const l=new PointLight(0xffffff,intensity,d);l.position.set(x,0,z);root.add(l);return l;};
  const close=lamp(0,-4,5),outside=lamp(40,-4,2),dark=lamp(0,-4,5,0),unbounded=lamp(40,-4,0),shadow=lamp(50,-4,2);shadow.castShadow=true;
  let lod=0,previous=0;const original=()=>{previous++};scene.onBeforeRender=original;
- const hook=installCraterRenderPerf(root,()=>lod++);scene.add(root);scene.updateMatrixWorld(true);
+ const hook=installCraterRenderPerf(root,()=>lod++);scene.add(root);const exterior=new PointLight(0xffffff,4,5);exterior.position.set(60,0,-4);scene.add(exterior);const nearExterior=new PointLight(0xffffff,4,7);nearExterior.position.set(0,0,-6);scene.add(nearExterior);hook.refreshSceneLights();scene.updateMatrixWorld(true);
  const renderer={} as WebGLRenderer,call=(f:unknown)=>(f as (...a:unknown[])=>void).call(scene,renderer,scene,camera,null);
  call(scene.onBeforeRender);
- assert.equal(previous,1);assert.equal(lod,1);assert.equal(close.layers.mask,1);assert.equal(outside.layers.mask,0);assert.equal(dark.layers.mask,0);assert.equal(unbounded.layers.mask,1);assert.equal(shadow.layers.mask,1);assert.ok(outside.visible);
- call(scene.onAfterRender);assert.equal(outside.layers.mask,1);assert.equal(dark.layers.mask,1);assert.equal(dark.intensity,0);
+ assert.equal(previous,1);assert.equal(lod,1);assert.equal(close.layers.mask,1);assert.equal(outside.layers.mask,0);assert.equal(dark.layers.mask,0);assert.equal(unbounded.layers.mask,1);assert.equal(shadow.layers.mask,1);assert.ok(outside.visible);assert.equal(exterior.layers.mask,0);assert.equal(nearExterior.layers.mask,1);
+ call(scene.onAfterRender);assert.equal(outside.layers.mask,1);assert.equal(dark.layers.mask,1);assert.equal(dark.intensity,0);assert.equal(exterior.layers.mask,1);assert.equal(exterior.intensity,4);
  hook.dispose();assert.equal(scene.onBeforeRender,original);
 });
 test('closed wall certificate from actual cut terrain excludes hidden exterior only and restores layers',()=>{
