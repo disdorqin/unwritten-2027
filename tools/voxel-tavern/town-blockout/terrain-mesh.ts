@@ -30,7 +30,8 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
       `);
   };
 
-  const pending: { east: number; north: number }[] = [];
+  const pending: { east: number; north: number; fallback: Mesh }[] = [];
+  const resident = new Group();resident.name='Continuous outer terrain coverage';parent.add(resident);
   const detailed = new Group();
   detailed.name = 'Walkable terrain';
   parent.add(detailed);
@@ -147,10 +148,54 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
     if(mesh.geometry.getAttribute('position').count)detailed.add(mesh);else mesh.geometry.dispose();
   }
 
+  // Keep real coverage on every pending cell. Shared metre-spaced
+  // perimeter vertices connect coarse fans to detailed terrain and ridge.
+  function createResident(east:number,north:number){
+    const eEnd=Math.min(east+terrainChunkCells,cellWidth),nEnd=Math.min(north+terrainChunkCells,cellDepth);
+    const xyz:number[]=[],rgb:number[]=[],snow:number[]=[];
+    const emit=(a:number,b:number,c:number)=>{
+      const s0=surfaces[a],s1=surfaces[b],s2=surfaces[c],s=s0===s1||s0===s2?s0:s1===s2?s1:0;
+      const col=palette[s],ret=s===0?220:s===1?49:s===2?27:s===3?18:0;
+      for(const v of [a,b,c]){
+        xyz.push((v%gridWidth)*gridStep,elevation[v],-Math.floor(v/gridWidth)*gridStep);
+        rgb.push(col.r,col.g,col.b);snow.push(elevation[v]>waterHeight+.08?ret:0);
+      }
+    };
+    const id=(e:number,n:number)=>n*gridWidth+e;
+    const tile=8;
+    for(let n=north;n<nEnd;n+=tile)for(let e=east;e<eEnd;e+=tile){
+      const r=Math.min(e+tile,eEnd),t=Math.min(n+tile,nEnd);
+      let occupied=0;
+      for(let j=n;j<t;j++)for(let i=e;i<r;i++)if(ridgeOwnsCell?.(i*gridStep,j*gridStep))occupied++;
+      if(occupied===(r-e)*(t-n))continue;
+      if(occupied||r-e<2||t-n<2){
+        for(let j=n;j<t;j++)for(let i=e;i<r;i++){
+          if(ridgeOwnsCell?.(i*gridStep,j*gridStep))continue;
+          const a=id(i,j),b=id(i+1,j),c=id(i,j+1),d=id(i+1,j+1);emit(a,b,c);emit(b,d,c);
+        }
+      }else{
+        const edge:number[]=[];
+        for(let i=e;i<r;i++)edge.push(id(i,n));
+        for(let j=n;j<t;j++)edge.push(id(r,j));
+        for(let i=r;i>e;i--)edge.push(id(i,t));
+        for(let j=t;j>n;j--)edge.push(id(e,j));
+        const center=id(Math.floor((e+r)/2),Math.floor((n+t)/2));
+        for(let i=0;i<edge.length;i++)emit(center,edge[i],edge[(i+1)%edge.length]);
+      }
+    }
+    const geo=new BufferGeometry();
+    geo.setAttribute('position',new BufferAttribute(new Float32Array(xyz),3));
+    geo.setAttribute('color',new BufferAttribute(new Float32Array(rgb),3));
+    geo.setAttribute('snowRetention',new BufferAttribute(new Uint8Array(snow),1,true));
+    geo.computeVertexNormals();if(xyz.length)geo.computeBoundingSphere();
+    const mesh=new Mesh(geo,material);mesh.name='Resident terrain '+east+','+north;
+    if(xyz.length)resident.add(mesh);return mesh;
+  }
+
   for (let north = 0; north < cellDepth; north += terrainChunkCells) {
     for (let east = 0; east < cellWidth; east += terrainChunkCells) {
       if (east * gridStep < layout.width && north * gridStep < layout.depth) addChunk(east, north);
-      else pending.push({ east, north });
+      else pending.push({ east, north, fallback:createResident(east,north) });
     }
   }
 
@@ -292,6 +337,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
     if(!walkingCull||overview||wide||!camera)restoreWalking();
     detailed.visible = !wide && !(overview && camera);
     if (aerialTerrain) aerialTerrain.visible = false;
+    resident.visible=!wide;
     if (wide) {
       if (!wideTerrain) {
         wideTerrain = createChunk(0, 0, cellWidth, cellDepth, 3);
@@ -315,8 +361,9 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
         distance = candidate;
       }
       if (nearest < 0) break;
-      const [{ east, north }] = pending.splice(nearest, 1);
-      addChunk(east, north);
+      const {east,north,fallback}=pending[nearest];
+      addChunk(east,north); // retire coverage only after fine geometry exists
+      pending.splice(nearest,1);fallback.removeFromParent();fallback.geometry.dispose();
     }
     if (overview && camera) renderAerialTerrain(camera);
     else if(walkingCull&&camera)renderWalkingTerrain(camera);
