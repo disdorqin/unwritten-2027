@@ -27,6 +27,7 @@ import { buildVillageLandmark, villageHousePortals } from './landmark-village';
 
 import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, worldBounds } from './terrain';
 import { addTerrainMeshes } from './terrain-mesh';
+import {mountWestMountainGround,westMountainTrackProtection} from './town-night-a-summit-west-ground';
 import { createTerrainSupportContract } from './town-a-r30-terrain-contract';
 import { supportFootprintOverlaps } from './town-a-r30-oriented-support';
 import { mainSummitLayout, mainSummitSpec } from './main-summit-block';
@@ -226,6 +227,9 @@ const snowCover = createTownSnowField(grid);
 let visualSnowCover = 0;
 const scene = new Scene();
 let westCraterRoad: ReturnType<typeof mountWestCraterRoad> | undefined;
+let westMountainGround:ReturnType<typeof mountWestMountainGround>|undefined;
+const westGroundReady=(e:number,n:number)=>ensureWestCraterRoad().terrainReadyAt(e,n)||!!westMountainGround?.readyAt(e,n);
+const westGroundAt=(e:number,n:number)=>westMountainGround?.heightAt(e,n)??ensureWestCraterRoad().heightAt(e,n);
 // S-1 (分支窗 A): the west (crater) domain gets its OWN walk-geometry index.
 // The town chunk key (chunkAtCell) collides for negative east — a west cell
 // block and a town-east cell block can share chunk id AND subcell, which
@@ -552,7 +556,7 @@ if (reportSummitSkyline) {
   };
 }
 const presence = createTownPresence(scene, camera, announceActivity, resetMovement,
-  (east, north) => east < 0 ? ensureWestCraterRoad().heightAt(east, north) ?? grid.heightAt(east, north)
+  (east, north) => east < 0 ? westGroundAt(east, north) ?? grid.heightAt(east, north)
     : grid.heightAt(east, north));
 // ZD-05 sky-city domain prep (zone-1 wiring plan, ruling 304c2e38):
 // the island lives in its own scene, hosted at the surveyed approach
@@ -834,6 +838,10 @@ function stationViewCamera() {
 scene.add(railway.group);
 const railExtension = buildCraterRailExtension(grid, ensureWestCraterRoad(),railway.route.points);
 scene.add(railExtension.group);
+// Real missing west carrier; never cover the existing crater/rail strip.
+// Preserve the complete three-track reservation outside old rendering.
+westMountainGround=mountWestMountainGround(ensureWestCraterRoad().heightAt,{west:craterWestSurvey.west,east:0,south:ensureWestCraterRoad().terrainBoundary.renderNorth,north:worldBounds.depth},westMountainTrackProtection([railExtension.samples,railExtension.narrowSamples,railExtension.sidingSamples]));
+scene.add(westMountainGround.group);
 productionRidge=mountProductionRidge(scene,grid,{loop:railway.route.points,branch:railExtension.samples,
   rearConnectorCandidate:previewOptions.has('mRearConnector')&&['127.0.0.1','localhost'].includes(location.hostname)});
 if(westSurfacePort){
@@ -3160,15 +3168,13 @@ function walkable(x: number, n: number) {
 }
 function outdoorWalkable(x: number, n: number) {
   if (x < 0) {
-    const road=ensureWestCraterRoad();
-    // The north rail strip is narrower than the crater carrier. Require
-    // support around the footprint, including at their L-shaped boundary;
-    // the E0 crossing itself is shared with the existing town lattice.
-    return n>=1 && n<=worldBounds.depth-1 && road.terrainReadyAt(x,n)
-      && road.terrainReadyAt(x-bodyRadius,n)
-      && road.terrainReadyAt(Math.min(0,x+bodyRadius),n)
-      && road.terrainReadyAt(x,n-bodyRadius)
-      && road.terrainReadyAt(x,n+bodyRadius);
+    // All five footprint probes consume the original carrier or the
+    // newly constructed single-owner northern extension.
+    return n>=1 && n<=worldBounds.depth-1 && westGroundReady(x,n)
+      && westGroundReady(x-bodyRadius,n)
+      && westGroundReady(Math.min(0,x+bodyRadius),n)
+      && westGroundReady(x,n-bodyRadius)
+      && westGroundReady(x,n+bodyRadius);
   }
   // E0 is a supported mesh seam. The legacy 1 m world-edge margin is open only here.
   const westSeam = x < 1 && n >= 1 && n <= worldBounds.depth - 1 && !isWater(x, n);
@@ -3189,8 +3195,8 @@ function surfaceAt(east: number, north: number, hintHeight?: number) {
 function outdoorSurfaceAt(east: number, north: number, hintHeight?: number) {
   outdoorTerrainContract??=createTerrainSupportContract({
     town:grid.heightAt,townReady:grid.terrainReadyAt,
-    west:(e,n)=>ensureWestCraterRoad().heightAt(e,n),
-    westReady:(e,n)=>ensureWestCraterRoad().terrainReadyAt(e,n),
+    west:westGroundAt,
+    westReady:westGroundReady,
     westId:(e,n)=>Math.hypot(e-craterWestSurvey.east,n-craterWestSurvey.north)<ensureWestCraterRoad().terrainBoundary.apronRadius?'crater-road':'west-ground',
     water:(e,n)=>townWater.at(e,n)?.ground,
     ridgeGround:(e,n)=>townWater.at(e,n)?undefined:productionRidge?.heightAt(e,n),
