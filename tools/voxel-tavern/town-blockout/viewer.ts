@@ -60,10 +60,9 @@ import { mountTownFillLakeEast } from './town-fill-lake-east';
 import { mountTownFillReedMarsh } from './town-fill-reed-marsh';
 import { mountTownFillPlumSlope } from './town-fill-plum-slope';
 import { mountTownFillNorthWest } from './town-fill-north-west';
-import { mountFrontRidgeProxy } from './town-front-ridge-proxy';
-import { createFrontRidgeSwitchbackRoad } from './front-ridge-switchback-road';
+import { mountProductionRidge } from './town-d-r30-production-ridge';
 import { createTownSkyClouds } from './town-sky-clouds';
-import { createFrontRidgeVegetation } from './front-ridge-vegetation';
+
 import { createFrontRidgeCloudBand } from './front-ridge-cloud-band';
 import { mountSkyCityHost } from './sky-city-host';
 import { skyCityApproachSite } from './sky-city-approach';
@@ -130,7 +129,7 @@ import { createHotSpringSoak, hotSpringPools } from './hot-spring-soak';
 import { hotSpringPhotoStand, hotSpringTeaStand } from './hot-spring-details';
 import { createWindowActivity } from './town-window';
 import { extensionPlots, extensionRoadClearance, extensionStreetClearance } from './town-extension';
-import {protectRailStationRoad} from './town-a-r30-station-protection';
+
 import { createTownRailway, type TownRailStopId } from './town-railway';
 import { createRailOvernightBroadcast, railOvernightBoardCopy, railPlatformCopy } from './town-rail-copy';
 import { isSharedHomePosition } from '../../../src/presence/shared-home-space';
@@ -251,7 +250,7 @@ const chunkAtCell = (east: number, north: number) => Math.floor(east / collision
 const subcellMask = collisionSubcells - 1;
 const subcellAt = (east: number, north: number) => (east & subcellMask) +
   collisionSubcells * (north & subcellMask);
-let switchbackRoad: ReturnType<typeof createFrontRidgeSwitchbackRoad> | undefined;
+let productionRidge: ReturnType<typeof mountProductionRidge> | undefined;
 let outdoorTerrainContract:ReturnType<typeof createTerrainSupportContract>|undefined;
 let undergroundDomain: ReturnType<typeof mountUndergroundDomainHost> | undefined;
 type DreamChain = Extract<ReturnType<typeof createUndergroundDreamChain>, { kind: 'ready' }>;
@@ -527,23 +526,8 @@ summitSkyline.add(summitHutLight);
   }
   summitSkyline.add(icefall);
 }
-// ZA-30 takeover step 2: the front ridge (350) as a town-side visual shell.
-const frontRidgeProxy = mountFrontRidgeProxy(scene);
-void frontRidgeProxy;
-// T5 mount (总控裁定 批55，分支窗 A): the D switchback corridor.
-// The walking fold LANDED with the T5 seam package (分支窗 A, 2026-11-22):
-// D-6 (批73) re-profiled the toe against the grid, resampled the corridor
-// to ~3 m and added the entry approach, so outdoorSurfaceAt now consults
-// switchbackRoad.heightAt first (see the fold at outdoorSurfaceAt).
-// Known remaining defect, measured by A at fold time and reported with the
-// seam package: heightAt picks the horizontally nearest sample, so where
-// switchback passes stack within ~3 m of each other the surface can flip
-// to a neighbouring pass between samples (~6% of toe samples, ~8% of
-// summit-spiral samples at 0.25 m steps; at centreline samples it is
-// always exact). The fix belongs to the corridor module (D); the fold
-// wiring here is the surface it will plug into.
-switchbackRoad = createFrontRidgeSwitchbackRoad();
-scene.add(switchbackRoad.group);
+// M1: mount the new ridge after both real rail alignments exist (below).
+// No old proxy or floating switchback geometry/support is constructed.
 // Batch-67 cloud layer (A share): five designed drift clusters plus the
 // crater smoke clouds. Self-contained at build time; weather and night are
 // fed per frame in the weather section below, so no init-order coupling.
@@ -554,8 +538,7 @@ scene.add(skyClouds.group);
 // modules. Night is fed in setNight below; the band's drift and glow fade
 // are fed per frame beside skyClouds. The band runs on its internal
 // weather defaults until a ZB-20 field mapping is ruled.
-const frontRidgeVegetation = createFrontRidgeVegetation(switchbackRoad);
-scene.add(frontRidgeVegetation.group);
+// The new forest is mounted with the same graded ridge field.
 const frontRidgeCloudBand = createFrontRidgeCloudBand();
 scene.add(frontRidgeCloudBand.group);
 if (reportSummitSkyline) {
@@ -843,6 +826,7 @@ function stationViewCamera() {
 scene.add(railway.group);
 const railExtension = buildCraterRailExtension(grid, ensureWestCraterRoad(),railway.route.points);
 scene.add(railExtension.group);
+productionRidge=mountProductionRidge(scene,grid,{loop:railway.route.points,branch:railExtension.samples});
 if(westSurfacePort){
   westSurfaceAssembly=westSurfacePort.attach(ensureWestCraterRoad(),railExtension);
   try{assertAR30SurfaceAttachment(ensureWestCraterRoad(),railExtension);}
@@ -923,14 +907,13 @@ function setNight(night: boolean) {
   timeOfDay.setAttribute('aria-pressed', String(night));
   scenery.setNight(night);
   westCraterRoad?.craterActions.setNight(night);
-  switchbackRoad?.setNight(night);
-  frontRidgeVegetation.setNight(night);
+  productionRidge?.setNight(night);
   frontRidgeCloudBand.setNight(night);
 }
 setNight(true);
 timeOfDay.onclick = () => setNight(timeOfDay.getAttribute('aria-pressed') !== 'true');
 
-const prepareTerrain = addTerrainMeshes(scene, grid);
+const prepareTerrain = addTerrainMeshes(scene, grid, productionRidge.ownsCell);
 
 const stone = new MeshLambertMaterial({ color: '#647382' });
 const timber = new MeshLambertMaterial({ color: '#865f46' });
@@ -1268,7 +1251,7 @@ const points = new Map<string, number[]>([
   ['雪团练习场', [...snowPracticeStand]],
   ['南河岸', [266, 120]],
   ['北河岸', [212, 400]],
-  ['星港坪', [324, 657]],
+  // 星港坪 awaits M3 certified domain transfer; no direct unverified jump.
   ['羊圈', [70, 215]],
   ['陨石坑口', [2, 159]],
   // 山口落点＝盘山道中心线第一点＝山口锚 (290,300)（D 测绘＋交叉核已验：
@@ -2811,7 +2794,10 @@ function currentAction() {
       ridePitch = 0;
     } };
   }
-  const cable = cloudRoute.action({ east: x, north: n, height: ground });
+  if (!homeReturn && Math.hypot(x-526,n-329)<18 && !productionRidge?.transportReady) return {
+    label:'缆车线路检修中',run(){announceActivity('新山地形已启用，缆车与上山道路正在施工，请沿现有安全地面探索。');}
+  };
+  const cable = productionRidge?.transportReady ? cloudRoute.action({ east: x, north: n, height: ground }) : undefined;
   if (cable) return cable;
   // 缆车修缮 (B2 host): the host offers the repair action for where the
   // player stands under the latest broadcast state; running it only
@@ -2925,7 +2911,7 @@ function landAtSelectedDestination() {
     '爆竹摊': [firecrackerStand.x, firecrackerStand.n],
     '东侧扩建步道': [456, 222], '北侧森林街区': [104, 415],
     '火车站': [526, 312], '环镇列车站': [478, 224],
-    '温泉浴场': [524, 158], '冰雪城堡': [460, 72], '山口': [526, 329], '山口站':[296,502],
+    '温泉浴场': [524, 158], '冰雪城堡': [460, 72], '山口': [320,600], '山口站':[440,520],
     '雪团练习场': snowPracticeTarget, '南河岸': [303, 120], '北河岸': [246, 400],
   };
   const [east, north] = target?.door ?? destinations[selector.value] ?? [226, 223];
@@ -3181,9 +3167,7 @@ function surfaceAt(east: number, north: number, hintHeight?: number) {
   if (cloudRoute.active()) return cloudRoute.walkingSurfaceAt(east, north, bodyRadius) ?? ground;
   return homeReturn ? sharedHomeSpawn.ground : outdoorSurfaceAt(east, north, hintHeight);
 }
-// A-R01 I1: keep the current production sources and share one resolver.
- // D's replacement ridgeGround will be registered only after its mesh and
- // boundary are accepted together. Until then the existing road is retained.
+// M1: the ridge is installed in the sole town grid before mesh creation.
 function outdoorSurfaceAt(east: number, north: number, hintHeight?: number) {
   outdoorTerrainContract??=createTerrainSupportContract({
     town:grid.heightAt,townReady:grid.terrainReadyAt,
@@ -3191,7 +3175,7 @@ function outdoorSurfaceAt(east: number, north: number, hintHeight?: number) {
     westReady:(e,n)=>ensureWestCraterRoad().terrainReadyAt(e,n),
     westId:(e,n)=>Math.hypot(e-craterWestSurvey.east,n-craterWestSurvey.north)<ensureWestCraterRoad().terrainBoundary.apronRadius?'crater-road':'west-ground',
     water:(e,n)=>townWater.at(e,n)?.ground,
-    ridgeRoad:protectRailStationRoad((e,n,h)=>switchbackRoad?.heightAt(e,n,h)),
+    ridgeGround:(e,n)=>townWater.at(e,n)?undefined:productionRidge?.heightAt(e,n),
     passable:outdoorWalkable,
   });
   // The old numeric caller requires a fallback for off-domain probes.
@@ -3321,7 +3305,7 @@ function obstructed(east: number, north: number, feet: number, { colliders, floo
   }
   const intersects = (box: Box) => feet + surfaceEpsilon < box.max[1] &&
     feet + bodyHeight - surfaceEpsilon > box.min[1] && overlapsBody(east, north, box);
-  return railway.vehicleBlocks(east, north, feet, bodyHeight, bodyRadius) ||
+  return (!homeReturn&&!!productionRidge?.blocked(east,north,feet,bodyRadius)) || railway.vehicleBlocks(east, north, feet, bodyHeight, bodyRadius) ||
     activities.some(activity => activity.blocked?.(east, north, feet)) ||
     colliders.some(intersects) || floors.some(intersects);
 }
@@ -3818,7 +3802,7 @@ renderer.setAnimationLoop(now => {
   const frameSeconds = Math.max(0, now - previous) / 1000;
   const dt = Math.min(.25, frameSeconds);
   previous = now;
-  cloudRoute.update({ east: x, north: n, height: ground }, !sledRide.active());
+  cloudRoute.update({ east: x, north: n, height: ground }, !!productionRidge?.transportReady && !sledRide.active());
   updateGuardPosts();
   if (cloudRoute.active()) {
     renderCloudRoute(frameSeconds);
@@ -4071,7 +4055,10 @@ renderer.setAnimationLoop(now => {
   const cullCamera = cullStationView ? stationViewCamera() : undefined;
   const detailStartedAt = profileTown ? performance.now() : 0;
   snowCover.update(dt, nightMode);
-  if (!homeReturn) prepareTerrain(camera.position.x, -camera.position.z, false, false, visualSnowCover, cullCamera);
+  if (!homeReturn) {
+    prepareTerrain(camera.position.x, -camera.position.z, false, false, visualSnowCover, cullCamera);
+    productionRidge?.updateView(camera.position.x,-camera.position.z);
+  }
   const terrainMs = profileTown ? performance.now() - detailStartedAt : 0;
   stampMarkers.visible = stampSites.some(site =>
     Math.abs(camera.position.x - site.x) < 34 && Math.abs(camera.position.z + site.n) < 34 &&
@@ -4348,6 +4335,7 @@ renderer.setAnimationLoop(now => {
         calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, cameraY: camera.position.y, detailMs,
         weatherMs, weatherTier: weather.tier, snowIntensity: effectiveSnowIntensity, snowCover: visualSnowCover,
         fogNear: weatherFog.near, fogFar: weatherFog.far, points: renderer.info.render.points,
+        ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],surface:outdoorSurfaceAt(x,n)},
         ...(skylinePeak ? { summitSkyline: { draws: summitSkylineDraws, peakNdc: skylinePeak.toArray(),
           camera: camera.position.toArray(), far: camera.far } } : {}),
       } }));

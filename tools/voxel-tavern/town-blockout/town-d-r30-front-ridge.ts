@@ -172,7 +172,7 @@ export function ridgeFarIndices(cols:number,rows:number,step=4){
 }
 /** Spatial chunks share the same 1m vertices and cross-boundary normals.
  * No bottomless shell, doubled road surface or DoubleSide workaround. */
-export function mountFrontRidgeR30(field:FrontRidgeR30Field,roadAt?:(east:number,north:number)=>boolean){
+export function mountFrontRidgeR30(field:FrontRidgeR30Field,roadAt?:(east:number,north:number)=>boolean,ownsCell?:(east:number,north:number)=>boolean){
  const group=new Group();group.name='town-d-r30-front-ridge';
  const texture=makeFrontRidgePixelTexture(),material=new MeshLambertMaterial({vertexColors:true,map:texture});
  const moss=new Color('#59694b'),snow=new Color('#e0e8ed');
@@ -181,6 +181,9 @@ export function mountFrontRidgeR30(field:FrontRidgeR30Field,roadAt?:(east:number
  const lod:{mesh:Mesh;fine:BufferGeometry;far:BufferGeometry;east:number;north:number}[]=[];
  for(let n0=B.south;n0<B.north;n0+=B.chunk)for(let e0=B.west;e0<B.east;e0+=B.chunk){
    const e1=Math.min(B.east,e0+B.chunk),n1=Math.min(B.north,n0+B.chunk),cols=e1-e0+1,rows=n1-n0+1;
+   let owned=0;for(let n=n0;n<n1;n++)for(let e=e0;e<e1;e++)if(!ownsCell||ownsCell(e,n))owned++;
+   if(!owned)continue;
+   const full=owned===(cols-1)*(rows-1);
    const p=new Float32Array(cols*rows*3),normal=new Float32Array(p.length),color=new Float32Array(p.length),uv=new Float32Array(cols*rows*2),indices:number[]=[];
    for(let n=n0;n<=n1;n++)for(let e=e0;e<=e1;e++){
      const i=(n-n0)*cols+e-e0,h=field.vertexAt(e,n),norm=field.normalAt(e,n);
@@ -220,12 +223,12 @@ export function mountFrontRidgeR30(field:FrontRidgeR30Field,roadAt?:(east:number
      if(roadAt?.(e,n))tint.copy(gravel).multiplyScalar(.90+.10*small);
      color.set([tint.r,tint.g,tint.b],i*3);
      uv.set([(e+h*.11)/2,(n*.72+h*.69)/2],i*2);
-     if(e<e1&&n<n1)indices.push(i,i+1,i+cols,i+1,i+cols+1,i+cols);
+     if(e<e1&&n<n1&&(!ownsCell||ownsCell(e,n)))indices.push(i,i+1,i+cols,i+1,i+cols+1,i+cols);
    }
    const g=new BufferGeometry();g.setAttribute('position',new Float32BufferAttribute(p,3));g.setAttribute('normal',new Float32BufferAttribute(normal,3));g.setAttribute('color',new Float32BufferAttribute(color,3));g.setAttribute('uv',new Float32BufferAttribute(uv,2));g.setIndex(indices);g.computeBoundingSphere();
    const far=new BufferGeometry();
    for(const attr of ['position','normal','color','uv'])far.setAttribute(attr,g.getAttribute(attr));
-   far.setIndex(ridgeFarIndices(cols,rows));far.boundingSphere=g.boundingSphere?.clone()??null;
+   far.setIndex(full?ridgeFarIndices(cols,rows):indices);far.boundingSphere=g.boundingSphere?.clone()??null;
    const mesh=new Mesh(g,material);mesh.name='d-r30-ridge-'+e0+'-'+n0;group.add(mesh);geometries.push(g,far);
    lod.push({mesh,fine:g,far,east:(e0+e1)/2,north:(n0+n1)/2});
  }

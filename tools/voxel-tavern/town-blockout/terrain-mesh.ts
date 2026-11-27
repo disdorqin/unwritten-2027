@@ -10,7 +10,7 @@ const clipTolerance = .0001;
 type TerrainSpan = { start: number; count: number; bounds: Box3 };
 const palette = ['#d8e1ef', '#9a887c', '#bcac97', '#c7b795', '#78b8d9'].map(value => new Color(value));
 
-export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof createTerrainGrid>) {
+export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof createTerrainGrid>, ridgeOwnsCell?: (east:number,north:number)=>boolean) {
   const { elevation, surfaces, gridWidth, gridDepth } = grid;
   const cellWidth = gridWidth - 1;
   const cellDepth = gridDepth - 1;
@@ -86,6 +86,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
         const first = offset;
         for (let j = tileNorth; j < Math.min(tileNorth + tile, northEnd); j += stride) {
           for (let i = tileEast; i < Math.min(tileEast + tile, eastEnd); i += stride) {
+            if(stride===1&&ridgeOwnsCell?.(i*gridStep,j*gridStep))continue;
             const a = j * gridWidth + i;
             const b = a + Math.min(stride, eastEnd - i);
             const c = a + Math.min(stride, northEnd - j) * gridWidth;
@@ -96,7 +97,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
             triangle(b, d, c, variation);
           }
         }
-        if (stride === 1) {
+        if (stride === 1 && offset>first) {
           const bounds = new Box3();
           bounds.min.set(tileEast * gridStep, Infinity, -Math.min(tileNorth + tile, northEnd) * gridStep);
           bounds.max.set(Math.min(tileEast + tile, eastEnd) * gridStep, -Infinity, -tileNorth * gridStep);
@@ -110,9 +111,9 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
     }
 
     const geometry = new BufferGeometry();
-    geometry.setAttribute('position', new BufferAttribute(position, 3));
-    geometry.setAttribute('color', new BufferAttribute(colors, 3));
-    geometry.setAttribute('snowRetention', new BufferAttribute(retention, 1, true));
+    geometry.setAttribute('position', new BufferAttribute(position.subarray(0,offset), 3));
+    geometry.setAttribute('color', new BufferAttribute(colors.subarray(0,offset), 3));
+    geometry.setAttribute('snowRetention', new BufferAttribute(retention.subarray(0,offset/3), 1, true));
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
     if (stride === 1) {
@@ -138,7 +139,8 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
   }
 
   function addChunk(east: number, north: number) {
-    detailed.add(createChunk(east, north, Math.min(east + terrainChunkCells, cellWidth), Math.min(north + terrainChunkCells, cellDepth)));
+    const mesh=createChunk(east, north, Math.min(east + terrainChunkCells, cellWidth), Math.min(north + terrainChunkCells, cellDepth));
+    if(mesh.geometry.getAttribute('position').count)detailed.add(mesh);else mesh.geometry.dispose();
   }
 
   for (let north = 0; north < cellDepth; north += terrainChunkCells) {
@@ -223,6 +225,9 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
 
   return function prepareTerrain(x: number, n: number, overview: boolean, wide: boolean, cover = 0, camera?: Camera) {
     snowCover.value = cover;
+    // A masked terrain uses the exact disjoint ridge/town mesh partition;
+    // never draw the coarse unmasked panorama on top of the ridge.
+    if(ridgeOwnsCell&&wide){wide=false;overview=true;}
     detailed.visible = !wide && !(overview && camera);
     if (aerialTerrain) aerialTerrain.visible = false;
     if (wide) {
