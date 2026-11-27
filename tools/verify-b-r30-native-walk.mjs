@@ -226,7 +226,11 @@ async function face(page, evidence, desired, tolerance=.009) {
     // Sample the actual view. Native pointer coordinates may be rounded at a fractional raster scale.
     const until = Date.now() + 800;
     while (evidence.poses.at(-1)?.seq === before.seq && Date.now() < until) await page.waitForTimeout(30);
-    await page.waitForTimeout(120);
+    // The actual outgoing Presence yaw is the acknowledgement. Do not
+    // add a fixed 120ms delay after an already-confirmed orientation.
+    const confirmed=evidence.poses.at(-1);
+    if(confirmed&&Math.abs(yawDistance(confirmed.yaw,desired))<=tolerance)return;
+    await page.waitForTimeout(35);
   }
   assert.fail(`Native mouse drag could not face ${desired}`);
 }
@@ -246,10 +250,10 @@ async function walkTo(page, evidence, target, label, precise=false) {
       return;
     }
     const desired = Math.atan2(dx, dn);
-    await face(page, evidence, desired,precise?.004:.009);
-    // For small final corrections use the slow backward movement, avoiding double-W sprint.
+    // For small final corrections use the slow backward movement, avoiding
+    // double-W sprint. Aim directly at the required backward orientation.
     const backwards = distance < 1.4;
-    if (backwards) await face(page, evidence, desired + Math.PI,precise?.004:.009);
+    await face(page,evidence,backwards?desired+Math.PI:desired,precise?.004:.009);
     const key = backwards ? 's' : 'w';
     const fast = !precise && !backwards && distance > 3;
     if (fast) await page.keyboard.down('Shift');
