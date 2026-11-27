@@ -1,4 +1,7 @@
-import { Group, Mesh, type Material, type Object3D } from 'three';
+import {
+  BoxGeometry, Color, DoubleSide, Group, InstancedMesh, Matrix4, Mesh,
+  MeshLambertMaterial, Object3D, type Material,
+} from 'three';
 import { createMainSummitBlock, mainSummitLayout } from './main-summit-block';
 import { createMainSummitTrail } from './main-summit-trail';
 import { createMainSummitIcefall } from './main-summit-icefall';
@@ -140,6 +143,187 @@ function cullTransparentPaintQuads(mesh: Mesh): number {
   return dropped;
 }
 
+/**
+ * R4/R5: the summit five-piece polish overlay.
+ *
+ * The canonical facility modules own their surveyed coordinates, heights and
+ * rules; this overlay never rewrites them. It only adds the R30 host-side
+ * block detail the "绝顶五件套" reference demands — hut eave icicles, roof
+ * snow, door steps and a roof flag, the monument flagpole with its red-orange
+ * banner, and the terrace stone railing with viewing pennants — so every body
+ * keeps its canonical datum while reading as a stacked, pixel-textured five
+ * -piece set instead of a smooth mass.
+ *
+ * Every piece is a unit-box instance in a Lambert material, so the existing
+ * `setNight` tint pass dims the whole overlay with the rest of the summit.
+ * The lamp cores carry an emissive term: the tint pass keeps emissive at
+ * night and clears it at noon, so they glow only after dusk without a second
+ * night switch.
+ */
+type PolishAnchor = { east: number; north: number; height: number };
+
+function makePolishBatches(group: Group, disposers: (() => void)[], name: string) {
+  const box = new BoxGeometry(1, 1, 1);
+  disposers.push(() => box.dispose());
+  const ice = new MeshLambertMaterial({ color: '#cfeef5' });
+  const snow = new MeshLambertMaterial({ color: '#e5eaeb' });
+  const stone = new MeshLambertMaterial({ color: '#83817d' });
+  const timber = new MeshLambertMaterial({ color: '#694e39' });
+  const flagMat = new MeshLambertMaterial({ color: '#b86a4c', side: DoubleSide });
+  const lampMat = new MeshLambertMaterial({ color: '#3a3230', emissive: '#ffb45c', emissiveIntensity: 1 });
+  for (const material of [ice, snow, stone, timber, flagMat, lampMat]) {
+    disposers.push(() => material.dispose());
+  }
+  const batches: InstancedMesh[] = [];
+  const matrix = new Matrix4();
+  const pose = new Object3D();
+  const tint = new Color();
+  function batch(batchName: string, material: MeshLambertMaterial, count: number) {
+    const mesh = new InstancedMesh(box, material, count);
+    mesh.name = `${name}-${batchName}`;
+    batches.push(mesh);
+    group.add(mesh);
+    return mesh;
+  }
+  function place(mesh: InstancedMesh, index: number, east: number, height: number,
+    north: number, w: number, h: number, d: number, yaw = 0, color?: string) {
+    pose.position.set(east, height, -north);
+    pose.rotation.set(0, yaw, 0);
+    pose.scale.set(w, h, d);
+    pose.updateMatrix();
+    mesh.setMatrixAt(index, pose.matrix);
+    if (color) mesh.setColorAt(index, tint.set(color));
+  }
+  function finish() {
+    for (const mesh of batches) {
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      mesh.computeBoundingSphere();
+    }
+  }
+  return { batches, matrix, pose, tint, batch, place, finish,
+    materials: { ice, snow, stone, timber, flagMat, lampMat } };
+}
+
+/** Hut + monument polish: eave icicles, roof snow, door steps, roof flag, monument flagpole. */
+function buildHutMonumentPolish(anchors: {
+  hut: PolishAnchor & { west: number; east: number; south: number; north: number };
+  monument: PolishAnchor;
+}) {
+  const group = new Group();
+  group.name = 'summit-hut-monument-polish';
+  const disposers: (() => void)[] = [];
+  const b = makePolishBatches(group, disposers, 'hut-monument');
+  const { hut, monument } = anchors;
+  const hutMidNorth = (hut.south + hut.north) / 2;
+  const hutMidEast = (hut.west + hut.east) / 2;
+  const soffit = hut.height + 4.15;
+  const roofRise = 1.98;
+
+  // Icicle teeth along both eaves, one per block course, reading as the
+  // frozen drip the reference shows under the hut roof.
+  const icicleCount = 22;
+  const icicles = b.batch('eave-icicles', b.materials.ice, icicleCount);
+  for (let i = 0; i < icicleCount; i++) {
+    const east = hut.west + 0.6 + (i % 11) * ((hut.east - hut.west - 1.2) / 10);
+    const north = i < 11 ? hut.south : hut.north;
+    b.place(icicles, i, east, soffit - 0.3, north, 0.18, 0.6, 0.18);
+  }
+  // Roof ridge snow: a pale cap along the ridge line, one block thick.
+  const ridgeSnow = b.batch('roof-snow', b.materials.snow, 12);
+  for (let i = 0; i < 12; i++) {
+    const east = hut.west + 0.6 + i * ((hut.east - hut.west - 1.2) / 11);
+    b.place(ridgeSnow, i, east, soffit + roofRise + 0.12, hutMidNorth, 0.7, 0.12, 13.2);
+  }
+  // Door steps: two stone courses in front of the south door.
+  const steps = b.batch('door-steps', b.materials.stone, 2);
+  for (let i = 0; i < 2; i++) {
+    b.place(steps, i, hutMidEast, hut.height + 0.05 + i * 0.12, hut.south - 0.25 - i * 0.3, 1.4, 0.1, 0.5);
+  }
+  // Roof flagpole: a slim mast on the ridge with a red-orange pennant,
+  // echoing the monument banner across the plateau.
+  const roofPole = b.batch('roof-flagpole', b.materials.timber, 6);
+  const roofFlag = b.batch('roof-flag', b.materials.flagMat, 1);
+  const poleBase = soffit + roofRise + 0.1;
+  for (let i = 0; i < 6; i++) {
+    b.place(roofPole, i, hutMidEast, poleBase + i * 0.45, hutMidNorth, 0.08, 0.45, 0.08);
+  }
+  b.place(roofFlag, 0, hutMidEast + 0.35, poleBase + 2.7, hutMidNorth, 0.55, 0.32, 0.04);
+  // A small warm lamp by the door: emissive Lambert, so the night tint keeps
+  // the glow after dusk and clears it at noon.
+  const doorLamp = b.batch('door-lamp', b.materials.lampMat, 1);
+  b.place(doorLamp, 0, hutMidEast, hut.height + 1.5, hut.south - 0.18, 0.22, 0.26, 0.22);
+
+  // The reference pairs the carved stone with a red-orange flag on a slim
+  // pole; the canonical monument keeps its slab, this overlay adds the pole.
+  const monPole = b.batch('monument-flagpole', b.materials.timber, 10);
+  const monFlag = b.batch('monument-flag', b.materials.flagMat, 1);
+  const monBase = monument.height;
+  for (let i = 0; i < 10; i++) {
+    b.place(monPole, i, monument.east, monBase + 0.2 + i * 0.55, monument.north, 0.09, 0.55, 0.09);
+  }
+  b.place(monFlag, 0, monument.east + 0.45, monBase + 5.5, monument.north, 0.8, 0.48, 0.04);
+  // Ice teeth on the monument plinth edge.
+  const monIcicles = b.batch('monument-plinth-icicles', b.materials.ice, 4);
+  for (let i = 0; i < 4; i++) {
+    b.place(monIcicles, i, monument.east - 0.7 + i * 0.47, monBase + 0.32, monument.north - 1.0, 0.16, 0.5, 0.16);
+  }
+
+  b.finish();
+  let disposed = false;
+  return {
+    group,
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      group.removeFromParent();
+      group.clear();
+      for (const mesh of b.batches) mesh.dispose();
+      for (const dispose of disposers) dispose();
+    },
+  };
+}
+
+/** Terrace polish: chipped stone balustrade and a short viewing pennant string. */
+function buildTerracePolish(terrace: PolishAnchor) {
+  const group = new Group();
+  group.name = 'summit-terrace-polish';
+  const disposers: (() => void)[] = [];
+  const b = makePolishBatches(group, disposers, 'terrace');
+  const railCount = 14;
+  const rail = b.batch('stone-rail', b.materials.stone, railCount);
+  const railNorth = terrace.north - 6.2;
+  for (let i = 0; i < railCount; i++) {
+    const east = terrace.east - 8.4 + i * (16.8 / (railCount - 1));
+    b.place(rail, i, east, terrace.height + 0.55, railNorth, 0.7, 0.5, 0.5);
+  }
+  // Pennant poles along the rail, each with a cloth flag in the reference's
+  // warm palette; instance colours keep one draw for the whole string.
+  const pennantPoles = b.batch('pennant-poles', b.materials.timber, 15);
+  const pennants = b.batch('pennants', b.materials.flagMat, 3);
+  const pennantColors = ['#b86a4c', '#e7bb84', '#8d7159'];
+  for (let i = 0; i < 3; i++) {
+    const east = terrace.east - 5 + i * 5;
+    for (let seg = 0; seg < 5; seg++) {
+      b.place(pennantPoles, i * 5 + seg, east, terrace.height + 0.6 + seg * 0.4, railNorth, 0.07, 0.4, 0.07);
+    }
+    b.place(pennants, i, east + 0.28, terrace.height + 2.6, railNorth, 0.5, 0.3, 0.04, 0, pennantColors[i]!);
+  }
+  b.finish();
+  let disposed = false;
+  return {
+    group,
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      group.removeFromParent();
+      group.clear();
+      for (const mesh of b.batches) mesh.dispose();
+      for (const dispose of disposers) dispose();
+    },
+  };
+}
+
 export function createTownD2R30SummitFacilities(
   options: TownD2R30SummitFacilitiesOptions = {},
 ) {
@@ -244,6 +428,16 @@ export function createTownD2R30SummitFacilities(
     group.add(machineRoom.group);
     disposers.push(() => machineRoom.dispose());
     record('machine-room', 'building', -15.5, 6, arrivalHeight);
+
+    // R4/R5: the hut and monument polish overlay. The canonical hut and
+    // carved slab keep their surveyed datum; this only adds the stacked
+    // block detail the five-piece reference demands.
+    const hutPolish = buildHutMonumentPolish({
+      hut: { ...summit.hut },
+      monument: { ...summit.monument },
+    });
+    group.add(hutPolish.group);
+    disposers.push(() => hutPolish.dispose());
   }
 
   if (includeGeology) {
@@ -334,6 +528,17 @@ export function createTownD2R30SummitFacilities(
     group.add(windGround.group);
     disposers.push(() => windGround.dispose());
     record('wind-ground', 'building', DEFAULTS.glideLaunch.east, DEFAULTS.glideLaunch.north, 800);
+
+    // R4/R5: the terrace polish overlay. The canonical wind-ground pad keeps
+    // its surveyed datum; this only adds the stacked stone balustrade and
+    // viewing pennants the five-piece reference shows on the vantage.
+    const terracePolish = buildTerracePolish({
+      east: DEFAULTS.glideLaunch.east,
+      north: DEFAULTS.glideLaunch.north,
+      height: 800,
+    });
+    group.add(terracePolish.group);
+    disposers.push(() => terracePolish.dispose());
 
     const bannerCloud = createMainSummitBannerCloud();
     group.add(bannerCloud.group);
