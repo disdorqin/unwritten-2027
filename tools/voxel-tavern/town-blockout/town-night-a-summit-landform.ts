@@ -4,6 +4,7 @@ export type SouthGround=(east:number,north:number)=>number|undefined;
 export type SouthProtection=(east:number,north:number)=>boolean;
 export const southSector=Object.freeze({west:-1100,east:1100,south:-10,north:480,feather:32});
 const smooth=(v:number)=>{const t=Math.max(0,Math.min(1,v));return t*t*(3-2*t);};
+const directions=Array.from({length:16},(_,i)=>[Math.cos(i*Math.PI/8),Math.sin(i*Math.PI/8)] as const);
 const bump=(e:number,n:number,x:number,z:number,rx:number,rn:number)=>Math.exp(-(((e-x)/rx)**2)-((n-z)/rn)**2);
 export function southGullyNorth(e:number){return 350+.22*(e+250)-17*Math.sin((e+250)*.011);}
 export function createSouthHeightDelta(protectedAt:SouthProtection){
@@ -15,10 +16,9 @@ export function createSouthHeightDelta(protectedAt:SouthProtection){
   // or any C2/B canonical road and transport reservation.
   const arrival=Math.hypot(Math.max(Math.abs(e)-42,0),Math.max(-10-n,n-52,0));
   if(arrival<32||protectedAt(e,n))return 0;
-  const clearance=Array.from({length:16},(_,i)=>i*Math.PI/8);
   let weight=1;
   for(const radius of [8,16,24,32]){
-   if(clearance.some(t=>protectedAt(e+radius*Math.cos(t),n+radius*Math.sin(t)))){weight=smooth((radius-8)/32);break;}
+   if(directions.some(([x,z])=>protectedAt(e+radius*x,n+radius*z))){weight=smooth((radius-8)/32);break;}
   }
   const mask=smooth(boundary/32)*smooth((arrival-32)/48)*weight;
   // Broad unequal foothill shoulders and lower glacial apron, not a cone

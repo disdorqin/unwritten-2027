@@ -84,7 +84,7 @@ export function mountSouthEntry(heightAt:SouthGround){
  mountAR30StaticBatches(group,batches,'night-a-entry');
  group.userData.colliders=solids;group.userData.floors=floors;
  let disposed=false;
- return {group,colliders:solids,floors,setNight(night:boolean){lamp.emissiveIntensity=night?1.0:.10;},dispose(){
+ return {group,colliders:solids,floors,blocked(e:number,n:number,h:number,r=.27,body=1.8){return solids.some(b=>h+body-.025>b.min[1]!&&h+.025<b.max[1]!&&Math.hypot(Math.max(b.min[0]!-e,e-b.max[0]!,0),Math.max(b.min[2]!+n,-n-b.max[2]!,0))<r);},setNight(night:boolean){lamp.emissiveIntensity=night?1.0:.10;},dispose(){
   if(disposed)return;disposed=true;group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});
   for(const m of [stone,ash,wood,warm,snow,bronze,lamp])m.dispose();group.clear();
  }};
