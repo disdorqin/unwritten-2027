@@ -52,12 +52,12 @@ export function mountSouthEarthworks(points:readonly Point[],first:number,last:n
   const ex=dx/l*.085,nx=dn/l*.085,tx=-nx,tn=ex;
   const corners=[point(p.east-ex-tx,p.north-nx-tn,h-.13),point(p.east+ex-tx,p.north+nx-tn,h-.13),point(p.east+ex+tx,p.north+nx+tn,h-.13),point(p.east-ex+tx,p.north-nx+tn,h-.13)];
   const top=corners.map(q=>point(q.east,q.north,h+1.04));
-  for(let i=0;i<4;i++){const j=(i+1)%4;quad(corners[i]!,corners[j]!,top[i]!,top[j]!,false,railColor);}
+  const band=railPosts%5===0?top.map(q=>point(q.east,q.north,h+.85)):top;
+  for(let i=0;i<4;i++){const j=(i+1)%4;quad(corners[i]!,corners[j]!,band[i]!,band[j]!,false,railColor);}
   // Pale snow cap and intermittent warm survey-post bands, recognizable
   // in snow haze. Use the same physical post dimensions/collider.
   quad(top[0]!,top[1]!,top[3]!,top[2]!,false,frostColor);
   if(railPosts%5===0){
-   const band=top.map(q=>point(q.east,q.north,h+.85));
    for(let i=0;i<4;i++){const j=(i+1)%4;quad(band[i]!,band[j]!,top[i]!,top[j]!,false,guideColor);}
   }
   railPosts++;

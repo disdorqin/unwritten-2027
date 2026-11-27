@@ -24,14 +24,21 @@ export function mountSouthSector(input:{
  if(input.trailPoints&&input.earthworks)throw Error('Two southern road renderers requested');
  if(input.earthworks&&(!input.canonicalCutInstalled||input.earthworks.group.parent))throw Error('Install shared terrain cut and transfer an unattached road leaf');
  const group=new Group();group.name='night-a-south-sector';
- const entry=mountSouthEntry(input.heightAt),gully=mountSouthGully(input.heightAt,input.reserved),forest=mountSouthForest(input.heightAt,input.reserved);
- const road=input.earthworks??(input.trailPoints?mountSouthTrailWorks(input.trailPoints,input.heightAt):undefined);
+ const leaves:{dispose():void}[]=[];
+ const build=<T extends {dispose():void}>(fn:()=>T):T=>{
+  try{const leaf=fn();leaves.push(leaf);return leaf;}
+  catch(error){for(const leaf of leaves.reverse())leaf.dispose();throw error;}
+ };
+ const entry=build(()=>mountSouthEntry(input.heightAt));
+ const gully=build(()=>mountSouthGully(input.heightAt,input.reserved));
+ const forest=build(()=>mountSouthForest(input.heightAt,input.reserved));
+ const road=input.earthworks??(input.trailPoints?build(()=>mountSouthTrailWorks(input.trailPoints!,input.heightAt)):undefined);
  group.add(entry.group,gully.group,forest.group);if(road)group.add(road.group);
  let disposed=false;
  return {group,entry,gully,forest,road,cutTread:input.earthworks?.cutTread,
- supportAt:(e:number,n:number)=>input.earthworks?.supportAt(e,n),
- blocked(e:number,n:number,h:number,r=.27,body=1.8){return entry.blocked(e,n,h,r,body)||forest.blocked(e,n,h,r,body)||!!road?.blocked(e,n,h,r,body);},
- updateView(e:number,n:number){forest.updateView(e,n);},
- setNight(night:boolean){entry.setNight(night);},
+ supportAt:(e:number,n:number)=>disposed?undefined:input.earthworks?.supportAt(e,n),
+ blocked(e:number,n:number,h:number,r=.27,body=1.8){return !disposed&&(entry.blocked(e,n,h,r,body)||forest.blocked(e,n,h,r,body)||!!road?.blocked(e,n,h,r,body));},
+ updateView(e:number,n:number){if(!disposed)forest.updateView(e,n);},
+ setNight(night:boolean){if(!disposed)entry.setNight(night);},
  dispose(){if(disposed)return;disposed=true;entry.dispose();gully.dispose();forest.dispose();road?.dispose();group.removeFromParent();group.clear();}};
 }
