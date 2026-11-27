@@ -4028,7 +4028,7 @@ renderer.setAnimationLoop(now => {
   if(craterExteriorDirty&&westCraterRoad){
     craterExteriorDirty=false;
     craterExteriorCertified=setCraterExteriorRenderRoots(westCraterRoad.group,
-      [landscape,detailedBridges,...architecture.values(),...(extensionStreets?[extensionStreets.group]:[])]);
+      [landscape,detailedBridges,...architecture.values(),...(extensionStreets?[extensionStreets.group]:[]),...(productionRidge?.staticRenderRoots??[])]);
   }
   if(undergroundRenderParent){
     const known=undergroundDomain?.kind==='ready'&&!!dreamChain;
