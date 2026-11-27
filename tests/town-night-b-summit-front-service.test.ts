@@ -7,13 +7,15 @@ import {buildFrontRidgeR30Field} from '../tools/voxel-tavern/town-blockout/town-
 import {mountRidgeCableFacilities,auditRidgeCableSweep} from '../tools/voxel-tavern/town-blockout/town-d-r30-cable-facilities';
 import {Group} from 'three';
 import {createNightBCableRideHost} from '../tools/voxel-tavern/town-blockout/town-night-b-summit-ride-host';
+import {auditNightBFrontOpenFacilities} from '../tools/voxel-tavern/town-blockout/town-night-b-summit-front-sweep';
 test('front service uses surveyed dual cabins, actual repair authority and terminal dwell',()=>{
  const grid=createTerrainGrid(),field=buildFrontRidgeR30Field(grid.groundHeightAt,()=>1);
- const facilities=mountRidgeCableFacilities(new Group(),field,true,false);
+ const facilities=mountRidgeCableFacilities(new Group(),field,true,false,true);
  try {
  const s=facilities.survey,raw=auditRidgeCableSweep(field,s),repair=createZa36CableRepair(1);
  // Isolated candidate fixture has no other buildings; NOT a production obstacle certificate.
- const audit=auditRidgeCableSweep(field,s,()=>false);let t=0,day=true,sync=true,deck=true;
+ const own=auditNightBFrontOpenFacilities(field,facilities);assert.equal(own.ownHits,0);assert.equal(own.externalSurveyed,false);assert.equal(own.candidateEnvelopeClear,false);
+ const audit=auditNightBFrontOpenFacilities(field,facilities,()=>false);assert.ok(audit.candidateEnvelopeClear);assert.ok(audit.probes>100000);console.log('front isolated sweep',JSON.stringify(audit));let t=0,day=true,sync=true,deck=true;
  const input={survey:s,audit,state:()=>sync?repair.snapshot():undefined,now:()=>t,daylight:()=>day,dockClear:()=>deck};
  const service=createNightBFrontService(input);
  const base=service.cabinsAt(0)[0]!.feet;assert.equal(service.board(base,0),undefined);
