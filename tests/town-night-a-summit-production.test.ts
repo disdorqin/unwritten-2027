@@ -52,9 +52,18 @@ test('southern production replaces the real near mesh and releases it atomically
     assert.equal(s.blocked(e,100,346.655),false);
    }
    assert.equal(s.groundAt(90,100),347);
+   assert.equal(s.coversCut(90,100),false);
+   assert.equal(s.cutGroundAt(90,100),undefined);
+   assert.equal(s.deckAt(90,100),undefined);
+   assert.equal(s.coversCut(110,100),true);
+   assert.ok(s.cutGroundAt(110,100)!<347);
+   assert.ok(Math.abs(s.deckAt(110,100)!-346.655)<.001);
+   assert.deepEqual(s.cutTiles(),[f.tile]);
    assert.throws(()=>mountSouthProduction(f.input),/already mounted/);
    s.group.removeFromParent();
    assert.equal(s.supportAt(110,100),undefined);
+   assert.equal(s.coversCut(110,100),false);
+   assert.deepEqual(s.cutTiles(),[]);
    assert.equal(s.blocked(24,23,347),false);
    s.updateSnow(1,()=>{throw Error('Detached sector must not sample weather');});
    f.owner.add(s.group);assert.ok(s.supportAt(110,100)!>346.6);

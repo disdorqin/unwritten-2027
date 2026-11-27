@@ -45,18 +45,19 @@ export function mountSouthProduction(input:Input){
  let sector:ReturnType<typeof mountSouthSector>|undefined;
  let disposed=false;
  const restore=()=>{for(const c of cuts){if(c.mesh.geometry===c.geometry)c.mesh.geometry=c.original;c.surface.dispose();c.geometry.dispose();}cuts.length=0;};
- function groundAt(e:number,n:number){
+ function coversCut(e:number,n:number){return !disposed&&cuts.some(c=>c.surface.covers(e,n));}
+ function cutGroundAt(e:number,n:number){
   if(disposed)return;
-  let covered=false,y:number|undefined;
+  let y:number|undefined;
   for(const cut of cuts){
    if(!cut.surface.covers(e,n))continue;
-   covered=true;
    const h=cut.surface.surfaceAt(e,n);
    if(h===undefined||!Number.isFinite(h))return;
    y=y===undefined?h:Math.max(y,h);
   }
-  return covered?y:input.groundAt(e,n);
+  return y;
  }
+ function groundAt(e:number,n:number){return disposed?undefined:coversCut(e,n)?cutGroundAt(e,n):input.groundAt(e,n);}
  try{
   road.cutTread.computeBoundingBox();
   const bounds=road.cutTread.boundingBox!;
@@ -108,6 +109,13 @@ export function mountSouthProduction(input:Input){
  const mounted=sector;
  const live=()=>!disposed&&mounted.group.parent===input.owner;
  return {sector:mounted,group:mounted.group,groundAt:(e:number,n:number)=>live()?groundAt(e,n):undefined,cutChunks:cuts.length,
+  // D2 must prefer the final cut face inside a changed tile even when
+  // lower than the original raster. Undefined within coverage is a hole,
+  // not permission to restore an invisible uncut collision layer.
+  coversCut:(e:number,n:number)=>live()&&coversCut(e,n),
+  cutGroundAt:(e:number,n:number)=>live()?cutGroundAt(e,n):undefined,
+  deckAt:(e:number,n:number)=>live()?mounted.supportAt(e,n):undefined,
+  cutTiles:()=>live()?cuts.map(c=>c.mesh):[],
   supportAt(e:number,n:number){
    if(!live())return;
    const h=groundAt(e,n);if(h===undefined)return;
