@@ -1,4 +1,4 @@
-import { Group, type Object3D } from 'three';
+import { Group, type Mesh, type Object3D } from 'three';
 import { createMainSummitBlock, mainSummitLayout } from './main-summit-block';
 import { createMainSummitTrail } from './main-summit-trail';
 import { createTownD2R30CableTowers } from './town-d2-r30-cable-towers';
@@ -58,6 +58,10 @@ export type TownD2R30AssemblyOptions = Readonly<{
 export type TownD2R30Assembly = Readonly<{
   group: Group;
   heightAt(east: number, north: number): number | undefined;
+  /** Canonical near TOP tiles (identity transform, summit-local frame), so a
+   * sector installer can replace their geometry in place. Empty in streaming
+   * mode: a floor that streams away cannot host an excavated road. */
+  tiles: readonly Mesh[];
   collision: ReturnType<typeof createTownD2R30Collision>;
   ropeway: ReturnType<typeof createTownD2R30Ropeway> | undefined;
   /** North-wall climb + landmark bodies, exposed so the production host can block them. */
@@ -132,6 +136,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   }
 
   let terrainStats: () => unknown;
+  let tiles: readonly Mesh[] = Object.freeze([]);
   let updateLod: ((east: number, north: number) => void) | undefined;
   let updateRopeway: ((nowMs: number) => void) | undefined;
   let ropeway: ReturnType<typeof createTownD2R30Ropeway> | undefined;
@@ -139,6 +144,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   let cableTowers: ReturnType<typeof createTownD2R30CableTowers> | undefined;
   if (terrainMode === 'static') {
     const massif = createTownD2R30Massif({ arrivalHeight });
+    tiles = massif.tiles;
     terrainStats = () => massif.stats();
     children.push(massif.group);
     disposers.push(() => massif.dispose());
@@ -295,6 +301,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   let night = false;
   return {
     group,
+    tiles,
     heightAt,
     collision,
     ropeway,

@@ -240,10 +240,12 @@ export function createTownD2R30Massif(options: TownD2R30MassifOptions = {}) {
   group.name = 'town-d2-r30-massif';
   const material = new MeshLambertMaterial({ color: dayColor.clone(), vertexColors: true });
   let vertices = 0, triangles = 0, minHeight = Infinity, maxHeight = -Infinity, minTopHeight = Infinity;
-  const addMesh = (geometry: BufferGeometry) => {
+  const topTiles: Mesh[] = [];
+  const addMesh = (geometry: BufferGeometry, isTopTile = false) => {
     const mesh = new Mesh(geometry, material);
     mesh.name = geometry.name;
     group.add(mesh);
+    if (isTopTile) topTiles.push(mesh);
     vertices += geometry.getAttribute('position').count;
     triangles += (geometry.getIndex()?.count ?? 0) / 3;
     geometry.computeBoundingBox();
@@ -254,7 +256,7 @@ export function createTownD2R30Massif(options: TownD2R30MassifOptions = {}) {
     const geometry = buildTownD2R30ChunkGeometry(chunk, spacing, arrivalHeight);
     geometry.computeBoundingBox();
     minTopHeight = Math.min(minTopHeight, geometry.boundingBox!.min.y);
-    addMesh(geometry);
+    addMesh(geometry, true);
   }
   const perimeter = massifPerimeter(
     townD2R30GridAxis(-townD2R30Spec.width / 2, townD2R30Spec.width / 2, spacing),
@@ -270,6 +272,10 @@ export function createTownD2R30Massif(options: TownD2R30MassifOptions = {}) {
   let disposed = false;
   return {
     group,
+    /** The canonical near TOP tiles only (no skirt, no floor cap). A sector
+     * installer may replace their geometry in place; the host keeps ownership
+     * and restores them on uninstall. */
+    tiles: topTiles as readonly Mesh[],
     heightAt: (east: number, north: number) => sampleTownD2R30Height(east, north, arrivalHeight),
     stats: () => stats,
     setNight(night: number) {
