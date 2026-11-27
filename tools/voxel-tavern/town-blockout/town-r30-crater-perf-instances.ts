@@ -1,68 +1,107 @@
-import {Box3,Camera,Color,Frustum,Group,InstancedBufferAttribute,InstancedMesh,Material,Matrix4,MeshBasicMaterial,MeshLambertMaterial,MeshStandardMaterial,Object3D,Sphere,StaticDrawUsage,Vector3} from 'three';
+import {Box3,BufferAttribute,Camera,Color,Frustum,InstancedBufferAttribute,InstancedMesh,Material,Matrix4,MeshBasicMaterial,MeshLambertMaterial,MeshStandardMaterial,Object3D,Sphere,StaticDrawUsage,Vector3} from 'three';
 import {sphereBehindCraterWall} from './town-r30-crater-perf-occlusion';
 type Ring=Parameters<typeof sphereBehindCraterWall>[0];
 type Chunk={mesh:InstancedMesh;box:Box3;count:number};
-type Source={mesh:InstancedMesh;chunks:Chunk[];matrixVersion:number;colorVersion:number;count:number;geometry:InstancedMesh['geometry'];material:InstancedMesh['material'];matrixAttribute:InstancedMesh['instanceMatrix'];colorAttribute:InstancedMesh['instanceColor']};
+type Snapshot={mesh:InstancedMesh;matrixVersion:number;colorVersion:number;count:number;geometry:InstancedMesh['geometry'];material:InstancedMesh['material'];matrixAttribute:InstancedMesh['instanceMatrix'];colorAttribute:InstancedMesh['instanceColor'];position:ReturnType<InstancedMesh['geometry']['getAttribute']>;positionVersion:number;index:InstancedMesh['geometry']['index'];indexVersion:number};
+type Source=Snapshot&{chunks:Chunk[]};
+type Build={snap:Snapshot;bins:Map<string,number[]>;cursor:number;entries?:number[][];part:number;chunks:Chunk[];current?:{mesh:InstancedMesh;box:Box3;cursor:number;indices:number[]}};
+const attrVersion=(a:ReturnType<InstancedMesh['geometry']['getAttribute']>)=>a instanceof BufferAttribute?a.version:a.data.version;
 const ordinary=(m:Material)=> (m instanceof MeshStandardMaterial||m instanceof MeshLambertMaterial||m instanceof MeshBasicMaterial)&&!m.transparent&&!m.wireframe&&m.depthTest&&m.depthWrite&&!(m as MeshStandardMaterial).displacementMap&&m.onBeforeCompile===Material.prototype.onBeforeCompile;
 function eligible(o:Object3D):o is InstancedMesh{
  return o instanceof InstancedMesh&&o.count>=24&&o.frustumCulled&&!o.castShadow&&!Array.isArray(o.material)&&ordinary(o.material)&&o.instanceMatrix.usage===StaticDrawUsage&&o.morphTexture===null&&
   !Object.values(o.geometry.attributes).some(a=>a instanceof InstancedBufferAttribute)&&!o.geometry.morphAttributes.position?.length&&
   o.onBeforeRender===Object3D.prototype.onBeforeRender&&o.onAfterRender===Object3D.prototype.onAfterRender;
 }
+function snapshot(m:InstancedMesh):Snapshot{
+ const position=m.geometry.getAttribute('position');
+ return {mesh:m,matrixVersion:m.instanceMatrix.version,colorVersion:m.instanceColor?.version??-1,count:m.count,geometry:m.geometry,material:m.material,matrixAttribute:m.instanceMatrix,colorAttribute:m.instanceColor,position,positionVersion:attrVersion(position),index:m.geometry.index,indexVersion:m.geometry.index?.version??-1};
+}
+function unchanged(s:Snapshot){
+ const m=s.mesh;
+ return m.count===s.count&&m.geometry===s.geometry&&m.material===s.material&&m.instanceMatrix===s.matrixAttribute&&m.instanceColor===s.colorAttribute&&m.instanceMatrix.version===s.matrixVersion&&(m.instanceColor?.version??-1)===s.colorVersion&&m.geometry.getAttribute('position')===s.position&&attrVersion(s.position)===s.positionVersion&&m.geometry.index===s.index&&(m.geometry.index?.version??-1)===s.indexVersion&&eligible(m);
+}
 /** Exact static instance partition. Source is never removed or modified;
- * child cells share the original material/geometry and carry exact matrices
- * and colors. Source mutations fail open, and source owns all resources. */
+ * child cells share original geometry/material and exact matrices/colors.
+ * Initialization is incremental; an unfinished or mutated source stays
+ * on its original render path. Non-rendered proxies have layer zero. */
 export function createCraterInstanceCells(cellSize=32,maxExtraDraws=36){
  if(!Number.isFinite(cellSize)||cellSize<=0||!Number.isInteger(maxExtraDraws)||maxExtraDraws<0)throw Error('Invalid instance cell budget');
- const sources:Source[]=[],seen=new Set<InstancedMesh>(),masked:{object:InstancedMesh;mask:number}[]=[],active:InstancedMesh[]=[];
- const frustum=new Frustum(),vp=new Matrix4(),matrix=new Matrix4(),sphere=new Sphere(),box=new Box3(),eye=new Vector3();
+ const sources:Source[]=[],seen=new Set<InstancedMesh>(),queue:InstancedMesh[]=[],masked:{object:InstancedMesh;mask:number}[]=[],active:InstancedMesh[]=[];
+ const frustum=new Frustum(),vp=new Matrix4(),matrix=new Matrix4(),sphere=new Sphere(),box=new Box3(),eye=new Vector3(),center=new Vector3(),tint=new Color();
+ let job:Build|undefined;
  let last={sources:0,submitted:0,savedInstances:0,extraDraws:0};
- function restore(){for(const m of masked)m.object.layers.mask=m.mask;masked.length=0;for(const m of active)m.visible=false;active.length=0;}
- function register(roots:readonly Object3D[]){
-  const candidates:InstancedMesh[]=[];
-  for(const root of roots)root.traverse(o=>{if(eligible(o)&&!seen.has(o)&&!o.userData.p2InstanceCell){seen.add(o);candidates.push(o);}});
-  for(const source of candidates){
-   const g=source.geometry;if(!g.boundingBox)g.computeBoundingBox();if(!g.boundingBox)continue;
-   const bins=new Map<string,number[]>(),center=new Vector3(),tint=new Color();
-   for(let i=0;i<source.count;i++){
-    source.getMatrixAt(i,matrix);if(matrix.determinant()<=0){bins.clear();break;}
+ function restore(){for(const m of masked)m.object.layers.mask=m.mask;masked.length=0;for(const m of active){m.visible=false;m.layers.mask=0;}active.length=0;}
+ function enqueue(roots:readonly Object3D[]){
+  for(const root of roots)root.traverse(o=>{if(eligible(o)&&!seen.has(o)&&!o.userData.p2InstanceCell){seen.add(o);queue.push(o);}});
+ }
+ function discard(){
+  if(!job)return;for(const c of job.chunks)c.mesh.dispose();job.current?.mesh.dispose();job=undefined;
+ }
+ function step(){
+  if(!job){
+   const source=queue.shift();if(!source)return;
+   if(!eligible(source))return;
+   if(!source.geometry.boundingBox)source.geometry.computeBoundingBox();if(!source.geometry.boundingBox)return;
+   job={snap:snapshot(source),bins:new Map(),cursor:0,part:0,chunks:[]};
+  }
+  const j=job,source=j.snap.mesh,g=j.snap.geometry;
+  if(!j.entries){
+   if(j.cursor<j.snap.count){
+    const i=j.cursor++;source.getMatrixAt(i,matrix);
+    if(matrix.determinant()<=0){discard();return;}
     center.setFromMatrixPosition(matrix);const k=Math.floor(center.x/cellSize)+','+Math.floor(center.z/cellSize);
-    const a=bins.get(k)??[];a.push(i);bins.set(k,a);
+    const a=j.bins.get(k)??[];a.push(i);j.bins.set(k,a);
+    if(j.bins.size>256){discard();return;}
+    return;
    }
-   if(bins.size<2||bins.size>256)continue;
-   const chunks:Chunk[]=[];
-   for(const indices of bins.values()){
-    const mesh=new InstancedMesh(g,source.material,indices.length);mesh.name='p2-instance-cell';mesh.userData.p2InstanceCell=true;
-    mesh.layers.mask=source.layers.mask;mesh.receiveShadow=source.receiveShadow;mesh.renderOrder=source.renderOrder;
-    mesh.matrixAutoUpdate=false;mesh.visible=false;
-    const local=new Box3();
-    for(let i=0;i<indices.length;i++){
-     source.getMatrixAt(indices[i],matrix);mesh.setMatrixAt(i,matrix);
-     local.union(box.copy(g.boundingBox).applyMatrix4(matrix));
-     if(source.instanceColor){source.getColorAt(indices[i],tint);mesh.setColorAt(i,tint);}
-    }
-    mesh.instanceMatrix.needsUpdate=true;if(mesh.instanceColor)mesh.instanceColor.needsUpdate=true;
-    mesh.boundingBox=local.clone();mesh.boundingSphere=local.getBoundingSphere(new Sphere());
-    source.add(mesh);chunks.push({mesh,box:local,count:indices.length});
-   }
-   sources.push({mesh:source,chunks,matrixVersion:source.instanceMatrix.version,colorVersion:source.instanceColor?.version??-1,count:source.count,geometry:source.geometry,material:source.material,matrixAttribute:source.instanceMatrix,colorAttribute:source.instanceColor});
+   if(j.bins.size<2){discard();return;}j.entries=[...j.bins.values()];
+  }
+  if(j.part===j.entries.length){
+   if(!unchanged(j.snap)){discard();return;}
+   for(const c of j.chunks){source.add(c.mesh);c.mesh.updateWorldMatrix(true,false);}
+   sources.push({...j.snap,chunks:j.chunks});job=undefined;return;
+  }
+  if(!j.current){
+   const indices=j.entries[j.part],mesh=new InstancedMesh(g,source.material,indices.length);
+   mesh.name='p2-instance-cell';mesh.userData.p2InstanceCell=true;mesh.layers.mask=0;mesh.receiveShadow=source.receiveShadow;mesh.renderOrder=source.renderOrder;mesh.matrixAutoUpdate=false;mesh.visible=false;
+   j.current={mesh,box:new Box3(),cursor:0,indices};
+  }
+  const c=j.current,i=c.cursor++;
+  source.getMatrixAt(c.indices[i],matrix);c.mesh.setMatrixAt(i,matrix);c.box.union(box.copy(g.boundingBox!).applyMatrix4(matrix));
+  if(source.instanceColor){source.getColorAt(c.indices[i],tint);c.mesh.setColorAt(i,tint);}
+  if(c.cursor===c.indices.length){
+   c.mesh.instanceMatrix.needsUpdate=true;if(c.mesh.instanceColor)c.mesh.instanceColor.needsUpdate=true;
+   c.mesh.boundingBox=c.box.clone();c.mesh.boundingSphere=c.box.getBoundingSphere(new Sphere());
+   j.chunks.push({mesh:c.mesh,box:c.box,count:c.indices.length});j.current=undefined;j.part++;
   }
  }
+ /** Work budget is both time and operation bounded. Call after rendering,
+  * so completed cells are visible only at the next normal render. */
+ function warmStep(maxWork=1400,maxMs=2){
+  const start=performance.now();let n=0;
+  while((queue.length||job)&&n<maxWork){
+   if(n%64===0){if(performance.now()-start>=maxMs)break;if(job&&!unchanged(job.snap)){discard();continue;}}
+   step();n++;
+  }
+  return n;
+ }
+ // Synchronous only for tests and explicitly warmed diagnostic sessions.
+ function register(roots:readonly Object3D[]){enqueue(roots);while(queue.length||job)warmStep(Infinity,Infinity);}
  function begin(camera:Camera,ring?:Ring){
   restore();last={sources:0,submitted:0,savedInstances:0,extraDraws:0};eye.setFromMatrixPosition(camera.matrixWorld);
   frustum.setFromProjectionMatrix(vp.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
-  // Highest triangle savings first, under a strict extra submission budget.
   const choices:{s:Source;cells:Chunk[];saved:number;tris:number}[]=[];
   for(const s of sources){
-   const m=s.mesh;if(!m.parent||!m.visible||!camera.layers.test(m.layers)||m.count!==s.count||m.geometry!==s.geometry||m.material!==s.material||m.instanceMatrix!==s.matrixAttribute||m.instanceColor!==s.colorAttribute||m.instanceMatrix.version!==s.matrixVersion||(m.instanceColor?.version??-1)!==s.colorVersion||!eligible(m))continue;
+   const m=s.mesh;if(!m.parent||!m.visible||!camera.layers.test(m.layers)||!unchanged(s))continue;
    let ancestor:Object3D|null=m.parent;while(ancestor&&ancestor.visible)ancestor=ancestor.parent;if(ancestor)continue;
    if(!m.boundingSphere)m.computeBoundingSphere();
    if(m.boundingSphere&&!frustum.intersectsSphere(sphere.copy(m.boundingSphere).applyMatrix4(m.matrixWorld)))continue;
    const cells:Chunk[]=[];let n=0;
    for(const c of s.chunks){box.copy(c.box).applyMatrix4(m.matrixWorld);if(!frustum.intersectsBox(box))continue;
-    box.getBoundingSphere(sphere);if(ring&&sphereBehindCraterWall(ring,eye,sphere))continue;cells.push(c);n+=c.count;}
+    if(ring&&sphereBehindCraterWall(ring,eye,box.getBoundingSphere(sphere)))continue;cells.push(c);n+=c.count;}
    const saved=s.count-n,triangles=(m.geometry.index?.count??m.geometry.getAttribute('position').count)/3;
-   if(saved>0&&(cells.length<=1||saved>=s.count*.30))choices.push({s,cells,saved,tris:saved*triangles});
+   const extra=Math.max(0,cells.length-1),savedTris=saved*triangles;
+   if(saved>0&&(extra===0||(saved>=s.count*.30&&savedTris>=extra*2500)))choices.push({s,cells,saved,tris:savedTris});
   }
   choices.sort((a,b)=>b.tris-a.tris);
   for(const {s,cells,saved} of choices){
@@ -73,6 +112,6 @@ export function createCraterInstanceCells(cellSize=32,maxExtraDraws=36){
   }
   return last;
  }
- function dispose(){restore();for(const s of sources)for(const c of s.chunks){c.mesh.removeFromParent();c.mesh.dispose();}sources.length=0;seen.clear();}
- return {register,begin,restore,dispose,get sourceCount(){return sources.length;},get stats(){return last;}};
+ function dispose(){restore();discard();queue.length=0;for(const s of sources)for(const c of s.chunks){c.mesh.removeFromParent();c.mesh.dispose();}sources.length=0;seen.clear();}
+ return {register,enqueue,warmStep,begin,restore,dispose,get sourceCount(){return sources.length;},get pendingSources(){return queue.length+Number(!!job);},get stats(){return last;}};
 }
