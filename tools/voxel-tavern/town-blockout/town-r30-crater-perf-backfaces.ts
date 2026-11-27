@@ -16,7 +16,7 @@ export function createCraterBoxBackfaces(){
   if(!(g instanceof BoxGeometry)||g.groups.length!==6||g.index?.count!==36||g.drawRange.start!==0||g.drawRange.count<36)return;
   const p=g.getAttribute('position'),i=g.index;if(!(p instanceof BufferAttribute)||!(i instanceof BufferAttribute)||p.count!==24||p.itemSize!==3)return;
   const groups=g.groups.map(x=>x.start+':'+x.count).join(',');const old=cache.get(g);if(old&&old.position===p&&old.index===i&&old.pv===p.version&&old.iv===i.version&&old.groups===groups&&Object.keys(g.attributes).length===Object.keys(old.attrs).length&&Object.entries(old.attrs).every(([n,a])=>g.attributes[n]===a))return old;
-  if(old===null)return;drop(old);const faces:Face[]=[],unique=new Set<string>();
+  if(old===null)return;drop(old);cache.delete(g);const faces:Face[]=[],unique=new Set<string>();
   g.computeBoundingBox();const box=g.boundingBox;if(!box||box.isEmpty())return;
   for(const group of g.groups){
    if(group.count!==6||group.start<0||group.start+6>36)return;
