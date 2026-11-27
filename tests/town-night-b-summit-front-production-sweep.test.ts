@@ -13,6 +13,7 @@ import {mountRidgeRetainingBanks} from '../tools/voxel-tavern/town-blockout/town
 import {mountRidgeCloudTerrace} from '../tools/voxel-tavern/town-blockout/town-d-r30-cloud-terrace';
 import {buildRailwayStation} from '../tools/voxel-tavern/town-blockout/landmark-station';
 import {auditNightBFrontOpenFacilities} from '../tools/voxel-tavern/town-blockout/town-night-b-summit-front-sweep';
+import {installNightBFrontOperation} from '../tools/voxel-tavern/town-blockout/town-night-b-summit-front-install';
 test('front production field and actual rail, station, forest, roads, banks and terrace audit',()=>{
  const grid=createTerrainGrid(),root=new Group(),west=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
  const rail=createTownRailway(grid,()=>0),branch=buildCraterRailExtension(grid,west,rail.route.points);
@@ -29,7 +30,7 @@ test('front production field and actual rail, station, forest, roads, banks and 
  for(const mesh of station.group.children){if(!(mesh instanceof InstancedMesh))continue;for(let i=0;i<mesh.count;i++){mesh.getMatrixAt(i,matrix);pos.setFromMatrixPosition(matrix);scale.setFromMatrixScale(matrix);if(pos.y+scale.y/2>140.10)stationBoxes.push({east:pos.x,north:-pos.z,height:pos.y,w:scale.x,d:scale.z,h:scale.y});}}
  const hits:Record<string,number>={},first:Record<string,unknown>={};
  const mark=(kind:string,p:unknown)=>{hits[kind]=(hits[kind]??0)+1;first[kind]??=p;};
- const audit=auditNightBFrontOpenFacilities(field,facility,(p,w,d,top)=>{
+ const externalBlocked:NonNullable<Parameters<typeof auditNightBFrontOpenFacilities>[2]>=(p,w,d,top)=>{
   const found=new Set<string>();
   if(stationBoxes.some(x=>Math.abs(p.east-x.east)<w+x.w/2&&Math.abs(p.north-x.north)<d+x.d/2&&p.height+top>x.height-x.h/2&&p.height<x.height+x.h/2))found.add('station-rendered');
   if(all.some(x=>p.east+w>x.min[0]&&p.east-w<x.max[0]&&-p.north+d>x.min[2]&&-p.north-d<x.max[2]&&p.height+top>x.min[1]&&p.height<x.max[1]))found.add('rail');
@@ -42,9 +43,32 @@ test('front production field and actual rail, station, forest, roads, banks and 
    if(banks.some(b=>b.blocked(e,n,h,.025)))found.add('retaining-bank');
   }
   for(const key of found)mark(key,p);return found.size>0;
- });
+ };
+ const audit=auditNightBFrontOpenFacilities(field,facility,externalBlocked);
  const docks=facility.survey.towers.filter(p=>p.station).flatMap(p=>[-1,1].map(s=>{const e=p.east+s*1.55,n=p.north-2.1,h=p.height;return {e,n,h,support:externalCableDockSupport(e,n)??station.surfaceAt(e,n)??field.heightAt(e,n),blocked:facility.blocked(e,n,h)||ridge.forest.blocked(e,n,h,.27)||station.blocked(e,n,h,.27)||terrace.blocked(e,n,h,.27)||furniture.some(f=>f.blocked(e,n,h,.27))||banks.some(b=>b.blocked(e,n,h,.27))}}));
  console.log(JSON.stringify({audit,hits,first,docks}));
  assert.equal(audit.groundHits,0);assert.equal(audit.ownHits,0);assert.equal(audit.obstacleHits,0,JSON.stringify({hits,first}));assert.ok(audit.candidateEnvelopeClear);assert.ok(docks.every(p=>p.support===p.h&&!p.blocked));
- facility.dispose();station.dispose();terrace.dispose();
+ // Same real walking colliders at the mount, not a synthetic dock flag.
+ const dockClear=(_station:string,p:{east:number;north:number;height:number})=>{
+  const {east:e,north:n,height:h}=p;
+  const support=externalCableDockSupport(e,n)??station.surfaceAt(e,n)??field.heightAt(e,n);
+  if(support===undefined||Math.abs(support-h)>.04)return false;
+  return !ridge.forest.blocked(e,n,h,.27)&&!station.blocked(e,n,h,.27)&&!terrace.blocked(e,n,h,.27)&&!furniture.some(f=>f.blocked(e,n,h,.27))&&!banks.some(b=>b.blocked(e,n,h,.27))&&!all.some(x=>h+1.775>x.min[1]&&h+.025<x.max[1]&&Math.hypot(Math.max(0,x.min[0]-e,e-x.max[0]),Math.max(0,x.min[2]+n,-n-x.max[2]))<.27);
+ };
+ const checkPath=(from:{east:number;north:number;height:number},to:{east:number;north:number;height:number})=>{
+  // Bounded 0.1m straight-foot probes for the station approach itself.
+  const steps=Math.ceil(Math.hypot(to.east-from.east,to.north-from.north)/.1);
+  for(let i=0;i<=steps;i++){const t=i/steps,p={east:from.east+(to.east-from.east)*t,north:from.north+(to.north-from.north)*t,height:to.height};if(!dockClear('',p)||facility.blocked(p.east,p.north,p.height))return false;}return true;
+ };
+ const closed=ridge.facilities!,originalParent=closed.group.parent;
+ const input={field,closed,authorized:false,externalBlocked,dockClear,certifyApproaches:()=>false,firstRun:{wokeAt:()=>undefined,openedAt:()=>undefined,dawnEpoch:()=>undefined},state:()=>undefined,now:()=>undefined,daylight:()=>undefined};
+ const rejected=installNightBFrontOperation(input);assert.equal(rejected.ready,false);assert.equal(closed.group.parent,originalParent);
+ const routeRejected=installNightBFrontOperation({...input,authorized:true});assert.equal(routeRejected.ready,false);assert.equal(routeRejected.reason,'walking-route-not-certified');assert.equal(closed.group.parent,originalParent);
+ const accepted=installNightBFrontOperation({...input,authorized:true,certifyApproaches:entries=>entries.every(d=>{
+  const gate=d.station==='base'?{east:d.approach.east,north:346,height:26}:d.station==='middle'?{east:d.approach.east,north:517,height:140}:{east:d.approach.east,north:636,height:347};
+  return checkPath(gate,d.approach)&&checkPath(d.approach,d.board);
+ })});
+ assert.ok(accepted.ready,JSON.stringify(accepted.ready?{}:{reason:accepted.reason,docks:accepted.docks}));assert.equal(closed.group.parent,null);assert.equal(accepted.facilities.group.parent,originalParent);assert.equal(accepted.service.serviceOpen(),false);
+ console.log('six local approach links certified; atomic replacement preserved owner; dormant authority remains closed');
+ accepted.facilities.dispose();facility.dispose();station.dispose();terrace.dispose();
 });
