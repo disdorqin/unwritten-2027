@@ -53,6 +53,20 @@ test('833m road candidate uses the real canonical cut and supported continuous t
    }
   }
   assert.ok(protectedEdges>300);
+  // Dense player-foot sweep along the actual 833m tread, including
+  // inside corners where a non-adjacent rail may cross the walking band.
+  let walkingSamples=0;
+  for(let i=2;i<=834;i++){
+   const a=points[i-1]!,b=points[i]!,prev=points[i-2]!,next=points[i+1]!;
+   const at=(p:typeof a,lo:typeof a,hi:typeof a,t:number)=>{const dx=hi.east-lo.east,dn=hi.north-lo.north,l=Math.hypot(dx,dn);return {e:p.east-dn/l*t,n:p.north+dx/l*t};};
+   for(const f of [.125,.375,.625,.875])for(const t of [-1,-.5,0,.5,1]){
+    const u=at(a,prev,b,t),v=at(b,a,next,t);
+    const e=u.e+(v.e-u.e)*f,n=u.n+(v.n-u.n)*f,h=road.supportAt(e,n);
+    assert.notEqual(h,undefined,JSON.stringify({i,f,t}));
+    assert.equal(road.blocked(e,n,h!),false,JSON.stringify({i,f,t,e,n,h}));walkingSamples++;
+   }
+  }
+  assert.equal(walkingSamples,16660);
   console.log(JSON.stringify({road:road.stats,sourceTriangles:idx.length/3,refined:result.refinedTriangles,lowered:result.loweredVertices,samples,maxError,maxOcclusion}));
  }finally{source.dispose();result.geometry.dispose();mat.dispose();road.dispose();w.dispose();}
 });
