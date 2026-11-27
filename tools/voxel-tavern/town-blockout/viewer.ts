@@ -185,6 +185,7 @@ import { createPlazaInformationActivity } from './plaza-information-activity';
 import { createPlazaSnowSupply, type PlazaSnowSupplySite } from './plaza-snow-supply';
 import { advanceWeatherCover, townSnowWeatherAt, townSnowWeatherForFrame } from './town-weather';
 import { sampleSouthRegionalWeather, applySouthWeatherPresentation, createSouthWeatherVisual, southWeatherWalkingScale } from './town-night-a-summit-weather-field';
+import { southWeatherStatus, southWeatherProfile } from './town-night-a-summit-weather-status';
 import { createTownNightWeatherSky, type TownNightWeatherSkyFrame } from './town-night-weather-sky';
 import { createSouthSummitWeatherHost } from './town-night-a-summit-weather-host';
 import { townNightWeatherDayMs, townNightWeatherDefaultDawnEpoch } from '../../../src/shared/town-night-weather-cycle';
@@ -957,6 +958,7 @@ function setNight(night: boolean) {
 }
 setNight(updateNightSky().nightSide);
 timeOfDay.disabled = !localLightingReview;
+if(!localLightingReview)timeOfDay.setAttribute('aria-label','当前服务器昼夜状态');
 timeOfDay.title = localLightingReview ? '本地验收：昼夜机位切换' : '昼夜随服务器时钟连续变化';
 if(localLightingReview)timeOfDay.onclick = () => {reviewNight=!nightMode;setNight(updateNightSky().nightSide);};
 
@@ -1512,6 +1514,19 @@ const tavernDrinkEffects = createTavernDrinkEffects();
 tavernDrinkEffects.mountSettings(element('town-panel-controls'));
 const townBgm = createTownBgm(festival.getAudioContext);
 const townSettings = element<HTMLDialogElement>('town-settings');
+const regionalWeatherStatus=document.createElement('output');
+regionalWeatherStatus.id='town-regional-weather';
+regionalWeatherStatus.setAttribute('aria-label','当前区域天气');
+regionalWeatherStatus.setAttribute('aria-live','off');
+regionalWeatherStatus.style.display='block';
+regionalWeatherStatus.style.color='#c6d3e5';
+element('position').after(regionalWeatherStatus);
+function showRegionalWeather(text:string){
+ if(regionalWeatherStatus.textContent===text)return;
+ regionalWeatherStatus.hidden=!text;
+ regionalWeatherStatus.style.display=text?'block':'none';
+ regionalWeatherStatus.textContent=text;
+}
 element('town-panel-toggle').addEventListener('click', cancelSledBrake);
 townBgm.mountControls(element('town-panel-controls'), element<HTMLButtonElement>('town-music-toggle'));
 let nextBgmRoomCheck = 0;
@@ -3867,11 +3882,14 @@ function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame
   summitSnowfall.update(camera,Math.min(.25,frameSeconds),!cabin&&walking,false);
   const fog=cloudRoute.scene.fog as Fog;
   applySouthWeatherPresentation(cloudRoute.scene,fog,weather,skyFrame,particleDensityScale(),local?.weather);
+  showRegionalWeather(southWeatherStatus(skyFrame,weatherState,local?.weather,ceremonyState.phase!=='ordinary',!!cabin,false));
   renderer.render(cloudRoute.scene, camera);
   if (profileTown) {
     renderer.domElement.dispatchEvent(new CustomEvent('town-frame-profile', { detail: {
       frameMs: frameSeconds * 1000, calls: renderer.info.render.calls,
       triangles: renderer.info.render.triangles, cameraY: camera.position.y,
+      weatherCycle:southWeatherProfile(skyFrame,weatherState,weather,local?.weather),
+      fogNear:fog.near,fogFar:fog.far,points:renderer.info.render.points,
     } }));
   }
 }
@@ -4290,6 +4308,7 @@ renderer.setAnimationLoop(now => {
   if (railNotice) announceActivity(railNotice);
   ceremonyOverlay.apply(ceremonyState);
   const indoors = sheltered || Boolean(homeReturn) || shedSheltered || roofSheltered;
+  showRegionalWeather(southWeatherStatus(skyFrame,outdoorWeather,regionalWeather?.weather,!ordinaryBellHours,!!boardingGround,indoors));
   ceremonyFrost.setWarmth('interior', indoors);
   ceremonyFrost.setWarmth('onsen', hotSpringSoak.active());
   ceremonyFrost.setWarmth('fire-source', homeReturn
@@ -4429,6 +4448,7 @@ renderer.setAnimationLoop(now => {
         movementMs: movementStepMs, snowballMs: snowballPhysicsMs,
         calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, cameraY: camera.position.y, detailMs,
         weatherMs, weatherTier: weather.tier, snowIntensity: effectiveSnowIntensity, snowCover: visualSnowCover,
+        weatherCycle:southWeatherProfile(skyFrame,outdoorWeather,weather,regionalWeather?.weather),
         fogNear: weatherFog.near, fogFar: weatherFog.far, points: renderer.info.render.points,
         craterPerf:{exteriorCertified:craterExteriorCertified,undergroundVisible:undergroundRenderParent?.visible},
         ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],heading:yaw,...(previewOptions.has('mRoadSurvey')?{roadGuide:productionRidge.baseToMiddleGuide,rearConnected:productionRidge.rearConnected,moveReject:ridgeMoveReject}:{}),surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities,cableInstances:productionRidge.facilities?.visibleInstances(),terraceMounted:!!productionRidge.terrace,cloudSeam:productionRidge.cloudSeam},

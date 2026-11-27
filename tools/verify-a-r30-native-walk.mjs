@@ -355,7 +355,11 @@ try{
   const initial=await state();assert.equal(initial.ridge.transportReady,false);assert.equal(initial.ridge.cloudSeam.physicalReady,true);
   assert.equal(initial.ridge.cloudSeam.domainReady,false);
   const snapshots=[];
-  const take=async(label)=>{const f=await state();assert.equal(f.ridge.roads,4);assert.ok(f.calls>0&&f.triangles>0);snapshots.push({label,foot:f.ridge.foot,calls:f.calls,triangles:f.triangles,ridge:f.ridge});await picture(page,evidence,label);};
+  const take=async(label)=>{const f=await state();assert.equal(f.ridge.roads,4);assert.ok(f.calls>0&&f.triangles>0);
+   const w=f.weatherCycle;assert.ok(w&&Number.isFinite(w.phase)&&w.phase>=0&&w.phase<1&&Number.isFinite(w.dawnEpoch));
+   assert.ok(Number.isFinite(w.visibility)&&w.visibility>0&&w.snow>0&&f.fogFar>f.fogNear);
+   snapshots.push({label,foot:f.ridge.foot,calls:f.calls,triangles:f.triangles,ridge:f.ridge,weatherCycle:w,fogNear:f.fogNear,fogFar:f.fogFar,points:f.points});
+   await picture(page,evidence,label);};
   await take('normal-entry');
   await page.locator('#town-panel-toggle').click();
   await page.locator('#jump').selectOption({label:'山口站'});
@@ -365,6 +369,8 @@ try{
   await face(page,evidence,0);
   await take('mountain-foot-north');
   await page.locator('#town-panel-toggle').click();await page.locator('#lighting').click();await page.locator('#town-settings-close').click();
+  const prior=snapshots.at(-1).weatherCycle;
+  await page.waitForFunction(p=>{const w=window.__za22Frame?.weatherCycle;return w&&w.skyColor!==p.skyColor&&w.dawnEpoch===p.dawnEpoch&&Math.abs(w.phase-p.phase)>.1;},prior,{timeout:15000});
   await take('mountain-foot-other-light');
   // The existing actual station approach is safe and near, not a claim
   // of the full 1268m road. Use ordinary keys and real wire poses.
