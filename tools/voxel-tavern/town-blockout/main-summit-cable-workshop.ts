@@ -9,17 +9,27 @@ type GroundAt = (east: number, north: number) => number | undefined;
 type Family = 'stone' | 'wood' | 'tile' | 'bronze' | 'iron' | 'snow' | 'glow';
 type Part = { family: Family; tint: string; x: number; y: number; z: number; w: number; h: number; d: number };
 type Solid = { x: number; z: number; w: number; d: number; low: number; high: number };
-const anchor = { east: -21, north: 7, floor: 347 };
-export const mainSummitCableWorkshopAnchor = anchor;
+export const mainSummitCableWorkshopAnchor = Object.freeze({east:-21,north:7,floor:347});
+/** The old expedition hall overlaps the R30 rope sweep. The new hall is
+ * north of the lower dock, on the same surveyed terrace. */
+export const mainSummitR30CableWorkshopAnchor=Object.freeze({east:-21,north:22,floor:347});
+type WorkshopAnchor=Readonly<{east:number;north:number;floor:number}>;
 
 /**
  * Complete second-line workshop beside the certified P-7 cloud station.
  * Local +Z is east, facing the station's west service door. The original
  * station footprint E[-10,-3], N[-2.5,15] remains wholly unmodified.
  */
-export function mountMainSummitCableWorkshop(owner: Group, groundAt: GroundAt) {
+export function mountMainSummitCableWorkshop(owner: Group, groundAt: GroundAt, anchor:WorkshopAnchor=mainSummitCableWorkshopAnchor) {
   if (Math.abs((groundAt(anchor.east, anchor.north) ?? Infinity) - anchor.floor) > .01) {
     throw new RangeError('The workshop needs the certified 347 m cloud terrace');
+  }
+  if(anchor===mainSummitR30CableWorkshopAnchor){
+    for(let x=-5.4;x<=5.4;x+=.3)for(let z=-4.7;z<=10.7;z+=.3){
+      if(Math.abs(x)>1.2&&z>4.7)continue;
+      const h=groundAt(anchor.east+z,anchor.north+x);
+      if(h===undefined||!Number.isFinite(h)||Math.abs(h-anchor.floor)>.04)throw new RangeError('R30 workshop footprint or service path lacks canonical support');
+    }
   }
   const group = new Group();
   group.name = 'main-summit-cable-machine-workshop';
@@ -207,7 +217,7 @@ export function mountMainSummitCableWorkshop(owner: Group, groundAt: GroundAt) {
   }
   let disposed = false;
   return {
-    group, lights, repairAnchors, sync,
+    group, lights, repairAnchors, sync, anchor,
     repairActions(feet:{east:number;north:number;height:number}){
       if(!state||!Number.isFinite(feet.height)||Math.abs(feet.height-anchor.floor)>.43)return [];
       const {x,z}=coordinates(feet.east,feet.north);
