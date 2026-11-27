@@ -40,6 +40,17 @@ test('the host walks the whole repair by offered actions only', () => {
   assert.deepEqual(host.actions(machine.snapshot(), anchors.brake), [], 'open line offers no repairs');
 });
 
+test('only the authoritative carrying player receives a hang action',()=>{
+ const m=createZa36CableRepair(1),a=createCableRepairHost(1,anchors),b=createCableRepairHost(1,anchors);
+ m.apply({kind:'wake',impact:'sled'});m.apply({kind:'take-weight',index:0});
+ const own={...m.snapshot(),carriedBySelf:true},other={...m.snapshot(),carriedBySelf:false};
+ a.sync(own);b.sync(other);
+ assert.ok(ids(a.actions(own,anchors.weightFrame)).includes('hang-weight'));
+ assert.deepEqual(b.actions(other,anchors.weightFrame),[]);
+ assert.deepEqual(b.actions(other,anchors.weightTower),[]);
+ assert.equal(b.carrying(),null);
+ m.returnCarriedWeight();b.sync(m.snapshot());assert.ok(ids(b.actions(m.snapshot(),anchors.weightTower)).includes('take-weight'));
+});
 test('actions are reach-bound and line-bound', () => {
   const machine = createZa36CableRepair(2);
   const host = createCableRepairHost(2, anchors);

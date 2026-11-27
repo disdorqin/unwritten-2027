@@ -46,6 +46,9 @@ export function createCableLineAuthority(now:()=>number=Date.now) {
   const openedAt:Record<Za36CableRepairLine,number|null>={1:null,2:null};
   const wokeAt:Record<Za36CableRepairLine,number|null>={1:null,2:null};
   const listeners = new Set<(frame: CableLineFrame) => void>();
+  const localActor={};
+  const weightOwners:Partial<Record<Za36CableRepairLine,object>>={};
+  function publish(line:Za36CableRepairLine,opened:boolean){const accepted=frame(line,opened);for(const listener of [...listeners])listener(accepted);return accepted;}
   function flags(): CableLineFlags {
     return {
       cableLine1Open: lines[1].snapshot().stage === 'full-line',
@@ -65,6 +68,8 @@ export function createCableLineAuthority(now:()=>number=Date.now) {
       return () => { listeners.delete(listener); };
     },
     snapshot: (line: Za36CableRepairLine) => lines[line].snapshot(),
+    snapshotFor(line:Za36CableRepairLine,actor:object){const s=lines[line].snapshot();return {...s,carriedBySelf:s.carriedWeight!==null&&weightOwners[line]===actor};},
+    releaseActor(actor:object){for(const line of [1,2] as const){if(weightOwners[line]!==actor)continue;delete weightOwners[line];if(lines[line].returnCarriedWeight())publish(line,false);}},
     /** The frame a newly connected client needs for one line. */
     hello: (line: Za36CableRepairLine) => frame(line, false),
     /**
@@ -72,16 +77,17 @@ export function createCableLineAuthority(now:()=>number=Date.now) {
      * (nothing changed, nothing to broadcast); accepted events return
      * the frame to broadcast, with openedNow set exactly once per line.
      */
-    applyEvent(line: Za36CableRepairLine, event: Za36CableRepairEvent): CableLineFrame | undefined {
+    applyEvent(line: Za36CableRepairLine, event: Za36CableRepairEvent, actor:object=localActor): CableLineFrame | undefined {
+      if(event.kind==='hang-weight'&&weightOwners[line]!==actor)return undefined;
       const epoch=now();
       if(!Number.isSafeInteger(epoch)||epoch<0)return undefined;
       const result = lines[line].apply(event);
       if (!result.accepted) return undefined;
       if(event.kind==='wake')wokeAt[line]=epoch;
       if(result.opened)openedAt[line]=epoch;
-      const accepted = frame(line, result.opened);
-      for (const listener of [...listeners]) listener(accepted);
-      return accepted;
+      if(event.kind==='take-weight')weightOwners[line]=actor;
+      if(event.kind==='hang-weight')delete weightOwners[line];
+      return publish(line,result.opened);
     },
   };
 }

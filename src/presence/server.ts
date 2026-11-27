@@ -359,8 +359,8 @@ export async function createPresenceServer(options: Options = {}) {
   // CableLineFrame plus the full snapshot the client repair host syncs
   // from; flags stay derived inside the authority, never set here.
   const cableLine = options.cableLineAuthority ?? createCableLineAuthority(wallNow);
-  const cableLineWire = (frame: CableLineFrame) =>
-    JSON.stringify({ ...frame, state: cableLine.snapshot(frame.line) });
+  const cableLineWire = (frame: CableLineFrame,peer:Peer) =>
+    JSON.stringify({ ...frame, state: cableLine.snapshotFor(frame.line,peer) });
   // Ice palace rites: the authority validates the caller's alcove pose and
   // delegates to policy stores. None of the three stores (ice window, forge
   // inventory, solstice) exists yet, so snapshots honestly report every rite
@@ -1071,6 +1071,7 @@ export async function createPresenceServer(options: Options = {}) {
 
   function remove(peer: Peer) {
     if (!peers.delete(peer.id)) return;
+    cableLine.releaseActor(peer);
     summitPassport?.forget(peer.id);
     if (peer.session) pollSessions.delete(peer.session);
     connLog(peer.transport, peer.id, 'drop', peer.dropReason ?? (peer.name ? 'closed' : 'unjoined'));
@@ -1269,7 +1270,7 @@ export async function createPresenceServer(options: Options = {}) {
           if(options.summitRoom&&line!==2)return;
           if(options.authorizeCableRepair&&!options.authorizeCableRepair(line,event,peer.record))return;
           // The shared authority publishes once to every attached room, including this one.
-          cableLine.applyEvent(line, event);
+          cableLine.applyEvent(line, event,peer);
         }
         return;
       }
@@ -1377,8 +1378,8 @@ export async function createPresenceServer(options: Options = {}) {
     if (photo && !photo.ended && wallNow() < photo.invite.captureAt - plazaPhotoLockMs) send(peer, JSON.stringify(photo.invite));
     const bellEvent = bellStateEvent();
     if (bellEvent) send(peer, JSON.stringify(bellEvent));
-    send(peer, cableLineWire(cableLine.hello(1)));
-    send(peer, cableLineWire(cableLine.hello(2)));
+    send(peer, cableLineWire(cableLine.hello(1),peer));
+    send(peer, cableLineWire(cableLine.hello(2),peer));
     send(peer, JSON.stringify({ type: 'ice-palace-rite', state: icePalaceRites.snapshot(peer.id).rites }));
     send(peer, JSON.stringify(icePalaceFragment.frame()));
     for (const other of peers.values()) {
@@ -1531,7 +1532,7 @@ export async function createPresenceServer(options: Options = {}) {
       resolve();
     });
   });
-  const stopFollowingCable = cableLine.subscribe(frame => broadcast(cableLineWire(frame)));
+  const stopFollowingCable = cableLine.subscribe(frame => {for(const peer of peers.values())if(peer.name)send(peer,cableLineWire(frame,peer));});
   const stopFollowingNight = options.townNightFeed?.subscribe(frame => broadcast(frame));
   const stopFollowingWater = options.undergroundWaterFeed?.subscribe(frame => broadcast(frame));
   const stopFollowingWeather = options.townOutdoorWeatherFeed?.subscribe(frame => broadcast(frame));
@@ -1600,6 +1601,7 @@ export async function createPresenceServer(options: Options = {}) {
       nightListeners.clear();
       weatherListeners.clear();
       for (const peer of peers.values()) {
+        cableLine.releaseActor(peer);
         clearTimeout(peer.joinTimer);
         peer.socket?.terminate();
       }

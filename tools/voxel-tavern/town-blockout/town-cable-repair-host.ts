@@ -56,7 +56,7 @@ export function createCableRepairHost(line: Za36CableRepairLine, anchors: Repair
     /** Reconcile the local hand against the authority state (call on every broadcast frame). */
     sync(state: Za36CableRepairState) {
       if (state.line !== line) return;
-      carrying = state.carriedWeight;
+      carrying = state.carriedBySelf===false?null:state.carriedWeight;
     },
     carrying: () => carrying,
     /** The repair actions available to a player standing at `player`, under `state`. */
@@ -76,11 +76,11 @@ export function createCableRepairHost(line: Za36CableRepairLine, anchors: Repair
       if (near(player, anchors.cableWheel) && state.cableAligned && state.cableTurns < 3) {
         offered.push({ id: 'tighten-cable', label: `紧缆（${state.cableTurns}/3）`, event: { kind: 'tighten-cable' } });
       }
-      if (near(player, anchors.weightTower) && carrying === null) {
+      if (near(player, anchors.weightTower) && state.carriedWeight === null) {
         const index = state.weightMounted.findIndex(mounted => !mounted);
         if (index >= 0) offered.push({ id: 'take-weight', label: '扛起配重块', event: { kind: 'take-weight', index } });
       }
-      if (near(player, anchors.weightFrame) && carrying !== null) {
+      if (near(player, anchors.weightFrame) && carrying !== null && state.carriedBySelf!==false && state.carriedWeight===carrying) {
         offered.push({ id: 'hang-weight', label: '挂上配重块', event: { kind: 'hang-weight', index: carrying } });
       }
       return offered;

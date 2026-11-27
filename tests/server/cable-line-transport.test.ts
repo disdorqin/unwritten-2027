@@ -8,7 +8,7 @@ import { createCableLineAuthority } from '../../src/presence/cable-line-authorit
 type CableState = {
   line: number; stage: string; version: number; impacts: number; brakePulled: boolean;
   cableAligned: boolean; cableTurns: number; carriedWeight: number | null;
-  weightMounted: boolean[];
+  weightMounted: boolean[];carriedBySelf?:boolean;
 };
 type Message = {
   type: string; kind?: string; name?: string; self?: boolean; cableLine?: boolean;
@@ -52,6 +52,22 @@ async function connected(t: TestContext, server: Awaited<ReturnType<typeof creat
 
 const cableFrames = (frames: Message[]) => frames.filter(frame => frame.type === 'cable-line');
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+test('shared room peers cannot hang another player weight and disconnect returns it',{timeout:10000},async t=>{
+ const authority=createCableLineAuthority(),s1=await createPresenceServer({cableLineAuthority:authority,connectionLog(){}}),s2=await createPresenceServer({cableLineAuthority:authority,connectionLog(){}});
+ t.after(()=>Promise.all([s1.close(),s2.close()]));
+ const a=await connected(t,s1,'扛配重甲'),b=await connected(t,s2,'扛配重乙');
+ const send=(p:typeof a,event:unknown)=>p.socket.send(JSON.stringify({type:'event',kind:'cable-repair',line:1,event}));
+ send(a,{kind:'wake',impact:'sled'});await a.next(f=>f.line===1&&f.stage==='one-station');
+ send(a,{kind:'take-weight',index:0});
+ const carried=await a.next(f=>f.line===1&&f.state?.carriedWeight===0);
+ const seen=await b.next(f=>f.line===1&&f.state?.carriedWeight===0);
+ assert.equal(carried.state?.carriedBySelf,true);assert.equal(seen.state?.carriedBySelf,false);
+ send(b,{kind:'hang-weight',index:0});await sleep(150);assert.equal(authority.snapshot(1).carriedWeight,0);
+ a.socket.terminate();const released=await b.next(f=>f.line===1&&f.state?.version===3);
+ assert.equal(released.state?.carriedWeight,null);assert.equal(released.state?.weightMounted[0],false);
+ send(b,{kind:'take-weight',index:0});assert.equal((await b.next(f=>f.line===1&&f.state?.carriedWeight===0)).state?.carriedBySelf,true);
+ send(b,{kind:'hang-weight',index:0});assert.equal((await b.next(f=>f.line===1&&f.state?.weightMounted[0]===true)).state?.carriedWeight,null);
+});
 
 test('cable repair events flow through the real server: hello, broadcast, full-line', { timeout: 15_000 }, async t => {
   const server = await createPresenceServer({ host: '127.0.0.1', port: 0, connectionLog() {} });
@@ -144,7 +160,10 @@ test('town and mountain rooms share both cable versions, without duplicate broad
  const send=async(p:typeof a,line:number,event:unknown,version:number)=>{
   p.socket.send(JSON.stringify({type:'event',kind:'cable-repair',line,event}));
   const frames=await Promise.all([a,b].map(p=>p.next(f=>f.type==='cable-line'&&f.line===line&&f.state?.version===version)));
-  assert.deepEqual(frames[0],frames[1]);return frames[0]!;
+  const shared=(f:Message)=>{const {carriedBySelf,...state}=f.state!;return {...f,state};};
+  assert.deepEqual(shared(frames[0]!),shared(frames[1]!));
+  for(const [i,f] of frames.entries())assert.equal(f.state!.carriedBySelf,f.state!.carriedWeight!==null&&[a,b][i]===p);
+  return frames[0]!;
  };
  await send(a,1,{kind:'wake',impact:'sled'},1);
  await send(b,2,{kind:'wake',impact:'sled'},1);
