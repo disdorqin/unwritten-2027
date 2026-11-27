@@ -1,0 +1,200 @@
+{
+  "url": "http://127.0.0.1:63241/",
+  "segment": "night-r3-bare-weather",
+  "viewport": {
+    "width": 960,
+    "height": 540
+  },
+  "deviceScaleFactor": 0.25,
+  "quality": "smooth",
+  "gpu": {
+    "vendor": "Google Inc. (Intel)",
+    "renderer": "ANGLE (Intel, Intel(R) UHD Graphics (0x0000A788) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  },
+  "paths": [
+    {
+      "name": "night-r3-bare-weather",
+      "checkpoints": [
+        {
+          "label": "spawn",
+          "hud": "东 223.0 m · 北 180.0 m · 行走",
+          "action": "E · 点亮钟楼广场迎宾灯",
+          "status": "已连接 · 1 人",
+          "east": 223,
+          "north": 180,
+          "height": 12,
+          "wire": {
+            "ms": 1795777524759,
+            "east": 223,
+            "north": 180,
+            "area": "town",
+            "height": 12,
+            "yaw": 0.06970025204955382,
+            "seq": 0
+          }
+        },
+        {
+          "label": "bare-weather-settings",
+          "lighting": "雪夜",
+          "hud": "东 223.0 m · 北 180.0 m · 行走",
+          "action": "E · 点亮钟楼广场迎宾灯",
+          "status": "已连接 · 1 人",
+          "east": 223,
+          "north": 180,
+          "height": 12,
+          "wire": {
+            "ms": 1795777524759,
+            "east": 223,
+            "north": 180,
+            "area": "town",
+            "height": 12,
+            "yaw": 0.06970025204955382,
+            "seq": 0
+          }
+        },
+        {
+          "label": "bare-weather-walk",
+          "lighting": "雪夜",
+          "hud": "东 223.3 m · 北 183.7 m · 行走",
+          "action": "E · 领取钟楼广场印章",
+          "status": "已连接 · 1 人",
+          "east": 223.3,
+          "north": 183.7,
+          "height": 12,
+          "wire": {
+            "ms": 1795777527252,
+            "east": 223.26,
+            "north": 183.74,
+            "area": "town",
+            "height": 12,
+            "yaw": 0.06970025204955382,
+            "seq": 7
+          }
+        }
+      ],
+      "sockets": [
+        "ws://127.0.0.1:63241/presence"
+      ],
+      "poses": [
+        {
+          "ms": 1795777524759,
+          "east": 223,
+          "north": 180,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 0
+        },
+        {
+          "ms": 1795777526664,
+          "east": 223.01,
+          "north": 180.12,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 1
+        },
+        {
+          "ms": 1795777526752,
+          "east": 223.05,
+          "north": 180.75,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 2
+        },
+        {
+          "ms": 1795777526856,
+          "east": 223.1,
+          "north": 181.5,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 3
+        },
+        {
+          "ms": 1795777526954,
+          "east": 223.16,
+          "north": 182.24,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 4
+        },
+        {
+          "ms": 1795777527050,
+          "east": 223.21,
+          "north": 182.99,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 5
+        },
+        {
+          "ms": 1795777527154,
+          "east": 223.26,
+          "north": 183.74,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 6
+        },
+        {
+          "ms": 1795777527252,
+          "east": 223.26,
+          "north": 183.74,
+          "area": "town",
+          "height": 12,
+          "yaw": 0.06970025204955382,
+          "seq": 7
+        }
+      ]
+    }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [],
+  "requestFailures": [],
+  "httpErrors": [],
+  "performanceSamples": [],
+  "entry": {
+    "scope": "ordinary bare root, live weather settings, clock read-only, snow display toggle and native movement",
+    "weather": "入夜 · 小镇 · 晴雪 · 能见度约 1340 m",
+    "lightingDisabled": true,
+    "snowToggleRestored": true,
+    "start": {
+      "hud": "东 223.0 m · 北 180.0 m · 行走",
+      "action": "E · 点亮钟楼广场迎宾灯",
+      "status": "已连接 · 1 人",
+      "east": 223,
+      "north": 180,
+      "height": 12
+    },
+    "moved": {
+      "hud": "东 223.3 m · 北 183.7 m · 行走",
+      "action": "E · 领取钟楼广场印章",
+      "status": "已连接 · 1 人",
+      "east": 223.3,
+      "north": 183.7,
+      "height": 12
+    }
+  },
+  "traversal": {
+    "top": {
+      "hud": "东 223.3 m · 北 183.7 m · 行走",
+      "action": "E · 领取钟楼广场印章",
+      "status": "已连接 · 1 人",
+      "east": 223.3,
+      "north": 183.7,
+      "height": 12
+    },
+    "returned": {
+      "hud": "东 223.3 m · 北 183.7 m · 行走",
+      "action": "E · 领取钟楼广场印章",
+      "status": "已连接 · 1 人",
+      "east": 223.3,
+      "north": 183.7,
+      "height": 12
+    }
+  },
+  "errors": 0
+}
