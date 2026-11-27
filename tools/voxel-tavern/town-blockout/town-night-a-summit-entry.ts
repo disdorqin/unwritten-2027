@@ -105,6 +105,35 @@ export function mountSouthEntry(heightAt:SouthGround){
    box(lamp,e,n,2.58,.42,.42,.45);box(wood,e,n,3.03,.56,.56,.15);box(snow,e,n,3.18,.6,.6,.07);
   }
  }
+ // East plaza: reuse the existing north bench as a small snow-sheltered
+ // rest point. Two rear posts leave the full approach open; no new
+ // building envelope or doorway. Require the actual plaza datum at feet.
+ const restE=17,restN=33;
+ if([[-1.65,1.03],[1.65,1.03]].every(([de,dn])=>Math.abs((heightAt(restE+de!,restN+dn!)??Infinity)-floor)<.05)){
+  for(const side of [-1,1]){
+   const e=restE+side*1.65;
+   box(stone,e,restN+1.03,-.04,.52,.52,.39,true);
+   box(wood,e,restN+1.03,.35,.26,.26,2.70,true);
+   box(warm,e,restN+1.03,.86,.31,.31,.12);
+   const len=Math.hypot(.95,.68);
+   add(wood,new BoxGeometry(.17,len,.18).rotateX(Math.atan2(.95,.68)).translate(e,floor+2.70,-restN-.55));
+  }
+  box(wood,restE,restN+1.03,2.88,3.80,.26,.27);
+  // Lean-to roof sheds snow to the rear; the front remains >2.9m clear.
+  const theta=Math.atan2(.36,2.52),run=Math.hypot(.36,2.52);
+  for(let i=0;i<12;i++){
+   const e=restE-2.02+i*.365;
+   add(wood,new BoxGeometry(.355,.19,run).rotateX(theta).translate(e,floor+3.24,-restN-.05));
+   add(snow,new BoxGeometry(.363,.13,run+.08).rotateX(theta).translate(e,floor+3.38,-restN-.05));
+  }
+  // Carved timber trail-map panel, mounted behind the seating back,
+  // with raised route strokes and inset mountain silhouettes.
+  box(wood,restE,restN+1.03,1.51,2.45,.13,1.06,true);
+  box(warm,restE,restN+.94,1.61,2.24,.08,.86);
+  for(let i=0;i<5;i++)box(ash,restE-.78+i*.34,restN+.88,1.78,.27,.04,.16+.09*Math.sin(i*1.6+1.2));
+  for(const e of [restE-.84,restE+.84])box(bronze,e,restN+.87,2.29,.10,.07,.1);
+  box(lamp,restE,restN+.80,2.66,.32,.31,.24);
+ }
  // Individual inset paving tiles follow the fixed plaza datum, with a
  // narrow real offset so no coplanar fighting or fake walking surface.
  for(let n=13;n<39;n+=1.6)for(let e=-5.6;e<5.7;e+=1.4)

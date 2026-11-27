@@ -19,6 +19,9 @@ test('real main summit assembly consumes the A entrance once and keeps existing 
   }
   for(let e=0;e<=7.25;e+=.2)assert.ok(!localBlocked(e,7,347),'guardroom entrance E'+e);
   assert.ok(host.blocked(324,699,347));
+  for(let e=15.8;e<=18.2;e+=.2)assert.ok(!localBlocked(e,31.8,347),'rest shelter approach');
+  assert.ok(host.blocked(315.35,710.03,347));
+  assert.ok(host.blocked(318.65,710.03,347));
   // Later D2 mount owns this exact same entrance; narrow host withdraws.
   const full=new Group();full.name='night-a-south-sector';a.group.add(full);
   host.sync(a,true);assert.equal(host.mounted(),false);assert.equal(first.parent,null);
