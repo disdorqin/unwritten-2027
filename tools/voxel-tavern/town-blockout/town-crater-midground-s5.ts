@@ -1,10 +1,14 @@
 import {
-  BoxGeometry, ConeGeometry, DataTexture, DodecahedronGeometry, Group, InstancedMesh,
-  MeshStandardMaterial, NearestFilter, Object3D, SRGBColorSpace,
+  Box3, BoxGeometry, DataTexture, DodecahedronGeometry, Group, InstancedMesh,
+  MeshStandardMaterial, NearestFilter, Object3D, SRGBColorSpace, Vector3,
 } from 'three';
 import { createMeteorCrater, meteorCraterFixturePlan } from './meteor-crater';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
+import type { Box } from './landmark-kit';
 import { surveyZa31CraterWinch } from './town-za31-crater-winch';
+import { buildBR30CrystalForm, buildBR30RailFragment, buildBR30TimberFragment } from './town-b-r30-crater-remnant-forms';
+import { surveyBR30RelicView, type BR30RelicView } from './town-b-r30-crater-relic-view';
+import { buildBR30BrokenTrestle } from './town-b-r30-broken-trestle';
 
 type Ground = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'lip' | 'heightAt'>;
 type Piece = 'scorch' | 'black-rock' | 'timber' | 'rust' | 'ice';
@@ -38,16 +42,16 @@ const tau = 2 * Math.PI;
 const geometry = {
   scorch: new BoxGeometry(),
   'black-rock': new DodecahedronGeometry(1, 0),
-  timber: new BoxGeometry(),
-  rust: new ConeGeometry(1, 1, 5),
-  ice: new ConeGeometry(1, 1, 5),
+  timber: buildBR30TimberFragment(),
+  rust: buildBR30RailFragment(),
+  ice: buildBR30CrystalForm(),
 };
 const sizes: Record<Piece, readonly [number, number, number]> = {
   scorch: [1.25, .09, .72],
   'black-rock': [.53, .55, .43],
-  timber: [.9, .14, .23],
-  rust: [.24, .42, .23],
-  ice: [.19, .69, .19],
+  timber: [1.12, .92, .74],
+  rust: [.56, 1.05, .52],
+  ice: [.49, 1.12, .49],
 };
 
 function grain(base: number, fleck: number, streak: number) {
@@ -72,8 +76,8 @@ const materials: Record<Piece, MeshStandardMaterial> = {
   'black-rock': createMaterial(0x3a332c, 0x9a8a76, 0x5d4630),
   timber: createMaterial(0x5d4630, 0xa98a56, 0x2c3648),
   rust: createMaterial(0x8a4a34, 0x2c3648, 0x5d4630),
-  ice: new MeshStandardMaterial({ color: 0x7fd4c8, emissive: 0x7fd4c8,
-    emissiveIntensity: .18, roughness: 1, flatShading: true }),
+  ice: new MeshStandardMaterial({ color: 0x8acccf, emissive: 0x4c8995,
+    emissiveIntensity: .15, roughness: .42, metalness: .12, flatShading: true }),
 };
 
 /** The ruled mound disc (batch 95): centre E-120/N196, r21 — plus margin. */
@@ -99,6 +103,8 @@ export function buildCraterMidgroundS5(road: Ground,
   const group = new Group();
   group.name = 'crater-midground-s5';
   const placements: CraterMidgroundPiece[] = [];
+  const crystalViews: {cluster:string;view:BR30RelicView}[]=[];
+  const colliders:Box[]=[];
   const stamps = new Map<Piece, Object3D[]>();
   const trail = Array.from({ length: 801 }, (_, i) => {
     const at = fixture.mainTrailPoint(i / 800);
@@ -123,20 +129,46 @@ export function buildCraterMidgroundS5(road: Ground,
     if (height === undefined || !Number.isFinite(height)) return;
     if (Math.hypot(east - originE, north - originN) < 8) return;
     if (Math.hypot(east - road.lip.east, north - road.lip.north) < 9.8) return;
-    if (reserved.some(site => Math.hypot(east - site.east, north - site.north) < site.radius + .55)) return;
-    if (trail.some(p => Math.hypot(east - p.east, north - p.north) < 3.1)) return;
+    const [sx, sy, sz] = sizes[kind];
+    const footprint=(Math.hypot(sx,sz)*.62+sy*Math.abs(Math.sin(tilt))*.5)*scale;
+    const radius=Math.hypot(east-originE,north-originN);
+    if(radius-footprint<20||radius+footprint>53)return;
+    if (reserved.some(site => Math.hypot(east - site.east, north - site.north) < site.radius + footprint + .15)) return;
+    if (trail.some(p => Math.hypot(east - p.east, north - p.north) < 3.1+footprint)) return;
     if (placements.some(p => Math.hypot(east - p.east, north - p.north) < .72)) return;
     if (avoid.some(p => Math.hypot(east - p.east, north - p.north) < .72)) return;
-    const [sx, sy, sz] = sizes[kind];
+    const samples=[height,...[-1,1].flatMap(x=>[-1,1].map(z=>road.heightAt(east+x*footprint*.55,north+z*footprint*.55)))];
+    if(samples.some(h=>h===undefined||!Number.isFinite(h)))return;
+    const low=Math.min(...samples as number[]),high=Math.max(...samples as number[]);
+    if(high-low>sy*scale*.85+.18)return;
     const part = new Object3D();
-    part.position.set(east, height + sy * scale * .52, -north);
+    part.position.set(east,low+sy*scale*.40,-north);
     part.rotation.set(tilt, angle, 0);
     part.scale.set(sx * scale, sy * scale, sz * scale);
     part.updateMatrix();
+    // Exact transformed vertices, not the placement keep-out disk. Only
+    // protruding solids block a player; low shards remain traversable.
+    const bounds=new Box3(),vertex=new Vector3();
+    const positions=geometry[kind].getAttribute('position');
+    for(let i=0;i<positions.count;i++)bounds.expandByPoint(vertex.fromBufferAttribute(positions,i).applyMatrix4(part.matrix));
+    const base=Math.max(bounds.min.y,low);
+    const exposed=bounds.max.y-base;
+    const solid=kind!=='scorch'&&exposed>.46;
+    if(solid&&trail.some(p=>Math.hypot(Math.max(bounds.min.x-p.east,0,p.east-bounds.max.x),
+      Math.max(bounds.min.z+p.north,0,-p.north-bounds.max.z))<2.1))return;
+    if(kind==='ice'){
+      // Aim at the real asymmetric tip, not a stale fixture height.
+      const tip=new Vector3(.12,.5,-.035).applyMatrix4(part.matrix);
+      const view=surveyBR30RelicView(road.heightAt,trail,{east:tip.x,north:-tip.z,height:tip.y});
+      if(!view)return;
+      crystalViews.push({cluster,view});
+    }
     const entries = stamps.get(kind) ?? [];
     entries.push(part);
     stamps.set(kind, entries);
     placements.push({ kind, cluster, east, north, height });
+    if(solid)colliders.push({min:[bounds.min.x,base,bounds.min.z],max:bounds.max.toArray()});
+    return true;
   }
 
   // Cluster angles are chosen in the widest gaps between the spiral
@@ -167,42 +199,71 @@ export function buildCraterMidgroundS5(road: Ground,
     return chosen;
   }
 
-  // Four mid bands between the floor rings and the rim scatter. Each
-  // cluster: one anchor boulder at mid scale (reads from across the
-  // bowl), two or three companion rocks, a scorch patch under them,
-  // and — on the deeper bands — a timber trace or a cold glint.
+  // Sparse themed outcrops rather than uniform rings of decorative objects.
+  // Existing route, mound, story and work-face reservations are unchanged.
   const bands = [
-    { radius: 49, clusters: 8 },
-    { radius: 42, clusters: 9 },
-    { radius: 34, clusters: 9 },
-    { radius: 26, clusters: 7 },
-  ];
+    { radius: 47.5, clusters: 2, theme:'rail' },
+    { radius: 40.5, clusters: 3, theme:'crystal' },
+    { radius: 33.2, clusters: 3, theme:'timber' },
+    { radius: 27.8, clusters: 2, theme:'crystal' },
+  ] as const;
   bands.forEach((band, bandIndex) => {
     const random = seeded(0xC350 + bandIndex * 977);
     const angles = gapAngles(band.radius, band.clusters, random);
     for (let cluster = 0; cluster < band.clusters; cluster++) {
-      const name = 'mid-B' + (bandIndex + 1) + '-' + (cluster + 1);
+      const name = 'r30-'+band.theme+'-'+(bandIndex+1)+'-'+(cluster+1);
       // gapAngles selects in the world frame; place() works in the
       // fixture's local frame — the two differ by the anchor yaw.
       const angle = angles[cluster]! - yaw;
       const radius = band.radius + (random() - .5) * 3;
       const place = (kind: Piece, radialShift: number, tangent: number, scale: number, tilt = 0) => {
-        const r = radius + radialShift;
-        const localE = r * Math.sin(angle) + tangent * Math.cos(angle);
-        const localN = r * Math.cos(angle) - tangent * Math.sin(angle);
-        add(kind, name, originE + localE * c + localN * s,
-          originN + localN * c - localE * s, angle + yaw + random() * .6, scale, tilt);
+        // Survey a tiny neighborhood on the real slope, not a global random
+        // scattering pass. Keep the thematic pieces together; reject each
+        // full footprint if it crosses a path or story reservation.
+        const turn=angle+yaw+random()*.6;
+        for(const [dr,dt] of [[0,0],[.7,0],[-.7,0],[0,.65],[0,-.65],[1.25,.65],[-1.25,-.65],[1.25,-.65],[-1.25,.65]]){
+          const r=radius+radialShift+dr,t=tangent+dt;
+          const localE=r*Math.sin(angle)+t*Math.cos(angle);
+          const localN=r*Math.cos(angle)-t*Math.sin(angle);
+          if(add(kind,name,originE+localE*c+localN*s,
+            originN+localN*c-localE*s,turn,scale,tilt))return true;
+        }
+        return false;
       };
-      place('scorch', 0, 0, 1.6);
-      place('black-rock', .4, -.6, 2.3);
-      place('black-rock', -.5, .9, 1.15);
-      place('black-rock', .9, 1.6, .85);
-      place('black-rock', -1.6, -.5, .7);
-      if (cluster % 2 === 0) place('timber', -.9, -1.7, 1.05, .18);
-      if (bandIndex >= 2 && cluster % 3 === 0) place('ice', -1.4, 2.2, .75);
-      if (cluster % 4 === 3) place('rust', 1.5, -2, .9);
+      // Place the signature object first; loose rock is subordinate.
+      if(band.theme==='crystal'){
+        if(!place('ice',-.3,0,1.55,.13))continue;
+        place('ice',.2,-1.25,.82,-.24);
+        place('ice',.15,1.4,.65,.18);
+      }else if(band.theme==='rail'){
+        if(!place('rust',0,0,1.02,.65))continue;
+        place('rust',.25,1.45,.82,-.63);
+      }else{
+        if(!place('timber',0,0,.92,.06))continue;
+        place('rust',.25,1.45,.65,.60);
+      }
+      place('black-rock',.4,-1.45,1.35);
+      place('black-rock',-.4,1.65,1.05);
     }
   });
+
+  // Surveyed mining benches on the south haul and eastern cut. If the
+  // thematic search missed an industrial relic, try these local pads with
+  // the same footprint and grade checks; never override a reservation.
+  const workBenches = [
+    { kind:'rust', cluster:'r30-south-haul-rail', e:33.5, n:-36.5, tilt:.55, scale:.87 },
+    { kind:'timber', cluster:'r30-east-cut-timber', e:48.5, n:13.75, tilt:.03, scale:.88 },
+  ] as const;
+  for(const bench of workBenches){
+    if(placements.some(p=>p.kind===bench.kind))continue;
+    for(const [de,dn] of [[0,0],[.75,0],[-.75,0],[0,.75],[0,-.75],[1.5,.75],[-1.5,-.75]]){
+      const e=originE+bench.e+de,n=originN+bench.n+dn;
+      if(!add(bench.kind,bench.cluster,e,n,.84,bench.scale,bench.tilt))continue;
+      add(bench.kind,bench.cluster,e-.95,n+.7,1.24,.62,-.18);
+      add('black-rock',bench.cluster,e+1.05,n+.3,.7,.73);
+      break;
+    }
+  }
 
   const batches: string[] = [];
   for (const [kind, parts] of stamps) {
@@ -214,5 +275,8 @@ export function buildCraterMidgroundS5(road: Ground,
     group.add(batch);
     batches.push(kind);
   }
-  return { group, placements, batches };
+  const trestle=buildBR30BrokenTrestle(originE+14.75,originN-46.75,road.heightAt,trail,[...avoid,...placements],reserved,materials.timber,materials.rust);
+  if(trestle){group.add(trestle.group);colliders.push(...trestle.colliders);}
+  const trestleView=trestle?surveyBR30RelicView(road.heightAt,trail,trestle.target):undefined;
+  return { group, placements, batches, crystalViews, colliders, trestle, trestleView };
 }
