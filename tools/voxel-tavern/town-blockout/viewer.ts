@@ -4097,7 +4097,7 @@ renderer.setAnimationLoop(now => {
     const walkingTerrainCull=walking&&!boardingGround&&!plazaPhoto.active()&&!museumInspection.active&&!museumLaunch.active&&
       !previewOptions.has('pPerfCompare')&&!previewOptions.has('mTerrainCullOff');
     prepareTerrain(camera.position.x,-camera.position.z,false,false,visualSnowCover,walkingTerrainCull?camera:cullCamera,walkingTerrainCull);
-    productionRidge?.updateView(camera.position.x,-camera.position.z);
+    productionRidge?.updateView(camera.position.x,-camera.position.z,!previewOptions.has('mRidgeDistantOff'));
   }
   const terrainMs = profileTown ? performance.now() - detailStartedAt : 0;
   stampMarkers.visible = stampSites.some(site =>
