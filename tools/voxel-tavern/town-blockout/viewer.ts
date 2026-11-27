@@ -29,7 +29,8 @@ import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, wo
 import { addTerrainMeshes } from './terrain-mesh';
 import { createTerrainSupportContract } from './town-a-r30-terrain-contract';
 import { supportFootprintOverlaps } from './town-a-r30-oriented-support';
-import { createMainSummitBlock, mainSummitLayout, mainSummitSpec } from './main-summit-block';
+import { mainSummitLayout, mainSummitSpec } from './main-summit-block';
+import { buildR30TownSkyline } from './town-d2-r30-skyline';
 import { cloudTerminal, createZa22CloudRoute } from './town-za22-cloud-route';
 import { cableWakeEvent, createCableRepairHost } from './town-cable-repair-host';
 import { mountZa29GuardPost, type Za29GuardPostKind } from './town-za29-guard-scenes';
@@ -470,119 +471,17 @@ const landscape = new Group();
 const viewBatches = createTownViewBatches();
 const viewFaces = createTownViewFaces();
 scene.add(landscape, viewBatches.group);
-// Use the surveyed mountain alignment for the town's distant skyline.
-// Walkable surfaces stay in the mountain scene.
+// Same terrain source as the D2 walkable main summit, sampled at a distant LOD.
 const summitSkylineOrigin = new Vector3(300, 0, -676);
 const summitSkylinePeak = new Vector3(mainSummitLayout.summit.east, mainSummitSpec.summitHeight,
   -mainSummitLayout.summit.north).add(summitSkylineOrigin);
 const summitSkylinePeakNdc = new Vector3();
 let summitSkylineDraws = 0;
+const summitSkylineDayMaterial = new MeshLambertMaterial({side:DoubleSide,fog:false,vertexColors:true});
+const summitSkylineNightMaterial = new MeshBasicMaterial({side:DoubleSide,fog:false,vertexColors:true});
 const summitSkylineMesh: Mesh<BufferGeometry, MeshLambertMaterial | MeshBasicMaterial> =
-  createMainSummitBlock(mainSummitLayout, 347, 100).coarse;
-const summitSkylineDayMaterial = summitSkylineMesh.material;
-summitSkylineDayMaterial.side = DoubleSide;
-// The day material is fog:false already (main-summit-block), but without
-// vertexColors it discards the height tint and renders the whole massif
-// as one flat slab — the "low dark ridge" seen live. Enable the tint.
-summitSkylineDayMaterial.vertexColors = true;
-// Town eyes see the underside of the open heightfield. A height tint keeps
-// that backlit silhouette legible during snow nights and the ceremony dim.
-const summitSkylineGeometry = summitSkylineMesh.geometry;
-const surveyedPositions = summitSkylineGeometry.getAttribute('position');
-const surveyedIndices = summitSkylineGeometry.getIndex()!;
-const skylineNearNorth = 600;
-const skylineIndices: number[] = [];
-const skylineEdges = new Map<number, [number, number]>();
-function countSkylineEdge(from: number, to: number) {
-  const key = Math.min(from, to) * surveyedPositions.count + Math.max(from, to);
-  if (!skylineEdges.delete(key)) skylineEdges.set(key, [from, to]);
-}
-for (let triangle = 0; triangle < surveyedIndices.count; triangle += 3) {
-  const a = surveyedIndices.getX(triangle);
-  const b = surveyedIndices.getX(triangle + 1);
-  const c = surveyedIndices.getX(triangle + 2);
-  // Leave the near approach to the walkable mountain scene.
-  if ([a, b, c].some(index => -surveyedPositions.getZ(index) < skylineNearNorth)) continue;
-  skylineIndices.push(a, b, c);
-  countSkylineEdge(a, b);
-  countSkylineEdge(b, c);
-  countSkylineEdge(c, a);
-}
-
-// Splay the perimeter into a low foothill behind the forest. A vertical
-// skirt exposes a straight cliff and a floating toe from the forest road.
-const skylinePositions = Array.from(surveyedPositions.array);
-// ZA-30 takeover step 3 (追令二 · Everest grammar): reshape the smooth
-// cone into a steep dark pyramid with ONE sharp sub-peak (Lhotse) west
-// of a south col; the old east shoulder is demoted to a spur. Only the
-// skyline shell is reshaped — the walkable mountain domain is untouched.
-function everestHeight(east: number, north: number, existing: number): number {
-  const dSummit = Math.hypot((east - 50) / 700, (north - 1000) / 750);
-  const hMain = 150 + 650 * Math.pow(Math.max(0, 1 - dSummit), 1.6);
-  const dLhotse = Math.hypot((east + 380) / 330, (north - 940) / 360);
-  const hLhotse = 150 + 505 * Math.pow(Math.max(0, 1 - dLhotse), 2.2);
-  return Math.max(hMain, hLhotse, Math.min(existing, 330));
-}
-for (let vertex = 0; vertex < surveyedPositions.count; vertex++) {
-  const offset = vertex * 3;
-  skylinePositions[offset + 1] = everestHeight(
-    skylinePositions[offset]!, -skylinePositions[offset + 2]!, skylinePositions[offset + 1]!);
-}
-const skylineFeet = new Map<number, number>();
-const skylineFootSpread = 460;
-const skylineFootDepth = 170;
-const skylineFootHeight = -375;
-const skylineMidNorth = (skylineNearNorth + mainSummitSpec.depth - mainSummitSpec.gateLength) / 2;
-function skylineFoot(vertex: number) {
-  const existing = skylineFeet.get(vertex);
-  if (existing !== undefined) return existing;
-  const index = skylinePositions.length / 3;
-  const east = surveyedPositions.getX(vertex);
-  const north = -surveyedPositions.getZ(vertex);
-  const eastOffset = east * skylineFootSpread / (mainSummitSpec.width / 2);
-  const northOffset = (north - skylineMidNorth) * skylineFootDepth / (skylineMidNorth - skylineNearNorth);
-  skylinePositions.push(east + eastOffset, skylineFootHeight, -north - northOffset);
-  skylineFeet.set(vertex, index);
-  return index;
-}
-for (const [a, b] of skylineEdges.values()) {
-  const footA = skylineFoot(a);
-  const footB = skylineFoot(b);
-  skylineIndices.push(a, footA, footB, a, footB, b);
-}
-summitSkylineGeometry.setAttribute('position', new BufferAttribute(new Float32Array(skylinePositions), 3));
-summitSkylineGeometry.setIndex(skylineIndices);
-summitSkylineGeometry.deleteAttribute('normal');
-summitSkylineGeometry.computeVertexNormals();
-summitSkylineGeometry.computeBoundingBox();
-summitSkylineGeometry.computeBoundingSphere();
-
-const skylineColors = new Float32Array(skylinePositions.length);
-const skylineShadow = new Color('#2c3648');
-const skylineStone = new Color('#8a8378');
-const skylineSnow = new Color('#e8ecf0');
-const skylineTint = new Color();
-const skylineNormals = summitSkylineGeometry.getAttribute('normal');
-const { baseHeight, summitHeight } = mainSummitSpec;
-// Four-band material grammar (追令三) with the Everest summit rule
-// (追令二): foothill earth/stone, snowfield with rock on steep faces, an
-// ochre rock band across the waist, and a dark-rock pyramid above it —
-// snow survives only on ledges.
-const skylineEarth = new Color('#a98a56');
-const skylineOchre = new Color('#b08d4f');
-const skylineDarkRock = new Color('#35322e');
-for (let vertex = 0; vertex < skylineNormals.count; vertex++) {
-  const offset = vertex * 3;
-  const y = skylinePositions[offset + 1]!;
-  const steep = 1 - Math.max(0, skylineNormals.getY(vertex));
-  if (y < baseHeight + 60) skylineTint.copy(skylineEarth).lerp(skylineStone, Math.min(1, steep * 1.6));
-  else if (y < 420) skylineTint.copy(steep > .42 ? skylineStone : skylineSnow);
-  else if (y < 510) skylineTint.copy(steep > .5 ? skylineDarkRock : skylineOchre);
-  else skylineTint.copy(steep > .22 || skylineNormals.getY(vertex) <= .8 ? skylineDarkRock : skylineSnow);
-  skylineTint.toArray(skylineColors, offset);
-}
-summitSkylineGeometry.setAttribute('color', new BufferAttribute(skylineColors, 3));
-const summitSkylineNightMaterial = new MeshBasicMaterial({ side: DoubleSide, fog: false, vertexColors: true });
+  new Mesh(buildR30TownSkyline(),summitSkylineDayMaterial);
+const {summitHeight}=mainSummitSpec;
 const summitSkyline = new Group();
 summitSkyline.name = 'main-summit-world-skyline';
 summitSkyline.position.copy(summitSkylineOrigin);

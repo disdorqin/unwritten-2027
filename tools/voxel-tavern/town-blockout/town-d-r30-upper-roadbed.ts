@@ -18,6 +18,12 @@ export const middleEastExtendedControls=Object.freeze([...middleEastRoadControls
  {east:511,north:533},{east:514,north:542},{east:515,north:550},{east:519,north:560},
  {east:521,north:570},{east:522,north:580},{east:521,north:590}
 ]);
+// Separate south exit candidate. This is the first west-facing descent
+// section, not a finished base-station connection.
+export const middleSouthRoadControls=Object.freeze([
+ {east:440,north:516},{east:440,north:510},{east:434,north:510},{east:426,north:515},
+ {east:420,north:524}
+]);
 function smoothPath(controls:readonly EN[]){
  let path=[...controls];
  for(let i=0;i<3;i++){
