@@ -4251,17 +4251,17 @@ renderer.setAnimationLoop(now => {
   townLights.setDusk(ordinaryBellHours && skyFrame.lampLevel>0);
   townLights.setNightLevel(ordinaryBellHours ? Math.round(skyFrame.lampLevel*255)/255 : 1);
   const outdoorWeather = presence.getTownOutdoorWeather();
-  const local=outdoorWeather&&ordinaryBellHours?sampleSouthRegionalWeather(outdoorWeather,shedEast,shedNorth,shedFeet,false):undefined;
+  const regionalWeather=outdoorWeather&&ordinaryBellHours?sampleSouthRegionalWeather(outdoorWeather,shedEast,shedNorth,shedFeet,false):undefined;
   // Before the authoritative snapshot arrives use a fixed clear-snow baseline,
   // not the old independent 64-slot client schedule.
-  const weather = local?.weather ?? (ordinaryBellHours?townSnowWeatherAt(ceremonyState.now,'light'):townSnowWeatherForFrame(ceremonyState));
+  const weather = regionalWeather?.weather ?? (ordinaryBellHours?townSnowWeatherAt(ceremonyState.now,'light'):townSnowWeatherForFrame(ceremonyState));
   const effectiveSnowIntensity = weather.intensity;
   const roofSheltered = walking && !boardingGround && !homeReturn && !sheltered && !shedSheltered &&
     roofed(shedEast, shedNorth, shedFeet);
   snowfall.setIntensity(effectiveSnowIntensity);
-  snowfall.setOutdoorWind(local?.weather.windEast??0,local?.weather.windNorth??0,local?.weather.windStrength??0,local?.exposure??1);
+  snowfall.setOutdoorWind(regionalWeather?.weather.windEast??0,regionalWeather?.weather.windNorth??0,regionalWeather?.weather.windStrength??0,regionalWeather?.exposure??1);
   snowfall.update(camera, dt, walking, sheltered || shedSheltered || roofSheltered || Boolean(homeReturn));
-  snowfall.setDensityScale(applySouthWeatherPresentation(scene,weatherFog,weather,skyFrame,particleDensityScale(),local?.weather));
+  snowfall.setDensityScale(applySouthWeatherPresentation(scene,weatherFog,weather,skyFrame,particleDensityScale(),regionalWeather?.weather));
   // Weather changes the snow tint and cold exposure. The movement and gathering cover
   // still follows the existing ceremony intensity and night mode.
   visualSnowCover = ceremonyState.phase === 'ordinary'
