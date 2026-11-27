@@ -34,9 +34,16 @@ export type TownD2R30NorthWallStats = Readonly<{
   groundedContacts: number;
   floatingContacts: number;
   landmarks: number;
+  collisionBoxes: number;
   meshes: number;
   draws: number;
   triangles: number;
+}>;
+
+/** Solid obstacle in the D2 local frame: x=east, y=height, z=-north. */
+export type TownD2R30NorthWallBox = Readonly<{
+  min: [number, number, number];
+  max: [number, number, number];
 }>;
 
 export const townD2R30NorthWallSpec = Object.freeze({
@@ -48,7 +55,10 @@ export const townD2R30NorthWallSpec = Object.freeze({
   railHeight: 1.15,
   anchorRadius: .22,
   arrivalHeight: townD2R30Anchors.summit.height,
-  monument: Object.freeze({ east: 18, north: 1_002, height: 6.4 }),
+  // The canonical summit monument already stands at E50/N1000 and the cable
+  // arrival lanes run through E21-27/N1000-1005. This climb memorial is placed
+  // on the open west shoulder so it never duplicates or blocks either.
+  monument: Object.freeze({ east: -20, north: 1_000, height: 6.4 }),
   flag: Object.freeze({ east: 92, north: 1_006, poleHeight: 13, flagWidth: 9, flagHeight: 5 }),
   lookout: Object.freeze({ east: -46, north: 1_038, width: 11, depth: 9, railHeight: 1.1 }),
 });
@@ -91,10 +101,21 @@ export function createTownD2R30NorthWall(options: {
   const timber = makeMaterial('#6f5540');
   const brass = makeMaterial('#c9a45b');
   const ground = (east: number, north: number) => groundedHeight(east, north, heightAt);
+  // Solid landmark bodies are exported as AABBs so the production host can
+  // block the player before they walk through the obelisk, flag mast or the
+  // lookout rails. Hand-lines and rungs are intentionally NOT solid: they are
+  // the climb surface itself and blocking them would freeze the ascent.
+  const collisionBoxes: TownD2R30NorthWallBox[] = [];
+  const solidBox = (
+    east: number, north: number, y: number, width: number, height: number, depth: number,
+  ) => collisionBoxes.push(Object.freeze({
+    min: [east - width / 2, y - height / 2, -north - depth / 2] as [number, number, number],
+    max: [east + width / 2, y + height / 2, -north + depth / 2] as [number, number, number],
+  }));
 
   const addBox = (
     material: MeshLambertMaterial, east: number, north: number, y: number,
-    width: number, height: number, depth: number, name: string,
+    width: number, height: number, depth: number, name: string, solid = false,
   ) => {
     const geometry = new BoxGeometry(width, height, depth);
     geometry.translate(east, y, -north);
@@ -102,11 +123,12 @@ export function createTownD2R30NorthWall(options: {
     const mesh = new Mesh(geometry, material);
     mesh.name = name;
     group.add(mesh);
+    if (solid) solidBox(east, north, y, width, height, depth);
     return mesh;
   };
   const addCylinder = (
     material: MeshLambertMaterial, east: number, north: number, fromY: number, toY: number,
-    radius: number, name: string,
+    radius: number, name: string, solid = false,
   ) => {
     const height = toY - fromY;
     const geometry = new CylinderGeometry(radius, radius, height, 8);
@@ -115,6 +137,7 @@ export function createTownD2R30NorthWall(options: {
     const mesh = new Mesh(geometry, material);
     mesh.name = name;
     group.add(mesh);
+    if (solid) solidBox(east, north, (fromY + toY) / 2, radius * 2, height, radius * 2);
     return mesh;
   };
 
@@ -202,12 +225,14 @@ export function createTownD2R30NorthWall(options: {
   // ------------------------------------------------------------- monument
   const monument = spec.monument;
   const monumentGround = ground(monument.east, monument.north);
-  addBox(stone, monument.east, monument.north, monumentGround + .3, 7, .6, 7, 'town-d2-r30-monument-base');
-  addBox(stoneTrim, monument.east, monument.north, monumentGround + 1, 5, 1.4, 5, 'town-d2-r30-monument-plinth');
+  addBox(stone, monument.east, monument.north, monumentGround + .3, 7, .6, 7, 'town-d2-r30-monument-base', true);
+  addBox(stoneTrim, monument.east, monument.north, monumentGround + 1, 5, 1.4, 5, 'town-d2-r30-monument-plinth', true);
   addBox(stone, monument.east, monument.north, monumentGround + 1 + monument.height / 2,
-    2.4, monument.height, 2.4, 'town-d2-r30-monument-obelisk');
+    2.4, monument.height, 2.4, 'town-d2-r30-monument-obelisk', true);
   addBox(brass, monument.east, monument.north, monumentGround + monument.height + 1.4,
-    1.4, .6, 1.4, 'town-d2-r30-monument-cap');
+    1.4, .6, 1.4, 'town-d2-r30-monument-cap', true);
+  // The plaque is a face decoration at shin height; it shares the base box
+  // and must not create a second overlapping collision body.
   addBox(timber, monument.east, monument.north - 4.4, monumentGround + 1.1,
     2.6, 1.6, .3, 'town-d2-r30-monument-plaque');
 
@@ -215,13 +240,15 @@ export function createTownD2R30NorthWall(options: {
   const flag = spec.flag;
   const flagGround = ground(flag.east, flag.north);
   addCylinder(iron, flag.east, flag.north, flagGround, flagGround + flag.poleHeight,
-    .28, 'town-d2-r30-great-flag-pole');
+    .28, 'town-d2-r30-great-flag-pole', true);
+  // Finial and banner are above head height and are visual-only: blocking
+  // them would be a phantom wall under the cloth.
   addBox(brass, flag.east, flag.north, flagGround + flag.poleHeight + .3,
     .9, .6, .9, 'town-d2-r30-great-flag-finial');
   addBox(cloth, flag.east + flag.flagWidth / 2, flag.north,
     flagGround + flag.poleHeight - flag.flagHeight / 2 - .6,
     flag.flagWidth, flag.flagHeight, .18, 'town-d2-r30-great-flag-cloth');
-  addBox(stone, flag.east, flag.north, flagGround + .35, 2.6, .7, 2.6, 'town-d2-r30-great-flag-footing');
+  addBox(stone, flag.east, flag.north, flagGround + .35, 2.6, .7, 2.6, 'town-d2-r30-great-flag-footing', true);
 
   // --------------------------------------------------------------- lookout
   const lookout = spec.lookout;
@@ -234,18 +261,18 @@ export function createTownD2R30NorthWall(options: {
       const px = lookout.east + side * (lookout.width / 2 - .8);
       const pn = lookout.north + along * (lookout.depth / 2 - .8);
       const pierGround = ground(px, pn);
-      addCylinder(stone, px, pn, pierGround, deckY, .42, `town-d2-r30-lookout-pier-${side}-${along}`);
+      addCylinder(stone, px, pn, pierGround, deckY, .42, `town-d2-r30-lookout-pier-${side}-${along}`, true);
     }
     addBox(timber, lookout.east + side * (lookout.width / 2), lookout.north,
       deckY + lookout.railHeight / 2, .25, lookout.railHeight, lookout.depth,
-      `town-d2-r30-lookout-rail-side-${side}`);
+      `town-d2-r30-lookout-rail-side-${side}`, true);
   }
   addBox(timber, lookout.east, lookout.north - lookout.depth / 2,
     deckY + lookout.railHeight / 2, lookout.width, lookout.railHeight, .25,
-    'town-d2-r30-lookout-rail-north');
+    'town-d2-r30-lookout-rail-north', true);
   addBox(timber, lookout.east, lookout.north + lookout.depth / 2,
     deckY + lookout.railHeight / 2, lookout.width, lookout.railHeight, .25,
-    'town-d2-r30-lookout-rail-south');
+    'town-d2-r30-lookout-rail-south', true);
 
   let triangles = 0;
   for (const geometry of geometries) {
@@ -262,15 +289,34 @@ export function createTownD2R30NorthWall(options: {
     groundedContacts,
     floatingContacts,
     landmarks: 4 + 1 + 1 + 1, // climb pair + monument + flag + lookout
+    collisionBoxes: collisionBoxes.length,
     meshes: group.children.length,
     draws: group.children.length,
     triangles,
   });
 
   let disposed = false;
+  const MAX_FOOT_SLOPE = 55 * Math.PI / 180;
+  const blocked = (east: number, north: number, feet: number, radius: number, bodyHeight: number) => {
+    if (disposed) throw new Error('D2 north-wall module is disposed.');
+    if (![east, north, feet, radius, bodyHeight].every(Number.isFinite) || radius < 0 || bodyHeight < 0) {
+      throw new RangeError('D2 north-wall collision inputs must be finite.');
+    }
+    for (const box of collisionBoxes) {
+      if (feet + bodyHeight - .025 <= box.min[1] || feet + .025 >= box.max[1]) continue;
+      const dx = Math.max(box.min[0] - east, east - box.max[0], 0);
+      const dz = Math.max(box.min[2] + north, -north - box.max[2], 0);
+      if (Math.hypot(dx, dz) < radius) return true;
+    }
+    return false;
+  };
+
   return {
     group,
     climbAnchors: climbAnchors as readonly TownD2R30NorthWallAnchor[],
+    collisionBoxes: collisionBoxes as readonly TownD2R30NorthWallBox[],
+    blocked,
+    maxFootSlope: MAX_FOOT_SLOPE,
     stats: () => stats,
     setNight(value: boolean) {
       if (disposed) throw new Error('D2 north-wall module is disposed.');

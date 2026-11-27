@@ -60,6 +60,8 @@ export type TownD2R30Assembly = Readonly<{
   heightAt(east: number, north: number): number | undefined;
   collision: ReturnType<typeof createTownD2R30Collision>;
   ropeway: ReturnType<typeof createTownD2R30Ropeway> | undefined;
+  /** North-wall climb + landmark bodies, exposed so the production host can block them. */
+  northWall: ReturnType<typeof createTownD2R30NorthWall> | undefined;
   /** Advance streaming LOD around a LOCAL observer point; no-op in static mode. */
   update(east: number, north: number, nowMs?: number): void;
   setNight(value: boolean): void;
@@ -131,6 +133,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   let updateLod: ((east: number, north: number) => void) | undefined;
   let updateRopeway: ((nowMs: number) => void) | undefined;
   let ropeway: ReturnType<typeof createTownD2R30Ropeway> | undefined;
+  let northWall: ReturnType<typeof createTownD2R30NorthWall> | undefined;
   if (terrainMode === 'static') {
     const massif = createTownD2R30Massif({ arrivalHeight });
     terrainStats = () => massif.stats();
@@ -237,10 +240,11 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
     // D2-R2: the central-sector climb + four summit landmarks, on the same
     // height field as the massif; canonical hut/icefall/glide are the R07
     // package's job and are deliberately not duplicated here.
-    const northWall = createTownD2R30NorthWall({ heightAt, arrivalHeight });
-    children.push(northWall.group);
-    disposers.push(() => northWall.dispose());
-    nightHooks.push(value => northWall.setNight(value));
+    const wall = createTownD2R30NorthWall({ heightAt, arrivalHeight });
+    northWall = wall;
+    children.push(wall.group);
+    disposers.push(() => wall.dispose());
+    nightHooks.push(value => wall.setNight(value));
   }
 
   for (const child of children) group.add(child);
@@ -290,6 +294,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
     heightAt,
     collision,
     ropeway,
+    northWall,
     update(east: number, north: number, nowMs?: number) {
       if (disposed) return;
       if (!Number.isFinite(east) || !Number.isFinite(north)) {

@@ -101,6 +101,45 @@ test('D2-R2 invalid inputs fail closed instead of floating geometry', context =>
   assert.ok(wall.climbAnchors.length > 0);
 });
 
+test('D2-R3 landmark bodies block the player but the climb itself stays traversable', context => {
+  const wall = cleanup(context, createTownD2R30NorthWall());
+  const spec = townD2R30NorthWallSpec;
+  const at = (east: number, north: number) => sampleTownD2R30Height(east, north)!;
+  assert.ok(wall.stats().collisionBoxes >= 10, `too few solid bodies: ${wall.stats().collisionBoxes}`);
+
+  // The obelisk, mast and lookout rails are solid at standing height.
+  assert.equal(wall.blocked(spec.monument.east, spec.monument.north,
+    at(spec.monument.east, spec.monument.north), .27, 1.7), true, 'player walks through the monument');
+  assert.equal(wall.blocked(spec.flag.east, spec.flag.north,
+    at(spec.flag.east, spec.flag.north), .27, 1.7), true, 'player walks through the flag mast');
+  const railEast = spec.lookout.east + spec.lookout.width / 2;
+  const railNorth = spec.lookout.north;
+  const deck = at(spec.lookout.east, spec.lookout.north) + 2.6;
+  assert.equal(wall.blocked(railEast, railNorth, deck + .2, .27, 1.7), true, 'lookout rail is phantom');
+
+  // A climber on the real rung line must not be rejected by the landmark
+  // bodies, and an open summit point must remain passable.
+  for (const anchor of wall.climbAnchors) {
+    assert.equal(wall.blocked(anchor.east, anchor.north, anchor.ground, .27, 1.7), false,
+      `climb anchor ${anchor.id} is falsely blocked`);
+  }
+  assert.equal(wall.blocked(0, 1000, at(0, 1000), .27, 1.7), false, 'open summit falsely blocked');
+  assert.throws(() => wall.blocked(NaN, 1000, 800, .27, 1.7), RangeError);
+  wall.dispose();
+  assert.throws(() => wall.blocked(0, 1000, 800, .27, 1.7), Error);
+});
+
+test('D2-R3 production host consumes R30 terrain and landmark collision', context => {
+  const assembly = createTownD2R30Assembly({ includeNorthWall: true });
+  context.after(() => assembly.dispose());
+  assert.ok(assembly.northWall, 'production assembly did not expose the north-wall bodies');
+  const spec = townD2R30NorthWallSpec;
+  const ground = sampleTownD2R30Height(spec.monument.east, spec.monument.north)!;
+  // Unit-level body check plus the host-level slope gate it wraps.
+  assert.equal(assembly.northWall.blocked(spec.monument.east, spec.monument.north, ground, .27, 1.7), true);
+  assert.equal(assembly.northWall.blocked(0, 1000, sampleTownD2R30Height(0, 1000)!, .27, 1.7), false);
+});
+
 test('D2-R2 the assembly and the production mount actually carry the north wall', context => {
   const assembly = createTownD2R30Assembly({ includeNorthWall: true });
   context.after(() => assembly.dispose());
