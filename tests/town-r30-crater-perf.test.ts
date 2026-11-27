@@ -72,6 +72,11 @@ test('closed wall certificate from actual cut terrain excludes hidden exterior o
  o.restore();assert.equal(hidden.layers.mask,1);
  camera.position.y=ring.minHeight+1;camera.updateMatrixWorld(true);assert.equal(o.begin(camera),0);
  const geometry=mesh.geometry.clone();geometry.setIndex([]);const broken=new Mesh(geometry,mesh.material);assert.equal(certifyCraterWallRing(broken,east,north),undefined);
+ camera.position.copy(eye);camera.updateMatrixWorld(true);assert.equal(o.begin(camera),1);o.restore();
+ const original=mesh.geometry;mesh.geometry=geometry;assert.equal(o.begin(camera),0);assert.equal(o.ring,undefined);assert.equal(hidden.layers.mask,1);
+ mesh.geometry=original;assert.equal(o.begin(camera),1);o.restore();
+ const material=mesh.material as MeshStandardMaterial;material.transparent=true;assert.equal(o.begin(camera),0);assert.equal(hidden.layers.mask,1);material.transparent=false;
+ original.index!.needsUpdate=true;assert.equal(o.begin(camera),0);assert.equal(o.ring,undefined);o.refresh([exterior]);assert.ok(o.prepare());assert.equal(o.begin(camera),1);o.restore();
 });
 test('small static instance sources cull only when every instance is wall-hidden, invalidate cache and revoke roots',()=>{
  const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
