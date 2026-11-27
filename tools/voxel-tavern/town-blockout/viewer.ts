@@ -184,6 +184,8 @@ import { createTownSnowField } from './town-snow-field';
 import { createPlazaInformationActivity } from './plaza-information-activity';
 import { createPlazaSnowSupply, type PlazaSnowSupplySite } from './plaza-snow-supply';
 import { advanceWeatherCover, townSnowWeatherForFrame } from './town-weather';
+import { createTownNightWeatherSky } from './town-night-weather-sky';
+import { townNightWeatherDayMs, townNightWeatherDefaultDawnEpoch } from '../../../src/shared/town-night-weather-cycle';
 import { createSledRide, createSledWallCollider } from './sled-ride';
 import { createTownSledVisuals } from './sled-visuals';
 import { resolveTownSledRacks } from './town-sled-racks';
@@ -911,23 +913,26 @@ snowButton.onclick = () => {
 };
 const timeOfDay = element<HTMLButtonElement>('lighting');
 let nightMode = true;
-let clockNightApplied: boolean | null = null;
 let ceremonyDim = 1;
-function applyCeremonyLighting() {
-  ambient.intensity = (nightMode ? .96 : 1.35) * ceremonyDim;
-  sun.intensity = (nightMode ? 1.23 : 1.7) * ceremonyDim;
+const nightSky = createTownNightWeatherSky({scene,ambient,sun,fog:weatherFog});
+// Keep the last authoritative calendar origin through reconnects. No second
+// clock: all samples still come from the existing Presence server clock.
+let weatherDawnEpoch = presence.getTownWeatherDawnEpoch() ?? townNightWeatherDefaultDawnEpoch;
+const localLightingReview = previewOptions.has('profile') && ['127.0.0.1','localhost'].includes(location.hostname);
+let reviewNight: boolean | undefined;
+function updateNightSky() {
+  weatherDawnEpoch = presence.getTownWeatherDawnEpoch() ?? weatherDawnEpoch;
+  const now = localLightingReview && reviewNight !== undefined
+    ? weatherDawnEpoch + (reviewNight ? .78 : .30) * townNightWeatherDayMs
+    : presence.serverNow();
+  return nightSky.update(now,weatherDawnEpoch,{dim:ceremonyDim});
 }
 function setNight(night: boolean) {
   nightMode = night;
   summitSkylineMesh.material = night ? summitSkylineNightMaterial : summitSkylineDayMaterial;
   summitHutLight.visible = night;
   cloudRoute.setNight(night);
-  const sky = night ? '#182642' : '#acc2dd';
-  (scene.background as Color).set(sky);
-  scene.fog!.color.set(sky);
-  ambient.color.set(night ? '#83a9e7' : '#e4edff');
-  sun.color.set(night ? '#a6c0fd' : '#ffe6c5');
-  applyCeremonyLighting();
+  // Background, light colour/intensity and fog are owned by the continuous sky rig.
   timeOfDay.textContent = night ? '雪夜' : '白昼';
   timeOfDay.setAttribute('aria-pressed', String(night));
   scenery.setNight(night);
@@ -935,8 +940,10 @@ function setNight(night: boolean) {
   productionRidge?.setNight(night);
   frontRidgeCloudBand.setNight(night);
 }
-setNight(true);
-timeOfDay.onclick = () => setNight(timeOfDay.getAttribute('aria-pressed') !== 'true');
+setNight(updateNightSky().nightSide);
+timeOfDay.disabled = !localLightingReview;
+timeOfDay.title = localLightingReview ? '本地验收：昼夜机位切换' : '昼夜随服务器时钟连续变化';
+if(localLightingReview)timeOfDay.onclick = () => {reviewNight=!nightMode;setNight(updateNightSky().nightSide);};
 
 const prepareTerrain = addTerrainMeshes(scene, grid, productionRidge.ownsCell);
 
@@ -1506,7 +1513,8 @@ let towerDusk = false;
 function setTowerDusk(enabled: boolean) {
   if (towerDusk === enabled) return;
   towerDusk = enabled;
-  townLights.setDusk(enabled);
+  // The clocktower keeps its wall-clock cues; automatic street lamps now
+  // follow the single game-day lighting rig instead.
   setClocktowerDuskLighting(tower, enabled);
 }
 const mascotFrustum = new Frustum();
@@ -1979,7 +1987,6 @@ const ceremony = createCeremonyDirector(ceremonyClock, {
   onSnowIntensity: snowCover.setIntensity,
   onDim(level) {
     ceremonyDim = level;
-    applyCeremonyLighting();
     townLights.setCeremonyDim(level);
   },
 });
@@ -2993,7 +3000,9 @@ function visitSelectedDestination() {
   return true;
 }
 rehearse.onclick = () => {
-  if (!festival.active() && festival.start()) setNight(true);
+  if (!festival.active() && festival.start() && localLightingReview) {
+    reviewNight=true;setNight(updateNightSky().nightSide);
+  }
   if (townSettings.open) townSettings.close();
   renderer.domElement.focus({ preventScroll: true });
 };
@@ -4208,27 +4217,24 @@ renderer.setAnimationLoop(now => {
   const duckMusic = ceremonyElapsed !== undefined && ceremonyElapsed >= -10 && ceremonyElapsed < 30;
   festival.update(dt, { listener: camera.position, ceremonyElapsed, musicLevel: townBgm.setDuck(duckMusic ? .3 : 1) });
   const weatherStartedAt = profileTown ? performance.now() : 0;
-  // Day/night visuals follow the server night-window clock (one game day = 10
-  // minutes: 6 daylight, 4 night). phase 'day' is the only daylight phase;
-  // 'awaiting-beacon' and 'night-window' are night. Applied on phase change
-  // only, so the ceremony can still force night within a phase. The lighting
-  // button remains a manual override until the next phase change.
+  const skyFrame = updateNightSky();
+  // Preserve the existing night-window authority for discrete gameplay.
+  // Its ordinary cycle uses the same epoch and .6 boundary as the sky.
   const nightWindowState = presence.getTownNightWindow();
-  if (nightWindowState) {
-    const clockNight = nightWindowState.phase !== 'day';
-    if (clockNight !== clockNightApplied) {
-      clockNightApplied = clockNight;
-      setNight(clockNight);
-    }
-  }
+  const clockNight = localLightingReview && reviewNight !== undefined ? skyFrame.nightSide
+    : nightWindowState ? nightWindowState.phase !== 'day' : skyFrame.nightSide;
+  if(clockNight!==nightMode)setNight(clockNight);
+  // Do not attenuate scripted ceremony lamp bands by the ordinary day cycle.
+  townLights.setDusk(ordinaryBellHours && skyFrame.lampLevel>0);
+  townLights.setNightLevel(ordinaryBellHours ? Math.round(skyFrame.lampLevel*255)/255 : 1);
   const weather = townSnowWeatherForFrame(ceremonyState);
   const effectiveSnowIntensity = weather.intensity;
   const roofSheltered = walking && !boardingGround && !homeReturn && !sheltered && !shedSheltered &&
     roofed(shedEast, shedNorth, shedFeet);
   snowfall.setIntensity(effectiveSnowIntensity);
   snowfall.update(camera, dt, walking, sheltered || shedSheltered || roofSheltered || Boolean(homeReturn));
-  weatherFog.near = weather.fogNear;
-  weatherFog.far = weather.fogFar;
+  weatherFog.near = weather.fogNear * skyFrame.fogNearScale;
+  weatherFog.far = weather.fogFar * skyFrame.fogFarScale;
   // Weather changes the snow tint and cold exposure. The movement and gathering cover
   // still follows the existing ceremony intensity and night mode.
   visualSnowCover = ceremonyState.phase === 'ordinary'
