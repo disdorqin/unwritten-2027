@@ -101,6 +101,8 @@ export function createTownD2R30NorthWall(options: {
   const cloth = makeMaterial('#b5463e');
   const timber = makeMaterial('#6f5540');
   const brass = makeMaterial('#c9a45b');
+  const rockShade = makeMaterial('#6f6860');
+  const clothShade = makeMaterial('#8c332c');
   const ground = (east: number, north: number) => groundedHeight(east, north, heightAt);
   // Solid landmark bodies are exported as AABBs so the production host can
   // block the player before they walk through the obelisk, flag mast or the
@@ -257,15 +259,51 @@ export function createTownD2R30NorthWall(options: {
   const ledgeRock = new InstancedMesh(
     new BoxGeometry(1.1, .7, 1.1), stone, ledgeAnchors.length * 2);
   ledgeRock.name = 'town-d2-r30-climb-ledge-rock';
+  // R5 rock-ledge texture: a tread course on the ledge top, a stone rim on
+  // the front edge, a root buttress sunk into the rock face, loose boulders
+  // beyond the ledge ends and a fixed anchor bolt on the rock behind each
+  // ledge, so the rest ledges read as carved rock instead of floating slabs.
+  const ledgeTreads = new InstancedMesh(
+    new BoxGeometry(spec.rungHalfWidth * 2 + 2, .12, 1.8), stoneTrim, ledgeAnchors.length);
+  ledgeTreads.name = 'town-d2-r30-climb-ledge-treads';
+  const ledgeRims = new InstancedMesh(
+    new BoxGeometry(spec.rungHalfWidth * 2 + 2.4, .5, .7), stoneTrim, ledgeAnchors.length);
+  ledgeRims.name = 'town-d2-r30-climb-ledge-rims';
+  const ledgeButtresses = new InstancedMesh(
+    new BoxGeometry(spec.rungHalfWidth * 2 + 2.4, 2.4, 1.6), stone, ledgeAnchors.length);
+  ledgeButtresses.name = 'town-d2-r30-climb-ledge-buttresses';
+  const ledgeBoulders = new InstancedMesh(
+    new BoxGeometry(1.3, 1, 1.3), rockShade, ledgeAnchors.length * 2);
+  ledgeBoulders.name = 'town-d2-r30-climb-ledge-boulders';
+  const anchorBolts = new InstancedMesh(
+    new BoxGeometry(.55, .3, .55), iron, ledgeAnchors.length);
+  anchorBolts.name = 'town-d2-r30-climb-anchor-bolts';
   geometries.add(ledgeSlabs.geometry);
   geometries.add(ledgePads.geometry);
   geometries.add(ledgeRock.geometry);
+  geometries.add(ledgeTreads.geometry);
+  geometries.add(ledgeRims.geometry);
+  geometries.add(ledgeButtresses.geometry);
+  geometries.add(ledgeBoulders.geometry);
+  geometries.add(anchorBolts.geometry);
   ledgeAnchors.forEach((anchor, index) => {
     rungDummy.position.set(anchor.east, anchor.ground + .1, -anchor.north);
     rungDummy.rotation.set(0, 0, 0);
     rungDummy.scale.set(1, 1, 1);
     rungDummy.updateMatrix();
     ledgeSlabs.setMatrixAt(index, rungDummy.matrix);
+    rungDummy.position.set(anchor.east, anchor.ground + .42, -anchor.north + .15);
+    rungDummy.updateMatrix();
+    ledgeTreads.setMatrixAt(index, rungDummy.matrix);
+    rungDummy.position.set(anchor.east, anchor.ground + .15, -anchor.north + 1.35);
+    rungDummy.updateMatrix();
+    ledgeRims.setMatrixAt(index, rungDummy.matrix);
+    rungDummy.position.set(anchor.east, anchor.ground - .8, -anchor.north + .3);
+    rungDummy.updateMatrix();
+    ledgeButtresses.setMatrixAt(index, rungDummy.matrix);
+    rungDummy.position.set(anchor.east, anchor.ground + .52, -anchor.north - 1.45);
+    rungDummy.updateMatrix();
+    anchorBolts.setMatrixAt(index, rungDummy.matrix);
     for (const side of [-1, 1] as const) {
       rungDummy.position.set(anchor.east + side * spec.rungHalfWidth, anchor.ground + .55, -anchor.north);
       rungDummy.updateMatrix();
@@ -274,12 +312,22 @@ export function createTownD2R30NorthWall(options: {
         anchor.east + side * (spec.rungHalfWidth + 1.4), anchor.ground + .25, -anchor.north);
       rungDummy.updateMatrix();
       ledgeRock.setMatrixAt(index * 2 + (side === -1 ? 0 : 1), rungDummy.matrix);
+      rungDummy.position.set(
+        anchor.east + side * (spec.rungHalfWidth + 2.6), anchor.ground + .4, -anchor.north + .8);
+      rungDummy.updateMatrix();
+      ledgeBoulders.setMatrixAt(index * 2 + (side === -1 ? 0 : 1), rungDummy.matrix);
     }
   });
   ledgeSlabs.instanceMatrix.needsUpdate = true;
   ledgePads.instanceMatrix.needsUpdate = true;
   ledgeRock.instanceMatrix.needsUpdate = true;
-  group.add(ledgeSlabs, ledgePads, ledgeRock);
+  ledgeTreads.instanceMatrix.needsUpdate = true;
+  ledgeRims.instanceMatrix.needsUpdate = true;
+  ledgeButtresses.instanceMatrix.needsUpdate = true;
+  ledgeBoulders.instanceMatrix.needsUpdate = true;
+  anchorBolts.instanceMatrix.needsUpdate = true;
+  group.add(ledgeSlabs, ledgePads, ledgeRock, ledgeTreads, ledgeRims,
+    ledgeButtresses, ledgeBoulders, anchorBolts);
   if (handlines.length) {
     const handMesh = new InstancedMesh(new BoxGeometry(.14, 1, .14), cable, handlines.length);
     handMesh.name = 'town-d2-r30-climb-handlines';
@@ -296,6 +344,32 @@ export function createTownD2R30NorthWall(options: {
     rungDummy.scale.set(1, 1, 1);
     geometries.add(handMesh.geometry);
     group.add(handMesh);
+  }
+  // R5: a continuous rail-height stringer links every post pair along the
+  // climb direction, so the armature reads as one beam running up the rock
+  // face instead of loose verticals between the sloping hand-lines.
+  if (steps > 1) {
+    const stringers = new InstancedMesh(new BoxGeometry(.18, .16, 1), iron, steps - 1);
+    stringers.name = 'town-d2-r30-climb-stringers';
+    const stringerUp = new Vector3(0, 1, 0);
+    for (let index = 0; index + 1 < climbAnchors.length; index++) {
+      const cur = climbAnchors[index]!, next = climbAnchors[index + 1]!;
+      const span = new Vector3(
+        next.east - cur.east, next.ground - cur.ground, -(next.north - cur.north));
+      const length = span.length();
+      rungDummy.position.set(
+        (cur.east + next.east) / 2,
+        (cur.ground + next.ground) / 2 + spec.railHeight - .14,
+        -(cur.north + next.north) / 2);
+      rungDummy.quaternion.setFromUnitVectors(stringerUp, span.clone().normalize());
+      rungDummy.scale.set(1, 1, length);
+      rungDummy.updateMatrix();
+      stringers.setMatrixAt(index, rungDummy.matrix);
+    }
+    stringers.instanceMatrix.needsUpdate = true;
+    rungDummy.scale.set(1, 1, 1);
+    geometries.add(stringers.geometry);
+    group.add(stringers);
   }
   // Base and top landings tie the ladder into the real walkable surface.
   for (const anchor of [climbAnchors[0]!, climbAnchors[climbAnchors.length - 1]!]) {
@@ -327,6 +401,31 @@ export function createTownD2R30NorthWall(options: {
     'town-d2-r30-monument-step');
   addBox(brass, monument.east, monument.north, monumentGround + 1 + monument.height / 2,
     2.8, .45, 2.8, 'town-d2-r30-monument-band');
+  // R5 monument texture: carved corner edges and two masonry courses give
+  // the obelisk real stone texture, a brass frame sets off the plaque, and a
+  // projecting moulding closes the plinth top.
+  for (let i = 0; i < 4; i++) {
+    const sideE = i < 2 ? -1 : 1;
+    const sideN = i % 2 === 0 ? -1 : 1;
+    addBox(stoneTrim, monument.east + sideE * 1.2, monument.north + sideN * 1.2,
+      monumentGround + 1 + monument.height / 2, .26, monument.height, .26,
+      `town-d2-r30-monument-edge-${i}`);
+  }
+  for (let i = 0; i < 2; i++) {
+    addBox(stoneTrim, monument.east, monument.north,
+      monumentGround + 1 + monument.height * (i === 0 ? .32 : .7),
+      2.62, .18, 2.62, `town-d2-r30-monument-course-${i}`);
+  }
+  addBox(brass, monument.east, monument.north - 4.62, monumentGround + 1.1,
+    3.0, 1.9, .14, 'town-d2-r30-monument-plaque-frame');
+  for (const along of [-1, 1] as const) {
+    addBox(stoneTrim, monument.east, monument.north + along * 2.5,
+      monumentGround + 1.72, 5.6, .3, .6, `town-d2-r30-monument-moulding-side-${along}`);
+  }
+  for (const side of [-1, 1] as const) {
+    addBox(stoneTrim, monument.east + side * 2.5, monument.north,
+      monumentGround + 1.72, .6, .3, 5.6, `town-d2-r30-monument-moulding-end-${side}`);
+  }
 
   // ------------------------------------------------------------------ flag
   const flag = spec.flag;
@@ -345,6 +444,23 @@ export function createTownD2R30NorthWall(options: {
   // tie the mast top to the summit rock so the pole reads as real structure.
   addBox(iron, flag.east + flag.flagWidth / 2, flag.north,
     flagGround + flag.poleHeight - .6, flag.flagWidth, .14, .14, 'town-d2-r30-great-flag-rod');
+  // R5 flag structure: iron mast bands every few metres, an iron collar at
+  // the footing, cloth folds and a weighted hem give the banner real
+  // texture instead of a flat rectangle on a bare pole.
+  for (let i = 0; i < 4; i++) {
+    addBox(iron, flag.east, flag.north, flagGround + 2.6 + i * 2.4,
+      1.2, .16, 1.2, `town-d2-r30-great-flag-ring-${i}`);
+  }
+  addBox(iron, flag.east, flag.north, flagGround + .95, 1.7, .5, 1.7,
+    'town-d2-r30-great-flag-collar');
+  const clothY = flagGround + flag.poleHeight - flag.flagHeight / 2 - .6;
+  for (let i = 0; i < 4; i++) {
+    addBox(clothShade, flag.east + flag.flagWidth / 2 + (i - 1.5) * 2, flag.north,
+      clothY, .5, flag.flagHeight, .22, `town-d2-r30-great-flag-fold-${i}`);
+  }
+  addBox(clothShade, flag.east + flag.flagWidth / 2, flag.north,
+    clothY - flag.flagHeight / 2 + .25, flag.flagWidth + .4, .5, .26,
+    'town-d2-r30-great-flag-hem');
   const flagUp = new Vector3(0, 1, 0);
   const riggingMesh = new InstancedMesh(new BoxGeometry(.1, 1, .1), cable, 2);
   riggingMesh.name = 'town-d2-r30-great-flag-rigging';
@@ -408,6 +524,43 @@ export function createTownD2R30NorthWall(options: {
   for (const plank of [-3, -1, 1, 3]) {
     addBox(timber, lookout.east, lookout.north + plank, deckY + .26,
       lookout.width - 1.2, .12, 1.2, `town-d2-r30-lookout-plank-${plank}`);
+  }
+  // R5 lookout structure: balusters fill every rail span so the deck reads
+  // as a real balustrade, deck joists structure the slab, and a stone base
+  // ties each pier leg to the summit rock.
+  const balusters = new InstancedMesh(new BoxGeometry(.12, .58, .12), timber, 23);
+  balusters.name = 'town-d2-r30-lookout-balusters';
+  geometries.add(balusters.geometry);
+  const balusterY = deckY + .81;
+  let baluster = 0;
+  for (const side of [-1, 1] as const) {
+    for (let k = 0; k < 7; k++) {
+      const along = (k / 6) * (lookout.depth - 1.2) - (lookout.depth - 1.2) / 2;
+      rungDummy.position.set(lookout.east + side * (lookout.width / 2), balusterY,
+        -(lookout.north + along));
+      rungDummy.updateMatrix();
+      balusters.setMatrixAt(baluster++, rungDummy.matrix);
+    }
+  }
+  for (let k = 0; k < 9; k++) {
+    const along = (k / 8) * (lookout.width - 1.2) - (lookout.width - 1.2) / 2;
+    rungDummy.position.set(lookout.east + along, balusterY, -(lookout.north - lookout.depth / 2));
+    rungDummy.updateMatrix();
+    balusters.setMatrixAt(baluster++, rungDummy.matrix);
+  }
+  balusters.instanceMatrix.needsUpdate = true;
+  group.add(balusters);
+  for (let i = 0; i < 4; i++) {
+    addBox(timber, lookout.east + (i - 1.5) * 2.8, lookout.north,
+      deckY - .22, .28, .22, lookout.depth - 1.2, `town-d2-r30-lookout-joist-${i}`);
+  }
+  for (const side of [-1, 1] as const) {
+    for (const along of [-1, 1] as const) {
+      const px = lookout.east + side * (lookout.width / 2 - .8);
+      const pn = lookout.north + along * (lookout.depth / 2 - .8);
+      addBox(stone, px, pn, ground(px, pn) + .35, 1.5, .5, 1.5,
+        `town-d2-r30-lookout-pier-base-${side}-${along}`);
+    }
   }
 
   let triangles = 0;

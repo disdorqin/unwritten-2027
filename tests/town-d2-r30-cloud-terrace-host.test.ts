@@ -44,6 +44,12 @@ function cloudMesh(host: Host) {
   return mesh;
 }
 
+function mistMesh(host: Host) {
+  const mesh = meshesOf(host).find(candidate => candidate.name === 'town-d2-r30-cloud-mist-contour');
+  assert.ok(mesh instanceof InstancedMesh);
+  return mesh;
+}
+
 function eachInstance(mesh: InstancedMesh, visit: (position: Vector3, scale: Vector3, index: number) => void) {
   const matrix = new Matrix4(), position = new Vector3(), scale = new Vector3(), rotation = new Object3D();
   for (let index = 0; index < mesh.count; index++) {
@@ -101,21 +107,24 @@ test('D2 R30 host composes cloud wall, existing outer ring and two instanced low
     assert.equal(host.group.name, 'town-d2-r30-cloud-terrace-host');
     assert.deepEqual(host.group.children.map(child => child.name), [
       'town-d2-main-summit-cloud-wall', 'town-d2-cloud-terrace-outer-ring', 'town-d2-r30-lowland-forest',
+      'town-d2-r30-cloud-mist-contour',
     ]);
     const stats = host.stats();
     assert.equal(host.stats(), stats);
-    assert.equal(stats.groups.length, 3);
+    assert.equal(stats.groups.length, 4);
     assert.equal(stats.cloud.meshes, 1);
     assert.equal(stats.outerRing.meshes, 5);
     assert.equal(stats.outerRing.instances, 716, 'the reviewed outer ring must remain unchanged');
     assert.equal(stats.forest.meshes, 2);
     assert.ok(stats.forest.pines > 0 && stats.forest.rocks > 0);
     assert.ok(stats.forest.clusters > 0);
-    assert.equal(stats.meshes, 8);
-    assert.equal(stats.draws, 8);
+    assert.equal(stats.mist.meshes, 1);
+    assert.equal(stats.meshes, 9);
+    assert.equal(stats.draws, 9);
     assert.equal(stats.drawCalls, stats.draws);
     assert.ok(stats.draws <= TOWN_D2_R30_CLOUD_TERRACE_HOST_MAX_DRAWS);
-    assert.equal(stats.instances, stats.cloud.instances + stats.outerRing.instances + stats.forest.instances);
+    assert.equal(stats.instances, stats.cloud.instances + stats.outerRing.instances +
+      stats.forest.instances + stats.mist.instances);
     const meshes = meshesOf(host);
     assert.equal(meshes.length, stats.meshes);
     assert.ok(meshes.every(mesh => mesh instanceof InstancedMesh));
@@ -236,7 +245,7 @@ test('arrivalHeight reaches both samplers and steep or high ground rejects fores
 test('night tinting is reversible for cloud and forest without changing opacity or instance transforms', () => {
   const host = createTownD2R30CloudTerraceHost();
   try {
-    const tinted = [cloudMesh(host), ...forestMeshes(host)];
+    const tinted = [cloudMesh(host), ...forestMeshes(host), mistMesh(host)];
     const day = instanceColors(tinted);
     const matrices = tinted.map(mesh => new Float32Array(mesh.instanceMatrix.array));
     host.setNight(true);

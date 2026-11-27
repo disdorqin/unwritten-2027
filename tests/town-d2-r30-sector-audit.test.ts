@@ -1,9 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  resolveTownD2SectorAudit, townD2SectorAt, townD2SectorContract,
+  auditTownD2R30Seams, resolveTownD2SectorAudit, townD2SectorAt, townD2SectorContract,
 } from '../tools/voxel-tavern/town-blockout/town-d2-r30-sector-audit';
 import { mainSummitBounds } from '../tools/voxel-tavern/town-blockout/main-summit-block';
+import { createTownD2R30Collision } from '../tools/voxel-tavern/town-blockout/town-d2-r30-collision';
 
 test('D2-R3 four-sector ownership puts the central massif in D2, seams read-only', () => {
   assert.equal(townD2SectorAt(0, 100), 'A');
@@ -37,7 +38,7 @@ test('D2-R3 the published sector bounds match the rebalance order', () => {
 
 test('D2-R3 all host checks pass so total control can mount the four sectors', () => {
   const report = resolveTownD2SectorAudit();
-  assert.equal(report.version, 'd2-sector-audit-1.0');
+  assert.equal(report.version, 'd2-sector-audit-1.1');
   for (const [name, passed] of Object.entries(report.checks)) {
     assert.equal(passed, true, `host check ${name} failed`);
   }
@@ -47,6 +48,53 @@ test('D2-R3 all host checks pass so total control can mount the four sectors', (
   assert.ok(report.measurements.returnPoints >= 1000);
   assert.equal(report.measurements.unsupportedReturn, 0);
   assert.equal(report.measurements.skylineMinimumY, 130);
+});
+
+test('D2-R3 the 32 m seam bands carry one canonical surface, collision and mesh', () => {
+  const seams = auditTownD2R30Seams();
+  assert.equal(seams.version, 'd2-seam-audit-1.0');
+  assert.equal(seams.readyForSeamAssembly, true);
+  assert.deepEqual(Object.keys(seams.bands).sort(), ['east', 'north', 'west']);
+  const north = seams.bands.north;
+  assert.equal(north.seam, 480);
+  assert.equal(north.axis, 'east');
+  assert.equal(north.width, 32);
+  assert.deepEqual({ ...north.extent }, { min: -1100, max: 1100 });
+  assert.equal(seams.bands.west.seam, -300);
+  assert.equal(seams.bands.east.seam, 300);
+  for (const band of [seams.bands.north, seams.bands.west, seams.bands.east]) {
+    assert.ok(band.lineSamples > 100, `${band.seam} seam has too few stations`);
+    assert.equal(band.unsupported, 0, `${band.seam} seam has unsupported stations`);
+    assert.ok(band.maxCrossDrift < 1e-4, `${band.seam} seam collision drifted off the canonical field`);
+    assert.ok(band.maxLineStep < 24, `${band.seam} seam carries a shear wall`);
+  }
+  // No hole anywhere in the band: vertices, collision cells and both meshes.
+  assert.ok(seams.measurements.bandVertices > 2000);
+  assert.equal(seams.measurements.bandUnsupported, 0);
+  assert.ok(seams.measurements.seamCollisionCells > 3000);
+  assert.equal(seams.measurements.seamCollisionHoles, 0);
+  assert.ok(seams.measurements.nearBandVertices > 0);
+  assert.ok(seams.measurements.farBandVertices > 0);
+  assert.ok(seams.measurements.seamRenderDrift < 1e-4);
+  assert.equal(seams.checks.seamElevationAligned, true);
+  assert.equal(seams.checks.seamCollisionCovered, true);
+  assert.equal(seams.checks.seamRenderConsistent, true);
+  assert.ok(Object.isFrozen(seams));
+  assert.ok(Object.isFrozen(seams.checks));
+});
+
+test('D2-R3 the seam audit consumes the caller host collision and leaves it alive', () => {
+  const collision = createTownD2R30Collision({});
+  try {
+    const seams = auditTownD2R30Seams({ collision });
+    assert.equal(seams.checks.seamCollisionCovered, true);
+    // The host owns the grid: the audit must not dispose what it did not build.
+    assert.equal(collision.stats().disposed, false);
+    assert.notEqual(collision.surfaceAt(0, 1000), undefined);
+    assert.ok(seams.measurements.seamCollisionDrift < 1e-4);
+  } finally {
+    collision.dispose();
+  }
 });
 
 test('D2-R3 the audit is a frozen report, not a live mount', () => {

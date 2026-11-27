@@ -1,6 +1,6 @@
 import {
-  BoxGeometry, Color, Group, InstancedMesh, IcosahedronGeometry, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial,
-  Object3D, PointLight, type Material,
+  BufferGeometry, Color, Float32BufferAttribute, Group, InstancedMesh, IcosahedronGeometry, Matrix4, Mesh, MeshBasicMaterial, MeshLambertMaterial,
+  Object3D, PointLight, Quaternion, type Material, Vector3,
 } from 'three';
 
 /**
@@ -101,6 +101,52 @@ export const townD2R30NightTintFactor = Object.freeze({ r: 0.50, g: 0.56, b: 0.6
 
 const tintCache = new WeakMap<Material, { colour: Color; emissive: Color }>();
 
+function addLampBox(positions: number[], colors: number[], tint: Color,
+  centre: readonly [number, number, number], size: readonly [number, number, number]) {
+  const [cx, cy, cz] = centre, [width, height, depth] = size;
+  const x0 = cx - width / 2, x1 = cx + width / 2;
+  const y0 = cy - height / 2, y1 = cy + height / 2;
+  const z0 = cz - depth / 2, z1 = cz + depth / 2;
+  const faces = [
+    [[x0, y0, z1], [x1, y0, z1], [x1, y1, z1], [x0, y0, z1], [x1, y1, z1], [x0, y1, z1]],
+    [[x1, y0, z0], [x0, y0, z0], [x0, y1, z0], [x1, y0, z0], [x0, y1, z0], [x1, y1, z0]],
+    [[x1, y0, z1], [x1, y0, z0], [x1, y1, z0], [x1, y0, z1], [x1, y1, z0], [x1, y1, z1]],
+    [[x0, y0, z0], [x0, y0, z1], [x0, y1, z1], [x0, y0, z0], [x0, y1, z1], [x0, y1, z0]],
+    [[x0, y1, z1], [x1, y1, z1], [x1, y1, z0], [x0, y1, z1], [x1, y1, z0], [x0, y1, z0]],
+    [[x0, y0, z0], [x1, y0, z0], [x1, y0, z1], [x0, y0, z0], [x1, y0, z1], [x0, y0, z1]],
+  ] as const;
+  for (const face of faces) for (const point of face) {
+    positions.push(...point);
+    colors.push(tint.r, tint.g, tint.b);
+  }
+}
+
+/**
+ * R4: a real lamp-post silhouette — stone base, tapered shaft, cross-arm
+ * bracket and head block — normalized to the same 1.55 m vertical footprint
+ * the fixture-height contract already uses, so instance grounding and the
+ * lamp-height contract are unchanged while the post reads as hardware.
+ */
+function createLampPostGeometry() {
+  const positions: number[] = [], colors: number[] = [];
+  const base = new Color('#3a342e');
+  const shaft = new Color(POST_COLOUR);
+  const head = new Color('#2c2722');
+  addLampBox(positions, colors, base, [0, -.595, 0], [.28, .36, .28]);
+  addLampBox(positions, colors, shaft, [0, -.115, 0], [.16, .6, .16]);
+  addLampBox(positions, colors, shaft, [0, .39, 0], [.13, .4, .13]);
+  addLampBox(positions, colors, shaft, [0, .52, 0], [.36, .07, .07]);
+  addLampBox(positions, colors, head, [0, .685, 0], [.18, .18, .18]);
+  const geometry = new BufferGeometry();
+  geometry.name = 'd2-r30-trail-lamp-post';
+  geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
+  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
 /**
  * Darkens every lit (Lambert) surface under `root` for the night, and
  * restores the exact daytime colour on the way back. Emissive bodies are
@@ -165,14 +211,15 @@ export function createTownD2R30NightLights(options: TownD2R30NightLightsOptions 
     }
   }
 
-  const postShape = new BoxGeometry(.13, 1.55, .13);
-  // R4: a rounded icosahedral lamp core reads as a real glowing bulb at night
-  // rather than a flat box, while keeping the same .17 m footprint so the
-  // fixture footprint and lamp-height contract are unchanged.
+  // R4: the post is a real multi-segment silhouette (stone base, tapered
+  // shaft, cross-arm, head) while the core stays a rounded icosahedral bulb
+  // with a per-lamp scale and warmth hierarchy, so the chain reads with
+  // lighting depth instead of a flat repeated fixture.
+  const postShape = createLampPostGeometry();
   const coreShape = new IcosahedronGeometry(.085, 0);
   disposers.push(() => postShape.dispose());
   disposers.push(() => coreShape.dispose());
-  const postMaterial = new MeshLambertMaterial({ color: POST_COLOUR });
+  const postMaterial = new MeshLambertMaterial({ color: '#ffffff', vertexColors: true });
   const coreMaterial = new MeshBasicMaterial({ color: CORE_DAY });
   // The lamp hardware must not be dimmed by the night tint: it owns its own
   // day/night colours and the emissive core must stay bright at night.
@@ -186,12 +233,31 @@ export function createTownD2R30NightLights(options: TownD2R30NightLightsOptions 
   const coreMesh = new InstancedMesh(coreShape, coreMaterial, Math.max(1, posts.length));
   coreMesh.name = 'town-d2-r30-trail-lamp-cores';
   const matrix = new Matrix4();
+  // Key lamps (the climb's first, last and every fourth post) carry a larger
+  // core and a fuller warmth so the chain has a visible lighting hierarchy;
+  // the rest stay at the base bulb size. The fixture footprint and the
+  // lamp-height contract are unchanged.
+  const coreScales = posts.map((_, index) =>
+    (index === 0 || index === posts.length - 1 || index % 4 === 0) ? .105 : .085);
+  const corePosition = new Vector3(), coreScale = new Vector3(), coreQuat = new Quaternion();
   posts.forEach((post, index) => {
     matrix.makeTranslation(post.east, post.height + .775, -post.north);
     postMesh.setMatrixAt(index, matrix);
-    matrix.makeTranslation(post.east, post.height + 1.56, -post.north);
+    corePosition.set(post.east, post.height + 1.56, -post.north);
+    coreScale.set(coreScales[index]!, coreScales[index]!, coreScales[index]!);
+    matrix.compose(corePosition, coreQuat, coreScale);
     coreMesh.setMatrixAt(index, matrix);
   });
+  // Per-lamp core warmth: key lamps keep the full night colour, the rest sit
+  // slightly dimmer and cooler so the chain reads with depth at night. The
+  // instance colour is constant; applyLook only swaps the material colour, so
+  // the day/night restore stays exact.
+  const coreKeyTint = new Color('#ffffff');
+  const coreNormalTint = new Color(.86, .86, .92);
+  for (let index = 0; index < posts.length; index++) {
+    coreMesh.setColorAt(index, coreScales[index]! > .1 ? coreKeyTint : coreNormalTint);
+  }
+  coreMesh.instanceColor!.needsUpdate = true;
   postMesh.count = posts.length;
   coreMesh.count = posts.length;
   postMesh.instanceMatrix.needsUpdate = true;

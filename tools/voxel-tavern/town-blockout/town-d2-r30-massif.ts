@@ -70,16 +70,34 @@ function surfaceColor(east: number, north: number, arrivalHeight: number, target
   const band = townD2R30SurfaceBand(east, north, arrivalHeight);
   const slope = 1 - normal[1];
   target.copy(palette[band]);
+  // Ridge/gully relief mask: mirrors the height field's ridge term so colour
+  // shading follows the actual carved ridge spine and gully channels rather
+  // than an independent pattern. Brightens crests, sinks gullies.
+  const ridgePhase = Math.sin(east * .006 + north * .0035) * Math.sin(north * .004 - east * .0015);
+  const ridgeMask = clamp01(.5 + ridgePhase * .5);
   if (band === 'alpine-rock') {
     // Strata read as layered rock bands that follow the relief, not a uniform
     // sine stripe: fractal noise at two scales breaks repetition along the ridge.
     const belt = smoothstep(415, 445, height) * (1 - smoothstep(525, 565, height)) *
       (1 - smoothstep(.38, .72, slope));
     target.lerp(ochre, belt * .82);
+    // Dark fissure lines: a high-frequency noise threshold cuts cracks through
+    // the rock strata so the ridge reads as fractured stone, not solid block.
+    const fissure = Math.pow(Math.max(0, fractalNoise(east * .12, north * .09) - .68), 2.5);
+    target.multiplyScalar(1 - fissure * .16);
     const strata = .88 + .12 * (fractalNoise(east * .04, north * .03) - .5) * 2;
     target.multiplyScalar(strata);
   } else if (band === 'glacier') {
-    // M08: read ice as layered, slope-facing surfaces rather than a flat fill.
+    // Flow striations: stripes aligned to the downhill gradient so the ice
+    // tongue reads as flowing along its own valley, not a flat fill. The
+    // cross-flow axis is perpendicular to the gradient derived from the
+    // surface normal (z = -north, so north = -z).
+    const gradLen = Math.hypot(normal[0], normal[2]);
+    const flowEast = gradLen > 1e-4 ? normal[0] / gradLen : 0;
+    const flowNorth = gradLen > 1e-4 ? -normal[2] / gradLen : 1;
+    const acrossFlow = east * -flowNorth + north * flowEast;
+    const striation = Math.sin(acrossFlow * .08 + fractalNoise(east * .03, north * .02) * 4);
+    target.multiplyScalar(1 - smoothstep(.3, .7, striation) * .08);
     // Crevasses cut dark lines along the flow; shallow shelves catch a cold
     // blue highlight. Fractal noise makes the ice follow the terrain, not repeat.
     const flow = fractalNoise(east * .05, north * .035);
@@ -97,7 +115,14 @@ function surfaceColor(east: number, north: number, arrivalHeight: number, target
     const windward = clamp01(.5 + .5 * Math.sin(east * .012 - north * .009)) * (.7 + .3 * aspect);
     const exposure = smoothstep(.12, .42, slope) * windward;
     target.lerp(palette['alpine-rock'], exposure * .26);
+    // Patchy rock outcrops: a high-frequency noise threshold reveals rock
+    // through the snow in irregular patches, so the cap reads as snow draped
+    // over rock, not a uniform white dome.
+    const outcrop = Math.pow(Math.max(0, fractalNoise(east * .09, north * .07) - .72), 2.0);
+    target.lerp(palette['alpine-rock'], outcrop * .3 * (1 - exposure));
   }
+  // Ridge/gully shading across every band: crests catch light, gullies sink.
+  target.multiplyScalar(1 + (ridgeMask - .5) * .06);
   // Fine grain: fractal noise at two scales so the surface never reads as a
   // flat repeated tint, with slope-based darkening for relief shading.
   const grain = .94 + .06 * (fractalNoise(east * .17, north * .11) - .5) * 2;
