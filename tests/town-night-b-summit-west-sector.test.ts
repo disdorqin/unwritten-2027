@@ -6,7 +6,7 @@ import {sampleTownD2R30Height} from '../tools/voxel-tavern/town-blockout/town-d2
 import {composeNightBWestHeight,buildNightBWestReliefPreview} from '../tools/voxel-tavern/town-blockout/town-night-b-summit-west-relief';
 import {createTownD2R30Collision} from '../tools/voxel-tavern/town-blockout/town-d2-r30-collision';
 import {createNightBWestSector} from '../tools/voxel-tavern/town-blockout/town-night-b-summit-west-sector';
-import {buildMainSummitTrailCut} from '../tools/voxel-tavern/town-blockout/main-summit-trail-cut';
+import {cutNightBWestTerrain} from '../tools/voxel-tavern/town-blockout/town-night-b-summit-west-cut';
 import {Mesh} from 'three';
 test('west sector combines final raster support, road and pavilion with no entrance obstruction',t=>{
  const block=createMainSummitBlock(mainSummitLayout,347,100);t.after(block.dispose);
@@ -20,6 +20,6 @@ test('west sector combines final raster support, road and pavilion with no entra
  assert.equal(s.cutTread.getIndex()!.count,s.road.stats.treadTris*3);
  const relief=buildNightBWestReliefPreview(sampleTownD2R30Height);t.after(relief.dispose);
  let refined=0,lowered=0;
- for(const m of relief.group.children as Mesh[]){if(!m.geometry.boundingBox)m.geometry.computeBoundingBox();if(!m.geometry.boundingBox!.intersectsBox(s.cutTread.boundingBox!))continue;const result=buildMainSummitTrailCut(m.geometry,s.cutTread);refined+=result.refinedTriangles;lowered+=result.loweredVertices;result.geometry.dispose();}
+ for(const m of relief.group.children as Mesh[]){if(!m.geometry.boundingBox)m.geometry.computeBoundingBox();if(!m.geometry.boundingBox!.intersectsBox(s.cutTread.boundingBox!))continue;const result=cutNightBWestTerrain(m.geometry,s.cutTread);refined+=result.refinedTriangles;lowered+=result.loweredVertices;if(result.geometry!==m.geometry){const color=result.geometry.getAttribute('color');assert.equal(color.count,result.geometry.getAttribute('position').count);assert.ok([...color.array].every(Number.isFinite));result.geometry.dispose();}}
  assert.ok(refined>0&&lowered>0);console.log(JSON.stringify({pavilion:p,road:s.road.stats,dressing:s.dressing.stats,refined,lowered}));
 });
