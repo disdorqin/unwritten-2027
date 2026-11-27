@@ -29,16 +29,29 @@ export function mountSouthForest(heightAt:SouthGround,reserved:SouthProtection){
   const yaw=hash(e,n,4)*Math.PI;
   if(q<density&&slope<.58){
    const c=cell(x,z),tall=5.5+hash(e,n,5)*5.5,diam=.4+hash(e,n,6)*.35;
-   // Buried trunk bottom and raised canopy allow players beneath branches.
-   const base=Math.min(h,...hs.map(v=>v!))-.12;
-   add(c,x,z,(base+h+tall)*.5,diam,h+tall-base,diam,yaw,'#665143');
-   for(let tier=0;tier<4;tier++){
-    const r=tall*(.235-tier*.044),cy=h+2.8+tier*(tall-2.8)/4;
-    const thick=(tall-2.8)/4+.22;
-    add(c,x,z,cy+thick*.5,r*2,thick,r*2,yaw+tier*.15,palette[Math.floor(hash(e,n,7+tier)*4)]!);
-    add(c,x,z,cy+thick-.02,r*1.68,.19,r*1.65,yaw+tier*.15,snow[Math.floor(hash(e,n,12+tier)*3)]!);
+   // Raise the lowest bough above the surveyed uphill canopy footprint,
+   // not merely above the trunk centre. Maintain the same instance budget.
+   const envelope=tall*.235*Math.SQRT2*1.12+.35;
+   const heights=[h,...hs.map(v=>v!)];
+   for(let i=0;i<8;i++){
+    const angle=i*Math.PI/4,foot=heightAt(x+Math.cos(angle)*envelope,z+Math.sin(angle)*envelope);
+    if(foot!==undefined&&Number.isFinite(foot))heights.push(foot);
    }
-   push(c,{east:x,north:z,bottom:base,top:h+tall,radius:diam*Math.SQRT2/2,kind:'pine'});trees++;
+   const base=Math.min(h,...hs.map(v=>v!))-.12,canopyStart=Math.max(h+2.8,Math.max(...heights)+2.1);
+   const top=Math.max(h+tall,canopyStart+1.6),tierHeight=(top-canopyStart)/4;
+   add(c,x,z,(base+top)*.5,diam,top-base,diam,yaw,'#665143');
+   // Unequal branch shelves and off-centre snow caps give each spruce a
+   // recognisable stepped silhouette without spawning separate meshes.
+   for(let tier=0;tier<4;tier++){
+    const r=tall*(.235-tier*.044),cy=canopyStart+tier*tierHeight;
+    const thick=tierHeight+.22,angle=yaw+tier*.15;
+    const lean=(hash(e,n,30+tier)-.5)*r*.24,shift=(hash(e,n,40+tier)-.5)*r*.24;
+    const width=r*(1.76+.24*hash(e,n,50+tier)),depth=r*(1.68+.30*hash(e,n,60+tier));
+    add(c,x+lean,z+shift,cy+thick*.5,width,thick,depth,angle,palette[Math.floor(hash(e,n,7+tier)*4)]!);
+    const sx=(hash(e,n,70+tier)-.5)*width*.14,sz=(hash(e,n,80+tier)-.5)*depth*.14;
+    add(c,x+lean+sx,z+shift+sz,cy+thick-.02,width*.76,.19,depth*.73,angle,snow[Math.floor(hash(e,n,12+tier)*3)]!);
+   }
+   push(c,{east:x,north:z,bottom:base,top,radius:diam*Math.SQRT2/2,kind:'pine'});trees++;
   }else if(q<.23&&slope<.82){
    const c=cell(x,z),w=1.2+hash(e,n,16)*2.2,tall=.6+hash(e,n,17)*1.15;
    const base=Math.min(h,...hs.map(v=>v!))-.12;
