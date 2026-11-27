@@ -846,7 +846,10 @@ scene.add(railExtension.group);
 westMountainGround=mountWestMountainGround(ensureWestCraterRoad().heightAt,{west:craterWestSurvey.west,east:0,south:ensureWestCraterRoad().terrainBoundary.renderNorth,north:worldBounds.depth},westMountainTrackProtection([railExtension.samples,railExtension.narrowSamples,railExtension.sidingSamples]));
 scene.add(westMountainGround.group);
 productionRidge=mountProductionRidge(scene,grid,{loop:railway.route.points,branch:railExtension.samples,
-  rearConnectorCandidate:previewOptions.has('mRearConnector')&&['127.0.0.1','localhost'].includes(location.hostname)});
+  // The normal candidate entry now attempts the independently audited four-road
+  // field. mountProductionRidge retains the original three roads if its
+  // protected-vertex / grade / cable audit rejects the connector.
+  rearConnectorCandidate:!(previewOptions.has('mRearConnectorOff')&&['127.0.0.1','localhost'].includes(location.hostname))});
 if(westSurfacePort){
   westSurfaceAssembly=westSurfacePort.attach(ensureWestCraterRoad(),railExtension);
   try{assertAR30SurfaceAttachment(ensureWestCraterRoad(),railExtension);}
