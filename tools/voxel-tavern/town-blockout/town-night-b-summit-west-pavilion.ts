@@ -53,8 +53,10 @@ export function createNightBWestPavilion(site:WestPavilionSite,heightAt:Height){
  floors.push({min:[-1,-.24,-offset],max:[1,0,-depth/2]});
  for(const z of [-offset+.8,zmid,-depth/2-.8]){for(const x of [-.67,.67])pier(x,z);}
  for(const x of [-.94,.94]){
-  box('walkway-rail',x,.95,zmid,.10,.12,span-.12,wood,true);
-  for(let i=0;i<5;i++)box('walkway-post',x,.48,-offset+.35+i*(span-.7)/4,.13,.96,.13,wood,true);
+  // Leave the original 3m road unobstructed where the bridge meets it.
+  const railStart=-offset+1.85,railEnd=-depth/2-.10;
+  box('walkway-rail',x,.95,(railStart+railEnd)/2,.10,.12,railEnd-railStart,wood,true);
+  for(let i=0;i<4;i++)box('walkway-post',x,.48,railStart+(railEnd-railStart)*i/3,.13,.96,.13,wood,true);
  }
  const local=(e:number,n:number,h:number)=>{const dx=e-site.east,dn=n-site.north;return new Vector3(dx*Math.cos(yaw)+dn*Math.sin(yaw),h-site.height,dx*Math.sin(yaw)-dn*Math.cos(yaw))};
  let disposed=false;

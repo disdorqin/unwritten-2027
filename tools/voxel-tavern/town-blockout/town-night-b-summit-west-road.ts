@@ -1,6 +1,6 @@
 import {BufferGeometry,DoubleSide,Float32BufferAttribute,Group,Mesh,MeshLambertMaterial} from 'three';
 import {mainSummitTrailSpec,type MainSummitTrailPoint as Point} from './main-summit-trail';
-import {nightBWestBounds as bounds,inNightBWest} from './town-night-b-summit-west-relief';
+import {nightBWestBounds as bounds,inNightBWest,type WestReserve} from './town-night-b-summit-west-relief';
 type Height=(e:number,n:number)=>number|undefined;
 type Tri=readonly [Point,Point,Point];
 const half=mainSummitTrailSpec.width/2,lift=.07,cell=32;
@@ -28,12 +28,14 @@ type Batch={tread:number[];stone:number[];rail:number[]};
  * western part of the global tread/support mesh, not a second route. The host
  * must cut the canonical terrain against the tread geometry and retain the
  * same neighbour seam before admitting public walking. */
-export function createNightBWestRoad(points:readonly Point[],groundAt:Height){
+export function createNightBWestRoad(points:readonly Point[],groundAt:Height,guardReserved:WestReserve=()=>false){
  if(points.length<3||points.some(p=>![p.east,p.north,p.height].every(Number.isFinite)))throw new RangeError('west road requires surveyed finite centreline');
  const group=new Group();group.name='night-b-west-road-replacement';
  const roadMaterial=new MeshLambertMaterial({color:'#b4b9b8',side:DoubleSide}),stoneMaterial=new MeshLambertMaterial({color:'#747d82',side:DoubleSide}),railMaterial=new MeshLambertMaterial({color:'#73523c',side:DoubleSide});
  const triCells=new Map<string,Tri[]>(),routeCells=new Map<string,Segment[]>(),railCells=new Map<string,Segment[]>();
  const batches=new Map<string,Batch>(),geos:BufferGeometry[]=[];
+ const cutPoints:number[]=[],cutIndices:number[]=[],cutVertices=new Map<string,number>();
+ function cutVertex(p:Point){const x=Math.fround(p.east),y=Math.fround(p.height),z=Math.fround(-p.north),key=x+','+y+','+z;let i=cutVertices.get(key);if(i===undefined){i=cutPoints.length/3;cutVertices.set(key,i);cutPoints.push(x,y,z);}return i;}
  const batch=(p:Point)=>{const key=Math.floor(p.east/96)+','+Math.floor(p.north/96);let b=batches.get(key);if(!b){b={tread:[],stone:[],rail:[]};batches.set(key,b)}return b};
  const boundsOf=(t:readonly Point[])=>({w:Math.min(...t.map(p=>p.east)),e:Math.max(...t.map(p=>p.east)),s:Math.min(...t.map(p=>p.north)),n:Math.max(...t.map(p=>p.north))});
  const insert=<T>(map:Map<string,T[]>,o:T,pts:readonly Point[],pad=0)=>{const b=boundsOf(pts);for(const key of gridKeys(b.w-pad,b.e+pad,b.s-pad,b.n+pad)){const list=map.get(key)??[];list.push(o);map.set(key,list)}};
@@ -44,7 +46,7 @@ export function createNightBWestRoad(points:readonly Point[],groundAt:Height){
    const t=[poly[0]!,poly[i]!,poly[i+1]!] as const;
    const ax=t[1].east-t[0].east,ay=t[1].height-t[0].height,az=t[1].north-t[0].north,bx=t[2].east-t[0].east,by=t[2].height-t[0].height,bz=t[2].north-t[0].north;
    if(Math.hypot(ay*bz-az*by,az*bx-ax*bz,ax*by-ay*bx)<1e-8)continue;
-   if(family==='tread'){treadTris++;insert(triCells,t,t);}else if(family==='stone')stoneTris++;else railTris++;
+   if(family==='tread'){treadTris++;insert(triCells,t,t);cutIndices.push(...t.map(cutVertex));}else if(family==='stone')stoneTris++;else railTris++;
    batch(t[0])[family].push(...t.flatMap(p=>[p.east,p.height,-p.north]));
   }
  }
@@ -82,7 +84,7 @@ export function createNightBWestRoad(points:readonly Point[],groundAt:Height){
    quad(l,cap0,r,cap1,'stone');quad(cap0,{...o0,height:Math.min(y0-.2,cap0.height-.18)},cap1,{...o1,height:Math.min(y1-.2,cap1.height-.18)},'stone');
    // Guard only real exposed drop, outside the 32 m coordination band.
    const interior=(p:Point)=>p.east>bounds.west+32&&p.east<bounds.east-32&&p.north>bounds.south+32&&p.north<bounds.north-32;
-   if(Math.min(l.height-g0,r.height-g1)>.9&&interior(o0)&&interior(o1)){
+   if(Math.min(l.height-g0,r.height-g1)>.9&&interior(o0)&&interior(o1)&&!guardReserved((o0.east+o1.east)/2,(o0.north+o1.north)/2,span/2+.2)){
     const up=(p:Point,h:number)=>({...p,height:p.height+h});
     const ia=a.edge(side,half+.24),ib=b.edge(side,half+.24),oa=a.edge(side,half+.38),ob=b.edge(side,half+.38);
     for(const h of [.48,.98]){
@@ -98,6 +100,7 @@ export function createNightBWestRoad(points:readonly Point[],groundAt:Height){
   if(!b[family].length)continue;const g=new BufferGeometry();g.setAttribute('position',new Float32BufferAttribute(b[family],3));g.computeVertexNormals();g.computeBoundingSphere();geos.push(g);
   const m=new Mesh(g,family==='tread'?roadMaterial:family==='stone'?stoneMaterial:railMaterial);m.name='west-road-'+key+'-'+family;group.add(m);
  }
+ const cutTread=new BufferGeometry();cutTread.setAttribute('position',new Float32BufferAttribute(cutPoints,3));cutTread.setIndex(cutIndices);cutTread.computeVertexNormals();cutTread.computeBoundingBox();cutTread.computeBoundingSphere();geos.push(cutTread);
  function surfaceAt(e:number,n:number){
   if(!inNightBWest(e,n)&&!(e===bounds.east&&n>=bounds.south&&n<=bounds.north))return;
   let h:number|undefined;const p={east:e,north:n,height:0};
@@ -108,8 +111,9 @@ export function createNightBWestRoad(points:readonly Point[],groundAt:Height){
  }
  function reserved(e:number,n:number,r:number){if(![e,n,r].every(Number.isFinite)||r<0)return false;return gridKeys(e-r,e+r,n-r,n+r).some(key=>(routeCells.get(key)??[]).some(s=>projectedDistance(s.a,s.b,e,n)<=half+r));}
  function blocked(e:number,n:number,h:number,r=.27,body=1.8){
+  if(![e,n,h,r,body].every(Number.isFinite)||r<0||body<=0)return false;
   return gridKeys(e-r,e+r,n-r,n+r).some(key=>(railCells.get(key)??[]).some(s=>{if(projectedDistance(s.a,s.b,e,n)>r+.15)return false;const de=s.b.east-s.a.east,dn=s.b.north-s.a.north,t=Math.max(0,Math.min(1,((e-s.a.east)*de+(n-s.a.north)*dn)/(de*de+dn*dn)));const y=lerp(s.a.height,s.b.height,t);return h+body>y&&h<y+1.03}));
  }
  let disposed=false;
- return {group,surfaceAt,reserved,blocked,stats:Object.freeze({length,maxGrade,maxCut,maxFill,railMetres,sections,treadTris,stoneTris,railTris,draws:group.children.length,triangles:treadTris+stoneTris+railTris}),dispose(){if(disposed)return;disposed=true;group.removeFromParent();group.clear();geos.forEach(g=>g.dispose());roadMaterial.dispose();stoneMaterial.dispose();railMaterial.dispose();triCells.clear();routeCells.clear();railCells.clear();}};
+ return {group,cutTread,surfaceAt,reserved,blocked,stats:Object.freeze({length,maxGrade,maxCut,maxFill,railMetres,sections,treadTris,stoneTris,railTris,draws:group.children.length,triangles:treadTris+stoneTris+railTris}),dispose(){if(disposed)return;disposed=true;group.removeFromParent();group.clear();geos.forEach(g=>g.dispose());roadMaterial.dispose();stoneMaterial.dispose();railMaterial.dispose();triCells.clear();routeCells.clear();railCells.clear();}};
 }
