@@ -94,6 +94,13 @@ test('small static instance sources cull only when every instance is wall-hidden
  m.setMatrixAt(2,matrix.makeTranslation(east+12,0,-north));m.instanceMatrix.needsUpdate=true;assert.equal(o.begin(camera),0);
  m.count=2;assert.equal(o.begin(camera),1);o.restore();other.add(m);scene.updateMatrixWorld(true);assert.equal(o.begin(camera),0);assert.equal(m.layers.mask,1);
 });
+test('angular wall exit bound dominates old certificate and every sampled real sphere ray',()=>{
+ const ring={east:0,north:0,radius:52,inradius:51.9,minHeight:8,segments:64};let newly=0,checked=0,seed=42;const rand=()=>{seed=(Math.imul(seed,1664525)+1013904223)>>>0;return seed/4294967296;};
+ for(let i=0;i<1200;i++){const a=rand()*Math.PI*2,e=rand()*50,eye=new Vector3(e*Math.cos(a),-24+rand()*24,e*Math.sin(a));const b=rand()*Math.PI*2,d=70+rand()*220,r=1+rand()*12,s=new Sphere(new Vector3(d*Math.cos(b),rand()*100,d*Math.sin(b)),r);
+  const old=sphereBehindCraterWall({...ring,tight:false},eye,s),tight=sphereBehindCraterWall(ring,eye,s);assert.ok(!old||tight);if(!tight)continue;if(!old)newly++;
+  for(let j=0;j<24;j++){const z=rand()*2-1,t=rand()*Math.PI*2,w=Math.sqrt(1-z*z),p=s.center.clone().add(new Vector3(w*Math.cos(t),z,w*Math.sin(t)).multiplyScalar(r));const dx=p.x-eye.x,dz=p.z-eye.z,A=dx*dx+dz*dz,B=eye.x*dx+eye.z*dz,C=eye.x*eye.x+eye.z*eye.z-ring.radius**2;const f=(-B+Math.sqrt(B*B-A*C))/A;assert.ok(f>0&&f<1);assert.ok(eye.y+(p.y-eye.y)*f<ring.minHeight-.35);checked++;}
+ }assert.ok(newly>50);assert.ok(checked>1000);
+});
 test('underground gate preserves unknown, opened and transition states',()=>{
  const u=new Group();
  const state={known:true,inMine:false,transition:false,coverOpen:false};
