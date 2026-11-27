@@ -60,4 +60,3 @@ for(const [step,cap,grade,penalty] of [[6,7.5,.105,4],[6,7.8,.11,10],[6,7.8,.11,
 }
 if(!best)throw Error('No certified rear traverse');
 console.log('FINAL',JSON.stringify(best));
-
