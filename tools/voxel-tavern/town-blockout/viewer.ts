@@ -1434,7 +1434,7 @@ museumVisit.dialog.addEventListener('close', () => {
 function museumPosition() {
   return { x: (x - museumEast) / museumHorizontalScale, y: ground - museumHeight, z: (museumNorth - n) / museumHorizontalScale };
 }
-museumMapButton.onclick = () => museumVisit.openMap(museumPosition());
+museumMapButton.onclick = () => {if(townSettings.open)townSettings.close();museumVisit.openMap(museumPosition());};
 
 function openPlace(title: string, description: string) {
   pauseForPanel();
@@ -1511,7 +1511,7 @@ const activityContext: Omit<TownActivityContext, 'announce'> = {
   },
 };
 const tavernDrinkEffects = createTavernDrinkEffects();
-tavernDrinkEffects.mountSettings(element('town-panel-controls'));
+tavernDrinkEffects.mountSettings(element('town-advanced-controls'));
 const townBgm = createTownBgm(festival.getAudioContext);
 const townSettings = element<HTMLDialogElement>('town-settings');
 const regionalWeatherStatus=document.createElement('output');
@@ -1528,7 +1528,9 @@ function showRegionalWeather(text:string){
  regionalWeatherStatus.textContent=text;
 }
 element('town-panel-toggle').addEventListener('click', cancelSledBrake);
-townBgm.mountControls(element('town-panel-controls'), element<HTMLButtonElement>('town-music-toggle'));
+townBgm.mountControls(element('town-advanced-controls'), element<HTMLButtonElement>('town-music-toggle'));
+townSettings.addEventListener('town-menu-opening',pauseForPanel);
+townSettings.addEventListener('close',()=>{if(!placeCard.open&&!museumVisit.dialog.open)renderer.domElement.focus({preventScroll:true});});
 let nextBgmRoomCheck = 0;
 const hotSpringSoak = createHotSpringSoak(
   { sit: activityContext.sit, announce: announceActivity }, tavernDrinkEffects.setSoaking,
@@ -1962,6 +1964,8 @@ const riddleActivity = createRiddleActivity({ open: activityContext.open, announ
 activitySpots.push(...riddleActivity.spots);
 const snowballControls = element('snowball-controls');
 const snowballScore = element('snowball-score');
+const menuSnowInventory=element('town-snow-inventory');
+const snowfightMaterial=element('snowfight-material');
 const snowballMeter = element<HTMLProgressElement>('snowball-action-meter');
 function ensureTownInputButton(id: string, label: string, after: HTMLElement): HTMLButtonElement {
   const existing = document.getElementById(id);
@@ -1997,8 +2001,8 @@ const ceremonyFrost = createCeremonyFrost(element('ceremony-frost'), {
   scene: element('scene'),
   announce: announceActivity,
 });
-ceremonyFrost.mountSettings(element('town-panel-controls'));
-festival.mountAudioSettings(element('town-panel-controls'));
+ceremonyFrost.mountSettings(element('town-advanced-controls'));
+festival.mountAudioSettings(element('town-advanced-controls'));
 const ceremonyClock = (import.meta.env.MODE === 'town-rehearsal' ? await loadRehearsalClock() : undefined)
   ?? { now: presence.serverNow, utcOffsetMinutes: 8 * 60 };
 const railOvernightBroadcast = createRailOvernightBroadcast();
@@ -2153,6 +2157,7 @@ function showSnowballScore({ ammo, hits, combo }: SnowballState) {
   const depth = snowCover.depth();
   const text = `雪团 ${ammo}/${snowResourceLimit} · ${depth.label} · 命中 ${hits}${combo > 1 ? ` · 连中 ${combo}` : ''}${snowOnHead ? ` · 顶雪 ${snowOnHead}/3` : ''}`;
   if (snowballScore.textContent !== text) snowballScore.textContent = text;
+  if(menuSnowInventory.textContent!==text)menuSnowInventory.textContent=text;
 }
 function showSnowGatherProgress() {
   const progress = snowControls.gatherProgress();
@@ -2507,9 +2512,13 @@ function updateSnowFight(dt: number) {
   if (snowHatTime > 0 && (snowHatTime -= dt) <= 0) snowOnHead = 0;
   if (snowStaggerTime > 0 && (snowStaggerTime -= dt) <= 0) snowballWalkFactor = 1;
   snowballPhysicsMs = snowballs.update(dt);
-  showSnowballScore(snowballs.getState());
+  const snowState=snowballs.getState();
+  showSnowballScore(snowState);
   showSnowGatherProgress();
-  snowballControls.hidden = !active;
+  // No persistent empty snow-inventory overlay during ordinary exploration.
+  // Preserve every live play affordance: gathering, ammo, practice, team
+  // fight/free building and head-snow feedback. Full inventory stays in menu.
+  snowballControls.hidden = !active||!(snowState.ammo>0||!snowballMeter.hidden||!practiceStatus.hidden||teamFight.active()||!snowfightMaterial.hidden||snowOnHead>0);
 
 }
 renderer.domElement.addEventListener('pointerdown', event => {
@@ -3876,6 +3885,7 @@ function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame
   crosshair.hidden = !lookAllowed();
   touchJump.disabled = !canJump();
   museumMapButton.hidden = true;
+  snowballControls.hidden=true;
   refreshPlayerControls();
   const local=weatherState&&ceremonyState.phase==='ordinary'
     ?sampleSouthRegionalWeather(weatherState,camera.position.x,-camera.position.z,camera.position.y-eye,true):undefined;
@@ -4387,7 +4397,7 @@ renderer.setAnimationLoop(now => {
   touchWalk.setAllowed(moveAllowed());
   crosshair.hidden = !lookAllowed();
   touchJump.disabled = !canJump();
-  museumMapButton.hidden = !canControl || museumOverlay() || Math.abs(local.x) > 29 || Math.abs(local.z) > 19;
+  museumMapButton.hidden = !walking || placeCard.open || museumVisit.dialog.open || museumOverlay() || Math.abs(local.x) > 29 || Math.abs(local.z) > 19;
   refreshPlayerControls();
   const groupPhotoFrame = plazaPhoto.update({
     east: x, north: n, height: ground,

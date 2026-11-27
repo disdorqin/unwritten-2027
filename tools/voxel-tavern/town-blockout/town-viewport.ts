@@ -8,9 +8,9 @@ export function isTouchEnvironment(coarsePointer: boolean, touchSeen: boolean): 
   return coarsePointer || touchSeen;
 }
 
-// Chat starts collapsed only on touch devices; desktop keeps the open panel.
-export function chatStartsCollapsed(touchEnvironment: boolean): boolean {
-  return touchEnvironment;
+// Chat is now in the single corner menu and starts closed on every device.
+export function chatStartsCollapsed(_touchEnvironment: boolean): boolean {
+  return true;
 }
 
 type FullscreenCapable = {
@@ -68,8 +68,7 @@ export function createViewportControls(options: {
   }
 
   function applyChatCollapsed() {
-    // Desktop never collapses: the class only exists in a touch environment.
-    const collapsed = touchEnvironment() && chatCollapsed;
+    const collapsed = chatCollapsed;
     options.chatPanel.classList.toggle('town-chat-collapsed', collapsed);
     options.chatToggle.setAttribute('aria-expanded', String(!collapsed));
     if (!collapsed) options.chatUnread.hidden = true;
@@ -95,7 +94,7 @@ export function createViewportControls(options: {
   options.fullscreenButton.addEventListener('click', () => {
     try {
       if (fullscreenActive()) {
-        if (typeof doc.exitFullscreen === 'function') void doc.exitFullscreen();
+        if (typeof doc.exitFullscreen === 'function') void doc.exitFullscreen().catch(()=>{});
         else doc.webkitExitFullscreen?.();
         return;
       }
@@ -123,6 +122,10 @@ export function createViewportControls(options: {
     if (records.some(record => record.addedNodes.length > 0)) options.chatUnread.hidden = false;
   }).observe(options.chatLog, { childList: true });
 
+  options.chatPanel.closest('dialog')?.addEventListener('close',()=>{
+    chatCollapsed=true;
+    applyChatCollapsed();
+  });
   sync();
   syncPressed();
 
