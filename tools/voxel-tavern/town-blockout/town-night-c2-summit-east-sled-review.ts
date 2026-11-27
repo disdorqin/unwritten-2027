@@ -1,14 +1,15 @@
 import {
   AmbientLight, DirectionalLight, Fog, PerspectiveCamera, Scene, Vector3, WebGLRenderer,
 } from 'three';
-import { createMainSummitBlock, mainSummitLayout } from './main-summit-block.js';
+import { createC2EastCanonicalGround } from './town-night-c2-summit-canonical.js';
+import { createTownD2R30Massif } from './town-d2-r30-massif.js';
 import { mountC2EastLandform } from './town-night-c2-summit-east-landform.js';
 import { mountC2EastCamp } from './town-night-c2-summit-east-camp.js';
 import { mountC2EastSled } from './town-night-c2-summit-east-sled.js';
 
 /**
  * C2 east-sector sled-start review. Host surface is the one canonical D2
- * summit block; only the new east packages are mounted. Fill lights are
+ * summit mesh, seated on its 8 m faces; only the new east packages are mounted. Fill lights are
  * review-only and the sled package itself adds none.
  */
 const scene = new Scene();
@@ -17,13 +18,14 @@ scene.fog = new Fog(0x9fb0c4, 900, 2600);
 
 // 8 m surface matches the sampler used to seat every piece; a 24 m coarse
 // shell made the chute appear to float above the visible ground.
-const block = createMainSummitBlock(mainSummitLayout, 348, 8);
-scene.add(block.coarse);
-const landform = mountC2EastLandform(block.heightAt);
+const ground = createC2EastCanonicalGround();
+const massif = createTownD2R30Massif();
+scene.add(massif.group);
+const landform = mountC2EastLandform(ground.heightAt);
 scene.add(landform.group);
-const camp = mountC2EastCamp(block.heightAt);
+const camp = mountC2EastCamp(ground.heightAt);
 scene.add(camp.group);
-const sled = mountC2EastSled(block.heightAt);
+const sled = mountC2EastSled(ground.heightAt);
 scene.add(sled.group);
 
 scene.add(new AmbientLight(0xffffff, .62));
@@ -90,7 +92,7 @@ function frame(now: number) {
     target.set(v.look.e, v.look.y, -v.look.n);
     camera.lookAt(target);
   } else {
-    const sampled = block.heightAt(foot.east, foot.north);
+    const sampled = ground.heightAt(foot.east, foot.north);
     const eye = Math.max(foot.height, sampled ?? foot.height) + 2.2;
     camera.position.set(foot.east, eye, -foot.north);
     forward.set(Math.sin(yaw), Math.tan(pitch), -Math.cos(yaw)).normalize();

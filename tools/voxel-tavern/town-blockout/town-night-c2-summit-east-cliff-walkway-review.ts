@@ -1,12 +1,13 @@
 import {
   AmbientLight, DirectionalLight, Fog, PerspectiveCamera, Scene, Vector3, WebGLRenderer,
 } from 'three';
-import { createMainSummitBlock, mainSummitLayout } from './main-summit-block.js';
+import { createC2EastCanonicalGround } from './town-night-c2-summit-canonical.js';
+import { createTownD2R30Massif } from './town-d2-r30-massif.js';
 import { mountC2EastCliffWalkway } from './town-night-c2-summit-east-cliff-walkway.js';
 
 /**
  * C2 east-sector third-round cliff-edge walkway review. Uses the one
- * canonical summit block as the host surface and adds only the new cliff
+ * canonical summit mesh, seated on its 8 m faces, as the host surface and adds only the new cliff
  * walkway. The coarse summit mesh is the real D2-owned geometry, read-only
  * here; the fill lights are review-only and the walkway itself adds none.
  */
@@ -14,9 +15,10 @@ const scene = new Scene();
 scene.name = 'town-night-c2-summit-east-cliff-walkway-review';
 scene.fog = new Fog(0x9fb0c4, 900, 2600);
 
-const block = createMainSummitBlock(mainSummitLayout, 348, 24);
-scene.add(block.coarse);
-const walkway = mountC2EastCliffWalkway(block.heightAt);
+const ground = createC2EastCanonicalGround();
+const massif = createTownD2R30Massif();
+scene.add(massif.group);
+const walkway = mountC2EastCliffWalkway(ground.heightAt);
 scene.add(walkway.group);
 
 scene.add(new AmbientLight(0xffffff, .62));
@@ -73,7 +75,7 @@ function frame(now: number) {
   if (keys.has('ArrowRight')) yaw += dt * 1.1;
   if (keys.has('ArrowUp')) pitch = Math.min(1.2, pitch + dt * .8);
   if (keys.has('ArrowDown')) pitch = Math.max(-1.2, pitch - dt * .8);
-  const sampled = block.heightAt(foot.east, foot.north);
+  const sampled = ground.heightAt(foot.east, foot.north);
   if (keys.size === 0) {
     const v = views[selected]!;
     foot = { east: v.eye.e, north: v.eye.n, height: v.eye.y };

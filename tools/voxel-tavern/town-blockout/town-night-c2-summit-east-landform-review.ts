@@ -1,22 +1,23 @@
 import {
   AmbientLight, DirectionalLight, Fog, PerspectiveCamera, Scene, Vector3, WebGLRenderer,
 } from 'three';
-import { createMainSummitBlock, mainSummitLayout } from './main-summit-block.js';
+import { createC2EastCanonicalGround } from './town-night-c2-summit-canonical.js';
+import { createTownD2R30Massif } from './town-d2-r30-massif.js';
 import { mountC2EastLandform } from './town-night-c2-summit-east-landform.js';
 
 /**
  * C2 east-sector first-round landform review. Uses the one canonical summit
- * block as the host surface and adds only the new east landform. The coarse
- * summit mesh is the real D2-owned geometry, read-only here; the fill lights
+ * mesh, seated on its 8 m faces, as the host surface and adds only the new east landform. The D2 massif mesh is the real D2-owned geometry, read-only here; the fill lights
  * are review-only and the landform itself adds none.
  */
 const scene = new Scene();
 scene.name = 'town-night-c2-summit-east-landform-review';
 scene.fog = new Fog(0x9fb0c4, 900, 2600);
 
-const block = createMainSummitBlock(mainSummitLayout, 348, 24);
-scene.add(block.coarse);
-const landform = mountC2EastLandform(block.heightAt);
+const ground = createC2EastCanonicalGround();
+const massif = createTownD2R30Massif();
+scene.add(massif.group);
+const landform = mountC2EastLandform(ground.heightAt);
 scene.add(landform.group);
 
 scene.add(new AmbientLight(0xffffff, .62));
@@ -76,7 +77,7 @@ function frame(now: number) {
   if (keys.has('ArrowRight')) yaw += dt * 1.1;
   if (keys.has('ArrowUp')) pitch = Math.min(1.2, pitch + dt * .8);
   if (keys.has('ArrowDown')) pitch = Math.max(-1.2, pitch - dt * .8);
-  const sampled = block.heightAt(foot.east, foot.north);
+  const sampled = ground.heightAt(foot.east, foot.north);
   // A station remains a fixed camera until the reviewer actually walks.
   if (keys.size === 0) {
     const v = views[selected]!;

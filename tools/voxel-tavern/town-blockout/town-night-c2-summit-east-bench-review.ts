@@ -1,21 +1,23 @@
 import {
   AmbientLight, DirectionalLight, Fog, PerspectiveCamera, Scene, Vector3, WebGLRenderer,
 } from 'three';
-import { createMainSummitBlock, mainSummitLayout } from './main-summit-block.js';
+import { createC2EastCanonicalGround } from './town-night-c2-summit-canonical.js';
+import { createTownD2R30Massif } from './town-d2-r30-massif.js';
 import { mountC2EastLandform } from './town-night-c2-summit-east-landform.js';
 import { mountC2EastBench } from './town-night-c2-summit-east-bench.js';
 
 /** C2 east-sector hairpin bench review. Host is the one canonical D2 summit
- * block; the 8 m shell matches the sampler that seats every bench piece. */
+ * mesh; the same 8 m faces seat every bench piece. */
 const scene = new Scene();
 scene.name = 'town-night-c2-summit-east-bench-review';
 scene.fog = new Fog(0x9fb0c4, 900, 2600);
 
-const block = createMainSummitBlock(mainSummitLayout, 348, 8);
-scene.add(block.coarse);
-const landform = mountC2EastLandform(block.heightAt);
+const ground = createC2EastCanonicalGround();
+const massif = createTownD2R30Massif();
+scene.add(massif.group);
+const landform = mountC2EastLandform(ground.heightAt);
 scene.add(landform.group);
-const bench = mountC2EastBench(block.heightAt);
+const bench = mountC2EastBench(ground.heightAt);
 scene.add(bench.group);
 
 scene.add(new AmbientLight(0xffffff, .62));
@@ -79,7 +81,7 @@ function frame(now: number) {
     target.set(v.look.e, v.look.y, -v.look.n);
     camera.lookAt(target);
   } else {
-    const sampled = block.heightAt(foot.east, foot.north);
+    const sampled = ground.heightAt(foot.east, foot.north);
     const eye = Math.max(foot.height, sampled ?? foot.height) + 2.2;
     camera.position.set(foot.east, eye, -foot.north);
     forward.set(Math.sin(yaw), Math.tan(pitch), -Math.cos(yaw)).normalize();
