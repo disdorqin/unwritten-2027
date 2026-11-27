@@ -1,0 +1,33 @@
+{
+  "scope": "B branch normal production build, not merged four-sector normal ride; actual compiled startPresence and local equivalent proxy, not Docker/Caddy or public deployment",
+  "sha": "1acd55562ac437c8941e5f971060584d597790d2",
+  "vite": "6.4.1",
+  "three": "0.183.2",
+  "errors": [],
+  "rooms": [
+    {
+      "path": "/presence",
+      "frame": "legacy",
+      "joined": true
+    },
+    {
+      "path": "/presence-summit",
+      "frame": "summit-v1",
+      "joined": true,
+      "releaseDefaultOff": true,
+      "poll": true
+    }
+  ],
+  "entry": [
+    {
+      "path": "/",
+      "before": "东 223.0 m · 北 180.0 m · 行走",
+      "after": "东 223.8 m · 北 191.6 m · 行走",
+      "joined": true,
+      "sent": 19,
+      "viewport": "960x540",
+      "dpr": 0.8
+    }
+  ],
+  "complete": true
+}
