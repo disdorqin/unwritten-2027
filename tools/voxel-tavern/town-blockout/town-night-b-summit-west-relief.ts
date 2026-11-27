@@ -20,11 +20,21 @@ export function westCableDistance(e:number,n:number){
  * broad glacial shoulders and small asymmetric ribs blend into that base.
  * The sole canonical owner composes this additive delta BEFORE mesh,
  * normal, LOD and collision generation. Never overlay a second land surface. */
-export function nightBWestHeightDelta(e:number,n:number,base:Height,reserved:WestReserve=()=>false){
- if(!inNightBWest(e,n))return 0;
+/** The reservation callback must be monotone in radius (physical footprint
+ * intersection). Hold the first 12m unchanged, then blend across 32m. */
+export function nightBWestReserveWeight(e:number,n:number,reserved?:WestReserve){
+ if(!reserved)return 1;
+ if(reserved(e,n,12))return 0;
+ if(!reserved(e,n,44))return 1;
+ let lo=12,hi=44;
+ for(let i=0;i<12;i++){const mid=(lo+hi)/2;if(reserved(e,n,mid))hi=mid;else lo=mid;}
+ return smooth(((lo+hi)/2-12)/32);
+}
+function westDelta(e:number,n:number,h:number|undefined,reserved?:WestReserve){
+ if(!inNightBWest(e,n)||h===undefined||!Number.isFinite(h))return 0;
  const b=nightBWestBounds,edge=Math.min(e-b.west,b.east-e,n-b.south,b.north-n);
- const seam=smooth(edge/32);if(seam===0||reserved(e,n,12))return 0;
- const h=base(e,n);if(h===undefined||!Number.isFinite(h))return 0;
+ const seam=smooth(edge/32);if(seam===0)return 0;
+ const reserve=nightBWestReserveWeight(e,n,reserved);if(reserve===0)return 0;
  const peakDistance=Math.hypot(e-nightBWestPeak.east,n-nightBWestPeak.north);
  const protect=smooth((peakDistance-24)/64)*smooth((westCableDistance(e,n)-18)/32);
  const along=(n-520)/770,channelEast=-760-95*Math.sin(clamp(along)*Math.PI)+54*clamp(along);
@@ -35,12 +45,16 @@ export function nightBWestHeightDelta(e:number,n:number,base:Height,reserved:Wes
   bell((e+645)/360)*bell((n-1040)/490);
  const lee=6*bell((e+885)/145)*bell((n-1420)/180);
  if(protect===0)return 0;
- const raw=(incision+shoulder+rib+lee)*seam*protect;
+ const raw=(incision+shoulder+rib+lee)*seam*protect*reserve;
  // Preserve the existing floor/peak limits; no new independent summit.
  return Math.max(150-h,Math.min(800-h,raw));
 }
+export function nightBWestHeightDelta(e:number,n:number,base:Height,reserved?:WestReserve){
+ if(!inNightBWest(e,n))return 0;
+ return westDelta(e,n,base(e,n),reserved);
+}
 export function composeNightBWestHeight(base:Height,reserved?:WestReserve):Height{
- return (e,n)=>{const h=base(e,n);return h===undefined?undefined:h+nightBWestHeightDelta(e,n,base,reserved);};
+ return (e,n)=>{const h=base(e,n);return h===undefined?undefined:h+westDelta(e,n,h,reserved);};
 }
 const forestTint=new Color('#36564b'),woodlandTint=new Color('#647561'),rockTint=new Color('#78858b'),warmRockTint=new Color('#9a8469'),snowTint=new Color('#dfe8ed');
 /** Continuous west-sector biome palette, feathered into the unmodified
