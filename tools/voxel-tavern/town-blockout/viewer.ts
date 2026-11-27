@@ -184,7 +184,7 @@ import { createTownSnowField } from './town-snow-field';
 import { createPlazaInformationActivity } from './plaza-information-activity';
 import { createPlazaSnowSupply, type PlazaSnowSupplySite } from './plaza-snow-supply';
 import { advanceWeatherCover, townSnowWeatherAt, townSnowWeatherForFrame } from './town-weather';
-import { sampleSouthRegionalWeather, applySouthWeatherPresentation } from './town-night-a-summit-weather-field';
+import { sampleSouthRegionalWeather, applySouthWeatherPresentation, createSouthWeatherVisual, southWeatherWalkingScale } from './town-night-a-summit-weather-field';
 import { createTownNightWeatherSky, type TownNightWeatherSkyFrame } from './town-night-weather-sky';
 import { createSouthSummitWeatherHost } from './town-night-a-summit-weather-host';
 import { townNightWeatherDayMs, townNightWeatherDefaultDawnEpoch } from '../../../src/shared/town-night-weather-cycle';
@@ -909,6 +909,8 @@ const forest = addForestDensity(landscape, grid,
   (east, north, radius) => extensionRoadClearance(east, north, radius) || railway.keepClear(east, north, radius) || extensionStreetClearance(east, north, radius));
 const snowfall = createSnowfall(scene);
 const summitSnowfall = createSnowfall(cloudRoute.scene);
+const townWeatherVisual=createSouthWeatherVisual(snowfall,particleDensityScale);
+const summitWeatherVisual=createSouthWeatherVisual(summitSnowfall,particleDensityScale);
 const snowButton = element<HTMLButtonElement>('snow');
 snowButton.onclick = () => {
   snowfall.setEnabled(!snowfall.enabled());
@@ -1344,6 +1346,7 @@ const landingSnow = createLandingSnow(scene);
 // 'balanced' (the default) reproduces the pre-tier values exactly.
 function applyQualityTier() {
   renderer.setPixelRatio(Math.min(devicePixelRatio, qualityPixelRatioCap()));
+  townWeatherVisual.reset();summitWeatherVisual.reset();
   snowfall.setDensityScale(particleDensityScale());
   summitSnowfall.setDensityScale(particleDensityScale());
   landingSnow.setDensityScale(particleDensityScale());
@@ -3816,6 +3819,8 @@ function updateSledPresentation(visuals: SledRackVisuals, dt: number) {
 
 function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame) {
   const cabin = cloudRoute.ridePoint();
+  const weatherState=presence.getTownOutdoorWeather();
+  const ceremonyState=ceremonyStateAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes);
   if (cabin) {
     cloudRoute.updateView(cabin);
     faceFrom(cabin.east, cabin.north, cabin.height + eye, yaw, pitch);
@@ -3831,7 +3836,8 @@ function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame
       if (moveAllowed()) {
         if (sledRide.active()) stepMountedSled(forward, right);
         else {
-          const nextX = x + east * townPhysicsDelta, nextN = n + north * townPhysicsDelta;
+          const windScale=airHeight===undefined?southWeatherWalkingScale(weatherState,x,n,east,north,true,ceremonyState.phase==='ordinary',false):1;
+          const nextX = x + east * windScale * townPhysicsDelta, nextN = n + north * windScale * townPhysicsDelta;
           if ((east || north) && !tryMove(nextX, nextN) && !tryMove(nextX, n)) tryMove(x, nextN);
           stepJump(townPhysicsDelta);
         }
@@ -3854,16 +3860,13 @@ function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame
   touchJump.disabled = !canJump();
   museumMapButton.hidden = true;
   refreshPlayerControls();
-  const weatherState=presence.getTownOutdoorWeather();
-  const ceremonyState=ceremonyStateAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes);
   const local=weatherState&&ceremonyState.phase==='ordinary'
     ?sampleSouthRegionalWeather(weatherState,camera.position.x,-camera.position.z,camera.position.y-eye,true):undefined;
   const weather=local?.weather??(ceremonyState.phase==='ordinary'?townSnowWeatherAt(ceremonyState.now,'light'):townSnowWeatherForFrame(ceremonyState));
-  summitSnowfall.setIntensity(weather.intensity);
-  summitSnowfall.setOutdoorWind(local?.weather.windEast??0,local?.weather.windNorth??0,local?.weather.windStrength??0,local?.exposure??1);
+  summitWeatherVisual.update(weather,local?.weather,local?.exposure??1,Math.min(.25,frameSeconds),performance.now());
   summitSnowfall.update(camera,Math.min(.25,frameSeconds),!cabin&&walking,false);
   const fog=cloudRoute.scene.fog as Fog;
-  summitSnowfall.setDensityScale(applySouthWeatherPresentation(cloudRoute.scene,fog,weather,skyFrame,particleDensityScale(),local?.weather));
+  applySouthWeatherPresentation(cloudRoute.scene,fog,weather,skyFrame,particleDensityScale(),local?.weather);
   renderer.render(cloudRoute.scene, camera);
   if (profileTown) {
     renderer.domElement.dispatchEvent(new CustomEvent('town-frame-profile', { detail: {
@@ -3962,6 +3965,8 @@ renderer.setAnimationLoop(now => {
     if (moveAllowed()) {
       const chillEnabled = ceremonyFrost.enabled();
       const chillTarget = ceremonyFrost.walkingScale();
+      const footWeather=presence.getTownOutdoorWeather();
+      const footOrdinary=ceremonyStateAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes).phase==='ordinary';
       const speed = (sprint ? 11.3 : 7.5) * snowballWalkFactor * landingFeedback.walkingScale() /
         Math.max(1, Math.hypot(forward, right));
       const east = (Math.sin(yaw) * forward + Math.cos(yaw) * right) * speed;
@@ -4005,7 +4010,8 @@ renderer.setAnimationLoop(now => {
               const target = snowCover.movementScale(x, n, ground, snowCleared, sprint);
               snowMoveScale = approachTownSnowScale(snowMoveScale, target, townPhysicsDelta);
               chillMoveScale = chillEnabled ? approachTownSnowScale(chillMoveScale, chillTarget, townPhysicsDelta) : 1;
-              moveScale = snowMoveScale * chillMoveScale;
+              const footShelter=Boolean(homeReturn)||roofed(x,n,ground)||inTavernWarmShed(tavernPlot,x,n,ground);
+              moveScale = snowMoveScale * chillMoveScale * southWeatherWalkingScale(footWeather,x,n,east,north,false,footOrdinary,footShelter);
             }
             const nx = x + east * moveScale * townPhysicsDelta;
             const nn = n + north * moveScale * townPhysicsDelta;
@@ -4258,10 +4264,9 @@ renderer.setAnimationLoop(now => {
   const effectiveSnowIntensity = weather.intensity;
   const roofSheltered = walking && !boardingGround && !homeReturn && !sheltered && !shedSheltered &&
     roofed(shedEast, shedNorth, shedFeet);
-  snowfall.setIntensity(effectiveSnowIntensity);
-  snowfall.setOutdoorWind(regionalWeather?.weather.windEast??0,regionalWeather?.weather.windNorth??0,regionalWeather?.weather.windStrength??0,regionalWeather?.exposure??1);
+  townWeatherVisual.update(weather,regionalWeather?.weather,regionalWeather?.exposure??1,dt,now);
   snowfall.update(camera, dt, walking, sheltered || shedSheltered || roofSheltered || Boolean(homeReturn));
-  snowfall.setDensityScale(applySouthWeatherPresentation(scene,weatherFog,weather,skyFrame,particleDensityScale(),regionalWeather?.weather));
+  applySouthWeatherPresentation(scene,weatherFog,weather,skyFrame,particleDensityScale(),regionalWeather?.weather);
   // Weather changes the snow tint and cold exposure. The movement and gathering cover
   // still follows the existing ceremony intensity and night mode.
   visualSnowCover = ceremonyState.phase === 'ordinary'

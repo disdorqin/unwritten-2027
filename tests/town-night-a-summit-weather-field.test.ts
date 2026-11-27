@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import type {TownOutdoorWeatherState} from '../src/shared/town-outdoor-weather';
 import {Color,Fog,Scene} from 'three';
-import {sampleSouthRegionalWeather,applySouthWeatherPresentation} from '../tools/voxel-tavern/town-blockout/town-night-a-summit-weather-field';
+import {sampleSouthRegionalWeather,applySouthWeatherPresentation,createSouthWeatherVisual,southWeatherWalkingScale} from '../tools/voxel-tavern/town-blockout/town-night-a-summit-weather-field';
 import {townNightWeatherAt} from '../src/shared/town-night-weather-cycle';
 test('production domain weather respects actual west ground and summit bounds, and preserves Presence input',()=>{
  const state:TownOutdoorWeatherState={weather:'whiteout',startedAt:0,nextChangeAt:600000,windEast:1,windNorth:0,windStrength:1};
@@ -28,4 +28,28 @@ test('regional haze is non-accumulating and light snow actually thins the existi
  assert.ok(applySouthWeatherPresentation(scene,fog,clear,sky,.5,clear)<.5);
  assert.equal(fog.color.getHex(),sample.fogColor);
  assert.ok(fog.near<fog.far);
+});
+test('production driver eases wind and density while keeping the player quality cap and light snow',()=>{
+ let quality=.5,density=0,windWrites=0;
+ const snow={setIntensity(){},setOutdoorWind(){windWrites++;},setDensityScale(v:number){density=v;}};
+ const driver=createSouthWeatherVisual(snow,()=>quality);
+ const state:TownOutdoorWeatherState={weather:'whiteout',startedAt:0,nextChangeAt:600000,windEast:1,windNorth:0,windStrength:1};
+ const high=sampleSouthRegionalWeather(state,350,1676,800,true).weather;
+ for(let i=0;i<120;i++){driver.update(high,high,1,1/60,i*1000/60);assert.ok(density<=quality);}
+ assert.ok(windWrites<=22);assert.ok(density<.5);
+ quality=1.25;driver.reset();
+ const clear=sampleSouthRegionalWeather({...state,weather:'clear-snow'},223,180,12,false).weather;
+ driver.update(clear,clear,1,1/60,2100);assert.ok(density<1.0);
+ quality=.5;driver.update(high,high,1,1/60,2117);assert.ok(density<=.5);
+});
+test('foot wind respects authority, direction, exposure and shelter without affecting ceremony',()=>{
+ const state:TownOutdoorWeatherState={weather:'whiteout',startedAt:0,nextChangeAt:600000,windEast:1,windNorth:0,windStrength:1};
+ assert.equal(southWeatherWalkingScale(state,350,1676,-1,0,true,true,false),.6);
+ assert.equal(southWeatherWalkingScale(state,350,1676,1,0,true,true,false),1.1);
+ assert.equal(southWeatherWalkingScale(state,350,1676,0,1,true,true,false),1);
+ assert.equal(southWeatherWalkingScale(state,350,1676,-1,0,true,true,true),1);
+ assert.equal(southWeatherWalkingScale(state,350,1676,-1,0,true,false,false),1);
+ assert.equal(southWeatherWalkingScale(undefined,350,1676,-1,0,true,true,false),1);
+ const town=southWeatherWalkingScale(state,223,180,-1,0,false,true,false);
+ assert.ok(town>=.6&&town<=1);
 });
