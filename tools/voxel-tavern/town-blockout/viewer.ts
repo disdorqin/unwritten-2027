@@ -28,6 +28,7 @@ import { buildVillageLandmark, villageHousePortals } from './landmark-village';
 import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, worldBounds } from './terrain';
 import { addTerrainMeshes } from './terrain-mesh';
 import {mountWestMountainGround,westMountainTrackProtection} from './town-night-a-summit-west-ground';
+import {westPresenceBounds} from '../../../src/shared/za22-west-domain';
 import { createTerrainSupportContract } from './town-a-r30-terrain-contract';
 import { supportFootprintOverlaps } from './town-a-r30-oriented-support';
 import { mainSummitLayout, mainSummitSpec } from './main-summit-block';
@@ -3170,7 +3171,7 @@ function outdoorWalkable(x: number, n: number) {
   if (x < 0) {
     // All five footprint probes consume the original carrier or the
     // newly constructed single-owner northern extension.
-    return n>=1 && n<=worldBounds.depth-1 && westGroundReady(x,n)
+    return n>=1 && n<=Math.min(worldBounds.depth-1,westPresenceBounds.depth-bodyRadius) && westGroundReady(x,n)
       && westGroundReady(x-bodyRadius,n)
       && westGroundReady(Math.min(0,x+bodyRadius),n)
       && westGroundReady(x,n-bodyRadius)
