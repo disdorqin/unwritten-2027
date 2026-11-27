@@ -1,4 +1,4 @@
-import {Box3,Camera,Material,Mesh,MeshBasicMaterial,MeshLambertMaterial,MeshStandardMaterial,Object3D,Sphere,Vector3} from 'three';
+import {Box3,BufferAttribute,Camera,InstancedBufferAttribute,InstancedMesh,Material,Matrix4,Mesh,MeshBasicMaterial,MeshLambertMaterial,MeshStandardMaterial,Object3D,Sphere,StaticDrawUsage,Vector3} from 'three';
 type Ring=Readonly<{east:number;north:number;radius:number;inradius:number;minHeight:number;segments:number}>;
 type Ground=(east:number,north:number)=>number|undefined;
 
@@ -71,7 +71,13 @@ export function sphereBehindCraterWall(ring:Ring,eye:Vector3,sphere:Sphere){
 function opaqueMesh(o:Object3D):o is Mesh{
  if(!(o instanceof Mesh)||!o.frustumCulled||o.castShadow||o.geometry.morphAttributes.position?.length||o.onBeforeRender!==Object3D.prototype.onBeforeRender||o.onAfterRender!==Object3D.prototype.onAfterRender)return false;
  const flags=o as Mesh&{isInstancedMesh?:boolean;isSkinnedMesh?:boolean;isBatchedMesh?:boolean};
- if(flags.isInstancedMesh||flags.isSkinnedMesh||flags.isBatchedMesh)return false;
+ if(flags.isSkinnedMesh||flags.isBatchedMesh)return false;
+ if(flags.isInstancedMesh){
+  const m=o as InstancedMesh;
+  // Small sources never enter the existing >=24 instance-cell partition.
+  // A whole-source conservative bound can eliminate their draw entirely.
+  if(m.count<1||m.count>=24||m.instanceMatrix.usage!==StaticDrawUsage||m.morphTexture!==null||Object.values(m.geometry.attributes).some(a=>a instanceof InstancedBufferAttribute))return false;
+ }
  const mats=Array.isArray(o.material)?o.material:[o.material];
  return mats.every(m=>(m instanceof MeshStandardMaterial||m instanceof MeshLambertMaterial||m instanceof MeshBasicMaterial)&&m.depthTest&&m.depthWrite&&!m.transparent&&!m.wireframe&&
   !(m as MeshStandardMaterial).displacementMap&&m.onBeforeCompile===Material.prototype.onBeforeCompile);
@@ -80,12 +86,30 @@ function opaqueMesh(o:Object3D):o is Mesh{
 /** Render-only, explicitly registered scene roots; never touches physics,
  * geometry, material, authority or visibility flags. A new object that
  * has not yet been registered remains visible. All layer masks restored
- * after the render pass. Dynamic instancing/skinning excluded. */
+ * after the render pass. Small static instance sets use their complete
+ * transformed geometry bounds; dynamic instancing/skinning excluded. */
 export function createCraterExteriorOcclusion(mesh:Mesh,anchor:{east:number;north:number},heightAt:Ground){
  let ring:Ring|undefined,certified=false,objects:Mesh[]=[];
  function prepare(){if(!certified){ring=certifyCraterWallRing(mesh,anchor.east,anchor.north);certified=true;}return ring;}
  const roots=new Set<Object3D>(),masked:{mesh:Mesh;mask:number}[]=[];
- const eye=new Vector3(),sphere=new Sphere(),box=new Box3();
+ const eye=new Vector3(),box=new Box3(),instance=new Matrix4(),part=new Box3();
+ type Bound={geometry:Mesh['geometry'];position:ReturnType<Mesh['geometry']['getAttribute']>;version:number;world:Matrix4;instanceAttribute?:InstancedMesh['instanceMatrix'];matrixVersion?:number;count?:number;sphere:Sphere};
+ const bounds=new WeakMap<Mesh,Bound>();
+ const geometryBounds=new WeakMap<Mesh['geometry'],{position:Bound['position'];version:number;box:Box3}>();
+ function worldBound(o:Mesh){
+  const g=o.geometry,p=g.getAttribute('position');if(!p)return;
+  const version=p instanceof BufferAttribute?p.version:p.data.version;
+  const m=o instanceof InstancedMesh?o:undefined,old=bounds.get(o);
+  if(old&&old.geometry===g&&old.position===p&&old.version===version&&old.world.equals(o.matrixWorld)&&old.instanceAttribute===m?.instanceMatrix&&old.matrixVersion===m?.instanceMatrix.version&&old.count===m?.count)return old.sphere;
+  // Recompute from actual attributes, not a potentially stale cached box.
+  let local=geometryBounds.get(g);
+  if(!local||local.position!==p||local.version!==version){g.computeBoundingBox();if(!g.boundingBox||g.boundingBox.isEmpty())return;local={position:p,version,box:g.boundingBox.clone()};geometryBounds.set(g,local);}
+  box.makeEmpty();
+  if(m){for(let i=0;i<m.count;i++){m.getMatrixAt(i,instance);if(!instance.elements.every(Number.isFinite))return;box.union(part.copy(local.box).applyMatrix4(instance));}}else box.copy(local.box);
+  const result=box.applyMatrix4(o.matrixWorld).getBoundingSphere(new Sphere());
+  if(![result.center.x,result.center.y,result.center.z,result.radius].every(Number.isFinite))return;
+  bounds.set(o,{geometry:g,position:p,version,world:o.matrixWorld.clone(),instanceAttribute:m?.instanceMatrix,matrixVersion:m?.instanceMatrix.version,count:m?.count,sphere:result});return result;
+ }
  const restore=()=>{for(const x of masked)x.mesh.layers.mask=x.mask;masked.length=0;};
  function refresh(input:readonly Object3D[]){
   restore();roots.clear();for(const r of input)roots.add(r);
@@ -101,18 +125,18 @@ export function createCraterExteriorOcclusion(mesh:Mesh,anchor:{east:number;nort
   prepare();
   if(ring&&eye.y<ring.minHeight-.35)return ring;
  }
- function begin(camera:Camera){
-  restore();const activeRing=ringForCamera(camera);if(!activeRing)return 0;
+ let smallInstanceCulled=0;
+ function begin(camera:Camera,smallInstances=true){
+  restore();smallInstanceCulled=0;const activeRing=ringForCamera(camera);if(!activeRing)return 0;
   for(const o of objects){
-   if(!o.parent||!o.visible||!camera.layers.test(o.layers)||!opaqueMesh(o))continue;
-   const g=o.geometry;if(!g.boundingBox)g.computeBoundingBox();
-   if(!g.boundingBox)continue;
-   box.copy(g.boundingBox).applyMatrix4(o.matrixWorld).getBoundingSphere(sphere);
-   if(sphereBehindCraterWall(activeRing,eye,sphere)){masked.push({mesh:o,mask:o.layers.mask});o.layers.mask=0;}
+   if(!o.parent||!o.visible||!camera.layers.test(o.layers)||!opaqueMesh(o)||(!smallInstances&&o instanceof InstancedMesh))continue;
+   let p:Object3D|null=o,approved=false;while(p&&p.visible){if(roots.has(p))approved=true;p=p.parent;}if(p||!approved)continue;
+   const b=worldBound(o);if(!b)continue;
+   if(sphereBehindCraterWall(activeRing,eye,b)){masked.push({mesh:o,mask:o.layers.mask});o.layers.mask=0;if(o instanceof InstancedMesh)smallInstanceCulled++;}
   }
   return masked.length;
  }
- return {refresh,begin,restore,prepare,ringForCamera,get ring(){return ring;},get candidates(){return objects.length;}};
+ return {refresh,begin,restore,prepare,ringForCamera,get ring(){return ring;},get candidates(){return objects.length;},get smallInstanceCulled(){return smallInstanceCulled;}};
 }
 
 /** M calls this with real domain/transition/cover state, never a camera

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {BoxGeometry,Group,Mesh,MeshBasicMaterial,MeshStandardMaterial,PerspectiveCamera,PointLight,Scene,Sphere,Vector3,type WebGLRenderer} from 'three';
+import {BoxGeometry,DynamicDrawUsage,Group,InstancedMesh,Matrix4,Mesh,MeshBasicMaterial,MeshStandardMaterial,PerspectiveCamera,PointLight,Scene,Sphere,Vector3,type WebGLRenderer} from 'three';
 import {mountZa31CraterLampRoom} from '../tools/voxel-tavern/town-blockout/town-za31-crater-lamp-room';
 import {createTerrainGrid,worldBounds} from '../tools/voxel-tavern/town-blockout/terrain';
 import {mountWestCraterRoad} from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
@@ -72,6 +72,20 @@ test('closed wall certificate from actual cut terrain excludes hidden exterior o
  o.restore();assert.equal(hidden.layers.mask,1);
  camera.position.y=ring.minHeight+1;camera.updateMatrixWorld(true);assert.equal(o.begin(camera),0);
  const geometry=mesh.geometry.clone();geometry.setIndex([]);const broken=new Mesh(geometry,mesh.material);assert.equal(certifyCraterWallRing(broken,east,north),undefined);
+});
+test('small static instance sources cull only when every instance is wall-hidden, invalidate cache and revoke roots',()=>{
+ const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
+ const ground=road.group.getObjectByName('meteor-crater-walk-mesh') as Mesh;
+ const {east,north}=road.anchor,scene=new Scene(),root=new Group(),other=new Group();scene.add(root,other);
+ const g=new BoxGeometry(1,1,1),mat=new MeshStandardMaterial(),m=new InstancedMesh(g,mat,3),dynamic=new InstancedMesh(g,mat,3),matrix=new Matrix4();
+ for(let i=0;i<3;i++){matrix.makeTranslation(east+190+i,0,-north);m.setMatrixAt(i,matrix);dynamic.setMatrixAt(i,matrix);}
+ m.instanceMatrix.needsUpdate=true;dynamic.instanceMatrix.setUsage(DynamicDrawUsage);root.add(m,dynamic);scene.updateMatrixWorld(true);
+ const camera=new PerspectiveCamera();camera.position.set(east+6,road.heightAt(east+6,north)!+1.65,-north);camera.updateMatrixWorld(true);
+ const o=createCraterExteriorOcclusion(ground,road.anchor,road.heightAt);o.refresh([root]);assert.ok(o.prepare());
+ assert.equal(o.begin(camera,false),0);assert.equal(m.layers.mask,1);
+ assert.equal(o.begin(camera),1);assert.equal(o.smallInstanceCulled,1);assert.equal(m.layers.mask,0);assert.equal(dynamic.layers.mask,1);o.restore();assert.equal(m.layers.mask,1);
+ m.setMatrixAt(2,matrix.makeTranslation(east+12,0,-north));m.instanceMatrix.needsUpdate=true;assert.equal(o.begin(camera),0);
+ m.count=2;assert.equal(o.begin(camera),1);o.restore();other.add(m);scene.updateMatrixWorld(true);assert.equal(o.begin(camera),0);assert.equal(m.layers.mask,1);
 });
 test('underground gate preserves unknown, opened and transition states',()=>{
  const u=new Group();
