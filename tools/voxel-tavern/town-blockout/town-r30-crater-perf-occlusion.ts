@@ -1,6 +1,11 @@
 import {Box3,BufferAttribute,Camera,InstancedBufferAttribute,InstancedMesh,Material,Matrix4,Mesh,MeshBasicMaterial,MeshLambertMaterial,MeshStandardMaterial,Object3D,Sphere,StaticDrawUsage,Vector3} from 'three';
 type Ring=Readonly<{east:number;north:number;radius:number;inradius:number;minHeight:number;segments:number}>;
 type Ground=(east:number,north:number)=>number|undefined;
+const attributeVersion=(p:ReturnType<Mesh['geometry']['getAttribute']>)=>p instanceof BufferAttribute?p.version:p.data.version;
+const authoredWallShaders=new WeakMap<MeshStandardMaterial,MeshStandardMaterial['onBeforeCompile']>();
+/** Only the authored crater surface may certify its color/roughness-only shader. */
+export function registerCraterOpaqueWallShader(material:MeshStandardMaterial){authoredWallShaders.set(material,material.onBeforeCompile);}
+function wallMaterial(m:Mesh['material']):m is MeshStandardMaterial{return m instanceof MeshStandardMaterial&&!m.transparent&&!m.wireframe&&m.depthWrite&&m.depthTest&&m.colorWrite&&m.alphaTest===0&&!m.alphaToCoverage&&!m.displacementMap&&!m.clippingPlanes?.length&&(m.onBeforeCompile===Material.prototype.onBeforeCompile||authoredWallShaders.get(m)===m.onBeforeCompile);}
 
 /** A closed, opaque polygon barrier certified against the FINAL cut walk
  * triangles, not a height estimate or a cylindrical proxy. Every edge
@@ -9,7 +14,7 @@ type Ground=(east:number,north:number)=>number|undefined;
 export function certifyCraterWallRing(mesh:Mesh,east:number,north:number,radius=52,segments=64):Ring|undefined{
  if(![east,north,radius,segments].every(Number.isFinite)||radius<=0||segments<16||!Number.isInteger(segments))return;
  const material=mesh.material;
- if(!(material instanceof MeshStandardMaterial)||material.transparent||material.wireframe||!material.depthWrite||material.alphaTest>0||material.displacementMap)return;
+ if(!wallMaterial(material)||mesh.geometry.morphAttributes.position?.length)return;
  mesh.updateWorldMatrix(true,false);
  const g=mesh.geometry,p=g.getAttribute('position'),index=g.index;
  if(!p||p.itemSize!==3||!index||g.drawRange.start!==0||g.drawRange.count<index.count)return;
@@ -90,7 +95,14 @@ function opaqueMesh(o:Object3D):o is Mesh{
  * transformed geometry bounds; dynamic instancing/skinning excluded. */
 export function createCraterExteriorOcclusion(mesh:Mesh,anchor:{east:number;north:number},heightAt:Ground){
  let ring:Ring|undefined,certified=false,objects:Mesh[]=[],warmCursor=0;
- function prepare(){if(!certified){ring=certifyCraterWallRing(mesh,anchor.east,anchor.north);certified=true;}return ring;}
+ type Certificate={geometry:Mesh['geometry'];position:ReturnType<Mesh['geometry']['getAttribute']>;positionVersion:number;index:NonNullable<Mesh['geometry']['index']>;indexVersion:number;world:Matrix4;material:MeshStandardMaterial;side:number;shader:MeshStandardMaterial['onBeforeCompile']};
+ let certificate:Certificate|undefined;
+ function certificateCurrent(){const c=certificate,g=mesh.geometry,p=g.getAttribute('position');return !!c&&g===c.geometry&&p===c.position&&attributeVersion(p)===c.positionVersion&&g.index===c.index&&c.index.version===c.indexVersion&&g.drawRange.start===0&&g.drawRange.count>=c.index.count&&mesh.matrixWorld.equals(c.world)&&wallMaterial(mesh.material)&&mesh.material===c.material&&mesh.material.side===c.side&&mesh.material.onBeforeCompile===c.shader&&!g.morphAttributes.position?.length;}
+ function prepare(){
+  if(!certified){ring=certifyCraterWallRing(mesh,anchor.east,anchor.north);certified=true;const g=mesh.geometry,p=g.getAttribute('position');
+   if(ring&&p&&g.index&&wallMaterial(mesh.material))certificate={geometry:g,position:p,positionVersion:attributeVersion(p),index:g.index,indexVersion:g.index.version,world:mesh.matrixWorld.clone(),material:mesh.material,side:mesh.material.side,shader:mesh.material.onBeforeCompile};}
+  return certificateCurrent()?ring:undefined;
+ }
  const roots=new Set<Object3D>(),masked:{mesh:Mesh;mask:number}[]=[];
  const eye=new Vector3(),box=new Box3(),instance=new Matrix4(),part=new Box3();
  type Bound={geometry:Mesh['geometry'];position:ReturnType<Mesh['geometry']['getAttribute']>;version:number;world:Matrix4;instanceAttribute?:InstancedMesh['instanceMatrix'];matrixVersion?:number;count?:number;sphere:Sphere};
@@ -114,6 +126,9 @@ export function createCraterExteriorOcclusion(mesh:Mesh,anchor:{east:number;nort
  const restore=()=>{for(const x of masked)x.mesh.layers.mask=x.mask;masked.length=0;};
  function refresh(input:readonly Object3D[]){
   restore();roots.clear();for(const r of input)roots.add(r);
+  // Lifecycle refresh is the explicit opportunity to recertify a replaced
+  // wall. During render, invalidation only disables the optimization.
+  if(certified&&!certificateCurrent()){certified=false;certificate=undefined;ring=undefined;}
   const set=new Set<Mesh>();
   for(const root of roots)root.traverse(o=>{if(o!==mesh&&opaqueMesh(o))set.add(o);});
   // Small sources first: they were absent from the previous cell warmup.
@@ -131,8 +146,8 @@ export function createCraterExteriorOcclusion(mesh:Mesh,anchor:{east:number;nort
   if(Math.hypot(eye.x-anchor.east,eye.z+anchor.north)>=50||!mesh.visible||!camera.layers.test(mesh.layers)||Array.isArray(mesh.material)||!mesh.material.visible||mesh.material.clippingPlanes?.length)return;
   const h=heightAt(eye.x,-eye.z);if(h===undefined||eye.y<h+.05||eye.y>h+4)return;
   let node:Object3D|null=mesh;while(node){if(!node.visible)return;node=node.parent;}
-  prepare();
-  if(ring&&eye.y<ring.minHeight-.35)return ring;
+  const active=prepare();
+  if(active&&eye.y<active.minHeight-.35)return active;
  }
  let smallInstanceCulled=0;
  function begin(camera:Camera,smallInstances=true,maxBuildMs=Infinity){
@@ -147,7 +162,7 @@ export function createCraterExteriorOcclusion(mesh:Mesh,anchor:{east:number;nort
   }
   return masked.length;
  }
- return {refresh,begin,restore,prepare,ringForCamera,warmBounds,get pendingBounds(){return objects.length-warmCursor;},get ring(){return ring;},get candidates(){return objects.length;},get smallInstanceCulled(){return smallInstanceCulled;}};
+ return {refresh,begin,restore,prepare,ringForCamera,warmBounds,get pendingBounds(){return objects.length-warmCursor;},get ring(){return certificateCurrent()?ring:undefined;},get candidates(){return objects.length;},get smallInstanceCulled(){return smallInstanceCulled;}};
 }
 
 /** M calls this with real domain/transition/cover state, never a camera

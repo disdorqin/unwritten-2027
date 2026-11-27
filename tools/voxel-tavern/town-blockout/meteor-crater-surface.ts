@@ -12,6 +12,7 @@ import { smoothBR30GroundNormals } from './town-b-r30-ground-normals';
 import { bR30WorkfaceMasks } from './town-b-r30-crater-workface-layout';
 import { bR30MoundTrailWear } from './town-b-r30-mound-route';
 import { surveyZa31CraterWinch } from './town-za31-crater-winch';
+import { registerCraterOpaqueWallShader } from './town-r30-crater-perf-occlusion';
 
 export type MeteorCraterWorldAnchor = Readonly<{
   east: number;
@@ -110,6 +111,9 @@ export function mountMeteorCraterSurface(anchor: MeteorCraterWorldAnchor,
       '#include <roughnessmap_fragment>',
       '#include <roughnessmap_fragment>\nroughnessFactor = mix(roughnessFactor, 0.97, vCraterSnowFeather);');
   };
+  // Authored shader changes color/roughness and varyings only: no vertex
+  // displacement, alpha discard or depth override. Certify this exact hook.
+  registerCraterOpaqueWallShader(groundMaterial);
   const ground = new Mesh(bowl, groundMaterial);
   ground.name = 'meteor-crater-walk-mesh';
   ground.userData.bR30UnifiedRelief = naturalRelief;
