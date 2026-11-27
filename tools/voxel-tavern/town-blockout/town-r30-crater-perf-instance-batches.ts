@@ -68,8 +68,8 @@ export function createCraterInstanceBatches(cell=96,wide=false){
    j.root.add(proxy);proxy.updateWorldMatrix(true,false);batches.push({...j,proxy});building=undefined;n++;
   }return n;
  }
- function begin(camera:Camera){
-  restore();stats={batches:0,savedDraws:0,extraTriangles:0};frustum.setFromProjectionMatrix(vp.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
+ function begin(camera:Camera,enabled=true){
+  restore();stats={batches:0,savedDraws:0,extraTriangles:0};if(!enabled)return stats;frustum.setFromProjectionMatrix(vp.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
   for(const b of batches){
    if(!b.root.matrixWorld.equals(b.rootWorld)||!visible(b.root,b.root)||!(camera.layers.mask&b.sources[0].mask))continue;
    let seen=0,extra=0,total=0;

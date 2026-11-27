@@ -156,12 +156,13 @@ export function installCraterRenderPerf(root:Group,lod:Lod,room?:Group,ground?:G
   // Only the explicitly requested camera-only experiment simulates the
   // closed surface-domain presentation; D must supply real domain state.
   if(compare&&crosslineProbe&&probe&&ground){const p=camera.position,h=ground.heightAt(p.x,-p.z);if(Math.hypot(p.x-ground.anchor.east,p.z+ground.anchor.north)<50&&h!==undefined&&p.y>=h+.05&&p.y<=h+4){const u=s.getObjectByName('underground-domain-host');if(u){undergroundProbe={object:u,visible:u.visible};u.visible=false;}}}
-  if(p2Enabled){const ring=exterior?.ringForCamera(camera);localCells.begin(camera,localWall&&!compare?ring:undefined,localWall,compactCells&&!compare);if(!compare||crosslineProbe)externalCells.begin(camera,ring,localWall,compactCells&&!compare);groundCells?.begin(camera);}
+  const ring=exterior?.ringForCamera(camera);
+  if(p2Enabled){localCells.begin(camera,localWall&&!compare?ring:undefined,localWall,compactCells&&!compare);if(!compare||crosslineProbe)externalCells.begin(camera,ring,localWall,compactCells&&!compare);groundCells?.begin(camera);}
   if(compare&&p3Enabled){localStatic.begin(camera);if(crosslineProbe)externalStatic.begin(camera);}
-  if(!compare&&coalesceInstances)coalescer.begin(camera);
+  if(!compare&&coalesceInstances)coalescer.begin(camera,!ring);
   if(!compare&&propBatches)props.begin(camera);
   if(!compare&&paletteBatches)palettes.begin(camera);
-  if(!compare)indices.begin(camera,exterior?.ringForCamera(camera),indexCells);
+  if(!compare)indices.begin(camera,ring,indexCells);
   restoreLights();
   frustum.setFromProjectionMatrix(matrix.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
   externalExcluded=0;consideredLights=0;

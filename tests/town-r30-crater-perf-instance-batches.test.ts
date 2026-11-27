@@ -8,7 +8,7 @@ test('wide static forest coalescing is budgeted, exact and refuses offscreen or 
  const other=new InstancedMesh(g,mat,600);detail.add(other);scene.updateMatrixWorld(true);
  const sys=createCraterInstanceBatches(192,true);sys.register([root]);assert.equal(sys.pending,1);sys.warmStep(1,Infinity);assert.equal(sys.count,0);assert.equal(sys.pending,1);while(sys.pending)sys.warmStep(1,Infinity);assert.equal(sys.count,1);
  const p=root.children.find(o=>o.name==='p4-coalesced-instances') as InstancedMesh;assert.equal(p.count,1800);
- const cam=new PerspectiveCamera(100,1,.1,500);cam.position.set(42,0,0);cam.lookAt(42,0,-65);cam.updateMatrixWorld(true);assert.equal(sys.begin(cam).savedDraws,2);assert.equal(other.layers.mask,1);sys.restore();
+ const cam=new PerspectiveCamera(100,1,.1,500);cam.position.set(42,0,0);cam.lookAt(42,0,-65);cam.updateMatrixWorld(true);assert.equal(sys.begin(cam).savedDraws,2);assert.equal(other.layers.mask,1);assert.equal(sys.begin(cam,false).savedDraws,0);assert.ok(sources.every(m=>m.layers.mask===1));sys.restore();
  cam.fov=10;cam.updateProjectionMatrix();cam.updateMatrixWorld(true);assert.equal(sys.begin(cam).savedDraws,0);assert.ok(sources.every(m=>m.layers.mask===1));
  cam.fov=100;cam.updateProjectionMatrix();sources[0].instanceMatrix.needsUpdate=true;assert.equal(sys.begin(cam).savedDraws,0);sys.dispose();assert.equal(root.children.length,1);
 });
