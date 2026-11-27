@@ -4,6 +4,7 @@ import {
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import {instanceWorkshopParts} from './town-r30-crater-perf-workshop';
+import {instanceWorkshopStateParts} from './town-r30-crater-perf-state-parts';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 import type { buildCraterRailExtension } from './town-crater-rail-extension';
 
@@ -370,6 +371,8 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
   const compare=typeof location!=='undefined'&&new URLSearchParams(location.search).has('profile')&&new URLSearchParams(location.search).has('pPerfCompare');
   const repeated=instanceWorkshopParts(root,new Set<Object3D>([...orePiles.flat(),...tallyPegs.flat(),...pressureSteps,...dialKnobs,...[bellowsGrip,leverGrip].filter((o):o is Mesh=>!!o)]),new Set([...allMaterials,pressureStepMaterial]),compare);
   root.userData.p2InstanceStats={before:repeated.before,after:repeated.after};
+  const stateParts=instanceWorkshopStateParts([{leaves:pressureSteps,materials:[pressureStepOff,pressureStepMaterial]},{leaves:tallyPegs.flat(),materials:[tallyOff,tallyOn]},...orePiles.map((leaves,i)=>({leaves,materials:[ores[i]]}))],compare);
+  root.userData.p3StateSources=stateParts.sourceCount;
   const ray=new Ray(),point=new Vector3(),delta=new Vector3();
   type ControlTarget={station:CraterWorkstationId;index?:0|1|2;point:Point;radius:number};
   const targets:ControlTarget[]=sites.flatMap<ControlTarget>(s=>{
@@ -449,6 +452,7 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
     }
     signal!.color.set(view.turnout==='branch'?0x78ac7d:0xaa4c3f);
     signal!.emissive.set(view.turnout==='branch'?0x294e2d:0x68251b);
+    stateParts.sync();
   }
   /** Do not move the last accepted mechanism when its host disappears.
    * Mark the physical face stale and suppress actionable signal colors. */
@@ -462,13 +466,14 @@ export function mountCraterWorkstations(owner:Object3D,road:Road,rail:Rails){
       dialMarks.forEach(m=>{m.visible=false;});
       pressureSteps.forEach(m=>{m.material=pressureStepOff;});
       paintWeight?.(undefined);
+      stateParts.sync();
     }
   }
   show({bellowsStroke:0,gaugeNeedle:0,sortingFill:[0,0,0],weighingNeedle:0,turnout:'straight'});
   setAvailable(false);
   function dispose(){
     root.removeFromParent();
-    repeated.dispose();
+    repeated.dispose();stateParts.dispose();
     const geometries=new Set<import('three').BufferGeometry>();
     root.traverse(o=>{if(o instanceof Mesh){geometries.add(o.geometry);if(o.material instanceof MeshBasicMaterial){o.material.map?.dispose();o.material.dispose();}}});
     for(const geo of geometries)geo.dispose();
