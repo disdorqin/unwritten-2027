@@ -1,5 +1,6 @@
 import {BufferGeometry,Color,Float32BufferAttribute,Group,Mesh,MeshLambertMaterial} from 'three';
 import {southGullyNorth,type SouthGround,type SouthProtection} from './town-night-a-summit-landform';
+import {createSouthSnowAppearance,type SouthSnowVisualSample} from './town-night-a-summit-snow-appearance';
 type Point={e:number;n:number};
 const width=(e:number)=>8+2.8*Math.sin(e*.034)+1.5*Math.sin(e*.071);
 const distance=(p:Point)=>Math.abs(p.n-southGullyNorth(p.e))-width(p.e);
@@ -10,6 +11,7 @@ export function mountSouthGully(heightAt:SouthGround,protectedAt:SouthProtection
  const group=new Group();group.name='night-a-south-frozen-gully';
  const mat=new MeshLambertMaterial({vertexColors:true});
  const bins=new Map<number,{p:number[];c:number[]}>();
+ const snowAppearance:ReturnType<typeof createSouthSnowAppearance>[]=[];
  const ice=new Color('#7897aa'),shale=new Color('#576970'),snow=new Color('#bbcbd1'),tint=new Color(),deepIce=new Color('#486b83'),frost=new Color('#dce7eb');
  let triangles=0;
  function clip(poly:Point[],sign:number){
@@ -84,7 +86,19 @@ export function mountSouthGully(heightAt:SouthGround,protectedAt:SouthProtection
  for(const [k,{p,c}] of bins){if(!p.length)continue;
   const geo=new BufferGeometry();geo.setAttribute('position',new Float32BufferAttribute(p,3));geo.setAttribute('color',new Float32BufferAttribute(c,3));geo.computeVertexNormals();geo.computeBoundingSphere();
   const m=new Mesh(geo,mat);m.name='south-gully-bed:'+k;group.add(m);
+  const rgb=geo.getAttribute('color'),pos=geo.getAttribute('position');
+  const dry=new Color('#718994'),base=new Color();
+  // Recede the bank frost towards darker frozen shale in weak snow.
+  // Keep the centre ice band fixed, and never move a walking surface.
+  const masks=Array.from({length:pos.count},(_,i)=>Math.max(0,Math.min(1,(distance({e:pos.getX(i),n:-pos.getZ(i)})+3)/6)));
+  snowAppearance.push(createSouthSnowAppearance(pos.getX(0),-pos.getZ(0),pos.getY(0)-.022,cover=>{
+   for(let i=0;i<rgb.count;i++){
+    base.setRGB(c[3*i]!,c[3*i+1]!,c[3*i+2]!).lerp(dry,(1-cover)*masks[i]!*.72);
+    rgb.setXYZ(i,base.r,base.g,base.b);
+   }
+   rgb.needsUpdate=true;
+  }));
  }
  let disposed=false;
- return {group,triangles,shelfCount,dispose(){if(disposed)return;disposed=true;group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});mat.dispose();group.clear();}};
+ return {group,triangles,shelfCount,updateSnow(dt:number,sample:SouthSnowVisualSample){if(!disposed)for(const appearance of snowAppearance)appearance.update(dt,sample);},dispose(){if(disposed)return;disposed=true;group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});mat.dispose();snowAppearance.length=0;group.clear();}};
 }

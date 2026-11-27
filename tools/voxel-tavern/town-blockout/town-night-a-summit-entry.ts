@@ -2,6 +2,7 @@ import {BoxGeometry,BufferGeometry,Color,Float32BufferAttribute,Group,Mesh,MeshL
 import {mountAR30StaticBatches} from './town-a-r30-static-batches';
 import type {Box} from './landmark-kit';
 import type {SouthGround} from './town-night-a-summit-landform';
+import {createSouthSnowAppearance,type SouthSnowVisualSample} from './town-night-a-summit-snow-appearance';
 /** Adorn the existing gate/guardroom, never create another entrance or
  * alter the 4x5m opening or the original station and guardroom shells. */
 export function mountSouthEntry(heightAt:SouthGround){
@@ -149,7 +150,11 @@ export function mountSouthEntry(heightAt:SouthGround){
   e>4.65&&e<11.85&&n>2.65&&n<11.35||
   restBuilt&&Math.abs(e-restE)<1.95&&Math.abs(n-restN-.05)<1.15);
  group.userData.shelteredAt=sheltered;
- return {group,colliders:solids,floors,sheltered,blocked(e:number,n:number,h:number,r=.27,body=1.8){return solids.some(b=>h+body-.025>b.min[1]!&&h+.025<b.max[1]!&&Math.hypot(Math.max(b.min[0]!-e,e-b.max[0]!,0),Math.max(b.min[2]!+n,-n-b.max[2]!,0))<r);},setNight(night:boolean){lamp.emissiveIntensity=night?1.0:.10;},dispose(){
+ const fresh=snow.color.clone(),packed=new Color('#b2c4ce');
+ const snowAppearance=createSouthSnowAppearance(0,0,floor+7,cover=>snow.color.copy(packed).lerp(fresh,.25+.75*cover));
+ const updateSnow=(dt:number,sample:SouthSnowVisualSample)=>{if(!disposed)snowAppearance.update(dt,sample);};
+ group.userData.updateSouthSnow=updateSnow;
+ return {group,colliders:solids,floors,sheltered,updateSnow,blocked(e:number,n:number,h:number,r=.27,body=1.8){return solids.some(b=>h+body-.025>b.min[1]!&&h+.025<b.max[1]!&&Math.hypot(Math.max(b.min[0]!-e,e-b.max[0]!,0),Math.max(b.min[2]!+n,-n-b.max[2]!,0))<r);},setNight(night:boolean){lamp.emissiveIntensity=night?1.0:.10;},dispose(){
   if(disposed)return;disposed=true;group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});
   for(const m of [stone,ash,wood,warm,snow,bronze,lamp])m.dispose();group.clear();
  }};

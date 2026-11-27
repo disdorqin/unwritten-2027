@@ -3892,6 +3892,10 @@ function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame
   const weather=local?.weather??(ceremonyState.phase==='ordinary'?townSnowWeatherAt(ceremonyState.now,'light'):townSnowWeatherForFrame(ceremonyState));
   summitWeatherVisual.update(weather,local?.weather,local?.exposure??1,Math.min(.25,frameSeconds),performance.now());
   const summitDt=Math.min(.25,frameSeconds);
+  // Visual accumulation uses fixed, surveyed asset positions. One update
+  // per second; never recolor the whole massif from the player's camera.
+  southEntryHost.updateSnow(summitDt,(e,n,h)=>weatherState&&ceremonyState.phase==='ordinary'
+   ?sampleSouthRegionalWeather(weatherState,e,n,h,true).weather:weather);
   const roof=southEntryHost.sheltered(x,n,ground);
   summitSnowfall.update(camera,summitDt,!cabin&&walking,roof);
   // Reuse the single existing player frost tracker in the early-return

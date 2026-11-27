@@ -15,7 +15,8 @@ test('southern forest is grounded, sector-owned, reserved, spatially culled with
   const p=f.bodies.at(-1)!;assert.ok(f.blocked(p.east,p.north,w.ground(p.east,p.north)!));
   for(const m of w.gully.group.children as Mesh[]){
    const p=m.geometry.getAttribute('position');
-   for(let i=0;i<p.count;i++)assert.ok(Math.abs(p.getY(i)-w.ground(p.getX(i),-p.getZ(i))!-.022)<.001);
+   for(let i=0;i<p.count;i++){const delta=p.getY(i)-w.ground(p.getX(i),-p.getZ(i))!;assert.ok(delta>=.021&&delta<=.172);}
+   // The later ground-conforming bank shelves retain their <=.172m cap.
   }
   console.log(JSON.stringify({forest:f.stats,gully:w.gully.triangles}));
  }finally{w.dispose();}

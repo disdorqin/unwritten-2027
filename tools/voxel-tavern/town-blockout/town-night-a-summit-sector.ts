@@ -6,6 +6,7 @@ import {mountSouthGully} from './town-night-a-summit-gully';
 import {mountSouthForest} from './town-night-a-summit-forest';
 import {mountSouthTrailWorks} from './town-night-a-summit-road';
 import type {mountSouthEarthworks} from './town-night-a-summit-road-earthworks';
+import type {SouthSnowVisualSample} from './town-night-a-summit-snow-appearance';
 /** One D2-owned mount in local coordinates. Caller must explicitly retire
  * the legacy overlapping southern vegetation, and if using road strips,
  * remove exactly their corresponding legacy tread. No automatic domain
@@ -35,7 +36,11 @@ export function mountSouthSector(input:{
  const road=input.earthworks??(input.trailPoints?build(()=>mountSouthTrailWorks(input.trailPoints!,input.heightAt)):undefined);
  group.add(entry.group,gully.group,forest.group);if(road)group.add(road.group);
  let disposed=false;
- return {group,entry,gully,forest,road,cutTread:input.earthworks?.cutTread,
+ function updateSnow(dt:number,sample:SouthSnowVisualSample){
+  if(disposed)return;entry.updateSnow(dt,sample);gully.updateSnow(dt,sample);forest.updateSnow(dt,sample);
+ }
+ group.userData.updateSouthSnow=updateSnow;
+ return {group,entry,gully,forest,road,updateSnow,cutTread:input.earthworks?.cutTread,
  supportAt:(e:number,n:number)=>disposed?undefined:input.earthworks?.supportAt(e,n),
  blocked(e:number,n:number,h:number,r=.27,body=1.8){return !disposed&&(entry.blocked(e,n,h,r,body)||forest.blocked(e,n,h,r,body)||!!road?.blocked(e,n,h,r,body));},
  updateView(e:number,n:number){if(!disposed)forest.updateView(e,n);},
