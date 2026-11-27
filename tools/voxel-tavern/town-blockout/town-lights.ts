@@ -45,10 +45,13 @@ export function createTownLights(
   setCeremonyBand(band: number): void;
   setDusk(enabled: boolean): void;
   setCeremonyDim(level: number): void;
+  /** Continuous 0..1 night glow for the automatic dusk lamps; player-lit lamps stay lit. */
+  setNightLevel(level: number): void;
 } {
   const lit = new Set<TownLightId>(savedLights());
   let ceremonyBand = -1;
   let ceremonyDim = 1;
+  let nightLevel = 1;
   let dusk = false;
   const dimmedColor = new Color();
   const partsPerLight = 15;
@@ -90,9 +93,10 @@ export function createTownLights(
   context.scene.add(fixtures);
 
   function paint({ id, pane, wick, cross, band }: typeof pieces[number]) {
-    const glowing = lit.has(id) || band <= ceremonyBand || dusk && (id === 'plaza' || id === 'workshop');
-    fixtures.setColorAt(pane, dimmedColor.copy(glowing ? colors.lamp : colors.glass).multiplyScalar(ceremonyDim));
-    dimmedColor.copy(glowing ? colors.filament : colors.shade).multiplyScalar(ceremonyDim);
+    const automatic = band <= ceremonyBand || dusk && (id === 'plaza' || id === 'workshop');
+    const glow = lit.has(id) ? 1 : automatic ? nightLevel : 0;
+    fixtures.setColorAt(pane, dimmedColor.copy(colors.glass).lerp(colors.lamp, glow).multiplyScalar(ceremonyDim));
+    dimmedColor.copy(colors.shade).lerp(colors.filament, glow).multiplyScalar(ceremonyDim);
     fixtures.setColorAt(wick, dimmedColor);
     fixtures.setColorAt(cross, dimmedColor);
     fixtures.instanceColor!.needsUpdate = true;
@@ -177,6 +181,13 @@ export function createTownLights(
       const dim = Math.max(0, Math.min(1, level));
       if (dim === ceremonyDim) return;
       ceremonyDim = dim;
+      pieces.forEach(paint);
+    },
+    setNightLevel(level) {
+      if (!Number.isFinite(level)) return;
+      const next = Math.max(0, Math.min(1, level));
+      if (next === nightLevel) return;
+      nightLevel = next;
       pieces.forEach(paint);
     },
     blocked(x, n) {
