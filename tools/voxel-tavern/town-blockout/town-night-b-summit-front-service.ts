@@ -70,9 +70,10 @@ export function createNightBFrontService(input:FrontCableServiceInput){
  }
  function board(foot:Foot,cabin:Cabin):Ride|undefined{
   if((cabin!==0&&cabin!==1)||!physical||![foot.east,foot.north,foot.height].every(Number.isFinite))return;
-  const f=first(),at=cabinStates()?.[cabin];
-  const firstBoard=input.firstRun&&cabin===0&&f?.phase==='first'&&f.boarding&&f.elapsed<frontCableTerminalDwellMs&&input.daylight()===true;
-  if((!serviceOpen()&&!firstBoard)||!at?.station||!input.dockClear(at.station,foot))return;
+  const at=cabinStates()?.[cabin];
+  // Canon: the impact wakes an EMPTY car for one station. No passenger
+  // can be trapped by the later automatic reposition during repairs.
+  if(!serviceOpen()||!at?.station||!input.dockClear(at.station,foot))return;
   const approach={...at.feet,north:at.feet.north-2.1};
   const near=(p:Foot)=>Math.hypot(foot.east-p.east,foot.north-p.north)<=.900000001&&Math.abs(foot.height-p.height)<=.430000001;
   // The walking approach used on exit must also be a legal boarding point.
