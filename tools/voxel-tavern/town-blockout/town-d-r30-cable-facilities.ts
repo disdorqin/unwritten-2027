@@ -93,7 +93,10 @@ export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Fiel
  const group=new Group();group.name='d-r30-front-cable-facilities';owner.add(group);
  const geometry=new BoxGeometry(),tmp=new Object3D(),parts:Part[]=[],solids:Solid[]=[];
  const stone=new MeshLambertMaterial({color:'#78818a'}),ash=new MeshLambertMaterial({color:'#9ba9af'}),wood=new MeshLambertMaterial({color:'#73523b'}),oak=new MeshLambertMaterial({color:'#ad8966'}),iron=new MeshLambertMaterial({color:'#384c58'}),brass=new MeshLambertMaterial({color:'#b9a074'}),snow=new MeshLambertMaterial({color:'#dce5eb'}),glass=new MeshLambertMaterial({color:'#7fa3a3'}),lamp=new MeshLambertMaterial({color:'#e9c58e'});
- const materials=[stone,ash,wood,oak,iron,brass,snow,glass,lamp],batches:InstancedMesh[]=[],boards:Mesh<PlaneGeometry,MeshBasicMaterial>[]=[];
+ const staticMaterial=new MeshLambertMaterial({color:'#ffffff'});
+ const materials=[stone,ash,wood,oak,iron,brass,snow,glass,lamp,staticMaterial],batches:InstancedMesh[]=[],boards:Mesh<PlaneGeometry,MeshBasicMaterial>[]=[];
+ const tiers:{near:InstancedMesh;far?:InstancedMesh;east:number;north:number}[]=[];
+ const tint=new Color();
  // Upper shelter faces the actual incoming diagonal, not world north.
  const E=336,N=640,Y=347,heading=Math.atan2(-104,120);
  let upperFrame=false;
@@ -255,8 +258,13 @@ export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Fiel
  const clock=createNorthRidgeCableClock(survey.lowerMetres,survey.length-survey.lowerMetres,0);
  const cabinGroups=[-1,1].map(side=>{
    const car=new Group();car.name='d-r30-cable-cabin-'+side;group.add(car);
+   const localParts:Part[]=[];
    function local(m:MeshLambertMaterial,x:number,y:number,z:number,w:number,h:number,d:number){
-    const mesh=new Mesh(geometry,m);mesh.position.set(x,y,z);mesh.scale.set(w,h,d);car.add(mesh);
+    if(closed){
+     tmp.position.set(x,y,z);tmp.rotation.set(0,0,0);tmp.scale.set(w,h,d);tmp.updateMatrix();localParts.push({m,matrix:tmp.matrix.clone()});
+    }else{
+     const mesh=new Mesh(geometry,m);mesh.position.set(x,y,z);mesh.scale.set(w,h,d);car.add(mesh);
+    }
    }
    // The station datum is the actual bottom support, not the centre of
    // the floor board. Never sink the moving floor below that datum.
@@ -272,6 +280,10 @@ export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Fiel
    }
    local(brass,0,2.55,0,.18,.39,.18);
    local(iron,0,2.70,0,.31,.16,.42);
+   if(closed){
+    const batch=new InstancedMesh(geometry,staticMaterial,localParts.length);batch.name='ridge-cable-parked-car-batch';
+    localParts.forEach((p,i)=>{batch.setMatrixAt(i,p.matrix);batch.setColorAt(i,p.m.color)});batch.computeBoundingSphere();car.add(batch);batches.push(batch);
+   }
    return {car,side};
  });
  function update(nowMs:number){
@@ -296,12 +308,37 @@ export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Fiel
   const g=new BufferGeometry().setFromPoints(survey.towers.map(p=>new Vector3(p.east+side*1.55,p.height+2.7,-p.north)));
   const rope=new Line(g,new LineBasicMaterial({color:'#414e58'}));rope.name='ridge-cable-survey-rope';group.add(rope);lines.push(rope);
  }
- for(const m of materials){
+ if(closed){
+  // Spatially bounded, vertex-color instancing for all non-emissive
+  // structure. Long continuous beams remain; far LOD drops only small
+  // decorative courses/rungs. Collision stays independent of render LOD.
+  const cells=new Map<string,{east:number;north:number;parts:Part[]}>();
+  for(const p of parts){
+   const x=Math.floor(p.matrix.elements[12]!/64),n=Math.floor(-p.matrix.elements[14]!/64),key=x+','+n;
+   const c=cells.get(key)??{east:x*64+32,north:n*64+32,parts:[]};c.parts.push(p);cells.set(key,c);
+  }
+  const largest=(p:Part)=>{const a=p.matrix.elements;return Math.max(Math.hypot(a[0]!,a[1]!,a[2]!),Math.hypot(a[4]!,a[5]!,a[6]!),Math.hypot(a[8]!,a[9]!,a[10]!))};
+  function batch(list:Part[],m:MeshLambertMaterial,name:string){
+   if(!list.length)return;
+   const b=new InstancedMesh(geometry,m,list.length);b.name=name;
+   list.forEach((p,i)=>{b.setMatrixAt(i,p.matrix);if(m===staticMaterial)b.setColorAt(i,tint.copy(p.m.color))});
+   b.computeBoundingSphere();group.add(b);batches.push(b);return b;
+  }
+  for(const [key,c]of cells){
+   const structure=c.parts.filter(p=>p.m!==lamp),lights=c.parts.filter(p=>p.m===lamp);
+   const near=batch(structure,staticMaterial,'ridge-cable-'+key+'-near'),far=batch(structure.filter(p=>largest(p)>=.65),staticMaterial,'ridge-cable-'+key+'-far');
+   if(near){near.visible=false;tiers.push({near,far,east:c.east,north:c.north})}
+   batch(lights,lamp,'ridge-cable-'+key+'-lights');
+  }
+ }else for(const m of materials){
   const list=parts.filter(p=>p.m===m);if(!list.length)continue;
   const batch=new InstancedMesh(geometry,m,list.length);batch.name='ridge-cable-facilities-'+m.color.getHexString();
   list.forEach((p,i)=>batch.setMatrixAt(i,p.matrix));batch.computeBoundingSphere();group.add(batch);batches.push(batch);
  }
- return {group,survey,clock,update,blocked(e:number,n:number,y:number,r=.27){
+ function updateView(e:number,n:number){
+  for(const c of tiers){const d=Math.hypot(e-c.east,n-c.north);c.near.visible=c.near.visible?d<150:d<120;if(c.far)c.far.visible=!c.near.visible}
+ }
+ return {group,survey,clock,update,updateView,visibleInstances:()=>batches.reduce((n,b)=>n+(b.visible?b.count:0),0),blocked(e:number,n:number,y:number,r=.27){
   return solids.some(s=>{const dx=e-s.e,dn=n-s.n,c=Math.cos(s.yaw),a=Math.sin(s.yaw),x=dx*c+dn*a,z=-dx*a+dn*c;
    return y+1.8>s.bottom&&y<s.top&&Math.hypot(Math.max(0,Math.abs(x)-s.w/2),Math.max(0,Math.abs(z)-s.d/2))<r})
  },setNight(night:boolean){lamp.emissive.set(night?'#e9c58e':'#000000');lamp.emissiveIntensity=night?.65:0;lights.forEach(l=>l.intensity=night?8:0)},

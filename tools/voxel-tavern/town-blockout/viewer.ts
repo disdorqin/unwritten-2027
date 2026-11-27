@@ -4341,7 +4341,7 @@ renderer.setAnimationLoop(now => {
         calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, cameraY: camera.position.y, detailMs,
         weatherMs, weatherTier: weather.tier, snowIntensity: effectiveSnowIntensity, snowCover: visualSnowCover,
         fogNear: weatherFog.near, fogFar: weatherFog.far, points: renderer.info.render.points,
-        ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities},
+        ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities,cableInstances:productionRidge.facilities?.visibleInstances()},
         ...(skylinePeak ? { summitSkyline: { draws: summitSkylineDraws, peakNdc: skylinePeak.toArray(),
           camera: camera.position.toArray(), far: camera.far } } : {}),
       } }));
