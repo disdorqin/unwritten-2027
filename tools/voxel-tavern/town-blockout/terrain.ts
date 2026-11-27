@@ -2,6 +2,7 @@ import layout from './layout.json';
 import { marketStallLayouts, marketStallLocalPoint } from './market-stall-layout';
 import { northernRiver, sampleExtension, worldBounds } from './town-extension';
 import { terrainReliefOffset } from './terrain-undulations';
+import { sampleTerrainEdge } from './town-a-r30-terrain-contract';
 
 export { layout, worldBounds };
 
@@ -65,7 +66,12 @@ function nearestRoad(x: number, north: number) {
     const px = x - a.x;
     const pn = north - a.north;
     const t = clamp((px * dx + pn * dn) / lengthSquared, 0, 1);
-    const d = Math.hypot(px - dx * t, pn - dn * t);
+    // Compare squared bounds first, but keep the original hypot for
+    // potential winners and near-ties so Float32 terrain and tie order
+    // remain identical to the surveyed height authority.
+    const ex=px-dx*t,en=pn-dn*t;
+    if(ex*ex+en*en>distance*distance*(1+8*Number.EPSILON))continue;
+    const d = Math.hypot(ex,en);
     if (d < distance) {
       distance = d;
       height = a.height + dh * t;
@@ -196,7 +202,15 @@ export function createTerrainGrid(options: { relief?: boolean } = {}) {
   function heightAt(x: number, north: number) {
     return bridgeAt(x, north)?.height ?? groundHeightAt(x, north);
   }
-  return { elevation, surfaces, gridWidth, gridDepth, heightAt, groundHeightAt };
+  const terrainReadyAt=(east:number,north:number)=>Number.isFinite(east)&&Number.isFinite(north)&&
+    east>=0&&east<=worldBounds.width&&north>=0&&north<=worldBounds.depth;
+  // D consumes H0 from the exact same 1m triangles as the town ground.
+  // The old-town grid/plots/roads are unchanged by this read-only contract.
+  const boundarySamples=(points:readonly (readonly [number,number])[])=>{
+    if(points.some(([e,n])=>!terrainReadyAt(e,n)))throw new RangeError('Boundary outside town H0 grid');
+    return sampleTerrainEdge(groundHeightAt,points);
+  };
+  return { elevation, surfaces, gridWidth, gridDepth, heightAt, groundHeightAt,terrainReadyAt,boundarySamples };
 }
 
 export function canEnter(x: number, n: number) {

@@ -16,13 +16,14 @@ type RailTrack=ReadonlyArray<Readonly<{east:number;north:number}>>;
 type Mode='review'|'host-candidate';
 type HostRoute=Parameters<typeof surveyBR30WorkshopApproaches>[2][number];
 type HostRail=Rail&{readonly sidingSamples?:RailTrack};
+type HostInscriptionSurvey=(road:Road,rail:HostRail)=>Readonly<{points:HostRoute['points'];length:number;bodyGap:number;trackGap:number;maxStep:number;steps:number;routeId:string}>;
 const live=new WeakSet<object>();
 /** One B-owned attachment after A's final unified terrain, legacy plate
  * retirement/refit and rail build, before the sole west collision index.
  * Host-candidate mode requires all three actual A rail routes and the
  * industrial approach surveys. No authority, new floor, lift, or
  * production approval is implied by returning a mounted scene. */
-export function attachBR30CraterCompletion(road:Road,rail:HostRail,tracks:readonly RailTrack[],mode:Mode,hostRoutes?:readonly HostRoute[]){
+export function attachBR30CraterCompletion(road:Road,rail:HostRail,tracks:readonly RailTrack[],mode:Mode,hostRoutes?:readonly HostRoute[],supportSurvey?:HostInscriptionSurvey){
  const root=road.group,old=road.group.userData.colliders as Box[];
  if(!Array.isArray(old))throw Error('Missing final west collision list');
  const ground=root.getObjectByName('meteor-crater-walk-mesh');
@@ -40,13 +41,13 @@ export function attachBR30CraterCompletion(road:Road,rail:HostRail,tracks:readon
   const kit=take(attachBR30PhysicalKit(road,rail)),melt=take(installBR30MeltColumns(road)),mound=take(installBR30MoundPlanting(road)),flag=take(installBR30MoundWorkFlag(road));
   const historic=take(installBR30HistoricEastWall(road,tracks,railBoxes)),paper=take(installBR30RubbingPaper(road.inscription));
   const returnSurvey=surveyBR30ReturnHeadframe(road);
-  let workshopApproaches:ReturnType<typeof surveyBR30WorkshopApproaches>|undefined,inscriptionApproach:ReturnType<typeof surveyBR30InscriptionApproach>|undefined;
+  let workshopApproaches:ReturnType<typeof surveyBR30WorkshopApproaches>|undefined,inscriptionApproach:ReturnType<typeof surveyBR30InscriptionApproach>|ReturnType<HostInscriptionSurvey>|undefined;
   if(mode==='host-candidate'){
    const routes=hostRoutes!;
    const solids=[...road.group.userData.colliders,...railBoxes] as Box[];
    workshopApproaches=surveyBR30WorkshopApproaches(road,kit.machines.sites,routes,tracks,solids);
    const dock=routes.find(r=>r.id==='transfer-dock');if(!dock)throw Error('Missing real transfer dock');
-   inscriptionApproach=surveyBR30InscriptionApproach(road,road.inscription.layout.useFoot,dock,tracks,solids);
+   if(supportSurvey){const a=supportSurvey(road,rail),actual=routes.find(r=>r.id==='inscription-access');if(!actual||a.routeId!==actual.id||a.points!==actual.points||![a.length,a.bodyGap,a.trackGap,a.maxStep,a.steps].every(Number.isFinite)||a.length<=0||a.bodyGap<.27||a.trackGap<1.30||a.maxStep>.43001||a.steps<1)throw Error('Invalid actual inscription support survey');inscriptionApproach=a;}else inscriptionApproach=surveyBR30InscriptionApproach(road,road.inscription.layout.useFoot,dock,tracks,solids);
   }
   live.add(root);
   let disposed=false;

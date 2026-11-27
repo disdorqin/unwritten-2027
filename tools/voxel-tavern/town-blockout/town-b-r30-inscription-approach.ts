@@ -15,7 +15,10 @@ function project(p:EN,a:EN,b:EN){
 /** A's real transfer dock anchor, B's original inscription foot.
  * A geometric candidate only, never a new support surface. */
 export function surveyBR30InscriptionApproach(road:Road,foot:Point,route:Route,tracks:readonly (readonly EN[])[],solids:readonly Box[]){
- if(route.id!=='transfer-dock'||tracks.length!==3||tracks.some(t=>t.length<2))throw Error('Missing actual transfer dock or three tracks');
+ const finiteEN=(p:EN)=>Number.isFinite(p.east)&&Number.isFinite(p.north);
+ const finitePoint=(p:Point)=>finiteEN(p)&&Number.isFinite(p.height);
+ const finiteBox=(b:Box)=>b.min.length===3&&b.max.length===3&&b.min.every((v,i)=>Number.isFinite(v)&&Number.isFinite(b.max[i])&&v<=b.max[i]);
+ if(!finitePoint(foot)||route.id!=='transfer-dock'||route.points.length<2||!route.points.every(finitePoint)||tracks.length!==3||tracks.some(t=>t.length<2||!t.every(finiteEN))||!solids.length||!solids.every(finiteBox))throw Error('Missing or invalid actual transfer dock, three tracks, foot or collision survey');
  const points=bR30InscriptionApproachPlan.map(([east,north])=>{
   const height=road.heightAt(east,north);if(height===undefined||!Number.isFinite(height))throw Error('Missing inscription approach support');
   return {east,north,height};

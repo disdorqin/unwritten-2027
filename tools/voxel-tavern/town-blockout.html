@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>UNWRITTEN 2027 · 雪夜小镇预览</title>
+  <title>UNWRITTEN 2027 · 未写镇 3.0 体验版</title>
   <link rel="stylesheet" href="./town-blockout/style.css">
   <link rel="stylesheet" href="./town-blockout/town-panel.css">
   <link rel="stylesheet" href="./town-blockout/town-entry.css">
@@ -29,7 +29,7 @@
 <body class="town-entry-pending">
   <section id="town-entry" aria-labelledby="town-entry-title">
     <div class="town-entry-content">
-      <h1 id="town-entry-title">进入未写镇</h1>
+      <h1 id="town-entry-title">进入未写镇 3.0</h1>
       <p id="town-entry-loading" role="status">正在加载小镇…</p>
       <p id="town-entry-guide" hidden>内置浏览器可能限制转向。请点右上角菜单，选择「在浏览器中打开」，也可以继续进入并拖动转向。</p>
       <p id="town-entry-error" role="alert" hidden>小镇没有加载成功。请重试，或在系统浏览器中打开。</p>
@@ -52,12 +52,13 @@
   </button>
   <dialog id="town-settings" class="panel" aria-labelledby="town-settings-title">
     <div class="town-panel-heading">
-      <h1 id="town-settings-title">小镇设置</h1>
+      <h1 id="town-settings-title">小镇设置 · 3.0 体验版</h1>
       <output id="town-presence-status" role="status" aria-label="小镇联机状态">单人模式</output>
       <button id="town-settings-close" type="button" autofocus>关闭</button>
     </div>
     <p id="env-banner" role="note" hidden><span id="env-banner-message">当前浏览器可能不支持鼠标视角锁定，建议复制链接到电脑上的 Chrome 或 Edge 打开。</span> <button id="env-banner-dismiss" type="button" hidden>关闭提示</button></p>
     <div id="town-panel-controls">
+      <small id="town-release-status" role="status" aria-label="游戏构建和服务器版本">正在核对版本…</small>
       <label class="town-presence-name">昵称
         <input id="town-presence-name" type="text" maxlength="48" placeholder="留空使用游客名"
           autocomplete="nickname" aria-describedby="town-presence-name-hint">

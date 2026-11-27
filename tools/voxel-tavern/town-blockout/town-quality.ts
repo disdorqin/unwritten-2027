@@ -29,15 +29,22 @@ export function parseQualityTier(value: unknown): QualityTier {
   return value === 'smooth' || value === 'balanced' || value === 'fine' ? value : qualityTierDefault;
 }
 
+// On a first visit from a touch-first mobile device, prefer the lower GPU budget.
+// Explicit saved choices always win; desktop keeps the existing default.
+export function initialQualityTier(stored: unknown, mobile: boolean): QualityTier {
+  return stored === null || stored === undefined ? (mobile ? 'smooth' : qualityTierDefault) : parseQualityTier(stored);
+}
+
 let current: QualityTier = qualityTierDefault;
 let loaded = false;
 
 export function qualityTier(): QualityTier {
   if (!loaded) {
     loaded = true;
+    const mobile = typeof navigator !== 'undefined' && /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+    current = initialQualityTier(undefined, mobile);
     try {
-      const stored = globalThis.localStorage?.getItem(qualityTierKey);
-      if (stored !== null && stored !== undefined) current = parseQualityTier(stored);
+      current = initialQualityTier(globalThis.localStorage?.getItem(qualityTierKey), mobile);
     } catch { /* Storage is optional; the session value still applies. */ }
   }
   return current;
