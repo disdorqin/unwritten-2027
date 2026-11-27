@@ -1119,6 +1119,8 @@ export function createTownPresence(
     leavePlazaPhoto(id: number) {
       if (photoSupported) sendEvent(JSON.stringify({ type: 'event', kind: 'plaza-photo-opt-out', id }));
     },
+    /** Current room's actual visible actors, without the plaza-only photograph filter. */
+    nearbyPlayerPoses(){return haveId&&joinedId!==null?[{id:joinedId,east:local.east,north:local.north,height:local.height},...Array.from(actors.values(),a=>({id:a.id,east:a.east,north:a.north,height:a.height}))]:[];},
     nearbyPhotoPeople() {
       return plazaPhotoLineup([{ id: joinedId ?? 1, name: joinedName ?? getName(), east: local.east, north: local.north, height: local.height }, ...actors.values()]);
     },

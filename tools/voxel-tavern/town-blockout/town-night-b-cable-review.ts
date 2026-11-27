@@ -55,7 +55,7 @@ addEventListener('keydown',e=>{if(e.code!=='KeyE'||e.repeat||document.activeElem
  else lastAction=host.board(feet,line,0)?'board':'blocked-board';
 });
 const status=document.querySelector('#ride-status')!;
-function state(){const ride=host.pose();return {line,legMs,cycleMs,actions,lastAction,frame,ride,feet,visual:visualPos(),bound:line===1?host.frontBound:host.upperBound,clock:presence.cableServerNow(),epoch:dispatch.openedAt(),dawn:dispatch.dawnEpoch(),self:presence.selfId(),people:presence.nearbyPhotoPeople(),draws:renderer.info.render.calls,tris:renderer.info.render.triangles};}
+function state(){const ride=host.pose();return {line,legMs,cycleMs,actions,lastAction,frame,ride,feet,visual:visualPos(),bound:line===1?host.frontBound:host.upperBound,clock:presence.cableServerNow(),epoch:dispatch.openedAt(),dawn:dispatch.dawnEpoch(),self:presence.selfId(),people:presence.nearbyPlayerPoses(),draws:renderer.info.render.calls,tris:renderer.info.render.triangles};}
 Object.assign(window,{__nightBCableReview:{state}});
 function loop(t:number){
  const dt=Math.min(.25,Math.max(0,(t-last)/1000));last=t;host.updateVisuals();

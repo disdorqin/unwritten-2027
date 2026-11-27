@@ -28,7 +28,7 @@ try{
  web=await createServer({root,configFile:path.join(root,'vite.config.ts'),cacheDir:path.join(out,'.vite-cache'),optimizeDeps:{noDiscovery:true,include:[]},logLevel:'error',server:{host:'127.0.0.1',port:0,hmr:false,fs:{allow:[repo]},proxy:{'^/presence-summit(?:/|$)':{target:'http://127.0.0.1:'+summit.address().port,ws:true,rewrite:p=>p.replace('/presence-summit','/presence')},'^/presence(?:/|$)':{target:'http://127.0.0.1:'+town.address().port,ws:true}}}});await web.listen();
  const chrome=['C:/Program Files/Google/Chrome/Application/chrome.exe','C:/Program Files (x86)/Google/Chrome/Application/chrome.exe'].find(existsSync);
  browser=await chromium.launch({headless:true,executablePath:chrome,args:['--use-gl=angle','--use-angle=d3d11','--disable-background-timer-throttling','--disable-renderer-backgrounding']});
- for(const line of [1,2]){
+ for(const line of (process.env.B_CABLE_REVIEW_LINE?[Number(process.env.B_CABLE_REVIEW_LINE)]:[1,2])){
   clock=epoch+1000;
   const pages=await Promise.all([0,1].map(async i=>{
    const ctx=await browser.newContext({viewport:{width:880,height:540},deviceScaleFactor:1});
@@ -38,7 +38,7 @@ try{
   }));
   const state=p=>p.evaluate(()=>window.__nightBCableReview.state());
   const wait=(p,fn,arg)=>p.waitForFunction(fn,arg,{timeout:20000});
-  await Promise.all(pages.map(p=>wait(p,()=>{const s=window.__nightBCableReview?.state();return s?.bound&&s.frame>3&&s.clock&&s.epoch&&s.dawn&&s.people.length>=2})));
+  try{await Promise.all(pages.map(p=>wait(p,()=>{const s=window.__nightBCableReview?.state();return s?.bound&&s.frame>3&&s.clock&&s.epoch&&s.dawn&&s.people.length>=2})));}catch(e){const states=await Promise.all(pages.map(p=>p.evaluate(()=>({state:window.__nightBCableReview?.state(),status:document.body.innerText}))));results.push({line,name:'initial-failure',states});console.log(JSON.stringify(states));throw e;}
   const initial=await state(pages[0]),leg=initial.legMs;
   async function jump(offset){
    clock=epoch+Math.ceil(offset);
