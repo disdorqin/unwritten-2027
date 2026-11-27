@@ -5,6 +5,7 @@ import {mountSouthEntry} from './town-night-a-summit-entry';
 import {mountSouthGully} from './town-night-a-summit-gully';
 import {mountSouthForest} from './town-night-a-summit-forest';
 import {mountSouthTrailWorks} from './town-night-a-summit-road';
+import type {mountSouthEarthworks} from './town-night-a-summit-road-earthworks';
 /** One D2-owned mount in local coordinates. Caller must explicitly retire
  * the legacy overlapping southern vegetation, and if using road strips,
  * remove exactly their corresponding legacy tread. No automatic domain
@@ -14,15 +15,21 @@ export function mountSouthSector(input:{
  legacySouthVegetationExcluded:boolean;
  trailPoints?:readonly MainSummitTrailPoint[];
  legacyTreadExcluded?:boolean;
+ /** Host consumes cutTread in canonical terrain/LOD/collision first. */
+ earthworks?:ReturnType<typeof mountSouthEarthworks>;
+ canonicalCutInstalled?:boolean;
 }){
  if(!input.legacySouthVegetationExcluded)throw Error('Exclude legacy southern vegetation before attaching A');
- if(input.trailPoints&&!input.legacyTreadExcluded)throw Error('Exclude corresponding legacy tread before attaching A road');
+ if((input.trailPoints||input.earthworks)&&!input.legacyTreadExcluded)throw Error('Exclude corresponding legacy tread before attaching A road');
+ if(input.trailPoints&&input.earthworks)throw Error('Two southern road renderers requested');
+ if(input.earthworks&&(!input.canonicalCutInstalled||input.earthworks.group.parent))throw Error('Install shared terrain cut and transfer an unattached road leaf');
  const group=new Group();group.name='night-a-south-sector';
  const entry=mountSouthEntry(input.heightAt),gully=mountSouthGully(input.heightAt,input.reserved),forest=mountSouthForest(input.heightAt,input.reserved);
- const road=input.trailPoints?mountSouthTrailWorks(input.trailPoints,input.heightAt):undefined;
+ const road=input.earthworks??(input.trailPoints?mountSouthTrailWorks(input.trailPoints,input.heightAt):undefined);
  group.add(entry.group,gully.group,forest.group);if(road)group.add(road.group);
  let disposed=false;
- return {group,entry,gully,forest,road,
+ return {group,entry,gully,forest,road,cutTread:input.earthworks?.cutTread,
+ supportAt:(e:number,n:number)=>input.earthworks?.supportAt(e,n),
  blocked(e:number,n:number,h:number,r=.27,body=1.8){return entry.blocked(e,n,h,r,body)||forest.blocked(e,n,h,r,body)||!!road?.blocked(e,n,h,r,body);},
  updateView(e:number,n:number){forest.updateView(e,n);},
  setNight(night:boolean){entry.setNight(night);},
