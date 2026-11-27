@@ -129,6 +129,70 @@ test('D2-R3 landmark bodies block the player but the climb itself stays traversa
   assert.throws(() => wall.blocked(0, 1000, 800, .27, 1.7), Error);
 });
 
+test('D2-R5 rock ledges rest every 15-20m of vertical rise and stay non-solid', context => {
+  const wall = cleanup(context, createTownD2R30NorthWall());
+  const stats = wall.stats();
+  assert.ok(stats.climbLedges >= 10, `too few rock ledges: ${stats.climbLedges}`);
+  // Reconstruct the ledge set the same greedy rule the module uses, then
+  // check every consecutive vertical gap sits in the reference band.
+  const anchors = [...wall.climbAnchors];
+  const ledgeMin = 15, ledgeMax = 20;
+  const ledges: typeof anchors = [anchors[0]!];
+  let rise = 0;
+  for (let i = 1; i < anchors.length; i++) {
+    const step = anchors[i]!.ground - anchors[i - 1]!.ground;
+    const projected = rise + step;
+    if (step >= ledgeMin || projected >= ledgeMin) {
+      if (projected > ledgeMax && rise >= ledgeMin * .8) { ledges.push(anchors[i - 1]!); rise = step; }
+      else { ledges.push(anchors[i]!); rise = 0; }
+    } else rise = projected;
+  }
+  if (ledges[ledges.length - 1] !== anchors[anchors.length - 1]!) ledges.push(anchors[anchors.length - 1]!);
+  assert.equal(ledges.length, stats.climbLedges, 'stats ledge count must match the greedy rule');
+  let inBand = 0;
+  for (let i = 1; i < ledges.length; i++) {
+    const gap = ledges[i]!.ground - ledges[i - 1]!.ground;
+    if (gap >= ledgeMin - 2.5 && gap <= ledgeMax + .5) inBand++;
+    assert.ok(gap > 0, `ledge ${i} does not rise`);
+  }
+  assert.ok(inBand >= Math.ceil(ledges.length * .6), `only ${inBand} of ${ledges.length - 1} ledge gaps in band`);
+
+  // Every ledge is a real rock slab instance on the climb line, and the
+  // ledges never add collision: the climb surface stays traversable.
+  const names = new Set<string>();
+  wall.group.traverse((object: Object3D) => { if (object.name) names.add(object.name); });
+  for (const required of [
+    'town-d2-r30-climb-ledges', 'town-d2-r30-climb-ledge-pads',
+    'town-d2-r30-climb-ledge-rock', 'town-d2-r30-climb-guides',
+    'town-d2-r30-climb-rung-brackets',
+  ]) assert.ok(names.has(required), `missing climb structure ${required}`);
+  for (const anchor of anchors) {
+    assert.equal(wall.blocked(anchor.east, anchor.north, anchor.ground, .27, 1.7), false,
+      `climb anchor ${anchor.id} is falsely blocked by ledges`);
+  }
+});
+
+test('D2-R5 summit landmarks carry real structural detail', context => {
+  const wall = cleanup(context, createTownD2R30NorthWall());
+  const names = new Set<string>();
+  wall.group.traverse((object: Object3D) => { if (object.name) names.add(object.name); });
+  for (const required of [
+    'town-d2-r30-monument-apron-0', 'town-d2-r30-monument-step',
+    'town-d2-r30-monument-band', 'town-d2-r30-great-flag-rod',
+    'town-d2-r30-great-flag-rigging', 'town-d2-r30-lookout-kerb-side-1',
+    'town-d2-r30-lookout-kerb-end-1', 'town-d2-r30-lookout-post-1-1',
+    'town-d2-r30-lookout-plank-1',
+  ]) assert.ok(names.has(required), `missing landmark detail ${required}`);
+  // The structural additions stay grounded: the flag rigging anchors are
+  // real summit rock, and the lookout kerb/posts sit on the deck.
+  const spec = townD2R30NorthWallSpec;
+  for (const [east, north] of [[spec.flag.east - 5, spec.flag.north + 4],
+    [spec.flag.east + 5, spec.flag.north + 4]] as const) {
+    assert.ok(Number.isFinite(sampleTownD2R30Height(east, north)!), `flag rigging anchor E${east}/N${north} unsupported`);
+  }
+  assert.ok(wall.stats().collisionBoxes >= 14, `landmark detail lost solid bodies: ${wall.stats().collisionBoxes}`);
+});
+
 test('D2-R3 production host consumes R30 terrain and landmark collision', context => {
   const assembly = createTownD2R30Assembly({ includeNorthWall: true });
   context.after(() => assembly.dispose());

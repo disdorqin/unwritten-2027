@@ -28,6 +28,7 @@ export type TownD2R30NorthWallAnchor = Readonly<{
 export type TownD2R30NorthWallStats = Readonly<{
   climbAnchors: number;
   climbRungs: number;
+  climbLedges: number;
   climbLength: number;
   maxRungGap: number;
   maxGrade: number;
@@ -150,10 +151,18 @@ export function createTownD2R30NorthWall(options: {
   const rungDummy = new Object3D();
   const rungs = new InstancedMesh(new BoxGeometry(spec.rungHalfWidth * 2, .18, .36), iron, steps);
   const posts = new InstancedMesh(new BoxGeometry(.22, 1, .22), iron, steps * 2);
+  // R5: vertical guide cables and rung end brackets at every post line, so
+  // the climb reads as a real via-ferrata armature instead of bare bars.
+  const guides = new InstancedMesh(new BoxGeometry(.1, 1, .1), cable, steps * 2);
+  const brackets = new InstancedMesh(new BoxGeometry(.34, .24, .55), iron, steps * 2);
   rungs.name = 'town-d2-r30-climb-rungs';
   posts.name = 'town-d2-r30-climb-posts';
+  guides.name = 'town-d2-r30-climb-guides';
+  brackets.name = 'town-d2-r30-climb-rung-brackets';
   geometries.add(rungs.geometry);
   geometries.add(posts.geometry);
+  geometries.add(guides.geometry);
+  geometries.add(brackets.geometry);
   let maxRungGap = 0, maxGrade = 0, groundedContacts = 0, floatingContacts = 0;
   const handlines: { from: Vector3; to: Vector3 }[] = [];
   let previous: TownD2R30NorthWallAnchor | undefined;
@@ -184,6 +193,16 @@ export function createTownD2R30NorthWall(options: {
       rungDummy.updateMatrix();
       postMatrix.copy(rungDummy.matrix);
       posts.setMatrixAt(index * 2 + (side === -1 ? 0 : 1), postMatrix);
+      // R5: guide cable runs the full rail height on the post line, and a
+      // heavier end bracket caps the rung where it meets the post.
+      rungDummy.position.set(east + side * spec.rungHalfWidth, floor + spec.railHeight / 2, -north);
+      rungDummy.scale.set(1, spec.railHeight, 1);
+      rungDummy.updateMatrix();
+      guides.setMatrixAt(index * 2 + (side === -1 ? 0 : 1), rungDummy.matrix);
+      rungDummy.position.set(east + side * spec.rungHalfWidth, rungY, -north);
+      rungDummy.scale.set(1, 1, 1);
+      rungDummy.updateMatrix();
+      brackets.setMatrixAt(index * 2 + (side === -1 ? 0 : 1), rungDummy.matrix);
       rungDummy.scale.set(1, 1, 1);
     }
     if (previous) {
@@ -198,7 +217,69 @@ export function createTownD2R30NorthWall(options: {
   }
   rungs.instanceMatrix.needsUpdate = true;
   posts.instanceMatrix.needsUpdate = true;
-  group.add(rungs, posts);
+  guides.instanceMatrix.needsUpdate = true;
+  brackets.instanceMatrix.needsUpdate = true;
+  group.add(rungs, posts, guides, brackets);
+  // R5 rock ledges: the reference asks for rest ledges every 15–20 m of
+  // vertical rise, so a slip lands back on the ledge below. A single steep
+  // step that already reaches the band is its own ledge; otherwise ledges
+  // are placed at the first anchor whose accumulated rise enters the band,
+  // backing up one anchor when the next step would overshoot 20 m. The
+  // summit anchor always gets a final ledge. Ledges are visual rock only —
+  // the climb surface stays non-solid so the ascent never freezes.
+  const ledgeMin = 15, ledgeMax = 20;
+  const ledgeAnchors: TownD2R30NorthWallAnchor[] = [climbAnchors[0]!];
+  let ledgeRise = 0;
+  for (let index = 1; index < climbAnchors.length; index++) {
+    const anchor = climbAnchors[index]!;
+    const rise = anchor.ground - climbAnchors[index - 1]!.ground;
+    const projected = ledgeRise + rise;
+    if (rise >= ledgeMin || projected >= ledgeMin) {
+      if (projected > ledgeMax && ledgeRise >= ledgeMin * .8) {
+        ledgeAnchors.push(climbAnchors[index - 1]!);
+        ledgeRise = rise;
+      } else {
+        ledgeAnchors.push(anchor);
+        ledgeRise = 0;
+      }
+    } else {
+      ledgeRise = projected;
+    }
+  }
+  const summitAnchor = climbAnchors[climbAnchors.length - 1]!;
+  if (ledgeAnchors[ledgeAnchors.length - 1] !== summitAnchor) ledgeAnchors.push(summitAnchor);
+  const ledgeSlabs = new InstancedMesh(
+    new BoxGeometry(spec.rungHalfWidth * 2 + 2.4, .6, 3.4), stone, ledgeAnchors.length);
+  ledgeSlabs.name = 'town-d2-r30-climb-ledges';
+  const ledgePads = new InstancedMesh(
+    new BoxGeometry(.9, .3, .9), stoneTrim, ledgeAnchors.length * 2);
+  ledgePads.name = 'town-d2-r30-climb-ledge-pads';
+  const ledgeRock = new InstancedMesh(
+    new BoxGeometry(1.1, .7, 1.1), stone, ledgeAnchors.length * 2);
+  ledgeRock.name = 'town-d2-r30-climb-ledge-rock';
+  geometries.add(ledgeSlabs.geometry);
+  geometries.add(ledgePads.geometry);
+  geometries.add(ledgeRock.geometry);
+  ledgeAnchors.forEach((anchor, index) => {
+    rungDummy.position.set(anchor.east, anchor.ground + .1, -anchor.north);
+    rungDummy.rotation.set(0, 0, 0);
+    rungDummy.scale.set(1, 1, 1);
+    rungDummy.updateMatrix();
+    ledgeSlabs.setMatrixAt(index, rungDummy.matrix);
+    for (const side of [-1, 1] as const) {
+      rungDummy.position.set(anchor.east + side * spec.rungHalfWidth, anchor.ground + .55, -anchor.north);
+      rungDummy.updateMatrix();
+      ledgePads.setMatrixAt(index * 2 + (side === -1 ? 0 : 1), rungDummy.matrix);
+      rungDummy.position.set(
+        anchor.east + side * (spec.rungHalfWidth + 1.4), anchor.ground + .25, -anchor.north);
+      rungDummy.updateMatrix();
+      ledgeRock.setMatrixAt(index * 2 + (side === -1 ? 0 : 1), rungDummy.matrix);
+    }
+  });
+  ledgeSlabs.instanceMatrix.needsUpdate = true;
+  ledgePads.instanceMatrix.needsUpdate = true;
+  ledgeRock.instanceMatrix.needsUpdate = true;
+  group.add(ledgeSlabs, ledgePads, ledgeRock);
   if (handlines.length) {
     const handMesh = new InstancedMesh(new BoxGeometry(.14, 1, .14), cable, handlines.length);
     handMesh.name = 'town-d2-r30-climb-handlines';
@@ -235,6 +316,17 @@ export function createTownD2R30NorthWall(options: {
   // and must not create a second overlapping collision body.
   addBox(timber, monument.east, monument.north - 4.4, monumentGround + 1.1,
     2.6, 1.6, .3, 'town-d2-r30-monument-plaque');
+  // R5: a stone apron course, a step ring and a brass band turn the bare
+  // obelisk stack into a real carved monument on the massif rock.
+  for (let i = 0; i < 6; i++) {
+    const angle = (i / 6) * Math.PI * 2;
+    addBox(stone, monument.east + Math.cos(angle) * 4.6, monument.north + Math.sin(angle) * 4.6,
+      monumentGround + .3, 1.4, .5, 1.4, `town-d2-r30-monument-apron-${i}`);
+  }
+  addBox(stone, monument.east, monument.north, monumentGround + .45, 6.6, .3, 6.6,
+    'town-d2-r30-monument-step');
+  addBox(brass, monument.east, monument.north, monumentGround + 1 + monument.height / 2,
+    2.8, .45, 2.8, 'town-d2-r30-monument-band');
 
   // ------------------------------------------------------------------ flag
   const flag = spec.flag;
@@ -249,6 +341,29 @@ export function createTownD2R30NorthWall(options: {
     flagGround + flag.poleHeight - flag.flagHeight / 2 - .6,
     flag.flagWidth, flag.flagHeight, .18, 'town-d2-r30-great-flag-cloth');
   addBox(stone, flag.east, flag.north, flagGround + .35, 2.6, .7, 2.6, 'town-d2-r30-great-flag-footing', true);
+  // R5: an iron ridge bar keeps the cloth extended, and two rigging cables
+  // tie the mast top to the summit rock so the pole reads as real structure.
+  addBox(iron, flag.east + flag.flagWidth / 2, flag.north,
+    flagGround + flag.poleHeight - .6, flag.flagWidth, .14, .14, 'town-d2-r30-great-flag-rod');
+  const flagUp = new Vector3(0, 1, 0);
+  const riggingMesh = new InstancedMesh(new BoxGeometry(.1, 1, .1), cable, 2);
+  riggingMesh.name = 'town-d2-r30-great-flag-rigging';
+  for (let i = 0; i < 2; i++) {
+    const side = i === 0 ? -1 : 1;
+    const anchorEast = flag.east + side * 5, anchorNorth = flag.north + 4;
+    const from = new Vector3(flag.east, flagGround + flag.poleHeight + .3, -flag.north);
+    const to = new Vector3(anchorEast, ground(anchorEast, anchorNorth) + .4, -anchorNorth);
+    const span = to.clone().sub(from);
+    rungDummy.position.copy(from).addScaledVector(span, .5);
+    rungDummy.quaternion.setFromUnitVectors(flagUp, span.clone().normalize());
+    rungDummy.scale.set(1, span.length(), 1);
+    rungDummy.updateMatrix();
+    riggingMesh.setMatrixAt(i, rungDummy.matrix);
+  }
+  riggingMesh.instanceMatrix.needsUpdate = true;
+  rungDummy.scale.set(1, 1, 1);
+  geometries.add(riggingMesh.geometry);
+  group.add(riggingMesh);
 
   // --------------------------------------------------------------- lookout
   const lookout = spec.lookout;
@@ -273,6 +388,27 @@ export function createTownD2R30NorthWall(options: {
   addBox(timber, lookout.east, lookout.north + lookout.depth / 2,
     deckY + lookout.railHeight / 2, lookout.width, lookout.railHeight, .25,
     'town-d2-r30-lookout-rail-south', true);
+  // R5: a stone kerb, four corner posts and deck planks give the lookout a
+  // real balustrade structure instead of a bare slab with rails.
+  for (const side of [-1, 1] as const) {
+    addBox(stone, lookout.east + side * (lookout.width / 2), lookout.north,
+      deckY + .35, .4, .35, lookout.depth, `town-d2-r30-lookout-kerb-side-${side}`, true);
+  }
+  for (const along of [-1, 1] as const) {
+    addBox(stone, lookout.east, lookout.north + along * (lookout.depth / 2),
+      deckY + .35, lookout.width, .35, .4, `town-d2-r30-lookout-kerb-end-${along}`, true);
+  }
+  for (const side of [-1, 1] as const) {
+    for (const along of [-1, 1] as const) {
+      addBox(timber, lookout.east + side * (lookout.width / 2 - .4),
+        lookout.north + along * (lookout.depth / 2 - .4), deckY + .95,
+        .28, 1.15, .28, `town-d2-r30-lookout-post-${side}-${along}`, true);
+    }
+  }
+  for (const plank of [-3, -1, 1, 3]) {
+    addBox(timber, lookout.east, lookout.north + plank, deckY + .26,
+      lookout.width - 1.2, .12, 1.2, `town-d2-r30-lookout-plank-${plank}`);
+  }
 
   let triangles = 0;
   for (const geometry of geometries) {
@@ -281,6 +417,7 @@ export function createTownD2R30NorthWall(options: {
   const stats: TownD2R30NorthWallStats = Object.freeze({
     climbAnchors: climbAnchors.length,
     climbRungs: steps,
+    climbLedges: ledgeAnchors.length,
     climbLength: climbAnchors.reduce((sum, anchor, index) =>
       index ? sum + Math.hypot(anchor.east - climbAnchors[index - 1]!.east,
         anchor.north - climbAnchors[index - 1]!.north) : 0, 0),
