@@ -38,8 +38,20 @@ export const lowerEastServiceControls=Object.freeze([
  {east:606,north:570},{east:600,north:576},{east:594,north:588},{east:594,north:600},
  {east:588,north:612},{east:582,north:624},{east:576,north:636},{east:570,north:648},
  {east:564,north:654},{east:558,north:666},{east:552,north:678},{east:546,north:690},
- {east:534,north:696},{east:528,north:708},{east:522,north:714},{east:516,north:720}
+ {east:534,north:696},{east:528,north:708},{east:522,north:714},{east:516,north:720},
+ // Rear traverse, surveyed on the real field with quantized grade labels.
+ {east:510,north:724},{east:504,north:728},{east:498,north:732},{east:492,north:736},
+ {east:486,north:738},{east:480,north:736},{east:474,north:734},{east:468,north:732},
+ {east:462,north:734},{east:456,north:738},{east:450,north:740},{east:444,north:742},
+ {east:438,north:744},{east:432,north:746},{east:426,north:748},{east:420,north:752},
+ {east:414,north:756},{east:408,north:758},{east:402,north:756},{east:396,north:756},
+ {east:390,north:756},{east:384,north:756},{east:378,north:756},{east:372,north:756},
+ {east:366,north:754},{east:360,north:754},{east:354,north:756},{east:348,north:758},
+ {east:342,north:758},{east:336,north:758},{east:330,north:758},{east:324,north:758},
+ {east:318,north:758},{east:312,north:758},{east:306,north:758},{east:300,north:756},
+ {east:294,north:752}
 ]);
+export const lowerEastServiceTerminal=Object.freeze({startHeight:26,endHeight:87.5});
 // Separate south exit candidate. This is the first west-facing descent
 // section, not a finished base-station connection.
 export const middleSouthRoadControls=Object.freeze([
