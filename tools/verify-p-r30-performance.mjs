@@ -6,8 +6,8 @@ import {cpus,totalmem} from 'node:os';
 import {buildBR30NativeRoute} from './verify-b-r30-native-route.ts';
 const [origin,out]=process.argv.slice(2);
 const route=buildBR30NativeRoute(),rim=route.lip,road=route.points.find(p=>p.t>=.58),floor=route.floor;
-const hardware=process.env.ZA22_HARDWARE==='1';
-const report={scope:'production town-preview normal entry; paired render-only camera probes explicitly marked; no player-pose write; same browser/raster/quality',hardwareRequested:hardware,cpu:cpus()[0]?.model,logicalCpus:cpus().length,memoryGB:totalmem()/1024**3,viewport:process.env.P_VIEWPORT==='mobile'?{width:390,height:844}:{width:960,height:540},deviceScaleFactor:1,quality:process.env.P_QUALITY??'smooth',samples:[],errors:[],startup:[],movement:[]};
+const hardware=process.env.ZA22_HARDWARE==='1',production=process.env.P_PRODUCTION==='1';
+const report={scope:production?'normal production gates; render-only camera probes explicitly marked; no state overrides or player-pose write':'production town-preview normal entry; paired render-only camera probes explicitly marked; no player-pose write; same browser/raster/quality',production,hardwareRequested:hardware,cpu:cpus()[0]?.model,logicalCpus:cpus().length,memoryGB:totalmem()/1024**3,viewport:process.env.P_VIEWPORT==='mobile'?{width:390,height:844}:{width:960,height:540},deviceScaleFactor:1,quality:process.env.P_QUALITY??'smooth',samples:[],errors:[],startup:[],movement:[]};
 let browser,page;
 const vec=p=>[p.east,p.height+1.65,-p.north];
 const target=[route.anchor.east,route.anchor.rimHeight-24,-route.anchor.north];
@@ -36,9 +36,9 @@ async function sample(id,enabled,camera,move=false,crosslineProbe=false,p2Enable
 try{
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:hardware?['--use-gl=angle','--use-angle=d3d11']:['--use-gl=angle','--use-angle=swiftshader','--enable-unsafe-swiftshader']});
  report.browser=browser.version();const context=await browser.newContext({viewport:report.viewport,deviceScaleFactor:1,locale:'zh-CN',isMobile:process.env.P_VIEWPORT==='mobile',hasTouch:process.env.P_VIEWPORT==='mobile'});page=await context.newPage();
- await page.addInitScript(quality=>{Object.defineProperty(Element.prototype,'requestPointerLock',{value:undefined});localStorage.setItem('unwritten.quality.tier.v1',quality);window.__pStartup=[];document.addEventListener('town-p1-render-profile',e=>{if(window.__pStartup.length<150)window.__pStartup.push(e.detail)});},report.quality);
+ await page.addInitScript(quality=>{Object.defineProperty(Element.prototype,'requestPointerLock',{value:undefined});localStorage.setItem('unwritten.quality.tier.v1',quality);window.__pStartup=[];document.addEventListener('town-p1-render-profile',e=>{window.__pLatest=e.detail;if(window.__pStartup.length<150)window.__pStartup.push(e.detail)});},report.quality);
  page.on('pageerror',e=>report.errors.push('page:'+e.message));page.on('console',m=>{if(m.type()==='error')report.errors.push('console:'+m.text())});page.on('response',r=>{if(r.status()>=400)report.errors.push('http:'+r.status()+':'+r.url())});
- const begin=Date.now();await page.goto(new URL('/?profile&pPerfCompare',origin).href,{waitUntil:'domcontentloaded',timeout:90000});
+ const begin=Date.now();await page.goto(new URL(production?'/?profile&pPerfMeasure':'/?profile&pPerfCompare',origin).href,{waitUntil:'domcontentloaded',timeout:90000});
  await page.waitForFunction(()=>document.querySelector('#town-entry')?.hidden===true||document.querySelector('#town-entry-continue')?.hidden===false||document.querySelector('#town-entry-error')?.hidden===false,{timeout:90000});
  assert.notEqual(await page.locator('#town-entry-error').evaluate(x=>x.hidden),false,'entry error');
  if(await page.locator('#town-entry-continue').isVisible())await page.locator('#town-entry-continue').click();
@@ -49,15 +49,16 @@ try{
  console.log(JSON.stringify({phase:'startup',gpu:report.gpu,cpu:report.cpu,wallMs:report.startup.wallMs,canvas:report.startup.canvas}));
  const p3=process.env.P3_COMPARE==='1',p2=p3||process.env.P2_COMPARE==='1';
  const floorOnly=process.env.P1_SCOPE==='floor';
- if(!floorOnly){await sample('plaza',p2,undefined,false,false,false);await sample('plaza',true);}
+ if(production){await page.waitForFunction(()=>window.__pLatest?.pendingCells===0,{timeout:60000}).catch(()=>{report.warmupWarning='Warmup did not report zero in startup sample window';});}
+ if(!floorOnly){if(!production)await sample('plaza',p2,undefined,false,false,false);await sample('plaza',true);}
  await page.locator('#town-panel-toggle').click();await page.locator('#jump').selectOption({label:'陨石坑口'});if(await page.locator('#town-settings').evaluate(d=>d.open))await page.locator('#town-settings-close').click();
  await page.waitForFunction(()=>{const t=document.querySelector('#position')?.textContent??'',m=/东\s*(-?[\d.]+)\s*m\s*·\s*北\s*(-?[\d.]+)\s*m/.exec(t);return m&&Math.hypot(+m[1]-2,+m[2]-159)<1.2},{timeout:45000});
  for(const [id,p]of [['rim',rim],['haul',road],['floor',floor]]){
   if(floorOnly&&id!=='floor')continue;
   const camera={position:vec(p),target:id==='floor'?[route.anchor.east,route.anchor.rimHeight-35+1.4,-route.anchor.north]:target};
-  await sample(id,p2,camera,false,false,false);await page.screenshot({path:join(out,id+'-baseline.png'),timeout:20000});await sample(id,true,camera);
+  if(!production){await sample(id,p2,camera,false,false,false);await page.screenshot({path:join(out,id+'-baseline.png'),timeout:20000});}await sample(id,true,camera);
   await page.screenshot({path:join(out,id+'-optimized.png'),timeout:20000});
-  if(id==='floor'){
+  if(id==='floor'&&!production){
     if(p2&&!p3){await sample(id,true,camera,false,true,false);await page.screenshot({path:join(out,id+'-crossline-p1.png'),timeout:20000});}
     if(p3){await sample(id,true,camera,false,true,true,false);await page.screenshot({path:join(out,id+'-crossline-p2.png'),timeout:20000});}
     await sample(id,true,camera,false,true);await page.screenshot({path:join(out,id+'-crossline-probe.png'),timeout:20000});

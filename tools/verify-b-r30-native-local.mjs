@@ -147,7 +147,23 @@ try {
   const { stdout } = await run('git', ['rev-parse', 'HEAD'], { cwd: repo, windowsHide: true });
   const commit = stdout.trim();
   await writeFile(join(output, 'source-commit.txt'), `${commit}\n`);
-  const tree = (await run('git', ['rev-parse', 'HEAD^{tree}'], { cwd: repo, windowsHide: true })).stdout;
+  // A locally staged, exact M-owned overlay is permitted for joint
+  // evidence only. Record its actual index tree, not B HEAD's tree.
+  // No unstaged tracked changes may enter either candidate.
+  await run('git',['diff','--quiet'],{cwd:repo,windowsHide:true});
+  const tree=(await run('git',['write-tree'],{cwd:repo,windowsHide:true})).stdout;
+  const headTree=(await run('git',['rev-parse','HEAD^{tree}'],{cwd:repo,windowsHide:true})).stdout;
+  if(tree.trim()!==headTree.trim()){
+    assert.ok(process.env.P_JOINT_M_SHA,'Staged overlay needs exact M source identity');
+    const m=(await run('git',['rev-parse',process.env.P_JOINT_M_SHA],{cwd:repo,windowsHide:true})).stdout.trim();
+    const files=(await run('git',['diff','--cached','--name-only'],{cwd:repo,windowsHide:true})).stdout.trim().split(/\r?\n/);
+    for(const file of files){
+      const a=(await run('git',['rev-parse',':'+file],{cwd:repo,windowsHide:true})).stdout.trim();
+      const b=(await run('git',['rev-parse',m+':'+file],{cwd:repo,windowsHide:true})).stdout.trim();
+      assert.equal(a,b,'Non-M blob in staged overlay '+file);
+    }
+    await writeFile(join(output,'source-overlay.json'),JSON.stringify({base:commit,m,tree:tree.trim(),files},null,2));
+  }
   await writeFile(join(output, 'source-tree.txt'), tree);
   await finish(startNode([vite, 'build', '--mode', 'town-preview', '--outDir', web], {}, { cwd: viewer }));
   // Presence now has a separate start.ts: compile the complete NodeNext graph,
