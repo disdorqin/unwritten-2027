@@ -43,7 +43,19 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
  function heightAt(e:number,n:number){
   return patch.ownsCell(Math.floor(e),Math.floor(n))?grid.heightAt(e,n):undefined;
  }
- return {field,ownership,ownsCell:patch.ownsCell,changedVertices:patch.changedVertices,roads,stationReady,model,forest,heightAt,
+ // A small frame step must not allow walking up a rock face merely
+ // because its per-frame elevation increment is below the old step limit.
+ // Natural snow slopes remain explorable; engineered roads keep their
+ // separately certified 12% bound. Actual steps/platforms are exempt.
+ function allowsUphill(from:{east:number;north:number;height:number},to:{east:number;north:number;height:number}){
+  const a=heightAt(from.east,from.north),b=heightAt(to.east,to.north);
+  if(a===undefined&&b===undefined)return true;
+  const h0=a??grid.heightAt(from.east,from.north),h1=b??grid.heightAt(to.east,to.north);
+  if(Math.abs(from.height-h0)>.04||Math.abs(to.height-h1)>.04)return true;
+  const d=Math.hypot(to.east-from.east,to.north-from.north);
+  return d<1e-6||h1-h0<=.85*d+1e-5;
+ }
+ return {field,ownership,ownsCell:patch.ownsCell,changedVertices:patch.changedVertices,roads,stationReady,model,forest,heightAt,allowsUphill,
   blocked(e:number,n:number,h:number,r=.27){return forest.blocked(e,n,h,r)||!!station?.blocked(e,n,h,r)||furniture.some(f=>f.blocked(e,n,h))||banks.some(b=>b.blocked(e,n,h))},
   setNight(night:boolean){station?.setNight(night);furniture.forEach(f=>f.setNight(night))},
   updateView(e:number,n:number){model.updateView(e,n);forest.updateView(e,n);banks.forEach(b=>b.updateView(e,n))},

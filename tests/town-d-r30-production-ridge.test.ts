@@ -14,6 +14,16 @@ test('production ridge consumes real railway mask and replaces only owned terrai
  const ridge=mountProductionRidge(root,grid,{loop:rail.route.points,branch:branch.samples});
  assert.ok(ridge.changedVertices>100000);assert.equal(ridge.roads.length,2);assert.equal(ridge.stationReady,true);
  assert.equal(ridge.transportReady,false);
+ let steep=0,roadSteps=0;
+ for(let n=400;n<700;n+=3)for(let e=270;e<570;e+=3){
+  const h=grid.groundHeightAt(e,n),h1=grid.groundHeightAt(e+.2,n);
+  if(ridge.ownsCell(e,n)&&h1-h>.2){assert.equal(ridge.allowsUphill({east:e,north:n,height:h},{east:e+.2,north:n,height:h1}),false);steep++;}
+ }
+ for(const road of ridge.roads)for(let i=1;i<road.route.length;i++){
+  const a=road.route[i-1]!,b=road.route[i]!;
+  assert.equal(ridge.allowsUphill({...a,height:grid.heightAt(a.east,a.north)},{...b,height:grid.heightAt(b.east,b.north)}),true);roadSteps++;
+ }
+ assert.ok(steep>100&&roadSteps>100);
  let frozen=0,owned=0;
  for(let n=270;n<=800;n++)for(let e=0;e<=640;e++){
   const id=n*grid.gridWidth+e;

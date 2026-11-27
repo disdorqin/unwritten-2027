@@ -611,6 +611,7 @@ let sledSpeedBeforeStop = 0;
 /** A hard impact on a station structure wakes line 1 (host mapping:
  * sled strikes and snow-wall collapses qualify, hand snowballs never). */
 function reportCableWake(kind: 'sled' | 'snow-wall', east: number, north: number) {
+  if(!productionRidge?.transportReady)return;
   const state = presence.getCableLineState(1);
   if (!state || state.stage !== 'dormant') return;
   if (!cableStationPoints.some(([e, n]) => Math.hypot(east - e, north - n) <= 15)) return;
@@ -692,6 +693,8 @@ const sledWorld: Parameters<typeof createSledRide>[0] = {
   blocked: obstructed,
   canTraverse(from, to) {
     if (cloudRoute.active() && !cloudRoute.acceptsStep(from.x, from.n, to.x, to.n, sledFootRadius)) return false;
+    if(!homeReturn&&!cloudRoute.active()&&productionRidge&&
+      !productionRidge.allowsUphill({east:from.x,north:from.n,height:from.y},{east:to.x,north:to.n,height:to.y}))return false;
     return !currentGuardDuty()?.blocksStep(
       { east: from.x, north: from.n, height: from.y },
       { east: to.x, north: to.n, height: to.y },
@@ -2802,7 +2805,7 @@ function currentAction() {
   // 缆车修缮 (B2 host): the host offers the repair action for where the
   // player stands under the latest broadcast state; running it only
   // submits the event — the authority's frame is what changes the world.
-  const repairState = homeReturn ? undefined : presence.getCableLineState(1);
+  const repairState = homeReturn || !productionRidge?.transportReady ? undefined : presence.getCableLineState(1);
   if (repairState) {
     cableRepairHost1.sync(repairState);
     const repair = cableRepairHost1.actions(repairState, { east: x, north: n })[0];
@@ -3394,6 +3397,8 @@ function tryMove(nextX: number, nextN: number) {
     bodyRadius, surfaceAt(nextX, nextN, ground),localGeometry);
   const nextHeight = airHeight === undefined ? floor : feet;
   if (floor > limit || obstructed(nextX, nextN, nextHeight,localGeometry)) return false;
+  if(!homeReturn&&!cloudRoute.active()&&airHeight===undefined&&productionRidge&&
+    !productionRidge.allowsUphill({east:x,north:n,height:ground},{east:nextX,north:nextN,height:floor}))return false;
   if (!homeReturn && currentGuardDuty()?.blocksStep(
     { east: x, north: n, height: feet }, { east: nextX, north: nextN, height: nextHeight },
   )) return false;
