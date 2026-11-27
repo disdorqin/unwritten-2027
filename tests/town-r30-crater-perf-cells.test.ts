@@ -52,6 +52,13 @@ test('ground cell index multiset equals the authoritative triangles, no attribut
  assert.ok(cells.begin(cam)>indices.length/3*.65);assert.equal(m.layers.mask,0);cells.restore();assert.equal(m.layers.mask,1);assert.equal(m.geometry,g);assert.deepEqual(Array.from(g.index!.array),indices);
  cells.dispose();assert.equal(m.children.length,0);
 });
+test('workshop residual merges exact differently sized fixed siblings, retaining live and named leaves',()=>{
+ const root=new Group(),pivot=new Group(),mat=new MeshStandardMaterial();root.add(pivot);
+ const a=new Mesh(new BoxGeometry(1,2,3),mat),b=new Mesh(new BoxGeometry(2,1,1),mat),handle=new Mesh(new BoxGeometry(),mat),label=new Mesh(new BoxGeometry(),mat);label.name='label';a.position.x=2;b.position.z=3;pivot.add(a,b,handle,label);
+ const stats=instanceWorkshopParts(root,new Set([handle]),new Set([mat]));assert.equal(stats.before,2);assert.equal(stats.after,1);assert.equal(handle.parent,pivot);assert.equal(label.parent,pivot);
+ const merged=pivot.children.find(o=>o.name==='p4-workshop-fixed-merge') as Mesh;assert.ok(merged);assert.equal(merged.geometry.index!.count,a.geometry.index!.count+b.geometry.index!.count);assert.equal(merged.material,mat);
+ pivot.rotation.y=.5;root.updateMatrixWorld(true);const p=merged.geometry.getAttribute('position');assert.ok(new Vector3().fromBufferAttribute(p,0).applyMatrix4(merged.matrixWorld).distanceTo(new Vector3().fromBufferAttribute(a.geometry.getAttribute('position'),0).applyMatrix4(a.matrix).applyMatrix4(pivot.matrixWorld))<1e-6);stats.dispose();
+});
 test('local mechanism instancing retains exact pivots and protected leaf identity',()=>{
  const root=new Group(),pivot=new Group(),g=new BoxGeometry(),mat=new MeshStandardMaterial();root.add(pivot);pivot.position.y=2;
  const leaves=Array.from({length:5},(_,i)=>{const m=new Mesh(g,mat);m.position.x=i;pivot.add(m);return m;});
