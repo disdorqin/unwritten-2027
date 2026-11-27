@@ -109,7 +109,8 @@ export function mountSouthEntry(heightAt:SouthGround){
  // rest point. Two rear posts leave the full approach open; no new
  // building envelope or doorway. Require the actual plaza datum at feet.
  const restE=17,restN=33;
- if([[-1.65,1.03],[1.65,1.03]].every(([de,dn])=>Math.abs((heightAt(restE+de!,restN+dn!)??Infinity)-floor)<.05)){
+ const restBuilt=[[-1.65,1.03],[1.65,1.03]].every(([de,dn])=>Math.abs((heightAt(restE+de!,restN+dn!)??Infinity)-floor)<.05);
+ if(restBuilt){
   for(const side of [-1,1]){
    const e=restE+side*1.65;
    box(stone,e,restN+1.03,-.04,.52,.52,.39,true);
@@ -141,7 +142,14 @@ export function mountSouthEntry(heightAt:SouthGround){
  mountAR30StaticBatches(group,batches,'night-a-entry');
  group.userData.colliders=solids;group.userData.floors=floors;
  let disposed=false;
- return {group,colliders:solids,floors,blocked(e:number,n:number,h:number,r=.27,body=1.8){return solids.some(b=>h+body-.025>b.min[1]!&&h+.025<b.max[1]!&&Math.hypot(Math.max(b.min[0]!-e,e-b.max[0]!,0),Math.max(b.min[2]!+n,-n-b.max[2]!,0))<r);},setNight(night:boolean){lamp.emissiveIntensity=night?1.0:.10;},dispose(){
+ // Actual mounted roof footprints. The mountain gate and guardroom have
+ // surveyed shells; the rest shelter only counts when its roof was built.
+ const sheltered=(e:number,n:number,h:number)=>!disposed&&Math.abs(h-floor)<.25&&(
+  Math.abs(e)<1.95&&n>-9.95&&n<-.05||
+  e>4.65&&e<11.85&&n>2.65&&n<11.35||
+  restBuilt&&Math.abs(e-restE)<1.95&&Math.abs(n-restN-.05)<1.15);
+ group.userData.shelteredAt=sheltered;
+ return {group,colliders:solids,floors,sheltered,blocked(e:number,n:number,h:number,r=.27,body=1.8){return solids.some(b=>h+body-.025>b.min[1]!&&h+.025<b.max[1]!&&Math.hypot(Math.max(b.min[0]!-e,e-b.max[0]!,0),Math.max(b.min[2]!+n,-n-b.max[2]!,0))<r);},setNight(night:boolean){lamp.emissiveIntensity=night?1.0:.10;},dispose(){
   if(disposed)return;disposed=true;group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});
   for(const m of [stone,ash,wood,warm,snow,bronze,lamp])m.dispose();group.clear();
  }};

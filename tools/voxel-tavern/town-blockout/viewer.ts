@@ -3851,8 +3851,10 @@ function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame
       if (moveAllowed()) {
         if (sledRide.active()) stepMountedSled(forward, right);
         else {
-          const windScale=airHeight===undefined?southWeatherWalkingScale(weatherState,x,n,east,north,true,ceremonyState.phase==='ordinary',false):1;
-          const nextX = x + east * windScale * townPhysicsDelta, nextN = n + north * windScale * townPhysicsDelta;
+          const roof=southEntryHost.sheltered(x,n,ground);
+          const windScale=airHeight===undefined?southWeatherWalkingScale(weatherState,x,n,east,north,true,ceremonyState.phase==='ordinary',roof):1;
+          const frostScale=airHeight===undefined?ceremonyFrost.walkingScale():1;
+          const nextX = x + east * windScale * frostScale * townPhysicsDelta, nextN = n + north * windScale * frostScale * townPhysicsDelta;
           if ((east || north) && !tryMove(nextX, nextN) && !tryMove(nextX, n)) tryMove(x, nextN);
           stepJump(townPhysicsDelta);
         }
@@ -3879,17 +3881,34 @@ function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame
     ?sampleSouthRegionalWeather(weatherState,camera.position.x,-camera.position.z,camera.position.y-eye,true):undefined;
   const weather=local?.weather??(ceremonyState.phase==='ordinary'?townSnowWeatherAt(ceremonyState.now,'light'):townSnowWeatherForFrame(ceremonyState));
   summitWeatherVisual.update(weather,local?.weather,local?.exposure??1,Math.min(.25,frameSeconds),performance.now());
-  summitSnowfall.update(camera,Math.min(.25,frameSeconds),!cabin&&walking,false);
+  const summitDt=Math.min(.25,frameSeconds);
+  const roof=southEntryHost.sheltered(x,n,ground);
+  summitSnowfall.update(camera,summitDt,!cabin&&walking,roof);
+  // Reuse the single existing player frost tracker in the early-return
+  // mountain branch. Snow depth is read only at a real supported foot,
+  // never inferred from the camera altitude or a preview mesh.
+  ceremonyFrost.setBaseline(ceremonyState.frostBaseline);
+  ceremonyFrost.setWarmth('interior',roof||!!cabin);
+  ceremonyFrost.setWarmth('onsen',false);
+  ceremonyFrost.setWarmth('fire-source',false);
+  if(warmDrinkUntil&&performance.now()>=warmDrinkUntil){warmDrinkUntil=0;ceremonyFrost.setWarmth('hot-drink',false);}
+  const mountainAssembly=cloudRoute.assembly();
+  const support=cloudRoute.walkingSurfaceAt(x,n,bodyRadius);
+  const actualSnow=mountainAssembly&&!roof&&!cabin&&walking&&airHeight===undefined&&support!==undefined&&Math.abs(support-ground)<.18
+    ?mountainAssembly.summitSnowAt(x-mountainAssembly.group.position.x,n+mountainAssembly.group.position.z):undefined;
+  const coldDepth=actualSnow!==undefined&&Number.isFinite(actualSnow)?Math.max(0,Math.min(1,actualSnow)):0;
+  ceremonyFrost.setExposure(weather.intensity,coldDepth,coldDepth>=.25?'dark-snow':'none',hasFrostCeremonyRelief(ceremonyState),1,sledRide.active());
+  ceremonyFrost.update(summitDt);
   const fog=cloudRoute.scene.fog as Fog;
   applySouthWeatherPresentation(cloudRoute.scene,fog,weather,skyFrame,particleDensityScale(),local?.weather);
-  showRegionalWeather(southWeatherStatus(skyFrame,weatherState,local?.weather,ceremonyState.phase!=='ordinary',!!cabin,false));
+  showRegionalWeather(southWeatherStatus(skyFrame,weatherState,local?.weather,ceremonyState.phase!=='ordinary',!!cabin,roof));
   renderer.render(cloudRoute.scene, camera);
   if (profileTown) {
     renderer.domElement.dispatchEvent(new CustomEvent('town-frame-profile', { detail: {
       frameMs: frameSeconds * 1000, calls: renderer.info.render.calls,
       triangles: renderer.info.render.triangles, cameraY: camera.position.y,
       weatherCycle:southWeatherProfile(skyFrame,weatherState,weather,local?.weather),
-      fogNear:fog.near,fogFar:fog.far,points:renderer.info.render.points,
+      fogNear:fog.near,fogFar:fog.far,points:renderer.info.render.points,mountainSheltered:roof,mountainSnowDepth:coldDepth,
     } }));
   }
 }

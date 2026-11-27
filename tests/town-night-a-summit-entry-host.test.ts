@@ -22,6 +22,11 @@ test('real main summit assembly consumes the A entrance once and keeps existing 
   for(let e=15.8;e<=18.2;e+=.2)assert.ok(!localBlocked(e,31.8,347),'rest shelter approach');
   assert.ok(host.blocked(315.35,710.03,347));
   assert.ok(host.blocked(318.65,710.03,347));
+  assert.equal(host.sheltered(317,709,347),true);
+  assert.equal(host.sheltered(300,671,347),true);
+  assert.equal(host.sheltered(307,683,347),true);
+  assert.equal(host.sheltered(300,705,347),false);
+  assert.equal(host.sheltered(317,709,351),false);
   // Later D2 mount owns this exact same entrance; narrow host withdraws.
   const full=new Group();full.name='night-a-south-sector';a.group.add(full);
   host.sync(a,true);assert.equal(host.mounted(),false);assert.equal(first.parent,null);
@@ -29,7 +34,7 @@ test('real main summit assembly consumes the A entrance once and keeps existing 
   // Detaching a real domain must disable the old colliders immediately,
   // even before the next animation-frame sync.
   const beforeDetach=a.group.getObjectByName('night-a-south-entry');assert.ok(beforeDetach);
-  a.group.removeFromParent();assert.equal(host.mounted(),false);assert.equal(host.blocked(324,699,347),false);
+  a.group.removeFromParent();assert.equal(host.mounted(),false);assert.equal(host.blocked(324,699,347),false);assert.equal(host.sheltered(317,709,347),false);
   host.sync(a,true);assert.equal(beforeDetach.parent,null);
   owner.add(a.group);host.sync(a,true);assert.equal(host.mounted(),true);
   const remounted=a.group.getObjectByName('night-a-south-entry');assert.ok(remounted);assert.notEqual(remounted,beforeDetach);

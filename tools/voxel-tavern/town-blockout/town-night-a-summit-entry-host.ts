@@ -1,3 +1,4 @@
+import type {Object3D} from 'three';
 import type {mountMainSummitAssembly} from './main-summit-assembly';
 import {mountSouthEntry} from './town-night-a-summit-entry';
 type Assembly=ReturnType<typeof mountMainSummitAssembly>;
@@ -6,12 +7,14 @@ type Assembly=ReturnType<typeof mountMainSummitAssembly>;
  * with its full sector assembly; never draw the entrance twice. */
 export function createSouthEntryHost(){
  let current:Assembly|undefined,entry:ReturnType<typeof mountSouthEntry>|undefined,nightApplied:boolean|undefined;
- const detach=()=>{entry?.dispose();entry=undefined;current=undefined;nightApplied=undefined;};
+ let fullEntry:Object3D|undefined;
+ const detach=()=>{entry?.dispose();entry=undefined;current=undefined;nightApplied=undefined;fullEntry=undefined;};
  function sync(assembly:Assembly|undefined,night:boolean){
   if(current!==assembly){detach();current=assembly;}
   if(!assembly?.r30||!assembly.group.parent){detach();return;}
   const already=assembly.group.getObjectByName('night-a-south-sector');
-  if(already){entry?.dispose();entry=undefined;nightApplied=undefined;return;}
+  if(already){entry?.dispose();entry=undefined;nightApplied=undefined;fullEntry=already.getObjectByName('night-a-south-entry');return;}
+  fullEntry=undefined;
   // A host can be temporarily detached/reused or have its child removed
   // during domain cleanup. Rebuild only the missing leaf, never a duplicate.
   if(entry&&entry.group.parent!==assembly.group){entry.dispose();entry=undefined;nightApplied=undefined;}
@@ -28,6 +31,15 @@ export function createSouthEntryHost(){
  }
  const mounted=()=>!!(current?.group.parent&&entry&&entry.group.parent===current.group);
  return {sync,mounted,
+  sheltered(e:number,n:number,h:number){
+   if(!current?.group.parent)return false;
+   const p=current.group.position;
+   const local=[e-p.x,n+p.z,h-p.y] as const;
+   if(mounted())return entry!.sheltered(...local);
+   let owner=fullEntry?.parent,live=false;
+   while(owner){if(owner===current.group){live=true;break;}owner=owner.parent;}
+   return live&&typeof fullEntry?.userData.shelteredAt==='function'&&!!fullEntry.userData.shelteredAt(...local);
+  },
   blocked(e:number,n:number,h:number,r=.27,body=1.8){
    if(!entry||!current||!mounted())return false;
    return entry.blocked(e-current.group.position.x,n+current.group.position.z,h-current.group.position.y,r,body);
