@@ -1,6 +1,12 @@
 # 3.0-R 窗 A 现役交接卡
 唯一续建记录，后续更新本卡；公共看板由总控登记。本卡不复活旧任务。
 
+## 2026-11-27 A-R3-F3/F4 独立收敛、跨线兼容与真实阻塞（792080c5）
+- 5fc5f729：完整833m实际D2现役8m正典网格（72顶面块）+ A南区原子安装，替换4块切坡，独立P3射线2499脚点、全部支撑且无阻挡、卸载恢复；新增父级坐标/宿主所属校验，脱挂立即撤销碰撞/支持/天气更新。266cf8e4精确消费B现有工作树7d1ef0e6中的west-cut源码（远端blob 72004ff55b44effddecdc3b56782a9d42c20c751），不复制不写B；相同完整路段9996脚点0阻挡，所有颜色属性齐全，恢复原网格，3/3通过。合并后测试自动采用B原模块，未合并可用 A_R30_B_CUT_MODULE=../window-b/tools/voxel-tavern/town-blockout/town-night-b-summit-west-cut.ts。注意：现役D2原版高程未消费A南坡delta，实际树林数量1294树273岩，不能冒充最终四区正典或替代原南区候选903树458岩；D2组合时需同源重跑。
+- a4adb03e正式viewer收敛单一菜单活动层：打开纪念戳册等活动关闭设置、只一层对话框、关闭回到正常输入。无profile根入口原生验收（.evidence/A-F3-menu-activity-a4adb03e）包括真实聊天/远端未读、戳册开关、键盘移动，0错；另mobile-review（.evidence/A-F3-mobile-profile-a4adb03e）真实浏览器390×844 DPR.65 Intel UHD D3D11，摇杆5.009m、停止、转向0.1279rad、跳升1.2543m，0错。广场idle120帧median8.3ms/p95 12.5ms/232draws/427120tris；坑口120帧median8.3ms/p95 12.5ms/372draws/1231167tris，最大854ms转场长帧，超过300draws目标；模拟非手机真机、低DPR/headless样本不宣称正式FPS达标。另31/31定向回归（真实Presence主/从天气同钟/重连、公开宿主、雪盖、界面、西区地面），R30 tsc通过。
+- a27c549f新裸入口连续原生线路：出生点→原有镇西路线→坑口→已认证西区绕树路→E-90/N350山脚，实际走到两处并保存截图 .evidence/A-F3-bare-west-a27c549f；山脚截图前脚本要求真实west Presence位姿，未菜单传送。返程期间270s工具调用边界结束进程，缺最终JSON、无完整回程或运行错误数，证据只作部分去程，不标全链通过；792080c5逐点落NDJSON防后续超时丢证据，确认本次进程已结束后仅清理本次临时构建及过期lock，保留原图/源码哈希。未审阅原截图像素。
+- 收尾远端 integration 30ba18e5、D2 258c115d（本地正在改massif/strata/facilities，非可接入提交）、C2 df426da2（东区E08悬崖栈道，不是A剩余723m重测）、B 7d1ef0e6。独立可交付闭环已移交：D2须消费mountSouthProduction的groundAt/supportAt/blocked/updateView/setNight/updateSnow/dispose并替换对应legacy tread/植被，使用B真实cut及CPU索引、统一四区delta/near/far；C2交A段723m实际端点/高程与合法前山后坡及dock认证；B双线createNightBProductionController须消费front/upper ready与实际domain transfer，未认证不得开放。最终全山原生往返、真机性能、独立审图、配对审核和总控入干均尚未通过，不代签，不抢写他线，不发布。总控收到本卡可先审A独立合格差分，恢复条件为D2/C2明确新SHA及授权接口，非重复巡检。状态【真实阻塞】（本线独立施工及补证已尽本轮范围，联合收工未达）。
+
 ## 2026-11-27 A-R3-F3 单一菜单与动态积雪（b1a29163）
 - 用户新增全局界面要求：非即时信息统一收纳到右上44×44px菜单图标，默认收起；保留真实移动/跳跃/疾跑/刹车/即时交互和活动所需状态，不新增常驻按钮。1183f6c4重组正式HTML/CSS及现有控制器，右上角滚动抽屉、×/Esc/外侧点击收起，开菜单释放移动输入；音乐/全屏/馆内地图/聊天/雪仗榜/库存/天气/进度归并，高级画质音量与操作二级折叠；雪团空库存非活动时隐藏浮层；保留馆内地图条件与Enter聊天。b1a29163联机未读点采用实际消息DOM变化、可访问标签，不弹出聊天。
 - e5464ddb及b1a29163正式无profile原生验收：桌面960×540 DPR.5、触屏竖屏390×844 DPR.65；同一真实Presence、面板矩形均未超界、控制收起/展开、聊天实际发送、降雪开关恢复、键鼠或摇杆原生走动；最新版桌面再加真实第二WebSocket客户端全镇消息触发未读点且菜单不自行展开，阅读后清点。三份证据均0错，共6截图、20+实际位姿；手机为浏览器模拟非物理真机，未承诺FPS。证据 .evidence/A-F3-menu-{desktop,touch}-e5464ddb/ 与 .evidence/A-F3-menu-unread-b1a29163/。Desktop Commander设备离线，未能逐像素审阅原图，不冒充视觉审签。
