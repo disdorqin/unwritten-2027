@@ -5,6 +5,7 @@ import type {installNightBUpperOperation} from './town-night-b-summit-upper-inst
 import type {createTownD2R30Ropeway} from './town-d2-r30-ropeway';
 import type {mountMainSummitCableWorkshop} from './main-summit-cable-workshop';
 import {createCableRepairHost,cableWakeEvent,type RepairAnchors} from './town-cable-repair-host';
+import {createNightBPryHold} from './town-night-b-pry-hold';
 import {createNightBFrontBoardPresenter} from './town-night-b-front-boards';
 import {summitReleaseApproaches} from '../../../src/shared/za22-summit-presence-domain';
 type Foot={east:number;north:number;height:number};
@@ -22,6 +23,7 @@ type Input={
  upperOrigin:Readonly<{east:number;north:number}>;
  domain:()=>Domain;
  acceptLanding:(line:1|2,feet:Foot,station:string)=>boolean;
+ inputNow?:()=>number;
 };
 export function nightBProductionAuthority(p:Presence,line:1|2){
  return {state:()=>p.getCableLineState(line),now:p.cableServerNow,
@@ -37,6 +39,7 @@ export function createNightBProductionController(input:Input){
  // Only the exact objects certified by the installer may drive repair or ride.
  if(upper&&(input.ropeway&&input.ropeway!==upper.ropeway||input.workshop&&input.workshop!==upper.workshop))throw Error('Mismatched certified upper operation assets');
  const workshop=upper?.workshop;
+ const pry=createNightBPryHold({state:p.getCableLineState,send:p.sendCableRepair,now:input.inputNow});
  const ride=createNightBCableRideHost({front:front?.service,frontFacilities:front?.facilities,upper:upper?.service,upperRopeway:upper?.ropeway,upperOrigin:input.upperOrigin,
  domain:()=>{const d=input.domain();return d==='mountain'?'town':d;},acceptLanding:input.acceptLanding});
  const repair=input.frontRepair&&createCableRepairHost(1,input.frontRepair.anchors);
@@ -58,9 +61,9 @@ export function createNightBProductionController(input:Input){
   const available:{id:string;label:string}[]=[];
   for(const cabin of [0,1] as const)if(ride.boardCandidate(feet,line,cabin))available.push({id:'board-'+cabin,label:'登乘'+(cabin+1)+'号车厢'});
   if(line===2&&upper&&p.getCableLineState(2)?.stage==='dormant'&&p.cableServerNow()!==undefined&&summitReleaseApproaches[0]&&Math.hypot(feet.east-summitReleaseApproaches[0].east,feet.north-summitReleaseApproaches[0].north)<=1.35&&Math.abs(feet.height-800)<=.43)available.push({id:'release',label:'放下绝顶缆车'});
-  if(line===2&&upper&&workshop&&p.getCableLineState(2)?.stage==='one-station')for(const a of workshop.repairActions(local(feet)))available.push({id:a.id,label:a.label});
+  if(line===2&&upper&&workshop&&p.getCableLineState(2)?.stage==='one-station')for(const a of workshop.repairActions(local(feet)))available.push({id:a.id,label:a.id==='pry-cable'?'按住 E 撬正缆绳':a.label});
   if(line===1&&front&&input.frontRepair&&repair&&Math.abs(feet.height-(input.frontRepair.surfaceAt(feet.east,feet.north)??Infinity))<=.43&&input.frontRepair.clear(feet)){
-   const s=p.getCableLineState(1);if(s)for(const a of repair.actions(s,feet))available.push({id:a.id,label:a.label});
+   const s=p.getCableLineState(1);if(s)for(const a of repair.actions(s,feet))available.push({id:a.id,label:a.id==='pry-cable'?'按住 E 撬正缆绳':a.label});
   }
   return available;
  }
@@ -70,12 +73,19 @@ export function createNightBProductionController(input:Input){
   const line=input.domain()==='summit'?2:1;
   if(id==='board-0'||id==='board-1')return {accepted:ride.board(feet,line,id==='board-0'?0:1)};
   if(id==='release')return {accepted:p.sendSummitCableRelease()};
+  if(id==='pry-cable')return {accepted:pry.begin(line)};
   const state=p.getCableLineState(line);
   const list=line===2?workshop?.repairActions(local(feet)):state&&repair?.actions(state,feet);
   const a=list?.find(a=>a.id===id);
   return {accepted:!!a&&p.sendCableRepair(line,a.event)};
  }
- return {tick,actions,action,riding:ride.riding,pose:ride.pose,
+ /** Call every input frame, including key-up/blur; suppress legacy repeat-E. */
+ function updateRepairHold(held:boolean,feet:Foot){
+  if(!pry.active())return;
+  const eligible=actions(feet).some(a=>a.id==='pry-cable')?(input.domain()==='summit'?2:1):undefined;
+  pry.update(held,eligible);
+ }
+ return {tick,actions,action,updateRepairHold,repairHolding:pry.active,riding:ride.riding,pose:ride.pose,
   /** Only the verified physical impact listener may call this. */
   reportFrontImpact(kind:'sled'|'big-snowball'|'snowball'|'snow-wall',impact:Foot){
    const domain=input.domain();if(!front||(domain!=='town'&&domain!=='mountain')||ride.riding()||p.getCableLineState(1)?.stage!=='dormant'||![impact.east,impact.north,impact.height].every(Number.isFinite))return false;

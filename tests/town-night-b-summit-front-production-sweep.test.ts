@@ -93,8 +93,8 @@ test('front production field and actual rail, station, forest, roads, banks and 
  accepted.facilities.setNight(true);
  accepted.facilities.group.traverse(o=>{if('isPointLight'in o)assert.equal((o as any).intensity,0);});
 assert.equal(closed.group.parent,null);assert.equal(accepted.facilities.group.parent,originalParent);assert.equal(accepted.service.serviceOpen(),false);
- let domain:'town'|'mountain'|'summit'='town';
- const controller=createNightBProductionController({presence,front:accepted,upperOrigin:{east:300,north:676},domain:()=>domain,acceptLanding:(_l,p,s)=>dockClear(s,p),frontRepair:{anchors:{brake:accepted.docks[0]!.approach,cableWheel:accepted.docks[2]!.approach,weightTower:accepted.docks[3]!.approach,weightFrame:accepted.docks[2]!.approach},surfaceAt:(e,n)=>externalCableDockSupport(e,n)??station.surfaceAt(e,n)??field.heightAt(e,n),clear:p=>dockClear('',p)}});
+ let domain:'town'|'mountain'|'summit'='town',inputClock=0;
+ const controller=createNightBProductionController({presence,inputNow:()=>inputClock,front:accepted,upperOrigin:{east:300,north:676},domain:()=>domain,acceptLanding:(_l,p,s)=>dockClear(s,p),frontRepair:{anchors:{brake:accepted.docks[0]!.approach,cableWheel:accepted.docks[2]!.approach,weightTower:accepted.docks[3]!.approach,weightFrame:accepted.docks[2]!.approach},surfaceAt:(e,n)=>externalCableDockSupport(e,n)??station.surfaceAt(e,n)??field.heightAt(e,n),clear:p=>dockClear('',p)}});
  const summit=accepted.docks.find(d=>d.station==='summit'&&d.cabin===0)!.approach;
  assert.equal(controller.action('board-0',summit).accepted,false);
  assert.equal(controller.reportFrontImpact('snowball',summit),false);
@@ -108,7 +108,16 @@ assert.equal(closed.group.parent,null);assert.equal(accepted.facilities.group.pa
  assert.equal(controller.action('strike-rust',{...accepted.docks[0]!.approach,height:999}).accepted,false);
  const act=(id:string,at:number)=>{controller.tick(0);assert.equal(controller.action(id,accepted.docks[at]!.approach).accepted,true,id);};
  for(let i=0;i<9;i++)act('strike-rust',0);
- act('pull-brake',0);act('pry-cable',2);for(let i=0;i<3;i++)act('tighten-cable',2);
+ act('pull-brake',0);
+ const wheel=accepted.docks[2]!.approach;
+ const holdFrames=(n:number)=>{for(let i=0;i<n;i++){inputClock+=100;controller.updateRepairHold(true,wheel);}};
+ act('pry-cable',2);assert.equal(authority.snapshot().cableHeight,0);
+ holdFrames(6);assert.equal(authority.snapshot().cableHeight,.25);
+ controller.updateRepairHold(false,wheel);assert.equal(authority.snapshot().cableHeight,.125);
+ assert.equal(controller.repairHolding(),false);
+ act('pry-cable',2);holdFrames(30);assert.equal(authority.snapshot().cableAligned,true);
+ controller.updateRepairHold(false,wheel);
+ for(let i=0;i<3;i++)act('tighten-cable',2);
  for(let i=0;i<4;i++){act('take-weight',3);act('hang-weight',2);}
  assert.equal(authority.snapshot().stage,'full-line');
  now=openedAt!+accepted.service.repositionMs;controller.tick(0);
