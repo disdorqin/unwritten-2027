@@ -184,7 +184,7 @@ import { createTownSnowField } from './town-snow-field';
 import { createPlazaInformationActivity } from './plaza-information-activity';
 import { createPlazaSnowSupply, type PlazaSnowSupplySite } from './plaza-snow-supply';
 import { advanceWeatherCover, townSnowWeatherAt, townSnowWeatherForFrame } from './town-weather';
-import { sampleSouthRegionalWeather } from './town-night-a-summit-weather-field';
+import { sampleSouthRegionalWeather, applySouthWeatherPresentation } from './town-night-a-summit-weather-field';
 import { createTownNightWeatherSky, type TownNightWeatherSkyFrame } from './town-night-weather-sky';
 import { createSouthSummitWeatherHost } from './town-night-a-summit-weather-host';
 import { townNightWeatherDayMs, townNightWeatherDefaultDawnEpoch } from '../../../src/shared/town-night-weather-cycle';
@@ -3863,7 +3863,7 @@ function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame
   summitSnowfall.setOutdoorWind(local?.weather.windEast??0,local?.weather.windNorth??0,local?.weather.windStrength??0,local?.exposure??1);
   summitSnowfall.update(camera,Math.min(.25,frameSeconds),!cabin&&walking,false);
   const fog=cloudRoute.scene.fog as Fog;
-  fog.near=weather.fogNear*skyFrame.fogNearScale;fog.far=weather.fogFar*skyFrame.fogFarScale;
+  summitSnowfall.setDensityScale(applySouthWeatherPresentation(cloudRoute.scene,fog,weather,skyFrame,particleDensityScale(),local?.weather));
   renderer.render(cloudRoute.scene, camera);
   if (profileTown) {
     renderer.domElement.dispatchEvent(new CustomEvent('town-frame-profile', { detail: {
@@ -4261,8 +4261,7 @@ renderer.setAnimationLoop(now => {
   snowfall.setIntensity(effectiveSnowIntensity);
   snowfall.setOutdoorWind(local?.weather.windEast??0,local?.weather.windNorth??0,local?.weather.windStrength??0,local?.exposure??1);
   snowfall.update(camera, dt, walking, sheltered || shedSheltered || roofSheltered || Boolean(homeReturn));
-  weatherFog.near = weather.fogNear * skyFrame.fogNearScale;
-  weatherFog.far = weather.fogFar * skyFrame.fogFarScale;
+  snowfall.setDensityScale(applySouthWeatherPresentation(scene,weatherFog,weather,skyFrame,particleDensityScale(),local?.weather));
   // Weather changes the snow tint and cold exposure. The movement and gathering cover
   // still follows the existing ceremony intensity and night mode.
   visualSnowCover = ceremonyState.phase === 'ordinary'

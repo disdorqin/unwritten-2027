@@ -1,4 +1,8 @@
+import {Color,Fog,type Scene} from 'three';
 import type {TownOutdoorWeatherState} from '../../../src/shared/town-outdoor-weather';
+import type {TownNightWeatherSkyFrame} from './town-night-weather-sky';
+import type {TownSnowWeather} from './town-weather';
+import type {TownOutdoorWeatherFieldSample} from './town-weather-field-outdoor';
 import {mainSummitBounds} from './main-summit-block';
 import {summitAssemblyAnchor} from './main-summit-assembly';
 import {craterWestSurvey} from './town-za22-crater-road';
@@ -16,4 +20,23 @@ export function sampleSouthRegionalWeather(state:TownOutdoorWeatherState,east:nu
  const edgeDistance=Math.max(0,Math.min(east-bounds.west,bounds.east-east,north-bounds.south,bounds.north-north));
  const exposure=townWeatherExposureFor(mountain?'open-ground':townWeatherAreaAt(east,north));
  return {weather:townOutdoorWeatherFieldAt(state,{east,north,elevation,edgeDistance},{exposure,nightFogFar:Infinity}),exposure};
+}
+
+/** The shader always emits its base flakes at intensity <=1. Reduce its
+ * existing draw range for light snow, never enlarge the quality budget.
+ * Whiteout haze follows the same sky sample in both domains. */
+const whiteoutTint=new Color('#d8e2e9');
+export function applySouthWeatherPresentation(scene:Scene,fog:Fog,weather:TownSnowWeather,sky:TownNightWeatherSkyFrame,quality:number,local?:TownOutdoorWeatherFieldSample){
+ fog.far=Math.max(.1,weather.fogFar*sky.fogFarScale);
+ fog.near=Math.min(fog.far-.05,Math.max(0,weather.fogNear*sky.fogNearScale));
+ // Reset from the sampled sky, not last frame's blended colour.
+ fog.color.setHex(sky.sample.fogColor);
+ const background=scene.background as Color|null;
+ if(background?.isColor)background.setHex(sky.sample.skyColor);
+ if(local?.skyColor){
+  const blend=.35+.5*local.severity;
+  fog.color.lerp(whiteoutTint,blend);
+  if(background?.isColor)background.lerp(whiteoutTint,blend);
+ }
+ return quality*Math.max(.125,Math.min(1,Math.round(weather.intensity*64)/64));
 }

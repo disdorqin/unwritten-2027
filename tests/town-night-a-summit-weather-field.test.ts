@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import type {TownOutdoorWeatherState} from '../src/shared/town-outdoor-weather';
-import {sampleSouthRegionalWeather} from '../tools/voxel-tavern/town-blockout/town-night-a-summit-weather-field';
+import {Color,Fog,Scene} from 'three';
+import {sampleSouthRegionalWeather,applySouthWeatherPresentation} from '../tools/voxel-tavern/town-blockout/town-night-a-summit-weather-field';
+import {townNightWeatherAt} from '../src/shared/town-night-weather-cycle';
 test('production domain weather respects actual west ground and summit bounds, and preserves Presence input',()=>{
  const state:TownOutdoorWeatherState={weather:'whiteout',startedAt:0,nextChangeAt:600000,windEast:1,windNorth:0,windStrength:1};
  const before=JSON.stringify(state);
@@ -12,4 +14,18 @@ test('production domain weather respects actual west ground and summit bounds, a
  assert.ok(summit.intensity>plaza.intensity&&summit.windStrength>plaza.windStrength);
  assert.deepEqual(at(350,1676,800,true),summit);assert.equal(JSON.stringify(state),before);
  for(const v of [plaza,west,crater,summit])assert.ok(v.fogNear<v.fogFar);
+});
+test('regional haze is non-accumulating and light snow actually thins the existing particle budget',()=>{
+ const scene=new Scene(),fog=new Fog(0,1,100);scene.background=new Color();
+ const sample=townNightWeatherAt(Date.UTC(2026,0,1)+180000);
+ const sky={sample,nightSide:!sample.daylight,lampLevel:sample.lampLevel,fogNearScale:sample.fogNearScale,fogFarScale:sample.fogFarScale};
+ const state:TownOutdoorWeatherState={weather:'whiteout',startedAt:0,nextChangeAt:600000,windEast:1,windNorth:0,windStrength:1};
+ const high=sampleSouthRegionalWeather(state,350,1676,800,true).weather;
+ assert.equal(applySouthWeatherPresentation(scene,fog,high,sky,.5,high),.5);
+ const color=fog.color.getHex();
+ assert.equal(applySouthWeatherPresentation(scene,fog,high,sky,.5,high),.5);assert.equal(fog.color.getHex(),color);
+ const clear=sampleSouthRegionalWeather({...state,weather:'clear-snow'},223,180,12,false).weather;
+ assert.ok(applySouthWeatherPresentation(scene,fog,clear,sky,.5,clear)<.5);
+ assert.equal(fog.color.getHex(),sample.fogColor);
+ assert.ok(fog.near<fog.far);
 });
