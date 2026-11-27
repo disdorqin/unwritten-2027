@@ -55,7 +55,7 @@ try{
  const snap=async(name)=>{
   await page.waitForTimeout(450);
   const state=await page.evaluate(()=>({position:document.querySelector('#position')?.textContent,day:document.querySelector('#lighting')?.textContent,frame:window.__m1Frame}));
-  assert.ok(state.frame.calls>0&&state.frame.ridge.roads===3);
+  assert.ok(state.frame.calls>0&&state.frame.ridge.roads===(rearConnector?4:3));
   assert.ok(state.frame.craterPerf.exteriorCertified&&state.frame.ridge.terraceMounted&&state.frame.ridge.cloudSeam.physicalReady);
   assert.equal(state.frame.ridge.cloudSeam.domainReady,false);
   assert.equal(state.frame.craterPerf.undergroundVisible,false);
