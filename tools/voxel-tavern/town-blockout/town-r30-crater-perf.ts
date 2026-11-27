@@ -99,13 +99,13 @@ export function installCraterRenderPerf(root:Group,lod:Lod,room?:Group,ground?:G
  const exterior=ground?createCraterExteriorOcclusion(ground.mesh,ground.anchor,ground.heightAt):undefined;
  const localCells=createCraterInstanceCells(24,8),externalCells=createCraterInstanceCells(32,24);
  const localStatic=createCraterStaticMeshBatches(16),externalStatic=createCraterStaticMeshBatches(20);
- const coalescer=createCraterInstanceBatches(96),props=createCraterPropBatches(48),indices=createCraterIndexCells(root);
+ const coalescer=createCraterInstanceBatches(192,true),props=createCraterPropBatches(48),indices=createCraterIndexCells(root);
  let groundCells:ReturnType<typeof createCraterGroundCells>;
  if(exterior){exteriorSessions.set(root,exterior);exteriorCells.set(root,externalCells);}
  let crosslineProbe=false,culledExterior=0,undergroundProbe:{object:Object3D;visible:boolean}|undefined;
  function restorePresentation(){indices.restore();props.restore();coalescer.restore();localStatic.restore();externalStatic.restore();localCells.restore();externalCells.restore();groundCells?.restore();exterior?.restore();if(undergroundProbe){undergroundProbe.object.visible=undergroundProbe.visible;undergroundProbe=undefined;}}
  const compare=comparison(),batch=room?batchCraterLampRoom(room,compare):undefined;
- if(!compare&&exterior&&typeof location!=='undefined'&&new URLSearchParams(location.search).has('pCoalesceCandidate'))exteriorCoalescers.set(root,coalescer);
+ if(!compare&&exterior)exteriorCoalescers.set(root,coalescer);
  if(!compare&&exterior)exteriorProps.set(root,props);
  let enabled=!compare,p2Enabled=!compare,p3Enabled=!compare,globalLights=!compare,scene:Scene|undefined,previousBefore:Scene['onBeforeRender']|undefined,previousAfter:Scene['onAfterRender']|undefined;
  let probe:Profile['camera'],savedPosition:Vector3|undefined,savedQuaternion:Camera['quaternion']|undefined;

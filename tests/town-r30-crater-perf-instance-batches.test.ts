@@ -2,6 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {BoxGeometry,Color,Group,InstancedMesh,Matrix4,MeshStandardMaterial,PerspectiveCamera,Scene,Vector3} from 'three';
 import {createCraterInstanceBatches} from '../tools/voxel-tavern/town-blockout/town-r30-crater-perf-instance-batches';
+test('wide static forest coalescing is budgeted, exact and refuses offscreen or modified sources',()=>{
+ const scene=new Scene(),root=new Group(),detail=new Group(),g=new BoxGeometry(),mat=new MeshStandardMaterial(),t=new Matrix4();scene.add(root);root.add(detail);
+ const sources=[0,1,2].map(k=>{const m=new InstancedMesh(g,mat,600);m.name='Forest trunks and branches ['+k+',0]';for(let i=0;i<600;i++)m.setMatrixAt(i,t.makeTranslation(10+k*32+i*.001,0,-65));detail.add(m);return m;});
+ const other=new InstancedMesh(g,mat,600);detail.add(other);scene.updateMatrixWorld(true);
+ const sys=createCraterInstanceBatches(192,true);sys.register([root]);assert.equal(sys.pending,1);sys.warmStep(1,Infinity);assert.equal(sys.count,0);assert.equal(sys.pending,1);while(sys.pending)sys.warmStep(1,Infinity);assert.equal(sys.count,1);
+ const p=root.children.find(o=>o.name==='p4-coalesced-instances') as InstancedMesh;assert.equal(p.count,1800);
+ const cam=new PerspectiveCamera(100,1,.1,500);cam.position.set(42,0,0);cam.lookAt(42,0,-65);cam.updateMatrixWorld(true);assert.equal(sys.begin(cam).savedDraws,2);assert.equal(other.layers.mask,1);sys.restore();
+ cam.fov=10;cam.updateProjectionMatrix();cam.updateMatrixWorld(true);assert.equal(sys.begin(cam).savedDraws,0);assert.ok(sources.every(m=>m.layers.mask===1));
+ cam.fov=100;cam.updateProjectionMatrix();sources[0].instanceMatrix.needsUpdate=true;assert.equal(sys.begin(cam).savedDraws,0);sys.dispose();assert.equal(root.children.length,1);
+});
 test('coalesces exact shared static batches, restores layers and rejects changed sources',()=>{
  const scene=new Scene(),root=new Group(),g=new BoxGeometry(),mat=new MeshStandardMaterial(),matrix=new Matrix4(),c=new Color();
  scene.add(root);const sources=Array.from({length:5},(_,i)=>{const p=new Group();p.position.set(i*2,0,-10);p.rotation.y=i*.12;root.add(p);const m=new InstancedMesh(g,mat,3);for(let j=0;j<3;j++){m.setMatrixAt(j,matrix.makeTranslation(j*.3,0,0));m.setColorAt(j,c.setRGB(i/5,j/3,.7));}p.add(m);return m;});
