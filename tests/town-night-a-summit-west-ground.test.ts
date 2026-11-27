@@ -30,5 +30,17 @@ test('new west carrier fills precisely the old missing 1m cells, preserves seams
    else assert.equal(hits.length,0);
   }
   assert.ok(count>500);
+  // A shared raster vertex must carry the same lighting normal in every tile.
+  const seen=new Map<string,number[]>();let shared=0;
+  for(const tile of a.group.children){
+   const mesh=tile as Mesh;assert.ok(mesh.isMesh);
+   const p=mesh.geometry.getAttribute('position'),normal=mesh.geometry.getAttribute('normal');
+   for(let i=0;i<p.count;i++){
+    const k=p.getX(i)+','+p.getZ(i),v=[normal.getX(i),normal.getY(i),normal.getZ(i)];
+    assert.ok(v[1]!>0);assert.ok(Math.abs(Math.hypot(...v)-1)<1e-6);
+    const prior=seen.get(k);if(prior){assert.deepEqual(v,prior);shared++;}else seen.set(k,v);
+   }
+  }
+  assert.ok(shared>1000);
  }finally{a.dispose();}
 });

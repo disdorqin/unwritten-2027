@@ -45,16 +45,22 @@ export function mountWestMountainGround(base:SouthGround,bounds:Bounds,protected
  let cells=0;
  for(let n0=south;n0<north;n0+=64)for(let e0=west;e0<east;e0+=64){
   const n1=Math.min(north,n0+64),e1=Math.min(east,e0+64),cols=e1-e0+1;
-  const positions:number[]=[],colors:number[]=[],indices:number[]=[];
+  const positions:number[]=[],colors:number[]=[],normals:number[]=[],indices:number[]=[];
   for(let n=n0;n<=n1;n++)for(let e=e0;e<=e1;e++){
    const h=heights[id(e,n)]!;positions.push(e,h,-n);
-   const slope=Math.hypot(heights[id(Math.min(east,e+1),n)]!-heights[id(Math.max(west,e-1),n)]!,heights[id(e,Math.min(north,n+1))]!-heights[id(e,Math.max(south,n-1))]!)*.5;
+   const em=Math.max(west,e-1),ep=Math.min(east,e+1),nm=Math.max(south,n-1),np=Math.min(north,n+1);
+   const dx=heights[id(ep,n)]!-heights[id(em,n)]!,dz=heights[id(e,np)]!-heights[id(e,nm)]!;
+   const de=dx/(ep-em),dn=dz/(np-nm);
+   // World z=-north. Sample the shared raster, not this tile's faces:
+   // duplicated border vertices now have the same upward normal.
+   const inv=1/Math.hypot(de,1,dn);normals.push(-de*inv,inv,dn*inv);
+   const slope=Math.hypot(dx,dz)*.5;
    tint.copy(snow).lerp(rock,Math.min(.56,slope*.75)).multiplyScalar(.96+.04*Math.sin(e*.27+n*.19));colors.push(tint.r,tint.g,tint.b);
    if(e===e1||n===n1||!ownsCell(e,n))continue;
    const a=(n-n0)*cols+e-e0,b=a+1,c=a+cols,d=c+1;indices.push(a,b,c,b,d,c);cells++;
   }
   if(!indices.length)continue;
-  const geo=new BufferGeometry();geo.setAttribute('position',new Float32BufferAttribute(positions,3));geo.setAttribute('color',new Float32BufferAttribute(colors,3));geo.setIndex(indices);geo.computeVertexNormals();geo.computeBoundingSphere();
+  const geo=new BufferGeometry();geo.setAttribute('position',new Float32BufferAttribute(positions,3));geo.setAttribute('color',new Float32BufferAttribute(colors,3));geo.setAttribute('normal',new Float32BufferAttribute(normals,3));geo.setIndex(indices);geo.computeBoundingSphere();
   const mesh=new Mesh(geo,material);mesh.name='west-mountain-ground:'+e0+','+n0;group.add(mesh);
  }
  const readyAt=(e:number,n:number)=>Number.isFinite(e)&&Number.isFinite(n)&&e>=west&&e<=east&&n>=south&&n<=north&&(e<=strip.west||n>=strip.north);
