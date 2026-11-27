@@ -70,7 +70,7 @@ export function createCableRepairHost(line: Za36CableRepairLine, anchors: Repair
           offered.push({ id: 'pull-brake', label: '拉下锈闸', event: { kind: 'pull-brake' } });
         }
       }
-      if (near(player, anchors.cableWheel) && state.brakePulled && !state.cableAligned) {
+      if (near(player, anchors.cableWheel) && !state.cableAligned) {
         offered.push({ id: 'pry-cable', label: '撬正缆绳', event: { kind: 'pry-cable', effort: 1 } });
       }
       if (near(player, anchors.cableWheel) && state.cableAligned && state.cableTurns < 3) {

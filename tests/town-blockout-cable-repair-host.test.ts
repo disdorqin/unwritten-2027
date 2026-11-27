@@ -46,10 +46,18 @@ test('only the authoritative carrying player receives a hang action',()=>{
  const own={...m.snapshot(),carriedBySelf:true},other={...m.snapshot(),carriedBySelf:false};
  a.sync(own);b.sync(other);
  assert.ok(ids(a.actions(own,anchors.weightFrame)).includes('hang-weight'));
- assert.deepEqual(b.actions(other,anchors.weightFrame),[]);
+ assert.deepEqual(ids(b.actions(other,anchors.weightFrame)),['pry-cable']); // adjacent wheel remains independently available; no hang action
  assert.deepEqual(b.actions(other,anchors.weightTower),[]);
  assert.equal(b.carrying(),null);
  m.returnCarriedWeight();b.sync(m.snapshot());assert.ok(ids(b.actions(m.snapshot(),anchors.weightTower)).includes('take-weight'));
+});
+test('the three fault points do not impose an artificial brake-first order',()=>{
+ const m=createZa36CableRepair(1),host=createCableRepairHost(1,anchors);m.apply({kind:'wake',impact:'sled'});
+ assert.ok(ids(host.actions(m.snapshot(),anchors.cableWheel)).includes('pry-cable'));
+ m.apply({kind:'pry-cable',effort:1});
+ assert.ok(ids(host.actions(m.snapshot(),anchors.cableWheel)).includes('tighten-cable'));
+ assert.ok(ids(host.actions(m.snapshot(),anchors.weightTower)).includes('take-weight'));
+ assert.equal(m.snapshot().brakePulled,false);
 });
 test('actions are reach-bound and line-bound', () => {
   const machine = createZa36CableRepair(2);
