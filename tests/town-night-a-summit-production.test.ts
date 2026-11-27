@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
+import {resolve} from 'node:path';
+import {pathToFileURL} from 'node:url';
+import {existsSync} from 'node:fs';
 import {BufferGeometry,Float32BufferAttribute,Group,Mesh,MeshBasicMaterial,DoubleSide,Raycaster,Vector3} from 'three';
 import {buildMainSummitTrailCut} from '../tools/voxel-tavern/town-blockout/main-summit-trail-cut';
 import {mountSouthProduction} from '../tools/voxel-tavern/town-blockout/town-night-a-summit-production';
@@ -61,7 +64,16 @@ test('southern production replaces the real near mesh and releases it atomically
   assert.equal(s.supportAt(110,100),undefined);assert.equal(s.blocked(24,23,347),false);
  }finally{f.original.dispose();f.mat.dispose();}
 });
-test('full 833m A assembly replaces actual D2 8m tiles and restores them, not just a flat fixture',()=>{
+test('full 833m A assembly replaces actual D2 8m tiles and restores them, not just a flat fixture',async()=>{
+ // Integration automatically uses B's actual module once it lands.
+ // For independent branch acceptance, pass its read-only checked-out file:
+ // A_R30_B_CUT_MODULE=../window-b/tools/voxel-tavern/town-blockout/town-night-b-summit-west-cut.ts
+ const modulePath=resolve(process.env.A_R30_B_CUT_MODULE??'tools/voxel-tavern/town-blockout/town-night-b-summit-west-cut.ts');
+ if(process.env.A_R30_B_CUT_MODULE&&!existsSync(modulePath))throw Error('Requested B source does not exist');
+ const actualB=existsSync(modulePath)?await import(pathToFileURL(modulePath).href) as {
+  cutNightBWestTerrain:Parameters<typeof mountSouthProduction>[0]['cutTerrain'];
+  createNightBWestCutSurface:Parameters<typeof mountSouthProduction>[0]['createCutSurface'];
+ }:undefined;
  const owner=new Group(),massif=createTownD2R30Massif(),collision=createTownD2R30Collision();
  owner.add(massif.group);
  const block=createMainSummitBlock(mainSummitLayout,347,100);
@@ -76,16 +88,16 @@ test('full 833m A assembly replaces actual D2 8m tiles and restores them, not ju
   const points=[...old.slice(0,1),...profile.profile,...old.slice(835)];
   const south=mountSouthProduction({owner,groundAt:collision.surfaceAt,reserved,trail:points,first:1,last:834,
    nearTiles:topTiles,legacySouthVegetationExcluded:true,legacyTreadExcluded:true,
-   cutTerrain(source,tread){
+   cutTerrain:actualB?.cutNightBWestTerrain??((source,tread)=>{
     const result=buildMainSummitTrailCut(source,tread);
     if(!result.refinedTriangles){result.geometry.dispose();return {geometry:source};}
     return result;
-   },
-   createCutSurface(g){
+   }),
+   createCutSurface:actualB?.createNightBWestCutSurface??(g=>{
     g.computeBoundingBox();const b=g.boundingBox!,m=new Mesh(g,mat);m.updateMatrixWorld(true);
     const covers=(e:number,n:number)=>e>=b.min.x&&e<=b.max.x&&-n>=b.min.z&&-n<=b.max.z;
     return {covers,surfaceAt(e,n){ray.ray.origin.set(e,900,-n);return ray.intersectObject(m,false)[0]?.point.y;},dispose(){}};
-   }
+   })
   });
   try{
    assert.ok(south.cutChunks>1);
@@ -97,14 +109,16 @@ test('full 833m A assembly replaces actual D2 8m tiles and restores them, not ju
      const de=r.east-l.east,dn=r.north-l.north,d=Math.hypot(de,dn);
      return {e:p.east-dn/d*t,n:p.north+de/d*t};
     };
-    for(const t of [-1,0,1]){
-     const u=side(a,prev,b,t),v=side(b,a,next,t),e=(u.e+v.e)/2,n=(u.n+v.n)/2,h=south.supportAt(e,n),road=south.sector.road!.supportAt(e,n);
+    for(const t of [-1,0,1])for(const f of actualB?[.125,.375,.625,.875]:[.5]){
+     const u=side(a,prev,b,t),v=side(b,a,next,t),e=u.e+(v.e-u.e)*f,n=u.n+(v.n-u.n)*f,h=south.supportAt(e,n),road=south.sector.road!.supportAt(e,n);
      assert.ok(h!==undefined&&road!==undefined&&Math.abs(h-road)<.001,JSON.stringify({i,e,n,h,road}));
      assert.equal(south.blocked(e,n,h),false,JSON.stringify({i,e,n,h}));samples++;
     }
    }
    south.updateView(0,0);south.setNight(true);
-   console.log(JSON.stringify({length:profile.length,cutChunks:south.cutChunks,samples,topTiles:topTiles.length,forest:south.sector.forest.stats}));
+   if(actualB)for(const tile of topTiles)assert.equal(tile.geometry.getAttribute('color').count,tile.geometry.getAttribute('position').count);
+   assert.equal(samples,actualB?9996:2499);
+   console.log(JSON.stringify({cutter:actualB?'actual B source':'independent P3 ray reference',length:profile.length,cutChunks:south.cutChunks,samples,topTiles:topTiles.length,forest:south.sector.forest.stats}));
   }finally{south.dispose();}
   assert.ok(topTiles.every((m,i)=>m.geometry===originals[i]));
   assert.equal(owner.getObjectByName('night-a-south-sector'),undefined);
