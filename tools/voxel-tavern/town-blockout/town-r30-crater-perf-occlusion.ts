@@ -68,8 +68,13 @@ export function sphereBehindCraterWall(ring:Ring,eye:Vector3,sphere:Sphere){
  if(Math.hypot(c.x-ring.east,c.z+ring.north)-r<=ring.radius+.5)return false;
  const dx=c.x-eye.x,dz=c.z-eye.z,centerDistance=Math.hypot(dx,dz),distance=centerDistance-r;
  if(distance<=0)return false;
- let maxExit=ring.radius+eyeR;
- if(ring.tight!==false&&eyeR>1e-8){
+ const oldExit=ring.radius+eyeR,dy=Math.max(0,c.y+r-eye.y),limit=ring.minHeight-.35;
+ // Most fully hidden sources already pass the original cheap bound.
+ // Reserve the directional calculation for ambiguous sources only.
+ if(eye.y+dy*Math.min(1,oldExit/distance)<limit)return true;
+ if(ring.tight===false||eyeR<=1e-8)return false;
+ let maxExit=oldExit;
+ {
   // All horizontal rays to the sphere lie in an angular cone of
   // half-angle asin(r/centerDistance). Minimize e·u over that cone,
   // then use the positive circle-exit root (the certified polygon
@@ -82,8 +87,8 @@ export function sphereBehindCraterWall(ring:Ring,eye:Vector3,sphere:Sphere){
   maxExit=Math.min(maxExit,exit+1e-6);
  }
  const t=Math.min(1,maxExit/distance);
- const crossing=eye.y+Math.max(0,c.y+r-eye.y)*t;
- return crossing<ring.minHeight-.35;
+ const crossing=eye.y+dy*t;
+ return crossing<limit;
 }
 
 function opaqueMesh(o:Object3D):o is Mesh{
