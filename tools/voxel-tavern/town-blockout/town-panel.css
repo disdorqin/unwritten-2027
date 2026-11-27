@@ -50,7 +50,7 @@
   background: #142136d9; border-color: #91abc78c; border-radius: 12px;
 }
 #town-panel-toggle:hover, #town-panel-toggle:focus-visible { background: #243650; }
-body:has(#town-chat:not([hidden]) #town-chat-unread:not([hidden])) #town-panel-toggle::after {
+#town-panel-toggle[data-chat-unread="true"]::after {
   content: ''; position: absolute; top: 5px; right: 5px;
   width: 7px; height: 7px; border-radius: 50%; background: #ffbc78;
   box-shadow: 0 0 0 2px #142136;

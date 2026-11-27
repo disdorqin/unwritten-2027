@@ -122,6 +122,18 @@ export function createViewportControls(options: {
     if (records.some(record => record.addedNodes.length > 0)) options.chatUnread.hidden = false;
   }).observe(options.chatLog, { childList: true });
 
+  const menuToggle=document.getElementById('town-panel-toggle');
+  const syncMenuUnread=()=>{
+    const unread=!options.chatPanel.hidden&&!options.chatUnread.hidden;
+    if(menuToggle){
+      menuToggle.dataset.chatUnread=String(unread);
+      menuToggle.setAttribute('aria-label',unread?'小镇设置，有未读聊天':'小镇设置');
+    }
+  };
+  const unreadObserver=new MutationObserver(syncMenuUnread);
+  unreadObserver.observe(options.chatUnread,{attributes:true,attributeFilter:['hidden']});
+  unreadObserver.observe(options.chatPanel,{attributes:true,attributeFilter:['hidden']});
+  syncMenuUnread();
   options.chatPanel.closest('dialog')?.addEventListener('close',()=>{
     chatCollapsed=true;
     applyChatCollapsed();

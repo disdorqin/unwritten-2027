@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from '@playwright/test';
+import { WebSocket } from 'ws';
 
 const [origin, output, segment = 'all'] = process.argv.slice(2);
 assert.ok(origin && output, 'Use the production-preview loopback URL and an evidence directory');
@@ -395,6 +396,27 @@ try{
   await picture(page,evidence,'bare-weather-settings');
   await activate(page.locator('#town-settings-close'));
   await page.waitForFunction(()=>document.querySelector('#town-panel-toggle')?.getAttribute('aria-expanded')==='false');
+  // A genuine second Presence client sends a town message while the
+  // visual browser is walking. No mocked events or extra WebGL context.
+  const peerUrl=new URL('/presence',origin);peerUrl.protocol='ws:';
+  const peer=new WebSocket(peerUrl);
+  try{
+   await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(Error('Peer join timeout')),8000);
+    peer.once('error',e=>{clearTimeout(timer);reject(e);});
+    peer.once('open',()=>peer.send(JSON.stringify({type:'join',name:'菜单验收伙伴'})));
+    peer.on('message',(raw,binary)=>{if(binary)return;const f=JSON.parse(raw.toString());if(f.type==='join'&&f.self===true){clearTimeout(timer);resolve();}});
+   });
+   peer.send(JSON.stringify({type:'chat',scope:'town',text:'未读提示实际联机'}));
+   await page.waitForFunction(()=>document.querySelector('#town-panel-toggle')?.dataset.chatUnread==='true'&&document.querySelector('#town-chat-log')?.textContent?.includes('未读提示实际联机'));
+   assert.equal(await menu.isVisible(),false);
+   assert.match(await toggle.getAttribute('aria-label'),/未读/);
+   assert.notEqual(await toggle.evaluate(el=>getComputedStyle(el,'::after').content),'none');
+   await activate(toggle);await activate(chat);
+   await page.waitForFunction(()=>document.querySelector('#town-panel-toggle')?.dataset.chatUnread==='false');
+   assert.equal(await page.locator('#town-chat-unread').evaluate(el=>el.hidden),true);
+   await activate(page.locator('#town-settings-close'));await menu.waitFor({state:'hidden'});
+  }finally{peer.terminate();}
   if(!menuTouch){
    await page.keyboard.press('Enter');
    await page.waitForFunction(()=>document.querySelector('#town-settings')?.open&&document.activeElement?.id==='town-chat-text');
@@ -425,7 +447,7 @@ try{
   assert.ok(Math.hypot(moved.east-start.east,moved.north-start.north)>.3,'Native keyboard walking must remain available');
   await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-moved.east,p.north-moved.north)<1);
   await picture(page,evidence,'bare-weather-walk');
-  report.entry={scope:'ordinary bare root, single corner menu, nested settings, chat send, close and native movement',weather,lightingDisabled:true,snowToggleRestored:true,menuTouch,drawer:bounds,hiddenIds,chatSent:true,start,moved};
+  report.entry={scope:'ordinary bare root, single corner menu, nested settings, chat send, close and native movement',weather,lightingDisabled:true,snowToggleRestored:true,menuTouch,drawer:bounds,hiddenIds,chatSent:true,remoteUnread:true,start,moved};
   report.traversal={top:moved,returned:moved};
  }else if(segment==='night-r3-entry'){
   const state=()=>page.evaluate(()=>window.__za22Frame);
