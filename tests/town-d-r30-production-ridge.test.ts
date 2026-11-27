@@ -39,7 +39,7 @@ test('production ridge consumes real railway mask and replaces only owned terrai
  facilities.updateView(526,354);const near=facilities.visibleInstances();facilities.updateView(0,0);const far=facilities.visibleInstances();assert.ok(near>far&&far>0);
  for(let n=346;n<=351;n+=.25)assert.equal(ridge.blocked(526,n,26),false);
  assert.equal(ridge.blocked(526,356.9,26),true);
- assert.ok(ridge.roads.some(r=>(r.route.at(-1)?.cum??0)>219));
+ assert.ok(ridge.roads.some(r=>(r.route.at(-1)?.cum??0)>384&&(r.route.at(-1)?.cum??0)<385));
  assert.ok(ridge.roads.some(r=>(r.route.at(-1)?.cum??0)>701&&(r.route.at(-1)?.cum??0)<702));assert.equal(ridge.serviceExit,true);
  for(let e=522;e<=526;e+=.25)assert.equal(ridge.blocked(e,355,26),false);
  let steep=0,roadSteps=0;

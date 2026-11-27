@@ -23,7 +23,17 @@ export const middleEastExtendedControls=Object.freeze([...middleEastRoadControls
 // M2 extension: follow the east ridge around its north-east shoulder.
 export const middleEastNorthControls=Object.freeze([...middleEastExtendedControls,
  {east:517,north:600},{east:514,north:610},{east:511,north:620},{east:507,north:630},
- {east:501,north:638},{east:496,north:646},{east:489,north:652},{east:480,north:655}
+ {east:501,north:638},{east:496,north:646},{east:489,north:652},{east:480,north:655},
+ // Rear middle-station traverse on the same contour, no elevated overlay.
+ {east:476,north:657},{east:472,north:661},{east:468,north:667},{east:464,north:675},
+ {east:460,north:679},{east:456,north:683},{east:452,north:687},{east:448,north:691},
+ {east:444,north:695},{east:440,north:699},{east:436,north:703},{east:432,north:705},
+ {east:428,north:708},{east:424,north:709},{east:420,north:709},{east:416,north:710},
+ {east:412,north:710},{east:408,north:712},{east:404,north:713},{east:400,north:714},
+ {east:396,north:715},{east:392,north:715},{east:388,north:715},{east:384,north:715},
+ {east:380,north:715},{east:376,north:716},{east:372,north:718},{east:368,north:719},
+ {east:364,north:721},{east:360,north:722},{east:356,north:722},{east:352,north:722},
+ {east:348,north:722},{east:344,north:722},{east:340,north:722}
 ]);
 // M2 deck west exit, exact 26m terminal grade; same real raster.
 // The whole previous low service corridor is replaced, not stacked.
