@@ -1,7 +1,7 @@
 import {BoxGeometry,Color,Group,InstancedMesh,MeshLambertMaterial,Object3D} from 'three';
 import type {FrontRidgeR30Field} from './town-d-r30-front-ridge';
 import type {RidgeRoadPoint} from './town-d-r30-road-survey';
-import {ridgeRoadProject} from './town-d-r30-roadbed';
+import {createRidgeRoadProximity,createRidgeSpatialIndex} from './town-d-r30-spatial';
 
 type Allowed=(e:number,n:number)=>boolean;
 type Wall={east:number;north:number;bottom:number;top:number;length:number;width:number;yaw:number};
@@ -23,7 +23,7 @@ export function mountRidgeRetainingBanks(field:FrontRidgeR30Field,route:readonly
  const chunks=new Map<string,{near:Part[];far:Part[];east:number;north:number}>();
  let brickCount=0;
  const shade=['#7d8586','#91978f','#696f72','#a2a49b','#89918e'];
- const total=route.at(-1)?.cum??0;
+ const total=route.at(-1)?.cum??0,nearRoad=createRidgeRoadProximity(route);
  let highest=0;
  const local=(w:Wall,x:number,z:number)=>({e:w.east+Math.cos(w.yaw)*x+Math.sin(w.yaw)*z,n:w.north+Math.sin(w.yaw)*x-Math.cos(w.yaw)*z});
  function brick(w:Wall,x:number,z:number,y:number,l:number,d:number,h:number,shade:string,structural=false){
@@ -43,7 +43,7 @@ export function mountRidgeRetainingBanks(field:FrontRidgeR30Field,route:readonly
    const probes=[];let valid=true;
    for(const x of [-.84,0,.84])for(const z of [-.48,0,.48]){
     const q=local(w,x,z),h=field.heightAt(q.e,q.n);
-    if(h===undefined||!allowed(q.e,q.n)||(ridgeRoadProject(route,q.e,q.n)?.distance??0)<margin){valid=false;break}
+    if(h===undefined||!allowed(q.e,q.n)||nearRoad(q.e,q.n,margin,false)){valid=false;break}
     probes.push(h);
    }
    if(!valid||!probes.length)continue;
@@ -70,8 +70,9 @@ export function mountRidgeRetainingBanks(field:FrontRidgeR30Field,route:readonly
  function batch(parts:Part[]){const mesh=new InstancedMesh(geometry,material,parts.length);parts.forEach((p,i)=>{mesh.setMatrixAt(i,p.matrix);mesh.setColorAt(i,tint.set(p.shade))});mesh.computeBoundingSphere();group.add(mesh);return mesh}
  for(const c of chunks.values()){const near=batch(c.near),far=batch(c.far);near.visible=false;batches.push({near,far,east:c.east,north:c.north})}
  function updateView(e:number,n:number){for(const c of batches){const d=Math.hypot(e-c.east,n-c.north);c.near.visible=c.near.visible?d<80:d<64;c.far.visible=!c.near.visible}}
+ const collision=createRidgeSpatialIndex(walls,w=>{const d=Math.hypot(w.length/2+.018,.48);return {west:w.east-d,east:w.east+d,south:w.north-d,north:w.north+d}});
  return {group,walls,highest,brickCount,updateView,visibleInstances:()=>batches.reduce((n,c)=>n+(c.near.visible?c.near.count:c.far.count),0),blocked(e:number,n:number,y:number,r=.27){
-  return walls.some(w=>{const dx=e-w.east,dn=n-w.north,c=Math.cos(w.yaw),s=Math.sin(w.yaw),x=c*dx+s*dn,z=s*dx-c*dn;
+  return collision.some(e,n,r,w=>{const dx=e-w.east,dn=n-w.north,c=Math.cos(w.yaw),s=Math.sin(w.yaw),x=c*dx+s*dn,z=s*dx-c*dn;
    return y+1.8>w.bottom&&y<w.top+.16&&Math.hypot(Math.max(0,Math.abs(x)-w.length/2-.018),Math.max(0,Math.abs(z)-.48))<r});
  },dispose(){group.removeFromParent();batches.forEach(c=>{c.near.dispose();c.far.dispose()});geometry.dispose();material.dispose()}};
 }

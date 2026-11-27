@@ -1,7 +1,7 @@
 import {BoxGeometry,Color,Group,InstancedMesh,MeshLambertMaterial,Object3D,Vector3} from 'three';
 import type {FrontRidgeR30Field} from './town-d-r30-front-ridge';
 import type {RidgeRoadPoint} from './town-d-r30-road-survey';
-import {ridgeRoadProject} from './town-d-r30-roadbed';
+import {createRidgeRoadProximity,createRidgeSpatialIndex} from './town-d-r30-spatial';
 
 type P={east:number;north:number;height:number};
 type Barrier={a:P;b:P;radius:number;bottom:number;top:number};
@@ -16,7 +16,7 @@ export function mountRidgeRoadFurniture(field:FrontRidgeR30Field,route:readonly 
   const x=new Vector3(a.east,a.height,-a.north),z=new Vector3(b.east,b.height,-b.north),d=z.clone().sub(x);
   tmp.position.copy(x).lerp(z,.5);tmp.quaternion.setFromUnitVectors(new Vector3(0,1,0),d.clone().normalize());tmp.scale.set(size,d.length(),size);tmp.updateMatrix();parts.push({matrix:tmp.matrix.clone(),color});
  }
- const total=route.at(-1)?.cum??0;
+ const total=route.at(-1)?.cum??0,nearRoad=createRidgeRoadProximity(route);
  function at(m:number){let i=1;while(i<route.length-1&&route[i]!.cum<m)i++;const a=route[i-1]!,b=route[i]!,len=b.cum-a.cum,t=Math.max(0,Math.min(1,(m-a.cum)/len));return {east:a.east+(b.east-a.east)*t,north:a.north+(b.north-a.north)*t,de:(b.east-a.east)/len,dn:(b.north-a.north)/len}}
  const railPosts:P[][]=[[],[]];let postCount=0,railCount=0,lanternCount=0;
  for(const [sideIndex,side]of [-1,1].entries()){
@@ -24,7 +24,7 @@ export function mountRidgeRoadFurniture(field:FrontRidgeR30Field,route:readonly 
   for(let m=5;m<total-5;m+=4){
    const p=at(m),e=p.east-p.dn*side*2.25,n=p.north+p.de*side*2.25;
    const y=field.heightAt(e,n),out=field.heightAt(e-p.dn*side*2.7,n+p.de*side*2.7),center=field.heightAt(p.east,p.north);
-   if(y===undefined||out===undefined||center===undefined||!allowed(e,n)||(ridgeRoadProject(route,e,n)?.distance??0)<2.02){previous=undefined;continue}
+   if(y===undefined||out===undefined||center===undefined||!allowed(e,n)||nearRoad(e,n,2.02,false)){previous=undefined;continue}
    // Only exposed outside shoulders need a rail; inside banks stay open.
    if(center-out<.72){previous=undefined;continue}
    const ground={east:e,north:n,height:y};
@@ -33,7 +33,7 @@ export function mountRidgeRoadFurniture(field:FrontRidgeR30Field,route:readonly 
    box(e,n,y+1.10,.22,.22,.12,'#a98a61');
    railPosts[sideIndex]!.push(ground);postCount++;
    barriers.push({a:ground,b:ground,radius:.13,bottom:y-.1,top:y+1.15});
-   if(previous&&Math.hypot(e-previous.east,n-previous.north)<4.8&&[.25,.5,.75].every(t=>(ridgeRoadProject(route,previous!.east+(e-previous!.east)*t,previous!.north+(n-previous!.north)*t)?.distance??0)>=1.98)){
+   if(previous&&Math.hypot(e-previous.east,n-previous.north)<4.8&&[.25,.5,.75].every(t=>!nearRoad(previous!.east+(e-previous!.east)*t,previous!.north+(n-previous!.north)*t,1.98,false))){
     for(const dh of [.43,.93])beam({...previous,height:previous.height+dh},{...ground,height:y+dh},'#72543d',.12);
     barriers.push({a:previous,b:ground,radius:.10,bottom:Math.min(y,previous.height)+.32,top:Math.max(y,previous.height)+1.02});railCount++;
    }
@@ -54,8 +54,9 @@ export function mountRidgeRoadFurniture(field:FrontRidgeR30Field,route:readonly 
   const batch=new InstancedMesh(geo,material,list.length);list.forEach((p,i)=>{batch.setMatrixAt(i,p.matrix);if(material===mat)batch.setColorAt(i,tint.set(p.color))});
   batch.computeBoundingSphere();group.add(batch);batches.push(batch);
  }
+ const collision=createRidgeSpatialIndex(barriers,b=>({west:Math.min(b.a.east,b.b.east)-b.radius,east:Math.max(b.a.east,b.b.east)+b.radius,south:Math.min(b.a.north,b.b.north)-b.radius,north:Math.max(b.a.north,b.b.north)+b.radius}));
  return {group,postCount,railCount,lanternCount,blocked(e:number,n:number,y:number,r=.27){
-  return barriers.some(b=>{const dx=b.b.east-b.a.east,dn=b.b.north-b.a.north,t=Math.max(0,Math.min(1,((e-b.a.east)*dx+(n-b.a.north)*dn)/(dx*dx+dn*dn||1)));return y+1.8>b.bottom&&y<b.top&&Math.hypot(e-b.a.east-dx*t,n-b.a.north-dn*t)<r+b.radius});
+  return collision.some(e,n,r,b=>{const dx=b.b.east-b.a.east,dn=b.b.north-b.a.north,t=Math.max(0,Math.min(1,((e-b.a.east)*dx+(n-b.a.north)*dn)/(dx*dx+dn*dn||1)));return y+1.8>b.bottom&&y<b.top&&Math.hypot(e-b.a.east-dx*t,n-b.a.north-dn*t)<r+b.radius});
  },setNight(night:boolean){glow.emissive.set(night?'#ecc283':'#000000');glow.emissiveIntensity=night?.75:0},
  dispose(){group.removeFromParent();batches.forEach(b=>b.dispose());geo.dispose();mat.dispose();glow.dispose()}};
 }

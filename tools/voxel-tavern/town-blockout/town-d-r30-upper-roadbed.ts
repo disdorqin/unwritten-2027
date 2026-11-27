@@ -1,5 +1,6 @@
 import {createFrontRidgeR30FieldFromRaster,frontRidgeR30Bounds,type FrontRidgeR30Field} from './town-d-r30-front-ridge';
-import {auditRidgeRoadSurface,ridgeRoadProject} from './town-d-r30-roadbed';
+import {auditRidgeRoadSurface} from './town-d-r30-roadbed';
+import {createRidgeRoadProximity} from './town-d-r30-spatial';
 import {auditRidgeRoadCrossings,type RidgeRoadPoint} from './town-d-r30-road-survey';
 
 type EN={east:number;north:number};
@@ -147,6 +148,7 @@ export function buildMiddleEastRoadbed(field:FrontRidgeR30Field,allowed:Allowed,
   if(core.has(e)&&core.has(n))maxCoreGrade=Math.max(maxCoreGrade,Math.hypot(elevation[e]!-elevation[id]!,elevation[n]!-elevation[id]!));
   if(core.has(e)&&core.has(n)&&core.has(en))maxCoreGrade=Math.max(maxCoreGrade,Math.hypot(elevation[en]!-elevation[n]!,elevation[en]!-elevation[e]!));
  }
+ const roadProximity=createRidgeRoadProximity(finalRoute);
  const ok=audit.maxGrade<=.12+1e-6&&maxCoreGrade<=.12+1e-5&&protectedChanges===0&&cut<=cutLimit+1e-5&&fill<=cutLimit+1e-5;
- return {ok,reason:ok?'certified section candidate':'actual surface grade or protection failed',route:finalRoute,field:graded,audit,maxCoreGrade,cut,fill,changed,protectedChanges,roadAt(e:number,n:number){if(e<minE||e>maxE||n<minN||n>maxN)return false;return (ridgeRoadProject(finalRoute,e,n)?.distance??Infinity)<=1.75}};
+ return {ok,reason:ok?'certified section candidate':'actual surface grade or protection failed',route:finalRoute,field:graded,audit,maxCoreGrade,cut,fill,changed,protectedChanges,roadAt(e:number,n:number){if(e<minE||e>maxE||n<minN||n>maxN)return false;return roadProximity(e,n,1.75)}};
 }
