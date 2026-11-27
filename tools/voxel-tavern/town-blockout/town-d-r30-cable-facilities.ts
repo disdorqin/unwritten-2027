@@ -89,7 +89,7 @@ export function auditRidgeCableSweep(field:FrontRidgeR30Field,survey:ReturnType<
 }
 type Part={m:MeshLambertMaterial;matrix:import('three').Matrix4};
 type Solid={e:number;n:number;bottom:number;top:number;w:number;d:number;yaw:number};
-export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Field,externalDock=false){
+export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Field,externalDock=false,closed=false){
  const group=new Group();group.name='d-r30-front-cable-facilities';owner.add(group);
  const geometry=new BoxGeometry(),tmp=new Object3D(),parts:Part[]=[],solids:Solid[]=[];
  const stone=new MeshLambertMaterial({color:'#78818a'}),ash=new MeshLambertMaterial({color:'#9ba9af'}),wood=new MeshLambertMaterial({color:'#73523b'}),oak=new MeshLambertMaterial({color:'#ad8966'}),iron=new MeshLambertMaterial({color:'#384c58'}),brass=new MeshLambertMaterial({color:'#b9a074'}),snow=new MeshLambertMaterial({color:'#dce5eb'}),glass=new MeshLambertMaterial({color:'#7fa3a3'}),lamp=new MeshLambertMaterial({color:'#e9c58e'});
@@ -112,7 +112,8 @@ export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Fiel
   tmp.position.copy(va).lerp(vb,.5);tmp.quaternion.setFromUnitVectors(new Vector3(0,1,0),delta.clone().normalize());tmp.scale.set(w,delta.length(),d);tmp.updateMatrix();parts.push({m,matrix:tmp.matrix.clone()});
  }
  function board(id:'S-12'|'S-19',e:number,n:number,y:number,yaw:number){
-  const copy=STATION_BOARD_TEXTS.find(b=>b.id===id)!;
+  const canonical=STATION_BOARD_TEXTS.find(b=>b.id===id)!;
+  const copy=closed?{...canonical,title:'缆车检修中',lines:['新线路正在安全验收','暂不登乘 · 请勿跨越护栏']}:canonical;
   box(wood,e,n,y,2.9,.12,1.35,false,yaw);
   if(typeof document==='undefined')return;
   const canvas=document.createElement('canvas');canvas.width=1152;canvas.height=540;const c=canvas.getContext('2d');if(!c)return;
@@ -206,6 +207,19 @@ export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Fiel
    for(const n of [351.5,354.5])for(const dh of [.45,.96])box(wood,e,n,p.height+dh,.13,3,.13,true);
   }
   for(const n of [350,353,356])box(iron,p.east,n,p.height-.24,7.1,.28,.24);
+  // Actual platform slab is registered in the host's existing floor
+  // index; it is not a second ground height or an invisible teleporter.
+  group.userData.floors=[{min:[p.east-3.5,p.height-.30,-front],max:[p.east+3.5,p.height,-back]}];
+  if(closed){
+   // Complete edge guards while the cable is out of service. The
+   // south entrance stays open, both sides and the far end are guarded.
+   for(const s of [-1,1]){
+    for(const y of [.46,.96])box(wood,p.east+s*3.35,(back+350)/2,p.height+y,.13,350-back,.13,true);
+    for(const y of [.46,.96])box(wood,p.east+s*3.35,(356+front)/2,p.height+y,.13,front-356,.13,true);
+   }
+   for(const y of [.46,.96])box(iron,p.east,front-.13,p.height+y,6.8,.14,.15,true);
+   for(const e of [p.east-3.35,p.east,p.east+3.35])box(iron,e,front-.13,p.height+.50,.15,.18,1.0,true);
+  }
  }
  const survey=surveyRidgeCableSpans(field,externalDock);
  for(const p of survey.towers){
@@ -261,7 +275,7 @@ export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Fiel
    return {car,side};
  });
  function update(nowMs:number){
-  const states=clock.cabinsAt(nowMs);
+  const states=clock.cabinsAt(closed?0:nowMs);
   return cabinGroups.map(({car,side},i)=>{
    const state=states[i]!,along=state.distanceMetres;
    let lo=0,hi=survey.measure.length-1;
@@ -271,7 +285,12 @@ export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Fiel
    return {...state,east:car.position.x,north:-car.position.z,height:car.position.y};
   });
  }
- update(0);
+ const parked=update(0);
+ if(closed){
+  // No unsupported moving cabin is exposed to players. Park at both
+  // physical terminals and include the car bodies in static collision.
+  for(const p of parked)solids.push({e:p.east,n:p.north,bottom:p.height,top:p.height+2.45,w:2.24,d:2.95,yaw:0});
+ }
  const lines:Line[]=[];
  for(const side of [-1,1]){
   const g=new BufferGeometry().setFromPoints(survey.towers.map(p=>new Vector3(p.east+side*1.55,p.height+2.7,-p.north)));

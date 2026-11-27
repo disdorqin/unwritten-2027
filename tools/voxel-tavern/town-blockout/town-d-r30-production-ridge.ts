@@ -8,6 +8,7 @@ import {mountRidgeForest,ridgeForestRouteClearance} from './town-d-r30-forest';
 import {mountRidgeRoadFurniture} from './town-d-r30-road-furniture';
 import {mountRidgeRetainingBanks} from './town-d-r30-retaining-banks';
 import {mountNorthRidgeMiddleStation} from './north-ridge-middle-station';
+import {mountRidgeCableFacilities,auditRidgeCableSweep,surveyRidgeCableSpans} from './town-d-r30-cable-facilities';
 type Grid=ReturnType<typeof createTerrainGrid>;
 type Options=Parameters<typeof createAR30RidgeOwnership>[0];
 /** M1 production only: actual rail geometry defines the protected H0.
@@ -42,6 +43,12 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
  // when its actual platform datum is supported by this exact field.
  const stationReady=Array.from({length:13},(_,i)=>i-6).every(de=>Array.from({length:9},(_,i)=>i-4).every(dn=>Math.abs((field.heightAt(440+de,520+dn)??-1)-140)<.001));
  const station=stationReady?mountNorthRidgeMiddleStation(owner):undefined;
+ // Static facilities use the actual raster; operational authority remains
+ // closed. No cabin motion, old line, or unverified domain transfer.
+ const cableSurvey=surveyRidgeCableSpans(field,true);
+ const cableAudit=auditRidgeCableSweep(field,cableSurvey);
+ const facilities=stationReady&&cableAudit.groundHits===0&&cableAudit.minMoving>=.25
+  ?mountRidgeCableFacilities(owner,field,true,true):undefined;
  function heightAt(e:number,n:number){
   return patch.ownsCell(Math.floor(e),Math.floor(n))?grid.heightAt(e,n):undefined;
  }
@@ -57,9 +64,9 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
   const d=Math.hypot(to.east-from.east,to.north-from.north);
   return d<1e-6||h1-h0<=.85*d+1e-5;
  }
- return {field,ownership,ownsCell:patch.ownsCell,changedVertices:patch.changedVertices,roads,stationReady,model,forest,heightAt,allowsUphill,
-  blocked(e:number,n:number,h:number,r=.27){return forest.blocked(e,n,h,r)||!!station?.blocked(e,n,h,r)||furniture.some(f=>f.blocked(e,n,h))||banks.some(b=>b.blocked(e,n,h))},
-  setNight(night:boolean){station?.setNight(night);furniture.forEach(f=>f.setNight(night))},
+ return {field,ownership,ownsCell:patch.ownsCell,changedVertices:patch.changedVertices,roads,stationReady,model,forest,heightAt,allowsUphill,facilities,cableAudit,
+  blocked(e:number,n:number,h:number,r=.27){return forest.blocked(e,n,h,r)||!!station?.blocked(e,n,h,r)||!!facilities?.blocked(e,n,h,r)||furniture.some(f=>f.blocked(e,n,h,r))||banks.some(b=>b.blocked(e,n,h,r))},
+  setNight(night:boolean){station?.setNight(night);facilities?.setNight(night);furniture.forEach(f=>f.setNight(night))},
   updateView(e:number,n:number){model.updateView(e,n);forest.updateView(e,n);banks.forEach(b=>b.updateView(e,n))},
   transportReady:false as const,
  };

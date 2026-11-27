@@ -53,7 +53,7 @@ try{
   await page.waitForTimeout(450);
   const state=await page.evaluate(()=>({position:document.querySelector('#position')?.textContent,day:document.querySelector('#lighting')?.textContent,frame:window.__m1Frame}));
   assert.ok(state.frame.calls>0&&state.frame.ridge.roads===3);
-  assert.ok(Math.abs(state.frame.ridge.foot[2]-state.frame.ridge.surface)<.5,'feet and actual ridge surface agree');
+  assert.ok(Math.abs(state.frame.ridge.foot[2]-(state.frame.ridge.support??state.frame.ridge.surface))<.5,'feet and actual physical support agree');
   await page.screenshot({path:join(out,name+'.png')});frames.push({name,...state});console.log('M1',JSON.stringify({name,position:state.position,ridge:state.frame.ridge,calls:state.frame.calls,triangles:state.frame.triangles}));
  };
  const day=async()=>{
@@ -76,7 +76,17 @@ try{
  }
  await snap('west-side-walk');
  const last=frames.at(-1).frame.ridge.foot;assert.ok(Math.hypot(last[0]-before[0],last[1]-before[1])>.5,'normal player moved');
- await go('火车站',526,305);await snap('east-side-station-day');await day();await snap('east-side-station-night');
+ await go('火车站',526,305);await snap('east-side-station-day');await day();await snap('east-side-station-night');await day();
+ const travel=async(key,condition)=>{
+  await page.keyboard.down(key);
+  try{await page.waitForFunction(condition,null,{timeout:14000})}finally{await page.keyboard.up(key)}
+ };
+ await travel('w',()=>window.__m1Frame.ridge.foot[1]>=349.5);
+ await snap('cable-dock-day');
+ const dock=frames.at(-1).frame.ridge;assert.ok(dock.cableMounted&&Math.abs(dock.foot[2]-26)<.06&&dock.foot[2]-dock.surface>1);
+ await day();await snap('cable-dock-night');
+ await travel('s',()=>window.__m1Frame.ridge.foot[1]<=306);
+ await snap('station-dock-return');
  assert.equal(errors.filter(e=>e.startsWith('page:')).length,0);
  if(buildPath){assert.ok(received>0&&sent>0,'real Presence bidirectional WS required');assert.equal(errors.length,0);}
 }catch(e){failure=String(e);console.error(failure)}

@@ -1134,6 +1134,7 @@ function geometry() {
   index(scenery.plazaCoverBoxes, (cell, box) => cell.colliders.push(box));
   const groups = [...architecture.values(), slide, railway.group, railExtension.group, bridgeCollision, tigerPine, pineCamp.group];
   if (extensionStreets) groups.push(extensionStreets.group);
+  if (productionRidge?.facilities) groups.push(productionRidge.facilities.group);
   for (const group of groups) {
     const { colliders, floors, ramps } = readWalkGeometry(group);
     index(colliders, (cell, box) => cell.colliders.push(box));
@@ -2797,7 +2798,7 @@ function currentAction() {
       ridePitch = 0;
     } };
   }
-  if (!homeReturn && Math.hypot(x-526,n-329)<18 && !productionRidge?.transportReady) return {
+  if (!homeReturn && (Math.hypot(x-526,n-329)<18 || Math.hypot(x-526,n-354)<12 || Math.hypot(x-440,n-520)<12 || Math.hypot(x-336,n-640)<12) && !productionRidge?.transportReady) return {
     label:'缆车线路检修中',run(){announceActivity('新山地形已启用，缆车与上山道路正在施工，请沿现有安全地面探索。');}
   };
   const cable = productionRidge?.transportReady ? cloudRoute.action({ east: x, north: n, height: ground }) : undefined;
@@ -4340,7 +4341,7 @@ renderer.setAnimationLoop(now => {
         calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, cameraY: camera.position.y, detailMs,
         weatherMs, weatherTier: weather.tier, snowIntensity: effectiveSnowIntensity, snowCover: visualSnowCover,
         fogNear: weatherFog.near, fogFar: weatherFog.far, points: renderer.info.render.points,
-        ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],surface:outdoorSurfaceAt(x,n)},
+        ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities},
         ...(skylinePeak ? { summitSkyline: { draws: summitSkylineDraws, peakNdc: skylinePeak.toArray(),
           camera: camera.position.toArray(), far: camera.far } } : {}),
       } }));
