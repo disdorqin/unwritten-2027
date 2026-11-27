@@ -9,7 +9,7 @@ import {chromium} from 'playwright';
 const root=resolve('.'),out=resolve(process.argv[2]??'.evidence/d-r30-m1');
 await mkdir(out,{recursive:true});
 let server,browser,page,failure,presence;
-const frames=[],errors=[];
+const frames=[],errors=[],mobileResults=[];
 const buildPath=process.argv[3]?resolve(process.argv[3]):undefined;
 let received=0,sent=0;
 try{
@@ -99,13 +99,43 @@ try{
  await go('陨石坑口',2,159);await snap('crater-mouth-production');
  const samples=await page.evaluate(()=>new Promise(resolve=>{const times=[],draws=[],tris=[];let prior,start;function tick(t){start??=t;if(prior!==undefined)times.push(t-prior);prior=t;if(window.__m1Frame){draws.push(window.__m1Frame.calls);tris.push(window.__m1Frame.triangles)}if(t-start<3500){requestAnimationFrame(tick);return}const q=(a,p)=>a.sort((x,y)=>x-y)[Math.max(0,Math.ceil(a.length*p)-1)];const gl=document.querySelector('#scene canvas').getContext('webgl2'),ext=gl.getExtension('WEBGL_debug_renderer_info');resolve({frames:times.length,p95:q(times,.95),median:q(times,.5),fps:times.length*1000/(t-start),draws:q(draws,.5),triangles:q(tris,.5),gpu:ext&&gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)});}requestAnimationFrame(tick)}));
  console.log('normal crater mouth frame samples',JSON.stringify(samples));frames.at(-1).timing=samples;
+ if(process.argv.includes('--mobile')&&buildPath){
+  await go('火车站',526,305);
+  const context=await browser.newContext({viewport:{width:390,height:844},deviceScaleFactor:1,isMobile:true,hasTouch:true,locale:'zh-CN'});
+  const phone=await context.newPage();let mSent=0,mReceived=0;
+  await phone.addInitScript(()=>{Object.defineProperty(Element.prototype,'requestPointerLock',{value:undefined});localStorage.setItem('unwritten.quality.tier.v1','smooth');document.addEventListener('town-frame-profile',e=>window.__m1Frame=e.detail,true)});
+  phone.on('pageerror',e=>errors.push('mobile page:'+e.message));
+  phone.on('console',m=>{if(m.type()==='error')errors.push('mobile console:'+m.text())});
+  phone.on('response',r=>{if(r.status()>=400)errors.push('mobile http:'+r.status()+':'+r.url())});
+  phone.on('websocket',ws=>{if(ws.url().includes('/presence')){ws.on('framereceived',()=>mReceived++);ws.on('framesent',()=>mSent++)}});
+  await phone.goto('http://127.0.0.1:'+server.httpServer.address().port+'/town-blockout.html?profile',{waitUntil:'domcontentloaded',timeout:65000});
+  await phone.waitForFunction(()=>document.querySelector('#town-entry')?.hidden||!document.querySelector('#town-entry-continue')?.hidden||!document.querySelector('#town-entry-error')?.hidden,null,{timeout:60000});
+  if(await phone.locator('#town-entry-error').isVisible())throw Error('mobile entry error');
+  if(await phone.locator('#town-entry-continue').isVisible())await phone.locator('#town-entry-continue').tap();
+  await phone.waitForFunction(()=>window.__m1Frame?.ridge?.terraceMounted&&document.querySelector('#town-entry')?.hidden,null,{timeout:60000});
+  await phone.locator('#town-panel-toggle').tap();await phone.locator('#jump').selectOption({label:'火车站'});if(await phone.locator('#town-settings-close').isVisible())await phone.locator('#town-settings-close').tap();
+  await phone.waitForFunction(()=>{const f=window.__m1Frame?.ridge?.foot;return f&&Math.hypot(f[0]-526,f[1]-305)<2},null,{timeout:12000});
+  await page.waitForFunction(()=>document.querySelector('#town-presence-status')?.textContent?.includes('2 人'),null,{timeout:20000});
+  await phone.waitForFunction(()=>document.querySelector('#town-presence-status')?.textContent?.includes('2 人'),null,{timeout:20000});
+  const start=await phone.evaluate(()=>window.__m1Frame.ridge.foot);
+  const pad=await phone.locator('#touch-walk').boundingBox();assert.ok(pad);
+  const cdp=await context.newCDPSession(phone),px=pad.x+pad.width/2,py=pad.y+pad.height/2;
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x:px,y:py}]});
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x:px,y:py-42}]});
+  await phone.waitForTimeout(1700);
+  await cdp.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});
+  const end=await phone.evaluate(()=>window.__m1Frame.ridge.foot);
+  assert.ok(Math.hypot(end[0]-start[0],end[1]-start[1])>.5,'mobile native touch moved');
+  await phone.screenshot({path:join(out,'mobile-touch-station.png')});
+  const dual={start,end,mSent,mReceived,desktopStatus:await page.locator('#town-presence-status').textContent(),mobileStatus:await phone.locator('#town-presence-status').textContent()};assert.ok(mSent>0&&mReceived>0);mobileResults.push(dual);console.log('mobile dual',JSON.stringify(dual));await context.close();
+ }
  assert.equal(errors.filter(e=>e.startsWith('page:')).length,0);
  if(buildPath){assert.ok(received>0&&sent>0,'real Presence bidirectional WS required');assert.equal(errors.length,0);}
 }catch(e){failure=String(e);console.error(failure)}
 finally{
  await browser?.close();await server?.close();
  if(presence&&presence.exitCode===null){presence.kill();await Promise.race([once(presence,'exit'),new Promise(r=>setTimeout(r,3000))])}
- const report={passed:!failure,frames,errors,failure,realPresence:!!buildPath&&received>0&&sent>0,received,sent,scope:'normal town entry; menu locations and native keyboard movement; not full mountain traversal'};
+ const report={passed:!failure,frames,mobileResults,errors,failure,realPresence:!!buildPath&&received>0&&sent>0,received,sent,scope:'normal town entry; menu locations and native keyboard movement; not full mountain traversal'};
  await writeFile(join(out,'report.json'),JSON.stringify(report,null,2));
  console.log(JSON.stringify({passed:report.passed,frames:frames.length,realPresence:report.realPresence,received,sent,errors:errors.slice(0,10),failure}));
  if(failure)process.exitCode=1;
