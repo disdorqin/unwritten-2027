@@ -186,6 +186,7 @@ import { createPlazaSnowSupply, type PlazaSnowSupplySite } from './plaza-snow-su
 import { advanceWeatherCover, townSnowWeatherAt, townSnowWeatherForFrame } from './town-weather';
 import { sampleSouthRegionalWeather, applySouthWeatherPresentation, createSouthWeatherVisual, southWeatherWalkingScale } from './town-night-a-summit-weather-field';
 import { southWeatherStatus, southWeatherProfile } from './town-night-a-summit-weather-status';
+import {createSouthWeatherAudioHost} from './town-night-a-summit-audio-host';
 import { createTownNightWeatherSky, type TownNightWeatherSkyFrame } from './town-night-weather-sky';
 import { createSouthSummitWeatherHost } from './town-night-a-summit-weather-host';
 import { townNightWeatherDayMs, townNightWeatherDefaultDawnEpoch } from '../../../src/shared/town-night-weather-cycle';
@@ -1515,6 +1516,21 @@ const activityContext: Omit<TownActivityContext, 'announce'> = {
 const tavernDrinkEffects = createTavernDrinkEffects();
 tavernDrinkEffects.mountSettings(element('town-advanced-controls'));
 const townBgm = createTownBgm(festival.getAudioContext);
+const regionalAudio=createSouthWeatherAudioHost(festival.getAudioContext);
+const weatherAudioControls=document.createElement('label');
+const weatherAudioToggle=document.createElement('input');
+weatherAudioToggle.type='checkbox';weatherAudioToggle.id='town-weather-audio';weatherAudioToggle.checked=regionalAudio.settings().enabled;
+weatherAudioControls.append('区域风雪音效',weatherAudioToggle);
+const weatherVolumeControls=document.createElement('label'),weatherVolume=document.createElement('input');
+weatherVolume.type='range';weatherVolume.min='0';weatherVolume.max='100';weatherVolume.value=String(regionalAudio.settings().volume);weatherVolume.id='town-weather-volume';
+weatherVolumeControls.append('风雪音量',weatherVolume);
+element('town-advanced-controls').append(weatherAudioControls,weatherVolumeControls);
+weatherAudioToggle.addEventListener('change',()=>regionalAudio.setEnabled(weatherAudioToggle.checked));
+weatherVolume.addEventListener('input',()=>regionalAudio.setVolume(Number(weatherVolume.value)));
+window.addEventListener('pointerdown',event=>{if(event.isTrusted)regionalAudio.gesture();});
+window.addEventListener('keydown',event=>{if(event.isTrusted)regionalAudio.gesture();});
+document.addEventListener('visibilitychange',()=>regionalAudio.setSuspended(document.hidden));
+window.addEventListener('pagehide',()=>regionalAudio.dispose());
 const townSettings = element<HTMLDialogElement>('town-settings');
 const regionalWeatherStatus=document.createElement('output');
 regionalWeatherStatus.id='town-regional-weather';
@@ -3917,6 +3933,7 @@ function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame
   ceremonyFrost.update(summitDt);
   const fog=cloudRoute.scene.fog as Fog;
   applySouthWeatherPresentation(cloudRoute.scene,fog,weather,skyFrame,particleDensityScale(),local?.weather);
+  regionalAudio.sync(local?.weather,roof,!!cabin,ceremonyState.phase==='ordinary',performance.now());
   showRegionalWeather(southWeatherStatus(skyFrame,weatherState,local?.weather,ceremonyState.phase!=='ordinary',!!cabin,roof));
   renderer.render(cloudRoute.scene, camera);
   if (profileTown) {
@@ -4343,6 +4360,7 @@ renderer.setAnimationLoop(now => {
   if (railNotice) announceActivity(railNotice);
   ceremonyOverlay.apply(ceremonyState);
   const indoors = sheltered || Boolean(homeReturn) || shedSheltered || roofSheltered;
+  regionalAudio.sync(regionalWeather?.weather,indoors,!!boardingGround,ordinaryBellHours,now);
   showRegionalWeather(southWeatherStatus(skyFrame,outdoorWeather,regionalWeather?.weather,!ordinaryBellHours,!!boardingGround,indoors));
   ceremonyFrost.setWarmth('interior', indoors);
   ceremonyFrost.setWarmth('onsen', hotSpringSoak.active());
