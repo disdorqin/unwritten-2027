@@ -9,6 +9,8 @@ COPY tools/voxel-tavern/ ./
 COPY src/presence/ /app/src/presence/
 COPY src/shared/ /app/src/shared/
 ARG TOWN_REHEARSAL_BUILD=off
+ARG TOWN_RELEASE=local
+ENV VITE_TOWN_RELEASE=${TOWN_RELEASE}
 RUN if [ "$TOWN_REHEARSAL_BUILD" = on ]; then npm run build -- --mode town-rehearsal; \
     else npm run build -- --mode town-preview; fi
 
