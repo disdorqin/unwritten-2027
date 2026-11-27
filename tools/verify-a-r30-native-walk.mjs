@@ -247,7 +247,7 @@ async function walkTo(page, evidence, target, label, precision=.46) {
     if (distance <= precision) {
       const checkpoint={ label, target, ...from, wire: evidence.poses.at(-1) };
       evidence.checkpoints.push(checkpoint);
-      if(['joint-historic','west-mountain'].includes(segment))await appendFile(join(output,'native-checkpoints.ndjson'),JSON.stringify(checkpoint)+'\n');
+      if(['joint-historic','west-mountain','night-r3-bare-west'].includes(segment))await appendFile(join(output,'native-checkpoints.ndjson'),JSON.stringify(checkpoint)+'\n');
       console.log(JSON.stringify({ phase: label, east: from.east, north: from.north, y: from.height }));
       return;
     }
@@ -360,7 +360,8 @@ try{
   const mouth=await readPose(page);await picture(page,evidence,'birth-crater-mouth');
   for(const [i,p] of approach['west-mountain'].entries())await walkTo(page,evidence,p,'birth-mountain-approach-'+i,.46);
   for(const [i,p] of westMountainFootway.slice(1).entries())await walkTo(page,evidence,p,'birth-mountain-foot-'+i,.46);
-  const top=await readPose(page);await waitForWire(page,evidence,p=>p?.area==='west'&&Math.hypot(p.east+90,p.north-350)<.8);
+  const top=await readPose(page);const wire=await waitForWire(page,evidence,p=>p?.area==='west'&&Math.hypot(p.east+90,p.north-350)<.8);
+  await appendFile(join(output,'native-checkpoints.ndjson'),JSON.stringify({label:'birth-west-outbound-complete',start,mouth,top,wire})+'\n');
   await picture(page,evidence,'birth-mountain-foot');
   for(const [i,p] of [...westMountainFootway.slice(0,-1).reverse(),...approach['west-mountain'].slice(0,-1).reverse(),[2,159],...path.slice(0,-1).reverse(),spawn].entries())await walkTo(page,evidence,p,'birth-return-'+i,.55);
   const returned=await readPose(page);await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-223,p.north-180)<.8);
