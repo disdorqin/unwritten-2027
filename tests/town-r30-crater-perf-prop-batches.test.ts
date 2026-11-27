@@ -16,6 +16,8 @@ test('surveyed static props preserve each original transform and material, fall 
  (p.material as MeshLambertMaterial).addEventListener('dispose',()=>{});assert.equal(system.begin(camera).savedDraws,11);system.restore();
  otherMat.emissive.setHex(0x123456);assert.equal(system.begin(camera).savedDraws,0);otherMat.emissive.setHex(0);
  otherMat.color.setHex(0x123456);assert.equal(system.begin(camera).savedDraws,0);otherMat.color.setHex(0x884422);
+ leaves[0].parent!.visible=false;assert.equal(system.begin(camera).savedDraws,0);leaves[0].parent!.visible=true;assert.equal(system.begin(camera).savedDraws,11);system.restore();
+ g.setDrawRange(0,12);assert.equal(system.begin(camera).savedDraws,0);g.setDrawRange(0,Infinity);assert.equal(system.begin(camera).savedDraws,11);system.restore();
  leaves[0].visible=false;assert.equal(system.begin(camera).savedDraws,0);leaves[0].visible=true;leaves[1].position.y+=1;scene.updateMatrixWorld(true);assert.equal(system.begin(camera).savedDraws,0);
  system.dispose();assert.equal(root.children.length,12);
 });

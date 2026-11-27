@@ -3,10 +3,13 @@ const approved=new Set(['town-fill-lake-east','za32-street-props','town-fill-rim
 type Leaf={mesh:Mesh;matrix:Matrix4;world:Matrix4;sphere:Sphere;geometry:BoxGeometry;material:MeshLambertMaterial;mask:number;position:BufferAttribute;version:number;index:BufferAttribute;indexVersion:number;color?:Color};
 type Job={root:Object3D;world:Matrix4;leaves:Leaf[];colored:boolean};
 type Batch=Job&{proxy:InstancedMesh};
-function eligible(o:Object3D):o is Mesh<BoxGeometry,MeshLambertMaterial>{
+function eligible(o:Object3D,geometryChecks:Map<BoxGeometry,boolean>,materialChecks:Map<MeshLambertMaterial,boolean>):o is Mesh<BoxGeometry,MeshLambertMaterial>{
  if(!(o instanceof Mesh)||o instanceof InstancedMesh||o.children.length||o.castShadow||o.receiveShadow||o.renderOrder!==0||!o.frustumCulled||o.onBeforeRender!==Object3D.prototype.onBeforeRender||o.onAfterRender!==Object3D.prototype.onAfterRender)return false;
  const g=o.geometry,m=o.material;
- return g instanceof BoxGeometry&&g.index instanceof BufferAttribute&&g.index.count===36&&g.getAttribute('position') instanceof BufferAttribute&&g.getAttribute('position').count===24&&g.drawRange.start===0&&g.drawRange.count>=36&&!Object.keys(g.morphAttributes).length&&m instanceof MeshLambertMaterial&&m.visible&&!m.transparent&&!m.wireframe&&m.depthWrite&&m.depthTest&&m.onBeforeCompile===Material.prototype.onBeforeCompile&&m.customProgramCacheKey===Material.prototype.customProgramCacheKey&&!m.displacementMap&&!m.clippingPlanes?.length;
+ if(!(g instanceof BoxGeometry)||!(m instanceof MeshLambertMaterial))return false;
+ let gOK=geometryChecks.get(g);if(gOK===undefined){gOK=g.index instanceof BufferAttribute&&g.index.count===36&&g.getAttribute('position') instanceof BufferAttribute&&g.getAttribute('position').count===24&&g.drawRange.start===0&&g.drawRange.count>=36&&!Object.keys(g.morphAttributes).length;geometryChecks.set(g,gOK);}
+ let mOK=materialChecks.get(m);if(mOK===undefined){mOK=m.visible&&!m.transparent&&!m.wireframe&&m.depthWrite&&m.depthTest&&m.onBeforeCompile===Material.prototype.onBeforeCompile&&m.customProgramCacheKey===Material.prototype.customProgramCacheKey&&!m.displacementMap&&!m.clippingPlanes?.length;materialChecks.set(m,mOK);}
+ return gOK&&mOK;
 }
 function pathVisible(o:Object3D,root:Object3D){let p:Object3D|null=o,found=false;while(p&&p.visible&&p.renderOrder===0){if(p===root)found=true;p=p.parent;}return !p&&found;}
 function orthogonal(m:Matrix4){
@@ -23,23 +26,26 @@ export function createCraterPropBatches(cell=48){
  // Three adds a dispose listener when a material first enters the real
  // renderer. This EventDispatcher bookkeeping is not a shader property.
  const ignored=new Set(['uuid','name','userData','version','color','_listeners']);
- const keys=Object.keys(reference).filter(k=>!ignored.has(k));
+ const keys=Object.keys(reference).filter(k=>!ignored.has(k)),keySet=new Set(keys);
+ const geometryChecks=new Map<BoxGeometry,boolean>(),materialChecks=new Map<MeshLambertMaterial,boolean>(),rootChecks=new Map<Object3D,Map<Object3D,boolean>>();
+ function resetChecks(){plainCache.clear();geometryChecks.clear();materialChecks.clear();rootChecks.clear();}
+ function parentVisible(p:Object3D|null,root:Object3D):boolean{if(!p)return false;let cache=rootChecks.get(root);if(!cache){cache=new Map();rootChecks.set(root,cache);}const old=cache.get(p);if(old!==undefined)return old;const ok=p===root?pathVisible(root,root):p.visible&&p.renderOrder===0&&parentVisible(p.parent,root);cache.set(p,ok);return ok;}
  function plain(m:MeshLambertMaterial){
   const old=plainCache.get(m);if(old!==undefined)return old;
   const a=m as unknown as Record<string,unknown>,b=reference as unknown as Record<string,unknown>;
-  const same=Object.getPrototypeOf(m)===MeshLambertMaterial.prototype&&Object.keys(m).every(k=>ignored.has(k)||keys.includes(k))&&keys.every(k=>{const x=a[k],y=b[k];return x===y||(!!x&&!!y&&typeof x==='object'&&typeof (x as {equals?:unknown}).equals==='function'&&(x as {equals:(v:unknown)=>boolean}).equals(y));});
+  const same=Object.getPrototypeOf(m)===MeshLambertMaterial.prototype&&Object.keys(m).every(k=>ignored.has(k)||keySet.has(k))&&keys.every(k=>{const x=a[k],y=b[k];return x===y||(!!x&&!!y&&typeof x==='object'&&typeof (x as {equals?:unknown}).equals==='function'&&(x as {equals:(v:unknown)=>boolean}).equals(y));});
   plainCache.set(m,same);return same;
  }
  let stats={batches:0,savedDraws:0,extraTriangles:0};
  function restore(){for(const x of masked)x.m.layers.mask=x.mask;masked.length=0;for(const p of active){p.visible=false;p.layers.mask=0;}active.length=0;}
- function dispose(){restore();for(const b of batches){b.proxy.removeFromParent();b.proxy.dispose();}batches.length=0;jobs.length=0;plainCache.clear();white.dispose();}
+ function dispose(){restore();for(const b of batches){b.proxy.removeFromParent();b.proxy.dispose();}batches.length=0;jobs.length=0;resetChecks();white.dispose();}
  function register(roots:readonly Object3D[]){
   dispose();const targets=new Set<Object3D>();
   for(const r of roots){if(approved.has(r.name))targets.add(r);for(const child of r.children)if(approved.has(child.name))targets.add(child);}
   for(const root of targets){
    root.updateWorldMatrix(true,true);inverse.copy(root.matrixWorld).invert();const bins=new Map<string,Leaf[]>();
    root.traverse(o=>{
-    if(!eligible(o)||!pathVisible(o,root)||!o.layers.mask)return;
+    if(!eligible(o,geometryChecks,materialChecks)||!o.visible||!parentVisible(o.parent,root)||!o.layers.mask)return;
     const g=o.geometry,p=g.getAttribute('position') as BufferAttribute,index=g.index!;if(!g.boundingSphere)g.computeBoundingSphere();if(!g.boundingSphere)return;
     if(!orthogonal(relative.multiplyMatrices(inverse,o.matrixWorld)))return;
     const s=g.boundingSphere.clone().applyMatrix4(o.matrixWorld);if(![s.center.x,s.center.y,s.center.z,s.radius].every(Number.isFinite)||s.radius>cell*.3)return;
@@ -49,16 +55,16 @@ export function createCraterPropBatches(cell=48){
    for(const list of bins.values())for(let i=0;i<list.length;i+=96){const leaves=list.slice(i,i+96);if(leaves.length>=2)jobs.push({root,world:root.matrixWorld.clone(),leaves,colored:!!leaves[0].color});}
   }
  }
- function valid(l:Leaf,root:Object3D){const m=l.mesh;return eligible(m)&&pathVisible(m,root)&&m.layers.mask===l.mask&&m.geometry===l.geometry&&m.material===l.material&&m.matrixWorld.equals(l.world)&&m.geometry.getAttribute('position')===l.position&&l.position.version===l.version&&m.geometry.index===l.index&&l.index.version===l.indexVersion&&(!l.color||(plain(l.material)&&l.color.equals(l.material.color)));}
+ function valid(l:Leaf,root:Object3D){const m=l.mesh;return eligible(m,geometryChecks,materialChecks)&&m.visible&&parentVisible(m.parent,root)&&m.layers.mask===l.mask&&m.geometry===l.geometry&&m.material===l.material&&m.matrixWorld.equals(l.world)&&m.geometry.getAttribute('position')===l.position&&l.position.version===l.version&&m.geometry.index===l.index&&l.index.version===l.indexVersion&&(!l.color||(plain(l.material)&&l.color.equals(l.material.color)));}
  function warmStep(maxJobs=2,maxMs=1){
-  plainCache.clear();const start=performance.now();let n=0;
+  resetChecks();const start=performance.now();let n=0;
   while(jobs.length&&n<maxJobs&&performance.now()-start<maxMs){const j=jobs.shift()!;n++;if(!j.root.matrixWorld.equals(j.world)||!j.leaves.every(l=>valid(l,j.root)))continue;
    const first=j.leaves[0],p=new InstancedMesh(first.geometry,j.colored?white:first.material,j.leaves.length);p.name='p4-static-prop-instances';p.userData.p4PropBatch=true;p.visible=false;p.layers.mask=0;p.matrixAutoUpdate=false;p.raycast=()=>{};
    j.leaves.forEach((l,i)=>{p.setMatrixAt(i,l.matrix);if(l.color)p.setColorAt(i,l.color);});p.instanceMatrix.needsUpdate=true;if(p.instanceColor)p.instanceColor.needsUpdate=true;p.computeBoundingSphere();j.root.add(p);p.updateWorldMatrix(true,false);batches.push({...j,proxy:p});
   }return n;
  }
  function begin(camera:Camera){
-  restore();plainCache.clear();stats={batches:0,savedDraws:0,extraTriangles:0};frustum.setFromProjectionMatrix(vp.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
+  restore();resetChecks();stats={batches:0,savedDraws:0,extraTriangles:0};frustum.setFromProjectionMatrix(vp.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
   for(const b of batches){
    if(!b.root.matrixWorld.equals(b.world)||!pathVisible(b.root,b.root)||!(camera.layers.mask&b.leaves[0].mask))continue;
    let seen=0;for(const l of b.leaves)if(frustum.intersectsSphere(l.sphere))seen++;
