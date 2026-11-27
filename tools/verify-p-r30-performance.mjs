@@ -14,7 +14,14 @@ const target=[route.anchor.east,route.anchor.rimHeight-24,-route.anchor.north];
 async function sample(id,enabled,camera,move=false,crosslineProbe=false,p2Enabled=enabled,p3Enabled=p2Enabled,globalLights=production?true:p3Enabled){
  await page.evaluate(d=>document.dispatchEvent(new CustomEvent('town-p1-perf-control',{detail:d})),{enabled,camera,crosslineProbe,p2Enabled,p3Enabled,globalLights});
  await page.evaluate(()=>new Promise(resolve=>{let n=0;const start=performance.now();function f(t){if(++n>=10||t-start>9000)resolve();else requestAnimationFrame(f);}requestAnimationFrame(f);}));
- if(move)await page.keyboard.down('w');
+ let touch;
+ const startPose=move?await page.locator('#position').textContent():undefined;
+ if(move==='touch'){
+  const pad=await page.locator('#touch-walk').boundingBox();assert.ok(pad,'Production touch walk pad missing');
+  touch=await page.context().newCDPSession(page);const x=pad.x+pad.width/2,y=pad.y+pad.height/2;
+  await touch.send('Input.dispatchTouchEvent',{type:'touchStart',touchPoints:[{x,y}]});
+  await touch.send('Input.dispatchTouchEvent',{type:'touchMove',touchPoints:[{x,y:y-42}]});
+ }else if(move)await page.keyboard.down('w');
  let result;
  try{result=await page.evaluate(()=>new Promise(resolve=>{
    const rows=[],frames=[],gaps=[],long=[],start=performance.now();let prev;
@@ -26,7 +33,12 @@ async function sample(id,enabled,camera,move=false,crosslineProbe=false,p2Enable
     document.removeEventListener('town-p1-render-profile',listener);document.removeEventListener('town-frame-profile',frame,true);observer.disconnect();
     resolve({duration:t-start,rows,frames,gaps,long,position:document.querySelector('#position')?.textContent,lighting:document.querySelector('#lighting')?.textContent});}
    requestAnimationFrame(tick);
- }));}finally{if(move)await page.keyboard.up('w');}
+ }));}finally{if(touch){await touch.send('Input.dispatchTouchEvent',{type:'touchEnd',touchPoints:[]});await touch.detach();}else if(move)await page.keyboard.up('w');}
+ if(move==='touch'){
+  const coords=s=>{const m=/东\s*(-?[\d.]+)\s*m\s*·\s*北\s*(-?[\d.]+)\s*m/.exec(s??'');assert.ok(m,'Missing actual player HUD');return [+m[1],+m[2]];};
+  const a=coords(startPose),b=coords(result.position);assert.ok(Math.hypot(b[0]-a[0],b[1]-a[1])>.5,'Native touch did not move');
+  report.movement.push({mode:'native touch',start:a,end:b});
+ }
  const stats=a=>{a=a.filter(Number.isFinite).sort((a,b)=>a-b);return a.length?{n:a.length,median:a[Math.floor((a.length-1)*.5)],p95:a[Math.max(0,Math.ceil(a.length*.95)-1)],max:a.at(-1)}:null;};
  const get=k=>stats(result.rows.map(x=>x[k])),viewer=k=>stats(result.frames.map(x=>x[k]));
  assert.ok(result.rows.length>0&&result.frames.length>0,'Missing actual render or viewer profile');
@@ -66,8 +78,10 @@ try{
   }
  }
  await page.evaluate(()=>document.dispatchEvent(new CustomEvent('town-p1-perf-control',{detail:{enabled:true}})));
- await page.locator('#scene canvas').click({position:{x:420,y:270}});
- if(!floorOnly)await sample('actual-mouth-movement',true,undefined,true);
+ if(!floorOnly){
+  if(process.env.P_VIEWPORT==='mobile')await sample('actual-mouth-touch',true,undefined,'touch');
+  else{await page.locator('#scene canvas').click({position:{x:420,y:270}});await sample('actual-mouth-movement',true,undefined,true);}
+ }
  report.complete=true;
 }catch(e){report.failure=e.stack??String(e);process.exitCode=1;console.log(report.failure);}
 finally{await writeFile(join(out,'p1-performance.json'),JSON.stringify(report,null,2));await browser?.close();}
