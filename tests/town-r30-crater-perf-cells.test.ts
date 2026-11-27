@@ -20,6 +20,19 @@ test('instance cells preserve every transform and tint; mutations fall back to o
  assert.equal(sys.begin(cam).sources,0);assert.equal(m.layers.mask,1);
  sys.replaceRoots([]);assert.equal(sys.sourceCount,0);assert.equal(m.children.length,0);sys.dispose();
 });
+test('stable visible cells compact to one draw without extra buffers per frame',()=>{
+ const root=new Group(),scene=new Scene();scene.add(root);const g=new BoxGeometry(1,1,1,4,4,4),m=new InstancedMesh(g,new MeshStandardMaterial(),60),t=new Matrix4(),color=new Color();
+ for(let i=0;i<60;i++){m.setMatrixAt(i,t.makeTranslation([2,34,202][Math.floor(i/20)]+(i%20)*.1,0,-20));m.setColorAt(i,color.setRGB(i/60,.5,.6));}m.instanceMatrix.needsUpdate=true;m.instanceColor!.needsUpdate=true;root.add(m);scene.updateMatrixWorld(true);
+ const sys=createCraterInstanceCells(32,0);sys.register([root]);assert.equal(m.children.length,3);
+ const cam=new PerspectiveCamera(65,1,.1,500);cam.position.set(18,0,20);cam.lookAt(18,0,-20);cam.updateMatrixWorld(true);
+ for(let i=0;i<6;i++){assert.equal(sys.begin(cam).sources,0);sys.restore();}
+ assert.ok(sys.warmCompacts(10,Infinity)>0);assert.equal(m.children.length,3);sys.warmCompacts(100,Infinity);assert.equal(m.children.length,4);
+ const stats=sys.begin(cam);assert.equal(stats.compactSources,1);assert.equal(stats.submitted,1);assert.equal(stats.savedInstances,20);assert.equal(stats.extraDraws,0);
+ const proxy=m.children.find(o=>o.name==='p2-instance-cell-compact') as InstancedMesh;assert.equal(proxy.count,40);assert.equal(proxy.visible,true);
+ const expected=new Matrix4(),actual=new Matrix4(),a=new Color(),b=new Color();for(let i=0;i<40;i++){m.getMatrixAt(i,expected);proxy.getMatrixAt(i,actual);assert.ok(expected.equals(actual));m.getColorAt(i,a);proxy.getColorAt(i,b);assert.ok(a.equals(b));}
+ sys.restore();assert.equal(m.layers.mask,1);assert.equal(proxy.visible,false);assert.equal(sys.begin(cam,undefined,true,false).compactSources,0);sys.restore();
+ m.instanceMatrix.needsUpdate=true;assert.equal(sys.begin(cam).sources,0);sys.replaceRoots([]);assert.equal(m.children.length,0);
+});
 test('one-cell source retains no GPU proxy and culls only with a valid wall ring',()=>{
  const root=new Group(),scene=new Scene();scene.add(root);const m=new InstancedMesh(new BoxGeometry(),new MeshStandardMaterial(),32),t=new Matrix4();
  for(let i=0;i<32;i++)m.setMatrixAt(i,t.makeTranslation(100+i*.1,0,-2));m.instanceMatrix.needsUpdate=true;root.add(m);scene.updateMatrixWorld(true);
