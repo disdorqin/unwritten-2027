@@ -1060,6 +1060,16 @@ export function createTownPresence(
     setMountainDomain(enabled: boolean, mountainScene?: Scene) {
       if (enabled) switchDomain('mountain', mountainScene);
       else if (domain === 'mountain') switchDomain('town');
+      else if(domain==='town'){avatarScene=scene;avatars?.setScene(avatarScene);}
+    },
+    /** The full surveyed front ride fits the legacy town wire frame.
+     * Before returning from the cloud terminal, use the town room with the
+     * ACTUAL cabin scene; otherwise N<540 would disappear from mountain room.
+     * Preserve the ride host across this authenticated reconnect. */
+    setFrontCableRideDomain(cabinScene:Scene){
+      if(domain==='mountain')switchDomain('town',cabinScene);
+      else if(domain==='town'){avatarScene=cabinScene;avatars?.setScene(avatarScene);}
+      return domain==='town';
     },
     setSummitDomain(enabled:boolean,summitScene?:Scene){
       if(enabled&&summitScene)switchDomain('summit',summitScene);

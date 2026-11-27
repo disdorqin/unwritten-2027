@@ -13,6 +13,8 @@ import {mountRidgeRetainingBanks} from '../tools/voxel-tavern/town-blockout/town
 import {mountRidgeCloudTerrace} from '../tools/voxel-tavern/town-blockout/town-d-r30-cloud-terrace';
 import {buildRailwayStation} from '../tools/voxel-tavern/town-blockout/landmark-station';
 import {auditNightBFrontOpenFacilities} from '../tools/voxel-tavern/town-blockout/town-night-b-summit-front-sweep';
+import {createNightBProductionController,nightBProductionAuthority} from '../tools/voxel-tavern/town-blockout/town-night-b-production-controller';
+import {createZa36CableRepair,type Za36CableRepairEvent} from '../src/shared/za36-cable-repair';
 import {installNightBFrontOperation} from '../tools/voxel-tavern/town-blockout/town-night-b-summit-front-install';
 test('front production field and actual rail, station, forest, roads, banks and terrace audit',()=>{
  const grid=createTerrainGrid(),root=new Group(),west=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
@@ -64,11 +66,36 @@ test('front production field and actual rail, station, forest, roads, banks and 
  const input={field,closed,authorized:false,externalBlocked,dockClear,certifyApproaches:()=>false,firstRun:{wokeAt:()=>undefined,openedAt:()=>undefined,dawnEpoch:()=>undefined},state:()=>undefined,now:()=>undefined,daylight:()=>undefined};
  const rejected=installNightBFrontOperation(input);assert.equal(rejected.ready,false);assert.equal(closed.group.parent,originalParent);
  const routeRejected=installNightBFrontOperation({...input,authorized:true});assert.equal(routeRejected.ready,false);assert.equal(routeRejected.reason,'walking-route-not-certified');assert.equal(closed.group.parent,originalParent);
- const accepted=installNightBFrontOperation({...input,authorized:true,certifyApproaches:entries=>entries.every(d=>{
+ const epoch=Date.UTC(2026,0,1),authority=createZa36CableRepair(1);
+ let now:number|undefined=epoch+1000,wokeAt:number|undefined,openedAt:number|undefined,reported=0,activity=-1;
+ const presence:Parameters<typeof createNightBProductionController>[0]['presence']={
+  getCableLineState:line=>line===1&&now!==undefined?authority.snapshot():undefined,cableServerNow:()=>now,
+  getTownNightWindow:()=>now===undefined?undefined:{phase:'day',shift:'day',canEnterRestricted:false,layersOverlap:false,chapterGatesLocked:true,beaconAt:null,morningBellAt:null},
+  getCableLineWokeAt:()=>wokeAt,getCableLineOpenedAt:()=>openedAt,getTownWeatherDawnEpoch:()=>epoch,
+  sampleCableRide:()=>{reported++;return true;},setActivityPose:v=>{activity=v;},
+  sendSummitCableRelease:()=>false,sendCableRepair:(line,event)=>{if(line!==1||now===undefined)return false;const result=authority.apply(event);if(result.accepted&&event.kind==='wake')wokeAt=now;if(result.opened)openedAt=now;return result.accepted;}
+ };
+ const accepted=installNightBFrontOperation({...input,...nightBProductionAuthority(presence,1),authorized:true,certifyApproaches:entries=>entries.every(d=>{
   const gate=d.station==='base'?{east:d.approach.east,north:346,height:26}:d.station==='middle'?{east:d.approach.east,north:517,height:140}:{east:d.approach.east,north:636,height:347};
   return checkPath(gate,d.approach)&&checkPath(d.approach,d.board);
  })});
  assert.ok(accepted.ready,JSON.stringify(accepted.ready?{}:{reason:accepted.reason,docks:accepted.docks}));assert.equal(closed.group.parent,null);assert.equal(accepted.facilities.group.parent,originalParent);assert.equal(accepted.service.serviceOpen(),false);
- console.log('six local approach links certified; atomic replacement preserved owner; dormant authority remains closed');
+ let domain:'town'|'mountain'|'summit'='town';
+ const controller=createNightBProductionController({presence,front:accepted,upperOrigin:{east:300,north:676},domain:()=>domain,acceptLanding:(_l,p,s)=>dockClear(s,p),frontRepair:{anchors:{brake:accepted.docks[0]!.approach,cableWheel:accepted.docks[2]!.approach,weightTower:accepted.docks[3]!.approach,weightFrame:accepted.docks[2]!.approach},surfaceAt:(e,n)=>externalCableDockSupport(e,n)??station.surfaceAt(e,n)??field.heightAt(e,n),clear:p=>dockClear('',p)}});
+ const summit=accepted.docks.find(d=>d.station==='summit'&&d.cabin===0)!.approach;
+ assert.equal(controller.action('board-0',summit).accepted,false);
+ assert.equal(controller.reportFrontImpact('snowball'),false);
+ assert.equal(controller.reportFrontImpact('sled'),true);
+ domain='mountain';assert.equal(controller.action('board-0',summit).accepted,true);
+ const firstRideFrame=controller.tick(0)!;assert.ok(firstRideFrame.synchronized&&reported===1);
+ now=wokeAt!+20000;assert.equal(controller.tick(0)?.station,null);
+ assert.equal(controller.action('exit',summit).accepted,false);
+ const held=controller.pose()!.feet;now=undefined;assert.deepEqual(controller.tick(0)?.feet,held);assert.equal(controller.pose()?.synchronized,false);
+ now=wokeAt!+accepted.service.firstMs;const arrived=controller.action('exit',summit);assert.ok(arrived.accepted&&arrived.landing);assert.equal(activity,0);
+ domain='town';
+ assert.equal(controller.action('strike-rust',{...accepted.docks[0]!.approach,height:999}).accepted,false);
+ assert.equal(controller.action('strike-rust',accepted.docks[0]!.approach).accepted,true);
+ assert.equal(authority.snapshot().impacts,1);
+ console.log('six local approach links certified; production controller uses authoritative E and repair events, holds last foot during reconnect');
  accepted.facilities.dispose();facility.dispose();station.dispose();terrace.dispose();
 });

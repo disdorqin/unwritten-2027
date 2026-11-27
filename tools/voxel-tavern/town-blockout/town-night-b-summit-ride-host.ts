@@ -31,9 +31,9 @@ export function createNightBCableRideHost(input:Input){
  // supply a certified open variant, not move the closed production model.
  const frontGroups=input.frontFacilities&&[-1,1].map(side=>input.frontFacilities!.group.getObjectByName('d-r30-cable-cabin-'+side));
  const frontBound=!!input.front?.physical&&!!frontGroups?.every(g=>g?.parent===input.frontFacilities!.group&&!g.getObjectByName('ridge-cable-parked-car-batch'));
- function updateVisuals(){
+ function updateVisuals(skipUpper=false){
   if(frontBound&&input.front){const states=input.front.present();states.forEach((s,i)=>{const g=frontGroups![i]!;g.position.set(s.feet.east,s.feet.height,-s.feet.north)});}
-  if(input.upper?.physical&&input.upperRopeway)input.upper.present();
+  if(!skipUpper&&input.upper?.physical&&input.upperRopeway)input.upper.present();
  }
  function pose():CableRideFrame|undefined{
   if(!ride)return;
