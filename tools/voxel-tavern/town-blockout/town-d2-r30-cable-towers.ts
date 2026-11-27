@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, BufferGeometry, CylinderGeometry, Group, InstancedMesh, Matrix4, MeshLambertMaterial,
+  BoxGeometry, BufferGeometry, Color, CylinderGeometry, Group, InstancedMesh, Matrix4, MeshLambertMaterial,
   StaticDrawUsage, Vector3,
 } from 'three';
 import { createMainSummitCable } from './main-summit-cable';
@@ -62,19 +62,16 @@ export function createTownD2R30CableTowers(options: TownD2R30CableTowersOptions 
   const geometries = new Set<BufferGeometry>();
   const materials = new Set<MeshLambertMaterial>();
   const iron = new MeshLambertMaterial({ color: '#5a6268' });
-  const stone=new MeshLambertMaterial({color:'#7b858b'}),snow=new MeshLambertMaterial({color:'#d9e5e8'});materials.add(stone);materials.add(snow);
+  const foundationMaterial=new MeshLambertMaterial({color:0xffffff});materials.add(foundationMaterial);
+  foundationMaterial.name='town-d2-r30-cable-tower-foundation-palette';
   iron.name = 'town-d2-r30-cable-tower-iron';
   materials.add(iron);
 
   // Unit-height shapes carry the per-tower scale in the instance matrix, so
   // one geometry serves every tower while the silhouette stays identical.
   const mastShape = new CylinderGeometry(.28, .62, 1, 6);
-  const barShape = new BoxGeometry(1,.3,.35);
-  const footingShape=new BoxGeometry(1,1,1),capShape=new BoxGeometry(1,1,1);geometries.add(footingShape);geometries.add(capShape);
-  const braceShape = new BoxGeometry(.18, 1, .18);
-  geometries.add(mastShape);
-  geometries.add(barShape);
-  geometries.add(braceShape);
+  const unitBox=new BoxGeometry(1,1,1);
+  geometries.add(mastShape);geometries.add(unitBox);
 
   const rope = cable.ropes[0],other=cable.ropes[1];
   // Use corresponding segment fraction, not a length ratio, so the beam
@@ -98,8 +95,7 @@ export function createTownD2R30CableTowers(options: TownD2R30CableTowersOptions 
 
   const memberMatrices=buildNightBLatticeMembers(towers);
   const mastTriangles = (mastShape.getIndex()?.count ?? mastShape.getAttribute('position').count) / 3;
-  const barTriangles = (barShape.getIndex()?.count ?? barShape.getAttribute('position').count) / 3;
-  const braceTriangles = (braceShape.getIndex()?.count ?? braceShape.getAttribute('position').count) / 3;
+  const boxTriangles = (unitBox.getIndex()?.count ?? unitBox.getAttribute('position').count) / 3;
 
   const batches: InstancedMesh[] = [];
   const addBatch = (
@@ -129,23 +125,31 @@ export function createTownD2R30CableTowers(options: TownD2R30CableTowersOptions 
       .multiply(new Matrix4().makeTranslation(0, tower.ground + tower.height / 2, 0))
       .multiply(new Matrix4().makeScale(1, tower.height, 1));
   });
-  addBatch('crossbar', barShape, towers, (tower, matrix) => {
-    towerPlacement.makeTranslation(tower.east, 0, -tower.north);
-    matrix.copy(towerPlacement)
-      .multiply(new Matrix4().makeTranslation(0, tower.ropeHeight, 0))
-      .multiply(new Matrix4().makeRotationY(tower.heading))
-      .multiply(new Matrix4().makeScale(tower.width,1,1));
-  });
-  if(memberMatrices.length){
-    const mesh=new InstancedMesh(braceShape,iron,memberMatrices.length);mesh.name='town-d2-r30-cable-tower-brace';mesh.instanceMatrix.setUsage(StaticDrawUsage);
-    memberMatrices.forEach((m,i)=>mesh.setMatrixAt(i,m));mesh.instanceMatrix.needsUpdate=true;mesh.computeBoundingSphere();group.add(mesh);batches.push(mesh);
+  // Exact affine equivalence: fold the original box's dimensions into
+  // each instance transform. No welded faces, reduced members or padding.
+  const ironParts=new InstancedMesh(unitBox,iron,towers.length+memberMatrices.length);
+  ironParts.name='town-d2-r30-cable-tower-iron-boxes';ironParts.instanceMatrix.setUsage(StaticDrawUsage);
+  const mat=new Matrix4(),braceScale=new Matrix4().makeScale(.18,1,.18);
+  towers.forEach((t,i)=>ironParts.setMatrixAt(i,mat.makeTranslation(t.east,t.ropeHeight,-t.north).multiply(new Matrix4().makeRotationY(t.heading)).multiply(new Matrix4().makeScale(t.width,.3,.35))));
+  memberMatrices.forEach((m,i)=>ironParts.setMatrixAt(towers.length+i,mat.copy(m).multiply(braceScale)));
+  ironParts.instanceMatrix.needsUpdate=true;ironParts.computeBoundingSphere();group.add(ironParts);batches.push(ironParts);
+  // White base material multiplied by linear instance colors reproduces the
+  // two old Lambert material colors. Both are opaque with identical flags.
+  const foundations=new InstancedMesh(unitBox,foundationMaterial,towers.length*2);
+  foundations.name='town-d2-r30-cable-tower-foundation-palette';foundations.instanceMatrix.setUsage(StaticDrawUsage);
+  const tint=new Color();let currentNight:boolean|undefined;
+  function tintFoundations(night:boolean){
+    if(currentNight===night)return;currentNight=night;
+    tint.set(night?'#53616c':'#7b858b');for(let i=0;i<towers.length;i++)foundations.setColorAt(i,tint);
+    tint.set(night?'#93a9bd':'#d9e5e8');for(let i=towers.length;i<towers.length*2;i++)foundations.setColorAt(i,tint);
+    if(foundations.instanceColor)foundations.instanceColor.needsUpdate=true;
   }
-
-  // Stone pier reaches below the lowest surveyed footprint; the upper
-  // course embeds the original mast instead of suspending it on a slope.
-  addBatch('footing',footingShape,towers,(t,m)=>m.makeTranslation(t.east,(t.footBottom+t.footTop)/2,-t.north).multiply(new Matrix4().makeScale(t.footHalf*2,t.footTop-t.footBottom,t.footHalf*2)),stone);
-  addBatch('snow-cap',capShape,towers,(t,m)=>m.makeTranslation(t.east,t.footTop+.045,-t.north).multiply(new Matrix4().makeScale(t.footHalf*2+.08,.09,t.footHalf*2+.08)),snow);
-  const triangles = towers.length * (mastTriangles + barTriangles+24) + memberMatrices.length * braceTriangles;
+  towers.forEach((t,i)=>{
+    foundations.setMatrixAt(i,mat.makeTranslation(t.east,(t.footBottom+t.footTop)/2,-t.north).multiply(new Matrix4().makeScale(t.footHalf*2,t.footTop-t.footBottom,t.footHalf*2)));
+    foundations.setMatrixAt(towers.length+i,mat.makeTranslation(t.east,t.footTop+.045,-t.north).multiply(new Matrix4().makeScale(t.footHalf*2+.08,.09,t.footHalf*2+.08)));
+  });
+  tintFoundations(false);foundations.instanceMatrix.needsUpdate=true;foundations.computeBoundingSphere();group.add(foundations);batches.push(foundations);
+  const triangles=towers.length*(mastTriangles+3*boxTriangles)+memberMatrices.length*boxTriangles;
   const stats: TownD2R30CableTowersStats = Object.freeze({
     towers: towers.length,
     spacing,
@@ -172,7 +176,7 @@ export function createTownD2R30CableTowers(options: TownD2R30CableTowersOptions 
     setNight(value: boolean) {
       if (disposed) throw new Error('The D2-R02 cable towers are disposed.');
       if (typeof value !== 'boolean') throw new TypeError('setNight expects a boolean.');
-      iron.color.set(value ? '#414951' : '#5a6268');stone.color.set(value?'#53616c':'#7b858b');snow.color.set(value?'#93a9bd':'#d9e5e8');
+      iron.color.set(value ? '#414951' : '#5a6268');tintFoundations(value);
     },
     dispose() {
       if (disposed) return;
