@@ -37,6 +37,10 @@ services:
       PRESENCE_WEST_PORT: "8092"
       PRESENCE_MINE_PORT: "8094"
       PRESENCE_MINE2_PORT: "8095"
+      # Isolated summit-v1 room. The transport permission remains closed
+      # until total-control certifies the actual normal-entry walking route.
+      PRESENCE_SUMMIT_PORT: "8096"
+      PRESENCE_SUMMIT_RELEASE: "${PRESENCE_SUMMIT_RELEASE:-off}"
       # Do not open the sky room before ZB-22/G-01/ZB-17 transfer authorization is live.
       PRESENCE_SKY_PORT: "${PRESENCE_SKY_PORT:-}"
       TOWN_NIGHT_SCHEDULE: "${TOWN_NIGHT_SCHEDULE:-}"
@@ -52,6 +56,7 @@ services:
       - "8093"
       - "8094"
       - "8095"
+      - "8096"
     logging:
       driver: json-file
       options:
