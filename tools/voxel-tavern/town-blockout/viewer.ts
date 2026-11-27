@@ -2904,10 +2904,10 @@ function interact() {
 }
 function landAtSelectedDestination() {
   if (selector.value === '星港坪') {
-    // 星港坪本体在山域场景内，镇域落点搜索在 (324,657) 无合法落脚点；
-    // 必须走缆车同一条域交接落到云海台站台，而不是改镇域坐标。
-    transferCloudTerminal('summit', cloudTerminal);
-    return true;
+    // M3: do not retain the legacy direct domain teleport even if an
+    // obsolete menu or saved selection reintroduces this value.
+    announceActivity('星港坪暂未开放跨域交通，请从已认证入口进入。');
+    return false;
   }
   if (skyCityViewKind === 'summit') {
     // 人在山域时选镇域目的地：先切回镇域，再按镇域落点落位。
@@ -4023,7 +4023,7 @@ renderer.setAnimationLoop(now => {
   if(undergroundRenderParent){
     const known=undergroundDomain?.kind==='ready'&&!!dreamChain;
     applyCraterUndergroundRenderGate(undergroundRenderParent,{known,inMine:dreamInMine(),
-      transition:dreamControlsLocked||dreamTripActive||!!dreamActiveTripId||!!dreamReturnRecovery,
+      transition:dreamControlsLocked||dreamTripActive||dreamActiveTripId!==undefined,
       coverOpen:dreamChain?.coverOpen()??true});
   }
   presence.setWestDomain(walking && !homeReturn && x < 0);
@@ -4036,7 +4036,7 @@ renderer.setAnimationLoop(now => {
   );
   presence.update(dt);
   const cableState1 = presence.getCableLineState(1);
-  if (cableState1) {
+  if (cableState1&&productionRidge?.transportReady) {
     cableRepairHost1.sync(cableState1);
     if (cableStageSeen !== cableState1.stage) {
       if (cableStageSeen !== undefined && cableState1.stage === 'one-station') {

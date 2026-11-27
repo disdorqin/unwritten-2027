@@ -153,12 +153,23 @@ export type FrontRidgeR30Field=ReturnType<typeof buildFrontRidgeR30Field>;
 /** Far geometry reuses the fine vertex buffer. Every exterior one-metre
  * edge vertex is referenced, even when a neighbouring chunk stays fine.
  * In the boundary strip a fan stitches coarse interior cells to that edge. */
-export function ridgeFarIndices(cols:number,rows:number,step=4){
+export function ridgeFarIndices(cols:number,rows:number,step=4,ownsCell?:(x:number,z:number)=>boolean){
  const result:number[]=[];const v=(x:number,z:number)=>z*cols+x;
+ const tileWidth=Math.ceil((cols-1)/step),tileDepth=Math.ceil((rows-1)/step),full=new Uint8Array(tileWidth*tileDepth);
+ for(let tz=0;tz<tileDepth;tz++)for(let tx=0;tx<tileWidth;tx++){
+  const x=tx*step,z=tz*step,r=Math.min(cols-1,x+step),b=Math.min(rows-1,z+step);
+  let all=true;
+  if(ownsCell)for(let j=z;j<b&&all;j++)for(let i=x;i<r;i++)if(!ownsCell(i,j)){all=false;break}
+  full[tz*tileWidth+tx]=all&&r-x>=2&&b-z>=2?1:0;
+ }
+ const coarse=(tx:number,tz:number)=>tx>=0&&tx<tileWidth&&tz>=0&&tz<tileDepth&&!!full[tz*tileWidth+tx];
  for(let z=0;z<rows-1;z+=step)for(let x=0;x<cols-1;x+=step){
    const r=Math.min(cols-1,x+step),b=Math.min(rows-1,z+step);
-   if(r-x<2||b-z<2){for(let j=z;j<b;j++)for(let i=x;i<r;i++)result.push(v(i,j),v(i+1,j),v(i,j+1),v(i+1,j),v(i+1,j+1),v(i,j+1));continue}
-   const top=z===0,right=r===cols-1,bottom=b===rows-1,left=x===0;
+   const tx=x/step,tz=z/step;
+   if(!coarse(tx,tz)){for(let j=z;j<b;j++)for(let i=x;i<r;i++)if(!ownsCell||ownsCell(i,j))result.push(v(i,j),v(i+1,j),v(i,j+1),v(i+1,j),v(i+1,j+1),v(i,j+1));continue}
+   // Any edge shared with a partial tile or an outside fine chunk keeps
+   // every metre vertex; all other interior edges agree at coarse ends.
+   const top=!coarse(tx,tz-1),right=!coarse(tx+1,tz),bottom=!coarse(tx,tz+1),left=!coarse(tx-1,tz);
    if(!top&&!right&&!bottom&&!left){result.push(v(x,z),v(r,z),v(x,b),v(r,z),v(r,b),v(x,b));continue}
    const ring:number[]=[v(x,z)];
    if(top)for(let i=x+1;i<=r;i++)ring.push(v(i,z));else ring.push(v(r,z));
@@ -228,7 +239,7 @@ export function mountFrontRidgeR30(field:FrontRidgeR30Field,roadAt?:(east:number
    const g=new BufferGeometry();g.setAttribute('position',new Float32BufferAttribute(p,3));g.setAttribute('normal',new Float32BufferAttribute(normal,3));g.setAttribute('color',new Float32BufferAttribute(color,3));g.setAttribute('uv',new Float32BufferAttribute(uv,2));g.setIndex(indices);g.computeBoundingSphere();
    const far=new BufferGeometry();
    for(const attr of ['position','normal','color','uv'])far.setAttribute(attr,g.getAttribute(attr));
-   far.setIndex(full?ridgeFarIndices(cols,rows):indices);far.boundingSphere=g.boundingSphere?.clone()??null;
+   far.setIndex(ridgeFarIndices(cols,rows,4,full?undefined:(x,z)=>!!ownsCell?.(e0+x,n0+z)));far.boundingSphere=g.boundingSphere?.clone()??null;
    const mesh=new Mesh(g,material);mesh.name='d-r30-ridge-'+e0+'-'+n0;group.add(mesh);geometries.push(g,far);
    lod.push({mesh,fine:g,far,east:(e0+e1)/2,north:(n0+n1)/2});
  }

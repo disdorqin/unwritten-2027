@@ -53,6 +53,9 @@ try{
   await page.waitForTimeout(450);
   const state=await page.evaluate(()=>({position:document.querySelector('#position')?.textContent,day:document.querySelector('#lighting')?.textContent,frame:window.__m1Frame}));
   assert.ok(state.frame.calls>0&&state.frame.ridge.roads===3);
+  assert.ok(state.frame.craterPerf.exteriorCertified&&state.frame.ridge.terraceMounted&&state.frame.ridge.cloudSeam.physicalReady);
+  assert.equal(state.frame.ridge.cloudSeam.domainReady,false);
+  assert.equal(state.frame.craterPerf.undergroundVisible,false);
   assert.ok(Math.abs(state.frame.ridge.foot[2]-(state.frame.ridge.support??state.frame.ridge.surface))<.5,'feet and actual physical support agree');
   await page.screenshot({path:join(out,name+'.png')});frames.push({name,...state});console.log('M1',JSON.stringify({name,position:state.position,ridge:state.frame.ridge,calls:state.frame.calls,triangles:state.frame.triangles}));
  };
@@ -93,6 +96,9 @@ try{
  await snap('native-ground-road-to-dock');
  await travel('s',()=>window.__m1Frame.ridge.foot[1]<=306);
  await snap('station-dock-return');
+ await go('陨石坑口',2,159);await snap('crater-mouth-production');
+ const samples=await page.evaluate(()=>new Promise(resolve=>{const times=[],draws=[],tris=[];let prior,start;function tick(t){start??=t;if(prior!==undefined)times.push(t-prior);prior=t;if(window.__m1Frame){draws.push(window.__m1Frame.calls);tris.push(window.__m1Frame.triangles)}if(t-start<3500){requestAnimationFrame(tick);return}const q=(a,p)=>a.sort((x,y)=>x-y)[Math.max(0,Math.ceil(a.length*p)-1)];const gl=document.querySelector('#scene canvas').getContext('webgl2'),ext=gl.getExtension('WEBGL_debug_renderer_info');resolve({frames:times.length,p95:q(times,.95),median:q(times,.5),fps:times.length*1000/(t-start),draws:q(draws,.5),triangles:q(tris,.5),gpu:ext&&gl.getParameter(ext.UNMASKED_RENDERER_WEBGL)});}requestAnimationFrame(tick)}));
+ console.log('normal crater mouth frame samples',JSON.stringify(samples));frames.at(-1).timing=samples;
  assert.equal(errors.filter(e=>e.startsWith('page:')).length,0);
  if(buildPath){assert.ok(received>0&&sent>0,'real Presence bidirectional WS required');assert.equal(errors.length,0);}
 }catch(e){failure=String(e);console.error(failure)}

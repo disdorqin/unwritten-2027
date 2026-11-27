@@ -34,6 +34,23 @@ test('far chunks retain every fine boundary vertex and cover their complete area
   assert.ok(index.length<6*(cols!-1)*(rows!-1)*.4);
  }
 });
+test('mixed ownership far LOD covers precisely the owned cells and preserves each seam edge',()=>{
+ const cols=65,rows=65,owns=(x:number,z:number)=>x>=8&&z>=5&&x<59&&z<61&&!(x>=27&&x<38&&z>=24&&z<39);
+ const indices=ridgeFarIndices(cols,rows,4,owns),used=new Set(indices);let owned=0,area=0;
+ for(let z=0;z<rows-1;z++)for(let x=0;x<cols-1;x++)if(owns(x,z)){
+  owned++;
+  if(x===0||!owns(x-1,z))assert.ok(used.has(z*cols+x)&&used.has((z+1)*cols+x));
+  if(x===cols-2||!owns(x+1,z))assert.ok(used.has(z*cols+x+1)&&used.has((z+1)*cols+x+1));
+  if(z===0||!owns(x,z-1))assert.ok(used.has(z*cols+x)&&used.has(z*cols+x+1));
+  if(z===rows-2||!owns(x,z+1))assert.ok(used.has((z+1)*cols+x)&&used.has((z+1)*cols+x+1));
+ }
+ for(let i=0;i<indices.length;i+=3){
+  const [a,b,c]=indices.slice(i,i+3),ax=a!%cols,az=Math.floor(a!/cols),bx=b!%cols,bz=Math.floor(b!/cols),cx=c!%cols,cz=Math.floor(c!/cols);
+  const d=(bx-ax)*(cz-az)-(bz-az)*(cx-ax);assert.ok(d>0);area+=d/2;
+  assert.ok(owns(Math.floor((ax+bx+cx)/3),Math.floor((az+bz+cz)/3)));
+ }
+ assert.equal(area,owned);assert.ok(indices.length<owned*6*.45);
+});
 test('host protection has final authority, even at a survey pad',()=>{
  const f=buildFrontRidgeR30Field(()=>12,(e,n)=>e===440&&n===520?0:1);
  assert.equal(f.heightAt(440,520),12);
