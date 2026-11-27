@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test, { type TestContext } from 'node:test';
-import { Group, Mesh, MeshLambertMaterial } from 'three';
+import { Group, Mesh, MeshBasicMaterial, MeshLambertMaterial } from 'three';
 import { createTownD2R30Ropeway } from '../tools/voxel-tavern/town-blockout/town-d2-r30-ropeway';
 import { createTownD2R30CableTowers } from '../tools/voxel-tavern/town-blockout/town-d2-r30-cable-towers';
 import { createTownD2R30Assembly } from '../tools/voxel-tavern/town-blockout/town-d2-r30-assembly';
@@ -101,6 +101,118 @@ test('D2-R09 moves the cabins and restores the day look exactly', context => {
   ropeway.update(60_000);
   assert.doesNotThrow(() => ropeway.update(120_000));
   assert.throws(() => ropeway.update(Number.NaN), /finite/);
+});
+
+test('D2-R09 refines the haul rope into a sagged physical tube', context => {
+  const ropeway = cleanup(context, createTownD2R30Ropeway());
+  const refinement = ropeway.group.getObjectByName('r30-ropeway-refinement') as Group;
+  assert.ok(refinement, 'the refinement package must be mounted');
+  const rope = ropeway.cable.ropes[0];
+
+  for (const index of [0, 1]) {
+    const tube = refinement.getObjectByName(`r30-haul-rope-${index}`) as Mesh | undefined;
+    assert.ok(tube, `haul rope ${index} must be mounted`);
+    const positions = tube.geometry.getAttribute('position');
+    // The tube samples every span densely, not just the nine survey points.
+    assert.ok(positions.count > rope.points.length * 3, `tube ${index} must be densely sampled`);
+  }
+
+  // The tube must actually suspend below the straight survey line between the
+  // supports: project every tube vertex onto the surveyed spans and measure
+  // how far the tube dips under the straight interpolation.
+  const tube = refinement.getObjectByName('r30-haul-rope-0') as Mesh;
+  const positions = tube.geometry.getAttribute('position');
+  let maxSag = 0;
+  for (let i = 0; i < positions.count; i++) {
+    const east = positions.getX(i);
+    const height = positions.getY(i);
+    const north = -positions.getZ(i);
+    for (let span = 0; span < rope.points.length - 1; span++) {
+      const from = rope.points[span]!;
+      const to = rope.points[span + 1]!;
+      const dx = to.east - from.east;
+      const dn = to.north - from.north;
+      const lengthSquared = dx * dx + dn * dn;
+      const t = ((east - from.east) * dx + (north - from.north) * dn) / lengthSquared;
+      if (t < 0.02 || t > 0.98) continue;
+      const perpendicular = Math.hypot(east - (from.east + dx * t), north - (from.north + dn * t));
+      if (perpendicular > 1.5) continue;
+      const straight = from.height + (to.height - from.height) * t;
+      maxSag = Math.max(maxSag, straight - height);
+    }
+  }
+  assert.ok(maxSag > 2, `the haul rope must sag, measured dip was ${maxSag}`);
+
+  // The canonical survey itself is unchanged: the refinement only renders.
+  assert.equal(ropeway.cable.ropes[0].points.length, 9);
+  assert.equal(ropeway.stats().ropes, 2);
+});
+
+test('D2-R09 cabin hardware rides the cabins and dock equipment stands at every dock', context => {
+  const ropeway = cleanup(context, createTownD2R30Ropeway());
+  const refinement = ropeway.group.getObjectByName('r30-ropeway-refinement') as Group;
+  assert.ok(refinement);
+
+  const details = [0, 1].map(index => refinement.getObjectByName(`r30-cabin-detail-${index}`) as Group);
+  assert.ok(details[0] && details[1], 'both cabin detail groups must be mounted');
+  for (const detail of details) {
+    assert.ok(detail.children.length >= 4, 'a cabin detail carries grip, cap, ridge and lamp');
+  }
+
+  // The refined hardware must track the same rope point the canonical cars use.
+  ropeway.update(0);
+  ropeway.cable.cabinsAt(0).forEach((state, index) => {
+    const detail = details[index]!;
+    assert.ok(Math.abs(detail.position.x - state.ropePoint.east) < 1e-9);
+    assert.ok(Math.abs(detail.position.y - state.ropePoint.height) < 1e-9);
+    assert.ok(Math.abs(detail.position.z + state.ropePoint.north) < 1e-9);
+    assert.ok(Math.abs(detail.rotation.y + state.ropePoint.heading) < 1e-9);
+  });
+  ropeway.update(60_000);
+  ropeway.cable.cabinsAt(60_000).forEach((state, index) => {
+    const detail = details[index]!;
+    assert.ok(Math.abs(detail.position.x - state.ropePoint.east) < 1e-9, 'cabin detail must follow the ride');
+  });
+
+  // Every canonical dock gains its canopy, guide rail and lamp.
+  for (const station of ['cloud-deck', 'summit'] as const) {
+    for (let index = 0; index < 2; index++) {
+      const dock = refinement.getObjectByName(`r30-dock-equipment-${station}-${index}`) as Group;
+      assert.ok(dock, `${station} dock ${index} equipment must be mounted`);
+      assert.ok(dock.children.length >= 7, 'a dock carries posts, roof, rail and lamp');
+      const { board, approach } = ropeway.cable.ropes[index].dock(station);
+      assert.ok(Math.abs(dock.position.x - (board.east + approach.east) / 2) < 1e-9);
+      assert.ok(Math.abs(dock.position.y - board.height) < 1e-9);
+    }
+  }
+});
+
+test('D2-R09 night lamp cores glow and restore their day colour exactly', context => {
+  const ropeway = cleanup(context, createTownD2R30Ropeway());
+  const refinement = ropeway.group.getObjectByName('r30-ropeway-refinement') as Group;
+  assert.ok(refinement);
+  const cores = new Set<MeshBasicMaterial>();
+  refinement.traverse(object => {
+    const mesh = object as Mesh & { material?: unknown };
+    if (mesh.material instanceof MeshBasicMaterial) cores.add(mesh.material);
+  });
+  assert.ok(cores.size >= 1, 'the refinement owns lamp cores');
+  const day = [...cores].map(material => material.color.clone());
+
+  ropeway.setNight(true);
+  [...cores].forEach((material, index) => {
+    const base = day[index]!;
+    assert.ok(material.color.r > base.r && material.color.g > base.g && material.color.b > base.b,
+      'a lamp core must glow warmer at night');
+  });
+  ropeway.setNight(false);
+  [...cores].forEach((material, index) => {
+    const base = day[index]!;
+    assert.ok(Math.abs(material.color.r - base.r) < 1e-6
+      && Math.abs(material.color.g - base.g) < 1e-6
+      && Math.abs(material.color.b - base.b) < 1e-6,
+      'the lamp cores must restore their daytime colour exactly');
+  });
 });
 
 test('D2-R09 validates its inputs and releases its resources exactly once', context => {
