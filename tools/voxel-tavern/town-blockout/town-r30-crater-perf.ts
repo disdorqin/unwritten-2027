@@ -7,7 +7,7 @@ import {createCraterStaticMeshBatches} from './town-r30-crater-perf-static-batch
 import {createCraterInstanceBatches} from './town-r30-crater-perf-instance-batches';
 import {createCraterPropBatches} from './town-r30-crater-perf-prop-batches';
 import {createCraterIndexCells} from './town-r30-crater-perf-index-cells';
-const localWallRoots=new Set(['crater-outer-works','crater-mouth-works','za31-crater-camp','za31-crater-rim-clusters','za36-crater-ejecta-landmarks','za36-crater-midground','crater-density-a2','meteor-crater-west-ground','za31-crater-entrance']);
+const localWallRoots=new Set(['crater-outer-works','crater-mouth-works','za31-crater-camp','za31-crater-rim-clusters','za36-crater-ejecta-landmarks','za36-crater-midground','crater-density-a2','meteor-crater-west-ground','za31-crater-entrance','b-r30-crater-workstations']);
 const exteriorProps=new WeakMap<Group,ReturnType<typeof createCraterPropBatches>>();
 const exteriorCoalescers=new WeakMap<Group,ReturnType<typeof createCraterInstanceBatches>>();
 const sceneLightRefresh=new WeakMap<Group,()=>void>();
