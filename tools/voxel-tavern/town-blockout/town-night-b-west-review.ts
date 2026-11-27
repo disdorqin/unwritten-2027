@@ -4,7 +4,7 @@ import {createMainSummitTrail} from './main-summit-trail';
 import {sampleTownD2R30Height,townD2R30ChunkList} from './town-d2-r30-domain';
 import {createTownD2R30Collision} from './town-d2-r30-collision';
 import {buildTownD2R30ChunkGeometry} from './town-d2-r30-massif';
-import {composeNightBWestHeight} from './town-night-b-summit-west-relief';
+import {composeNightBWestHeight,tintNightBWestSurface} from './town-night-b-summit-west-relief';
 import {createNightBWestSector} from './town-night-b-summit-west-sector';
 import {cutNightBWestTerrain} from './town-night-b-summit-west-cut';
 import {createTownD2R30Ropeway} from './town-d2-r30-ropeway';
@@ -18,8 +18,13 @@ const scene=new Scene();scene.background=new Color('#b3c9da');scene.fog=new Fog(
 const ground=new Group(),material=new MeshLambertMaterial({vertexColors:true});
 let cutCount=0,lowered=0;
 for(const chunk of townD2R30ChunkList){
- const source=buildTownD2R30ChunkGeometry(chunk,8,347),p=source.getAttribute('position');
- for(let i=0;i<p.count;i++)p.setY(i,height(p.getX(i),-p.getZ(i))!);
+ const source=buildTownD2R30ChunkGeometry(chunk,8,347),p=source.getAttribute('position'),rgb=source.getAttribute('color'),tint=new Color();
+ for(let i=0;i<p.count;i++){
+  const e=p.getX(i),n=-p.getZ(i),h=height(e,n)!;p.setY(i,h);
+  const a=height(e+2,n)??h,b=height(e-2,n)??h,c=height(e,n+2)??h,d=height(e,n-2)??h;
+  tint.setRGB(rgb.getX(i),rgb.getY(i),rgb.getZ(i));tintNightBWestSurface(e,n,h,Math.hypot(a-b,c-d)/4,tint);rgb.setXYZ(i,tint.r,tint.g,tint.b);
+ }
+ rgb.needsUpdate=true;
  p.needsUpdate=true;source.computeVertexNormals();source.computeBoundingBox();source.computeBoundingSphere();
  const cut=cutNightBWestTerrain(source,west.cutTread);if(cut.geometry!==source)source.dispose();
  cutCount+=cut.refinedTriangles;lowered+=cut.loweredVertices;ground.add(new Mesh(cut.geometry,material));
@@ -32,14 +37,15 @@ const ambient=new AmbientLight('#d8e7f4',1.25),sun=new DirectionalLight('#ffe0b5
 const camera=new PerspectiveCamera(63,innerWidth/innerHeight,.15,4800),renderer=new WebGLRenderer({antialias:true});
 renderer.setPixelRatio(1);renderer.setSize(innerWidth,innerHeight);document.body.appendChild(renderer.domElement);
 const p=west.pavilion.site;
+const tower=towers.footprints.filter(f=>f.legHalf>=2&&f.east< -300&&f.north>480).sort((a,b)=>Math.hypot(a.east+675,a.north-554)-Math.hypot(b.east+675,b.north-554))[0]!;
 type Shot={label:string;eye:[number,number,number];look:[number,number,number]};
 const point=(e:number,n:number,dy:number):[number,number,number]=>[e,(collision.surfaceAt(e,n)??350)+dy,-n];
 const shots:Shot[]=[
  {label:'西次峰与西沟 · 全区',eye:[-1050,920,-560],look:[-610,470,-970]},
  {label:'西沟林岩雪带',eye:point(-910,780,42),look:point(-815,920,5)},
  {label:'观云亭与连续道路',eye:[p.approach.east+5,p.height+6,-p.approach.north+7],look:[p.east,p.height+1,-p.north]},
- {label:'西部索道格构塔架',eye:[-760,600,-590],look:[-675,545,-554]},
- {label:'二线维修机房',eye:[-8,350,-7],look:[-21,349,-7]},
+ {label:'西部索道格构塔架',eye:[tower.east-45,tower.footTop+35,-tower.north+40],look:[tower.east,(tower.footTop+tower.mastTop)/2,-tower.north]},
+ {label:'二线维修机房',eye:[-17.1,348.75,-7],look:[-23,348.3,-8.5]},
 ];
 let selected=0,frame=0;const frameTimes:number[]=[];let last=performance.now();
 function select(index:number){selected=Math.max(0,Math.min(shots.length-1,index));const s=shots[selected]!;camera.position.set(...s.eye);camera.lookAt(new Vector3(...s.look));west.updateView(camera.position.x,-camera.position.z,950);frameTimes.length=0;}

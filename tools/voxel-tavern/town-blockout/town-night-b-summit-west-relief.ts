@@ -42,6 +42,23 @@ export function nightBWestHeightDelta(e:number,n:number,base:Height,reserved:Wes
 export function composeNightBWestHeight(base:Height,reserved?:WestReserve):Height{
  return (e,n)=>{const h=base(e,n);return h===undefined?undefined:h+nightBWestHeightDelta(e,n,base,reserved);};
 }
+const forestTint=new Color('#36564b'),woodlandTint=new Color('#647561'),rockTint=new Color('#78858b'),warmRockTint=new Color('#9a8469'),snowTint=new Color('#dfe8ed');
+/** Continuous west-sector biome palette, feathered into the unmodified
+ * neighbour's actual vertex color. Use final canonical height and slope. */
+export function tintNightBWestSurface(e:number,n:number,h:number,slope:number,base:Color){
+ if(!inNightBWest(e,n)||![h,slope].every(Number.isFinite))return base;
+ const b=nightBWestBounds,seam=smooth(Math.min(e-b.west,b.east-e,n-b.south,b.north-n)/b.blend);
+ if(seam<=0)return base;
+ const grain=Math.sin(e*.019+n*.011)*Math.cos(n*.013-e*.008),micro=Math.sin(e*.093+n*.071)*Math.cos(n*.047);
+ const shifted=h+grain*24;
+ const c=forestTint.clone().lerp(woodlandTint,smooth((shifted-220)/100));
+ const rockWeight=smooth((shifted-300)/150)*(.35+.65*smooth((slope-.14)/.42));
+ const rock=rockTint.clone().lerp(warmRockTint,.28+.23*grain);
+ c.lerp(rock,rockWeight);
+ const snowWeight=smooth((shifted-345)/160)*(1-.75*smooth((slope-.3)/.62));
+ c.lerp(snowTint,snowWeight).multiplyScalar(1+.045*micro);
+ return base.lerp(c,seam);
+}
 /** Independent actual mesh fixture of the exact 8m canonical vertices.
  * Only for local preview / inspection; production D2 uses the delta above,
  * not this overlapping ground. */
