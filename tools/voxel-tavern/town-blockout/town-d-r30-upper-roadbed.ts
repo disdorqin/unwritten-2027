@@ -1,11 +1,12 @@
 import {createFrontRidgeR30FieldFromRaster,frontRidgeR30Bounds,type FrontRidgeR30Field} from './town-d-r30-front-ridge';
 import {auditRidgeRoadSurface} from './town-d-r30-roadbed';
 import {createRidgeRoadProximity} from './town-d-r30-spatial';
+import {solveRidgeGradeCore} from './town-d-r30-grade-solver';
 import {auditRidgeRoadCrossings,type RidgeRoadPoint} from './town-d-r30-road-survey';
 
 type EN={east:number;north:number};
 type Allowed=(e:number,n:number)=>boolean;
-const B=frontRidgeR30Bounds,half=2.8,shoulder=8,cutLimit=8,axisSlope=.12/Math.sqrt(2)-.00015;
+const B=frontRidgeR30Bounds,half=2.8,shoulder=8,cutLimit=8;
 // Survey waypoint is not a new gameplay anchor. It is the end of the
 // first middle-to-upper switchback construction section.
 export const middleEastRoadControls=Object.freeze([
@@ -109,18 +110,10 @@ export function buildMiddleEastRoadbed(field:FrontRidgeR30Field,allowed:Allowed,
   const fixed=protectedVertex||endpoint>=0,datum=target??old;
   core.set(id,{e,n,natural:old,lo:fixed?datum:old-cutLimit,hi:fixed?datum:old+cutLimit});
  }
- const queue=[...core.keys()],queued=new Set(queue);
- for(let k=0;k<queue.length;k++){
-  const id=queue[k]!,a=core.get(id)!;queued.delete(id);
-  if(a.lo>a.hi+1e-7)return {ok:false as const,reason:'incompatible actual grade and cut/fill',east:a.e,north:a.n,lower:a.lo,upper:a.hi,route};
-  for(const next of [id-1,id+1,id-field.width,id+field.width]){
-   const b=core.get(next);if(!b)continue;
-   const lo=Math.max(b.lo,a.lo-axisSlope),hi=Math.min(b.hi,a.hi+axisSlope);
-   if(lo>b.lo+1e-8||hi<b.hi-1e-8){b.lo=lo;b.hi=hi;if(!queued.has(next)){queue.push(next);queued.add(next)}}
-  }
- }
+ const solved=solveRidgeGradeCore(core,field.width);
+ if(!solved.ok){const p=core.get(solved.failure.id)!;return {ok:false as const,reason:solved.reason,east:p.e,north:p.n,lower:solved.failure.lo,upper:solved.failure.hi,route}}
  const elevation=field.elevation.slice(),weights=field.weights.slice();
- for(const [id,p]of core)elevation[id]=(p.lo+p.hi)/2;
+ for(const [id,h]of solved.heights)elevation[id]=h;
  // Extend from the nearest solved core, then blend to natural ground.
  // Protected ground and station pad remain byte-identical.
  for(const [id,p]of near){
@@ -144,11 +137,11 @@ export function buildMiddleEastRoadbed(field:FrontRidgeR30Field,allowed:Allowed,
  // the two-dimensional grade bound, including transverse slope.
  let maxCoreGrade=0;
  for(const id of core.keys()){
-  const e=id+1,n=id+field.width,en=n+1;
+  const e=id+1,n=id+field.width,w=id-1,s=id-field.width;
   if(core.has(e)&&core.has(n))maxCoreGrade=Math.max(maxCoreGrade,Math.hypot(elevation[e]!-elevation[id]!,elevation[n]!-elevation[id]!));
-  if(core.has(e)&&core.has(n)&&core.has(en))maxCoreGrade=Math.max(maxCoreGrade,Math.hypot(elevation[en]!-elevation[n]!,elevation[en]!-elevation[e]!));
+  if(core.has(w)&&core.has(s))maxCoreGrade=Math.max(maxCoreGrade,Math.hypot(elevation[w]!-elevation[id]!,elevation[s]!-elevation[id]!));
  }
  const roadProximity=createRidgeRoadProximity(finalRoute);
  const ok=audit.maxGrade<=.12+1e-6&&maxCoreGrade<=.12+1e-5&&protectedChanges===0&&cut<=cutLimit+1e-5&&fill<=cutLimit+1e-5;
- return {ok,reason:ok?'certified section candidate':'actual surface grade or protection failed',route:finalRoute,field:graded,audit,maxCoreGrade,cut,fill,changed,protectedChanges,roadAt(e:number,n:number){if(e<minE||e>maxE||n<minN||n>maxN)return false;return roadProximity(e,n,1.75)}};
+ return {ok,reason:ok?'certified section candidate':'actual surface grade or protection failed',route:finalRoute,field:graded,audit,gradeMode:solved.mode,gradeSweeps:solved.sweeps,maxCoreGrade,cut,fill,changed,protectedChanges,roadAt(e:number,n:number){if(e<minE||e>maxE||n<minN||n>maxN)return false;return roadProximity(e,n,1.75)}};
 }
