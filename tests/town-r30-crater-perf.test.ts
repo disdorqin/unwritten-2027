@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import {BoxGeometry,Group,Mesh,MeshBasicMaterial,MeshStandardMaterial,PerspectiveCamera,PointLight,Scene,Vector3,type WebGLRenderer} from 'three';
+import {BoxGeometry,Group,Mesh,MeshBasicMaterial,MeshStandardMaterial,PerspectiveCamera,PointLight,Scene,Sphere,Vector3,type WebGLRenderer} from 'three';
 import {mountZa31CraterLampRoom} from '../tools/voxel-tavern/town-blockout/town-za31-crater-lamp-room';
 import {createTerrainGrid,worldBounds} from '../tools/voxel-tavern/town-blockout/terrain';
 import {mountWestCraterRoad} from '../tools/voxel-tavern/town-blockout/town-za22-crater-road';
 import {batchCraterLampRoom,installCraterRenderPerf} from '../tools/voxel-tavern/town-blockout/town-r30-crater-perf';
+import {certifyCraterWallRing,sphereBehindCraterWall,createCraterExteriorOcclusion,applyCraterUndergroundRenderGate} from '../tools/voxel-tavern/town-blockout/town-r30-crater-perf-occlusion';
 
 function geometry(root:Group){
  root.updateMatrixWorld(true);let draws=0,tris=0;const positions:string[]=[];
@@ -51,4 +52,30 @@ test('pre-render scope excludes only zero-contribution finite lights and restore
  assert.equal(previous,1);assert.equal(lod,1);assert.equal(close.layers.mask,1);assert.equal(outside.layers.mask,0);assert.equal(dark.layers.mask,0);assert.equal(unbounded.layers.mask,1);assert.equal(shadow.layers.mask,1);assert.ok(outside.visible);
  call(scene.onAfterRender);assert.equal(outside.layers.mask,1);assert.equal(dark.layers.mask,1);assert.equal(dark.intensity,0);
  hook.dispose();assert.equal(scene.onBeforeRender,original);
+});
+test('closed wall certificate from actual cut terrain excludes hidden exterior only and restores layers',()=>{
+ const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
+ const mesh=road.group.getObjectByName('meteor-crater-walk-mesh') as Mesh;
+ const {east,north}=road.anchor,ring=certifyCraterWallRing(mesh,east,north);
+ assert.ok(ring);assert.ok(ring.minHeight>5);
+ const eye=new Vector3(east+6,road.heightAt(east+6,north)!+1.65,-north);
+ const hidden=new Mesh(new BoxGeometry(2,2,2),new MeshStandardMaterial());hidden.position.set(east+200,0,-north);
+ const tall=new Mesh(new BoxGeometry(2,2,2),new MeshStandardMaterial());tall.position.set(east+200,100,-north);
+ const near=new Mesh(new BoxGeometry(2,2,2),new MeshStandardMaterial());near.position.set(east+12,0,-north);
+ const exterior=new Group();exterior.add(hidden,tall,near);
+ const camera=new PerspectiveCamera();camera.position.copy(eye);camera.updateMatrixWorld(true);exterior.updateMatrixWorld(true);
+ assert.equal(sphereBehindCraterWall(ring,eye,new Sphere(hidden.position,2)),true);
+ assert.equal(sphereBehindCraterWall(ring,eye,new Sphere(tall.position,2)),false);
+ const o=createCraterExteriorOcclusion(mesh,road.anchor,road.heightAt);
+ o.refresh([exterior]);assert.ok(o.prepare());assert.equal(o.begin(camera),1);
+ assert.equal(hidden.layers.mask,0);assert.equal(tall.layers.mask,1);assert.equal(near.layers.mask,1);assert.ok(hidden.visible);
+ o.restore();assert.equal(hidden.layers.mask,1);
+ camera.position.y=ring.minHeight+1;camera.updateMatrixWorld(true);assert.equal(o.begin(camera),0);
+ const geometry=mesh.geometry.clone();geometry.setIndex([]);const broken=new Mesh(geometry,mesh.material);assert.equal(certifyCraterWallRing(broken,east,north),undefined);
+});
+test('underground gate preserves unknown, opened and transition states',()=>{
+ const u=new Group();
+ const state={known:true,inMine:false,transition:false,coverOpen:false};
+ assert.equal(applyCraterUndergroundRenderGate(u,state),false);
+ for(const s of [{...state,known:false},{...state,inMine:true},{...state,transition:true},{...state,coverOpen:true}])assert.equal(applyCraterUndergroundRenderGate(u,s),true);
 });
