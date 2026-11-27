@@ -39,6 +39,15 @@ test('production ridge consumes real railway mask and replaces only owned terrai
   assert.equal(ridge.allowsUphill({...a,height:grid.heightAt(a.east,a.north)},{...b,height:grid.heightAt(b.east,b.north)}),true);roadSteps++;
  }
  assert.ok(steep>100&&roadSteps>100);
+ let probes=0;
+ for(const road of ridge.roads)for(let i=1;i<road.route.length;i++){
+  const a=road.route[i-1]!,b=road.route[i]!,de=b.east-a.east,dn=b.north-a.north,d=Math.hypot(de,dn),steps=Math.ceil(d/.25);
+  for(let j=0;j<=steps;j++)for(const off of [-1.25,0,1.25]){
+   const e=a.east+de*j/steps-dn/d*off,n=a.north+dn*j/steps+de/d*off,h=ridge.field.heightAt(e,n)!;
+   assert.equal(ridge.blocked(e,n,h,.27),false,'production road clearance '+e+','+n);probes++;
+  }
+ }
+ assert.ok(probes>5000);console.log('production road clearance probes',probes);
  let frozen=0,owned=0;
  for(let n=270;n<=800;n++)for(let e=0;e<=640;e++){
   const id=n*grid.gridWidth+e;

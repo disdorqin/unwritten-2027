@@ -27,7 +27,7 @@ export const middleEastNorthControls=Object.freeze([...middleEastExtendedControl
 // The whole previous low service corridor is replaced, not stacked.
 export const lowerEastServiceControls=Object.freeze([
  {east:522,north:355},{east:515,north:355},{east:508,north:357},{east:503,north:364},
- {east:503,north:374},{east:507,north:386},{east:514,north:397},{east:507,north:408}
+ {east:503,north:374},{east:504,north:386},{east:514,north:397},{east:507,north:408}
 ]);
 // Separate south exit candidate. This is the first west-facing descent
 // section, not a finished base-station connection.
