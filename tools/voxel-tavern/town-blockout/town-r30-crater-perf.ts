@@ -6,13 +6,14 @@ import {createCraterGroundCells} from './town-r30-crater-perf-ground';
 import {createCraterStaticMeshBatches} from './town-r30-crater-perf-static-batches';
 import {createCraterInstanceBatches} from './town-r30-crater-perf-instance-batches';
 import {createCraterPropBatches} from './town-r30-crater-perf-prop-batches';
+const localWallRoots=new Set(['crater-outer-works','crater-mouth-works','za31-crater-camp','za31-crater-rim-clusters','za36-crater-ejecta-landmarks','za36-crater-midground','crater-density-a2','meteor-crater-west-ground','za31-crater-entrance']);
 const exteriorProps=new WeakMap<Group,ReturnType<typeof createCraterPropBatches>>();
 const exteriorCoalescers=new WeakMap<Group,ReturnType<typeof createCraterInstanceBatches>>();
 const sceneLightRefresh=new WeakMap<Group,()=>void>();
 const exteriorCells=new WeakMap<Group,ReturnType<typeof createCraterInstanceCells>>();
 const exteriorSessions=new WeakMap<Group,ReturnType<typeof createCraterExteriorOcclusion>>();
 /** D registers explicitly approved exterior roots after normal scene assembly. */
-export function setCraterExteriorRenderRoots(root:Group,roots:readonly Object3D[]){const session=exteriorSessions.get(root);if(!session)return false;const coalescer=exteriorCoalescers.get(root),props=exteriorProps.get(root);coalescer?.dispose();props?.dispose();session.refresh(roots);session.prepare();exteriorCells.get(root)?.replaceRoots(roots);coalescer?.register(roots);props?.register(roots);sceneLightRefresh.get(root)?.();return !!session.ring;}
+export function setCraterExteriorRenderRoots(root:Group,roots:readonly Object3D[]){const session=exteriorSessions.get(root);if(!session)return false;const coalescer=exteriorCoalescers.get(root),props=exteriorProps.get(root);coalescer?.dispose();props?.dispose();session.refresh([...roots,...root.children.filter(o=>localWallRoots.has(o.name))]);session.prepare();exteriorCells.get(root)?.replaceRoots(roots);coalescer?.register(roots);props?.register(roots);sceneLightRefresh.get(root)?.();return !!session.ring;}
 
 const comparison=()=>typeof location!=='undefined'&&new URLSearchParams(location.search).has('profile')&&new URLSearchParams(location.search).has('pPerfCompare');
 type Batch={original:Mesh[];mesh:Mesh};
@@ -87,7 +88,7 @@ function renderBreakdown(renderer:WebGLRenderer,scene:Scene,crater:Group){
 type Lod=(camera:Camera)=>void;
 type GPUQuery={query:WebGLQuery;generation:number};
 type TimerExtension={TIME_ELAPSED_EXT:number;GPU_DISJOINT_EXT:number};
-type Profile={enabled:boolean;camera?:{position:number[];target:number[]};crosslineProbe?:boolean;p2Enabled?:boolean;p3Enabled?:boolean;globalLights?:boolean;smallInstances?:boolean;coalesceInstances?:boolean;propBatches?:boolean};
+type Profile={enabled:boolean;camera?:{position:number[];target:number[]};crosslineProbe?:boolean;p2Enabled?:boolean;p3Enabled?:boolean;globalLights?:boolean;smallInstances?:boolean;coalesceInstances?:boolean;propBatches?:boolean;localWall?:boolean};
 type GroundSource={mesh:Mesh;anchor:{east:number;north:number};heightAt:(east:number,north:number)=>number|undefined};
 /** A root-owned scene hook, called before Three collects render items.
  * No viewer patch, no changes to physics, night authority or scene
@@ -111,7 +112,7 @@ export function installCraterRenderPerf(root:Group,lod:Lod,room?:Group,ground?:G
  let started=0,gpu:WebGL2RenderingContext|undefined,ext:TimerExtension|null|undefined,active:WebGLQuery|null=null,pending:GPUQuery[]=[],lastGpu:number|null=null,generation=0;
  let breakdown:ReturnType<typeof renderBreakdown>|undefined;
  const profile=compare||(typeof location!=='undefined'&&new URLSearchParams(location.search).has('profile')&&new URLSearchParams(location.search).has('pPerfMeasure'));
- let externalExcluded=0,consideredLights=0,smallInstances=true,coalesceInstances=exteriorCoalescers.has(root),propBatches=true;
+ let externalExcluded=0,consideredLights=0,smallInstances=true,coalesceInstances=exteriorCoalescers.has(root),propBatches=true,localWall=true;
  function refreshSceneLights(){
   externalLights.length=0;if(!scene)return;
   const local=new Set(lights);
@@ -121,7 +122,7 @@ export function installCraterRenderPerf(root:Group,lod:Lod,room?:Group,ground?:G
  const onControl=(event:Event)=>{
   const d=(event as CustomEvent<Profile>).detail;
   if(!d||typeof d.enabled!=='boolean')return;
-  smallInstances=d.smallInstances??true;coalesceInstances=exteriorCoalescers.has(root)&&(d.coalesceInstances??true);propBatches=d.propBatches??true;
+  smallInstances=d.smallInstances??true;coalesceInstances=exteriorCoalescers.has(root)&&(d.coalesceInstances??true);propBatches=d.propBatches??true;localWall=d.localWall??true;
   if(!compare){probe=d.camera;globalLights=d.globalLights??true;generation++;breakdown=undefined;lastGpu=null;return;}
   enabled=d.enabled;p2Enabled=d.p2Enabled??d.enabled;p3Enabled=d.p3Enabled??p2Enabled;globalLights=d.globalLights??p3Enabled;if(globalLights&&!externalLights.length)refreshSceneLights();batch?.enable(enabled);probe=d.camera;crosslineProbe=!!d.crosslineProbe&&!!probe;
   if(compare&&exterior&&scene){const roots=crosslineProbe?scene.children.filter(o=>o!==root&&o.name!=='underground-domain-host'):[];exterior.refresh(roots);externalCells.replaceRoots(roots);if(crosslineProbe){exterior.prepare();if(p2Enabled)externalCells.register(roots);}if(p3Enabled&&crosslineProbe){externalStatic.register(roots);externalStatic.warmAll();}else externalStatic.dispose();}
@@ -148,11 +149,11 @@ export function installCraterRenderPerf(root:Group,lod:Lod,room?:Group,ground?:G
   }
   if(!enabled)return;
   lod(camera);
-  if(exterior&&exterior.candidates)culledExterior=exterior.begin(camera,smallInstances,compare?Infinity:1);
+  if(exterior&&exterior.candidates)culledExterior=exterior.begin(camera,smallInstances,compare?Infinity:1,localWall&&!compare?undefined:root);
   // Only the explicitly requested camera-only experiment simulates the
   // closed surface-domain presentation; D must supply real domain state.
   if(compare&&crosslineProbe&&probe&&ground){const p=camera.position,h=ground.heightAt(p.x,-p.z);if(Math.hypot(p.x-ground.anchor.east,p.z+ground.anchor.north)<50&&h!==undefined&&p.y>=h+.05&&p.y<=h+4){const u=s.getObjectByName('underground-domain-host');if(u){undergroundProbe={object:u,visible:u.visible};u.visible=false;}}}
-  if(p2Enabled){const ring=externalCells.sourceCount?exterior?.ringForCamera(camera):undefined;localCells.begin(camera);if(!compare||crosslineProbe)externalCells.begin(camera,ring);groundCells?.begin(camera);}
+  if(p2Enabled){const ring=exterior?.ringForCamera(camera);localCells.begin(camera,localWall&&!compare?ring:undefined,localWall);if(!compare||crosslineProbe)externalCells.begin(camera,ring,localWall);groundCells?.begin(camera);}
   if(compare&&p3Enabled){localStatic.begin(camera);if(crosslineProbe)externalStatic.begin(camera);}
   if(!compare&&coalesceInstances)coalescer.begin(camera);
   if(!compare&&propBatches)props.begin(camera);
@@ -180,7 +181,7 @@ export function installCraterRenderPerf(root:Group,lod:Lod,room?:Group,ground?:G
    const info=renderer.info;
    const renderCpuMs=performance.now()-started;
    breakdown??=renderBreakdown(renderer,s,root);
-   document.dispatchEvent(new CustomEvent('town-p1-render-profile',{detail:{enabled,p2Enabled,p3Enabled,localStatic:p3Enabled?localStatic.stats:null,externalStatic:p3Enabled&&(!compare||crosslineProbe)?externalStatic.stats:null,localCells:p2Enabled?localCells.stats:null,externalCells:p2Enabled&&(!compare||crosslineProbe)?externalCells.stats:null,pendingCells:localCells.pendingSources+externalCells.pendingSources,pendingOcclusionBounds:exterior?.pendingBounds??0,pendingCoalesced:coalescer.pending,coalesced:coalesceInstances?coalescer.stats:null,coalescedReady:coalescer.count,pendingProps:props.pending,propsReady:props.count,props:propBatches?props.stats:null,groundSaved:p2Enabled?groundCells?.savedTriangles:0,renderCpuMs,gpuMs:lastGpu,breakdown:breakdown.groups,breakdownDetails:breakdown.details,draws:info.render.calls,tris:info.render.triangles,geometries:info.memory.geometries,textures:info.memory.textures,excludedLights:excluded,externalExcluded,consideredLights,globalLights,externalLightCount:externalLights.length,culledExterior,smallInstances,smallInstanceCulled:exterior?.smallInstanceCulled??0,undergroundHidden,crosslineProbe,ringHeight:exterior?.ring?.minHeight,lightCount:lights.length,roomBefore:batch?.before,roomAfter:batch?.after,probe:!!probe,canvas:[renderer.domElement.width,renderer.domElement.height]}}));
+   document.dispatchEvent(new CustomEvent('town-p1-render-profile',{detail:{enabled,p2Enabled,p3Enabled,localStatic:p3Enabled?localStatic.stats:null,externalStatic:p3Enabled&&(!compare||crosslineProbe)?externalStatic.stats:null,localCells:p2Enabled?localCells.stats:null,externalCells:p2Enabled&&(!compare||crosslineProbe)?externalCells.stats:null,pendingCells:localCells.pendingSources+externalCells.pendingSources,pendingOcclusionBounds:exterior?.pendingBounds??0,pendingCoalesced:coalescer.pending,coalesced:coalesceInstances?coalescer.stats:null,coalescedReady:coalescer.count,pendingProps:props.pending,propsReady:props.count,props:propBatches?props.stats:null,groundSaved:p2Enabled?groundCells?.savedTriangles:0,renderCpuMs,gpuMs:lastGpu,breakdown:breakdown.groups,breakdownDetails:breakdown.details,draws:info.render.calls,tris:info.render.triangles,geometries:info.memory.geometries,textures:info.memory.textures,excludedLights:excluded,externalExcluded,consideredLights,globalLights,externalLightCount:externalLights.length,culledExterior,localWall,smallInstances,smallInstanceCulled:exterior?.smallInstanceCulled??0,undergroundHidden,crosslineProbe,ringHeight:exterior?.ring?.minHeight,lightCount:lights.length,roomBefore:batch?.before,roomAfter:batch?.after,probe:!!probe,canvas:[renderer.domElement.width,renderer.domElement.height]}}));
   }
   if(savedPosition&&savedQuaternion){camera.position.copy(savedPosition);camera.quaternion.copy(savedQuaternion);camera.updateMatrixWorld(true);savedPosition=undefined;savedQuaternion=undefined;}
   if(!compare){if(localCells.pendingSources)localCells.warmStep(800,1);else if(externalCells.pendingSources)externalCells.warmStep(1400,2);if(exterior?.pendingBounds)exterior.warmBounds(48,1);if(coalescer.pending)coalescer.warmStep(1,1);if(props.pending)props.warmStep(2,1);}

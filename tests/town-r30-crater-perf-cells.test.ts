@@ -20,6 +20,15 @@ test('instance cells preserve every transform and tint; mutations fall back to o
  assert.equal(sys.begin(cam).sources,0);assert.equal(m.layers.mask,1);
  sys.replaceRoots([]);assert.equal(sys.sourceCount,0);assert.equal(m.children.length,0);sys.dispose();
 });
+test('one-cell source retains no GPU proxy and culls only with a valid wall ring',()=>{
+ const root=new Group(),scene=new Scene();scene.add(root);const m=new InstancedMesh(new BoxGeometry(),new MeshStandardMaterial(),32),t=new Matrix4();
+ for(let i=0;i<32;i++)m.setMatrixAt(i,t.makeTranslation(100+i*.1,0,-2));m.instanceMatrix.needsUpdate=true;root.add(m);scene.updateMatrixWorld(true);
+ const sys=createCraterInstanceCells(32,8);sys.register([root]);assert.equal(sys.sourceCount,1);assert.equal(m.children.length,0);
+ const cam=new PerspectiveCamera(60,1,.1,500);cam.position.set(0,-10,0);cam.lookAt(100,0,-2);cam.updateMatrixWorld(true);
+ const ring={east:0,north:0,radius:52,inradius:51.9,minHeight:5,segments:64};
+ assert.equal(sys.begin(cam).sources,0);assert.equal(sys.begin(cam,ring,false).sources,0);assert.equal(sys.begin(cam,ring).savedInstances,32);assert.equal(m.layers.mask,0);sys.restore();assert.equal(m.layers.mask,1);
+ m.setMatrixAt(0,t.makeTranslation(0,0,0));m.instanceMatrix.needsUpdate=true;assert.equal(sys.begin(cam,ring).sources,0);sys.dispose();
+});
 test('ground cell index multiset equals the authoritative triangles, no attribute replacement',()=>{
  const scene=new Scene(),g=new PlaneGeometry(112,112,56,56);g.rotateX(-Math.PI/2);
  const m=new Mesh(g,new MeshStandardMaterial());scene.add(m);const cells=createCraterGroundCells(m,28)!;assert.ok(cells);

@@ -150,12 +150,12 @@ export function createCraterExteriorOcclusion(mesh:Mesh,anchor:{east:number;nort
   if(active&&eye.y<active.minHeight-.35)return active;
  }
  let smallInstanceCulled=0;
- function begin(camera:Camera,smallInstances=true,maxBuildMs=Infinity){
+ function begin(camera:Camera,smallInstances=true,maxBuildMs=Infinity,excludedRoot?:Object3D){
   restore();smallInstanceCulled=0;const activeRing=ringForCamera(camera);if(!activeRing)return 0;
   const started=performance.now();
   for(const o of objects){
    if(!o.parent||!o.visible||!camera.layers.test(o.layers)||!opaqueMesh(o)||(!smallInstances&&o instanceof InstancedMesh))continue;
-   let p:Object3D|null=o,approved=false;while(p&&p.visible){if(roots.has(p))approved=true;p=p.parent;}if(p||!approved)continue;
+   let p:Object3D|null=o,approved=false,excluded=false;while(p&&p.visible){if(roots.has(p))approved=true;if(p===excludedRoot)excluded=true;p=p.parent;}if(p||!approved||excluded)continue;
    // Cache misses fail open once this frame's build budget is exhausted.
    const b=worldBound(o,performance.now()-started<maxBuildMs);if(!b)continue;
    if(sphereBehindCraterWall(activeRing,eye,b)){masked.push({mesh:o,mask:o.layers.mask});o.layers.mask=0;if(o instanceof InstancedMesh)smallInstanceCulled++;}
