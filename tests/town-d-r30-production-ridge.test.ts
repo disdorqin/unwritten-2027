@@ -7,6 +7,8 @@ import {createTownRailway} from '../tools/voxel-tavern/town-blockout/town-railwa
 import {buildCraterRailExtension} from '../tools/voxel-tavern/town-blockout/town-crater-rail-extension';
 import {mountProductionRidge} from '../tools/voxel-tavern/town-blockout/town-d-r30-production-ridge';
 import {addTerrainMeshes} from '../tools/voxel-tavern/town-blockout/terrain-mesh';
+import {buildExtensionStreets} from '../tools/voxel-tavern/town-blockout/extension-streets';
+import {readWalkGeometry} from '../tools/voxel-tavern/town-blockout/landmark-kit';
 import {buildRailwayStation} from '../tools/voxel-tavern/town-blockout/landmark-station';
 import {auditRidgeCableSweep} from '../tools/voxel-tavern/town-blockout/town-d-r30-cable-facilities';
 import {ridgeCloudHandoff,productionCloudSeam} from '../tools/voxel-tavern/town-blockout/town-d-r30-cloud-terrace';
@@ -50,12 +52,15 @@ test('production ridge consumes real railway mask and replaces only owned terrai
   assert.equal(ridge.allowsUphill({...a,height:grid.heightAt(a.east,a.north)},{...b,height:grid.heightAt(b.east,b.north)}),true);roadSteps++;
  }
  assert.ok(steep>100&&roadSteps>100);
+ const streets=buildExtensionStreets(grid,(e,n,r)=>rail.keepClear(e,n,r)||ridge.reserveRoad(e,n,r));
+ const streetBoxes=readWalkGeometry(streets.group).colliders;
  let probes=0;
  for(const road of ridge.roads)for(let i=1;i<road.route.length;i++){
   const a=road.route[i-1]!,b=road.route[i]!,de=b.east-a.east,dn=b.north-a.north,d=Math.hypot(de,dn),steps=Math.ceil(d/.25);
-  for(let j=0;j<=steps;j++)for(const off of [-1.25,0,1.25]){
+  for(let j=0;j<=steps;j++)for(const off of [-1.25,-1,-.75,-.5,-.25,0,.25,.5,.75,1,1.25]){
    const e=a.east+de*j/steps-dn/d*off,n=a.north+dn*j/steps+de/d*off,h=ridge.field.heightAt(e,n)!;
-   assert.equal(ridge.blocked(e,n,h,.27),false,'production road clearance '+e+','+n);probes++;
+   assert.equal(ridge.blocked(e,n,h,.27),false,'production road clearance '+e+','+n);
+   assert.ok(!streetBoxes.some(b=>h+.025<b.max[1]!&&h+1.775>b.min[1]!&&Math.hypot(Math.max(0,b.min[0]!-e,e-b.max[0]!),Math.max(0,b.min[2]!+n,-n-b.max[2]!))<.27),'street collision '+e+','+n);probes++;
   }
  }
  assert.ok(probes>5000);console.log('production road clearance probes',probes);

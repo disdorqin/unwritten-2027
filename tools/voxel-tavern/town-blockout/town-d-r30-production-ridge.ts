@@ -68,7 +68,7 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
   const d=Math.hypot(to.east-from.east,to.north-from.north);
   return d<1e-6||h1-h0<=.85*d+1e-5;
  }
- return {field,ownership,ownsCell:patch.ownsCell,changedVertices:patch.changedVertices,roads,stationReady,model,forest,heightAt,allowsUphill,facilities,cableAudit,serviceExit,terrace,cloudSeam,
+ return {field,ownership,ownsCell:patch.ownsCell,changedVertices:patch.changedVertices,roads,stationReady,model,forest,heightAt,allowsUphill,facilities,cableAudit,serviceExit,terrace,cloudSeam,reserveRoad:(e:number,n:number,r:number)=>!clearance(e,n,r),
   blocked(e:number,n:number,h:number,r=.27){return forest.blocked(e,n,h,r)||!!station?.blocked(e,n,h,r)||!!facilities?.blocked(e,n,h,r)||!!terrace?.blocked(e,n,h,r)||furniture.some(f=>f.blocked(e,n,h,r))||banks.some(b=>b.blocked(e,n,h,r))},
   setNight(night:boolean){station?.setNight(night);facilities?.setNight(night);terrace?.setNight(night);furniture.forEach(f=>f.setNight(night))},
   updateView(e:number,n:number){model.updateView(e,n);forest.updateView(e,n);banks.forEach(b=>b.updateView(e,n));facilities?.updateView(e,n)},

@@ -9,7 +9,8 @@ import {chromium} from 'playwright';
 const root=resolve('.'),out=resolve(process.argv[2]??'.evidence/d-r30-m1');
 await mkdir(out,{recursive:true});
 let server,browser,page,failure,presence;
-const frames=[],errors=[],mobileResults=[];
+const frames=[],errors=[],mobileResults=[],roadWalk=[];
+const longRoad=process.argv.includes('--long-road');
 const buildPath=process.argv[3]?resolve(process.argv[3]):undefined;
 let received=0,sent=0;
 try{
@@ -44,7 +45,7 @@ try{
  page.on('pageerror',e=>errors.push('page:'+e.message));
  page.on('console',m=>{if(m.type()==='error')errors.push('console:'+m.text()+' '+m.location().url)});
  page.on('response',r=>{if(r.status()>=400)errors.push('http:'+r.status()+':'+r.url())});
- await page.goto('http://127.0.0.1:'+server.httpServer.address().port+'/town-blockout.html?profile',{waitUntil:'domcontentloaded',timeout:65000});
+ await page.goto('http://127.0.0.1:'+server.httpServer.address().port+'/town-blockout.html?profile'+(longRoad?'&mRoadSurvey':''),{waitUntil:'domcontentloaded',timeout:65000});
  await page.waitForFunction(()=>document.querySelector('#town-entry')?.hidden||!document.querySelector('#town-entry-continue')?.hidden||!document.querySelector('#town-entry-error')?.hidden,null,{timeout:60000});
  if(await page.locator('#town-entry-error').isVisible())throw Error('Entry failed: '+await page.locator('#town-entry-error').innerText());
  if(await page.locator('#town-entry-continue').isVisible())await page.locator('#town-entry-continue').click();
@@ -57,7 +58,7 @@ try{
   assert.equal(state.frame.ridge.cloudSeam.domainReady,false);
   assert.equal(state.frame.craterPerf.undergroundVisible,false);
   assert.ok(Math.abs(state.frame.ridge.foot[2]-(state.frame.ridge.support??state.frame.ridge.surface))<.5,'feet and actual physical support agree');
-  await page.screenshot({path:join(out,name+'.png')});frames.push({name,...state});console.log('M1',JSON.stringify({name,position:state.position,ridge:state.frame.ridge,calls:state.frame.calls,triangles:state.frame.triangles}));
+  await page.screenshot({path:join(out,name+'.png')});frames.push({name,...state});console.log('M1',JSON.stringify({name,position:state.position,ridge:{...state.frame.ridge,roadGuide:undefined},calls:state.frame.calls,triangles:state.frame.triangles}));
  };
  const day=async()=>{
   await page.locator('#town-panel-toggle').click();await page.locator('#lighting').click();await page.locator('#town-settings-close').click();
@@ -92,6 +93,52 @@ try{
  await travel('a',()=>window.__m1Frame.ridge.foot[0]<=516.5);
  await snap('native-dock-to-ground-road');
  const road=frames.at(-1).frame.ridge;assert.ok(Math.abs(road.foot[2]-road.surface)<.12);
+ if(longRoad){
+  const path=await page.evaluate(()=>window.__m1Frame.ridge.roadGuide);
+  assert.ok(path.at(-1).cum>280);
+  const project=f=>{
+   let best={dist:Infinity,cum:0};
+   for(let i=1;i<path.length;i++){
+    const a=path[i-1],b=path[i],dx=b.east-a.east,dn=b.north-a.north,s=dx*dx+dn*dn;
+    if(!s)continue;
+    const t=Math.max(0,Math.min(1,((f[0]-a.east)*dx+(f[1]-a.north)*dn)/s));
+    const dist=Math.hypot(f[0]-a.east-dx*t,f[1]-a.north-dn*t);
+    if(dist<best.dist)best={dist,cum:a.cum+(b.cum-a.cum)*t};
+   }return best;
+  };
+  const at=m=>{
+   const i=Math.max(1,path.findIndex(p=>p.cum>=m));const a=path[i-1],b=path[i],t=(m-a.cum)/(b.cum-a.cum);
+   return [a.east+(b.east-a.east)*t,a.north+(b.north-a.north)*t];
+  };
+  const canvas=await page.locator('#scene canvas').boundingBox(),cx=canvas.x+canvas.width*.5,cy=canvas.y+canvas.height*.46;
+  async function steer(delta){
+   while(Math.abs(delta)>.018){
+    const px=Math.sign(delta)*Math.min(380,Math.round(Math.abs(delta)/.003));
+    if(Math.abs(px)<6)break;
+    await page.mouse.move(cx,cy);await page.mouse.down();await page.mouse.move(cx+px,cy);await page.mouse.up();delta-=px*.003;
+   }
+  }
+  const total=path.at(-1).cum;
+  async function follow(direction,target){
+   const begin=Date.now();let lastProgress=-Infinity,stalled=0;
+   for(let k=0;k<1300;k++){
+    const r=await page.evaluate(()=>window.__m1Frame.ridge),p=project(r.foot);
+    roadWalk.push({direction,cum:p.cum,dist:p.dist,foot:r.foot,surface:r.surface,moveReject:r.moveReject});
+    if(p.dist>1.35||Math.abs(r.foot[2]-r.surface)>.12)throw Error('road deviation '+JSON.stringify(roadWalk.at(-1)));
+    if(direction*(p.cum-target)>=-.45){console.log('long road checkpoint',JSON.stringify({direction,cum:p.cum,foot:r.foot,seconds:(Date.now()-begin)/1000}));return;}
+    if(direction*p.cum>lastProgress+.1){lastProgress=direction*p.cum;stalled=0;}else if(++stalled>14)throw Error('road movement stalled '+JSON.stringify(roadWalk.at(-1)));
+    const aim=at(Math.min(total,Math.max(0,p.cum+direction*2.2)));
+    const heading=Math.atan2(aim[0]-r.foot[0],aim[1]-r.foot[1]);
+    await steer(Math.atan2(Math.sin(heading-r.heading),Math.cos(heading-r.heading)));
+    await page.keyboard.down('w');try{await page.waitForTimeout(Math.min(210,Math.max(65,Math.abs(target-p.cum)*90)))}finally{await page.keyboard.up('w')}
+    if(k%40===0)console.log('long road progress',JSON.stringify(roadWalk.at(-1)));
+   }
+   throw Error('long road input budget');
+  }
+  await follow(1,total);await snap('long-road-end');await follow(-1,5.5);await snap('long-road-return');
+  const r=await page.evaluate(()=>window.__m1Frame.ridge);
+  await steer(Math.atan2(Math.sin(-r.heading),Math.cos(-r.heading)));
+ }
  await travel('d',()=>window.__m1Frame.ridge.foot[0]>=525.9);
  await snap('native-ground-road-to-dock');
  await travel('s',()=>window.__m1Frame.ridge.foot[1]<=306);
@@ -135,7 +182,7 @@ try{
 finally{
  await browser?.close();await server?.close();
  if(presence&&presence.exitCode===null){presence.kill();await Promise.race([once(presence,'exit'),new Promise(r=>setTimeout(r,3000))])}
- const report={passed:!failure,frames,mobileResults,errors,failure,realPresence:!!buildPath&&received>0&&sent>0,received,sent,scope:'normal town entry; menu locations and native keyboard movement; not full mountain traversal'};
+ const report={passed:!failure,frames,mobileResults,roadWalk,errors,failure,realPresence:!!buildPath&&received>0&&sent>0,received,sent,scope:'normal town entry; menu locations and native keyboard movement; not full mountain traversal'};
  await writeFile(join(out,'report.json'),JSON.stringify(report,null,2));
  console.log(JSON.stringify({passed:report.passed,frames:frames.length,realPresence:report.realPresence,received,sent,errors:errors.slice(0,10),failure}));
  if(failure)process.exitCode=1;

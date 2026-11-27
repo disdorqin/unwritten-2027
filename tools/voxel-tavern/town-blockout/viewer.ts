@@ -1116,6 +1116,7 @@ const blockedHouseDoors = new Set<string>();
 let sharedHome: ReturnType<typeof buildSharedHome> | undefined;
 let sharedHomeGeometry: WalkGeometry | undefined;
 
+const ridgeGeometryOwners=new WeakMap<Box,string>();
 function geometry() {
   const chunks = new Map<number, (WalkGeometry | undefined)[]>();
   function index<T extends Box>(boxes: T[], append: (cell: WalkGeometry, box: T) => void) {
@@ -1143,6 +1144,7 @@ function geometry() {
   if (productionRidge?.facilities) groups.push(productionRidge.facilities.group);
   for (const group of groups) {
     const { colliders, floors, ramps } = readWalkGeometry(group);
+    if(previewOptions.has('mRoadSurvey'))for(const box of [...colliders,...floors,...ramps])ridgeGeometryOwners.set(box,group.name||group.children[0]?.name||group.type);
     index(colliders, (cell, box) => cell.colliders.push(box));
     index(floors, (cell, box) => cell.floors.push(box));
     index(ramps, (cell, ramp) => cell.ramps.push(ramp));
@@ -1737,7 +1739,7 @@ function enterSharedHome(door: TownHousePortal) {
 }
 function prepareExtensionStreets() {
   return extensionStreetsLoad ??= import('./extension-streets').then(({ buildExtensionStreets }) => {
-    extensionStreets = buildExtensionStreets(grid, railway.keepClear, districts.keepClear);
+    extensionStreets = buildExtensionStreets(grid,(e,n,r)=>railway.keepClear(e,n,r)||!!productionRidge?.reserveRoad(e,n,r),districts.keepClear);
     scene.add(extensionStreets.group);
     craterExteriorDirty=true;
     walkGeometry = geometry();
@@ -3392,10 +3394,14 @@ function stepJumpInMine(dt: number) {
   airHeight = next;
 }
 
+let ridgeMoveReject:unknown;
 function tryMove(nextX: number, nextN: number) {
   if (dreamInMine()) return tryMoveInMine(nextX, nextN);
   if (cloudRoute.active() && !cloudRoute.acceptsStep(x, n, nextX, nextN, bodyRadius)) return false;
-  if (!walkable(nextX, nextN)) return false;
+  if (!walkable(nextX, nextN)) {
+    if(profileTown&&previewOptions.has('mRoadSurvey'))ridgeMoveReject={reason:'walkable',next:[nextX,nextN],terrain:canEnter(nextX,nextN),scenery:scenery.blocked(nextX,nextN),district:districts.blocked(nextX,nextN),forest:forest.blocked(nextX,nextN),street:streetscape.blocked(nextX,nextN)};
+    return false;
+  }
   const feet = airHeight ?? ground;
   const limit = feet + (airHeight === undefined ? stepHeight : surfaceEpsilon);
   // 甲案 (总控裁定 2026-11-24): the walking step threads the player's
@@ -3406,12 +3412,16 @@ function tryMove(nextX: number, nextN: number) {
   const floor = supportAt(nextX, nextN, limit, airHeight === undefined ? ground + .03 : limit,
     bodyRadius, surfaceAt(nextX, nextN, ground),localGeometry);
   const nextHeight = airHeight === undefined ? floor : feet;
-  if (floor > limit || obstructed(nextX, nextN, nextHeight,localGeometry)) return false;
+  if (floor > limit || obstructed(nextX, nextN, nextHeight,localGeometry)) {
+    if(profileTown&&previewOptions.has('mRoadSurvey'))ridgeMoveReject={reason:floor>limit?'floor':'obstructed',next:[nextX,nextN,floor],ridge:productionRidge?.blocked(nextX,nextN,nextHeight),rail:railway.vehicleBlocks(nextX,nextN,nextHeight,bodyHeight,bodyRadius),
+     boxes:[...localGeometry.colliders,...localGeometry.floors].filter(box=>nextHeight+surfaceEpsilon<box.max[1]&&nextHeight+bodyHeight-surfaceEpsilon>box.min[1]&&overlapsBody(nextX,nextN,box)).map(box=>({...box,owner:ridgeGeometryOwners.get(box)}))};
+    return false;
+  }
   if(!homeReturn&&!cloudRoute.active()&&airHeight===undefined&&productionRidge&&
-    !productionRidge.allowsUphill({east:x,north:n,height:ground},{east:nextX,north:nextN,height:floor}))return false;
+    !productionRidge.allowsUphill({east:x,north:n,height:ground},{east:nextX,north:nextN,height:floor})){if(profileTown&&previewOptions.has('mRoadSurvey'))ridgeMoveReject={reason:'grade',next:[nextX,nextN,floor]};return false;}
   if (!homeReturn && currentGuardDuty()?.blocksStep(
     { east: x, north: n, height: feet }, { east: nextX, north: nextN, height: nextHeight },
-  )) return false;
+  )) {if(profileTown&&previewOptions.has('mRoadSurvey'))ridgeMoveReject={reason:'guard',next:[nextX,nextN,floor]};return false;}
   [x, n] = [nextX, nextN];
   if (airHeight === undefined) {
     if (ground - nextHeight > stepHeight) {
@@ -4364,7 +4374,7 @@ renderer.setAnimationLoop(now => {
         weatherMs, weatherTier: weather.tier, snowIntensity: effectiveSnowIntensity, snowCover: visualSnowCover,
         fogNear: weatherFog.near, fogFar: weatherFog.far, points: renderer.info.render.points,
         craterPerf:{exteriorCertified:craterExteriorCertified,undergroundVisible:undergroundRenderParent?.visible},
-        ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities,cableInstances:productionRidge.facilities?.visibleInstances(),terraceMounted:!!productionRidge.terrace,cloudSeam:productionRidge.cloudSeam},
+        ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],heading:yaw,...(previewOptions.has('mRoadSurvey')?{roadGuide:productionRidge.roads.at(-1)?.route,moveReject:ridgeMoveReject}:{}),surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities,cableInstances:productionRidge.facilities?.visibleInstances(),terraceMounted:!!productionRidge.terrace,cloudSeam:productionRidge.cloudSeam},
         ...(skylinePeak ? { summitSkyline: { draws: summitSkylineDraws, peakNdc: skylinePeak.toArray(),
           camera: camera.position.toArray(), far: camera.far } } : {}),
       } }));
