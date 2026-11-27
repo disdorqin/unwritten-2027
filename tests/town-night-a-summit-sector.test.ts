@@ -14,6 +14,6 @@ test('R1 south relief preserves the surveyed gate, trail, cable reservations and
   for(let n=-14;n<=35;n+=.25){assert.ok(!a.blocked(0,n,a.ground(0,n)!));}
   for(let e=0;e<=7.25;e+=.25)assert.ok(!a.blocked(e,7,a.ground(e,7)!));
   assert.ok(a.blocked(2.75,-5,347));assert.ok(a.entry.blocked(24,23,347));
-  console.log(JSON.stringify({changed,...a.stats}));
+  console.log(JSON.stringify({...a.stats,changedByAudit:changed}));
  }finally{a.dispose();}
 });
