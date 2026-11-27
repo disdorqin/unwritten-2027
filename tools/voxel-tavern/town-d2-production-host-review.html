@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>未写镇 · 3.1 四区宿主走查</title>
+  <style>
+    :root { color-scheme: dark; font: 15px system-ui, sans-serif; color: #edf4fa; background: #273342; }
+    body { margin: 0; min-height: 100vh; }
+    #scene { position: fixed; inset: 0; }
+    #scene canvas { display: block; }
+    main { position: relative; width: fit-content; max-width: calc(100% - 3rem); margin: 1rem; padding: .85rem 1rem; border: 1px solid #b9c7d466; border-radius: .6rem; background: #1c293be8; }
+    h1 { font-size: 1.1rem; margin: 0 0 .6rem; }
+    nav { display: flex; flex-wrap: wrap; gap: .35rem; }
+    button { padding: .35rem .6rem; border: 1px solid #a5bfd48a; border-radius: .25rem; background: #30455e; color: inherit; font: inherit; }
+    button[aria-pressed="true"] { background: #d9e9f6; color: #1c293b; }
+    p { margin: .65rem 0 0; }
+    #position { font-variant-numeric: tabular-nums; }
+  </style>
+</head>
+<body>
+  <div id="scene" aria-hidden="true"></div>
+  <main>
+    <h1>3.1 四区宿主走查</h1>
+    <nav aria-label="四区视角与昼夜">
+      <button id="view-south" type="button" aria-pressed="true">A 南区步道</button>
+      <button id="view-west" type="button" aria-pressed="false">B 西坡</button>
+      <button id="view-summit" type="button" aria-pressed="false">D2 绝顶</button>
+      <button id="view-north" type="button" aria-pressed="false">D2 北壁</button>
+      <button id="night" type="button" aria-pressed="false">昼夜</button>
+    </nav>
+    <p>宿主同一 owner 内装载 D2 中央山体、A 南区与 B 西区；C2 东区聚合模块未到货时如实报未装。</p>
+    <p><output id="position"></output></p>
+    <p id="status" role="status">正在装配四区宿主。</p>
+  </main>
+  <script type="module" src="./town-blockout/town-d2-production-host-review.ts"></script>
+</body>
+</html>
