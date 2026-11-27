@@ -40,6 +40,19 @@ test('833m road candidate uses the real canonical cut and supported continuous t
    }
   }
   assert.ok(road.stats.length>832&&road.stats.maxGrade<.12&&road.stats.railMetres>300);
+  assert.ok(road.stats.railPosts>75);
+  let protectedEdges=0;
+  for(let i=2;i<834;i++){
+   const a=points[i-1]!,b=points[i]!,prev=points[i-2]!,next=points[i+1]!;
+   for(const sign of [-1,1]){
+    const edge=(p:typeof a,lo:typeof a,hi:typeof a,t:number)=>{const dx=hi.east-lo.east,dn=hi.north-lo.north,l=Math.hypot(dx,dn);return {east:p.east-dn/l*t*sign,north:p.north+dx/l*t*sign,height:p.height+.055};};
+    const l=edge(a,prev,b,1.5),r=edge(b,a,next,1.5);
+    if(Math.max(l.height-w.collision.surfaceAt(l.east,l.north)!,r.height-w.collision.surfaceAt(r.east,r.north)!)<=.9)continue;
+    const u=edge(a,prev,b,1.72),v=edge(b,a,next,1.72);
+    assert.ok(road.blocked((u.east+v.east)/2,(u.north+v.north)/2,(u.height+v.height)/2));protectedEdges++;
+   }
+  }
+  assert.ok(protectedEdges>300);
   console.log(JSON.stringify({road:road.stats,sourceTriangles:idx.length/3,refined:result.refinedTriangles,lowered:result.loweredVertices,samples,maxError,maxOcclusion}));
  }finally{source.dispose();result.geometry.dispose();mat.dispose();road.dispose();w.dispose();}
 });

@@ -37,7 +37,24 @@ export function mountSouthEarthworks(points:readonly Point[],first:number,last:n
   const at=(t:number,h=p.height+lift)=>point(p.east-dn/l*t,p.north+dx/l*t,h);
   return {p,at};
  });
- let length=0,maxGrade=0,maxCut=0,maxFill=0,railMetres=0;
+ let length=0,maxGrade=0,maxCut=0,maxFill=0,railMetres=0,railPosts=0;
+ const railOpen=new Map<number,boolean>();
+ // Solid timber beam: both vertical faces, cap and underside. Retain
+ // the exact existing road section and the rail collision centreline.
+ function beam(a:{at:(t:number,h?:number)=>Point},b:{at:(t:number,h?:number)=>Point},sign:number,ha:number,hb:number){
+  const u=a.at(sign*1.66,ha),v=a.at(sign*1.78,ha),w=b.at(sign*1.66,hb),z=b.at(sign*1.78,hb);
+  const low=(p:Point)=>point(p.east,p.north,p.height-.12);
+  quad(u,v,w,z,false,railColor);quad(low(u),low(v),low(w),low(z),false,railColor);
+  quad(u,low(u),w,low(w),false,railColor);quad(v,low(v),z,low(z),false,railColor);
+ }
+ function post(s:{p:Point;at:(t:number,h?:number)=>Point},sign:number){
+  const p=s.at(sign*1.72),h=p.height,dx=p.east-s.p.east,dn=p.north-s.p.north,l=Math.hypot(dx,dn);
+  const ex=dx/l*.085,nx=dn/l*.085,tx=-nx,tn=ex;
+  const corners=[point(p.east-ex-tx,p.north-nx-tn,h-.13),point(p.east+ex-tx,p.north+nx-tn,h-.13),point(p.east+ex+tx,p.north+nx+tn,h-.13),point(p.east-ex+tx,p.north-nx+tn,h-.13)];
+  const top=corners.map(q=>point(q.east,q.north,h+1.04));
+  for(let i=0;i<4;i++){const j=(i+1)%4;quad(corners[i]!,corners[j]!,top[i]!,top[j]!,false,railColor);}
+  quad(top[0]!,top[1]!,top[3]!,top[2]!,false,railColor);railPosts++;
+ }
  // Check every intermediate cross-section before creating a renderable object.
  // The route is finely sampled; midpoint probes catch changes between vertices.
  for(let i=1;i<sections.length;i++){
@@ -62,14 +79,14 @@ export function mountSouthEarthworks(points:readonly Point[],first:number,last:n
    const ol=a.at(sign*1.84,l.height-.13),orr=b.at(sign*1.84,r.height-.13),og0=ground(ol),og1=ground(orr);
    quad(l,ol,r,orr,false,fillColor);
    quad(ol,base(ol,og0),orr,base(orr,og1),false,wallColor);
-   if(Math.min(l.height-g0,r.height-g1)>.9){
+   // Do not leave a one-metre unguarded drop where a fill starts/ends.
+   if(Math.max(l.height-g0,r.height-g1)>.9){
     const p=a.at(sign*1.72),q=b.at(sign*1.72);railSegments.push({a:p,b:q});railMetres+=span;
-    for(const h of [.45,.94]){
-     const u=a.at(sign*1.72,p.height+h),v=b.at(sign*1.72,q.height+h),w=a.at(sign*1.84,p.height+h),z=b.at(sign*1.84,q.height+h);
-     quad(u,w,v,z,false,railColor);quad(u,point(u.east,u.north,u.height-.12),v,point(v.east,v.north,v.height-.12),false,railColor);
-    }
-    if(i%4===0){const u=a.at(sign*1.72),v=a.at(sign*1.84);quad(u,v,point(u.east,u.north,u.height+1),point(v.east,v.north,v.height+1),false,railColor);}
-   }
+    for(const h of [.45,.94])beam(a,b,sign,p.height+h,q.height+h);
+    if(!railOpen.get(sign)||i%4===0)post(a,sign);
+    if(i===sections.length-1)post(b,sign);
+    railOpen.set(sign,true);
+   }else if(railOpen.get(sign)){post(a,sign);railOpen.set(sign,false);}
   }
  }
  for(const [k,c] of chunks)for(const road of [true,false]){
@@ -92,6 +109,6 @@ export function mountSouthEarthworks(points:readonly Point[],first:number,last:n
   return (railCells.get(Math.floor(e/cell)+','+Math.floor(n/cell))??[]).some(({a,b})=>{const dx=b.east-a.east,dn=b.north-a.north,t=Math.max(0,Math.min(1,((e-a.east)*dx+(n-a.north)*dn)/(dx*dx+dn*dn||1))),y=a.height+(b.height-a.height)*t;return h+body>y&&h<y+1.04&&Math.hypot(e-a.east-dx*t,n-a.north-dn*t)<r+.1;});
  }
  let disposed=false;
- return {group,cutTread,supportAt,blocked,stats:{length,maxGrade,maxCut,maxFill,railMetres,draws:group.children.length,treadTriangles:idx.length/3,triangles:group.children.reduce((s,m)=>s+(m as Mesh).geometry.getAttribute('position').count/3,0)},
+ return {group,cutTread,supportAt,blocked,stats:{length,maxGrade,maxCut,maxFill,railMetres,railPosts,draws:group.children.length,treadTriangles:idx.length/3,triangles:group.children.reduce((s,m)=>s+(m as Mesh).geometry.getAttribute('position').count/3,0)},
  dispose(){if(disposed)return;disposed=true;group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});group.clear();cutTread.dispose();treadMat.dispose();stoneMat.dispose();triangleCells.clear();railCells.clear();}};
 }
