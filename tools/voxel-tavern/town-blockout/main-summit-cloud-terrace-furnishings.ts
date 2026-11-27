@@ -134,7 +134,12 @@ export function buildCloudTerraceFurnishings(){
   // the E22..26 starport approach with an open 4m gap.
   // Short west-only rail: the earlier E10..33 fence crossed the flight
   // aircraft's 2.2m wing sweep although a walking player could pass.
-  for(let e=-2;e<=7;e+=1.75){
+  // ZA-07 ruling (2026-11-25): the loop is re-phased so the gap between
+  // posts centres on local east 0 -- the surveyed north spur to the
+  // north overlook crosses the fence line there. Six posts, same span
+  // and density; the two tall finial posts now frame the spur gap.
+  for(let e=-2.625;e<=7;e+=1.75){
+
     const north=-16.36;
     add('slate',e,347.34,-north,.63,.68,.58);
     add('slate',e,347.77,-north,.66,.19,.65);

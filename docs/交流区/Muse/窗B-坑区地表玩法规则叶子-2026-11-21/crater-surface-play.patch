@@ -1,0 +1,180 @@
+diff --git a/tests/town-blockout-crater-surface-play.test.ts b/tests/town-blockout-crater-surface-play.test.ts
+new file mode 100644
+index 00000000..c125c28b
+--- /dev/null
++++ b/tests/town-blockout-crater-surface-play.test.ts
+@@ -0,0 +1,55 @@
++import assert from 'node:assert/strict';
++import { test } from 'node:test';
++import {
++  createBellows, createCalibration, createScale, createSorting, createTrackSwitch, dialTargets, lumpWeightKg,
++} from '../tools/voxel-tavern/town-blockout/town-crater-surface-play';
++
++test('bellows: pumping into the band and holding 10 s casts; drifting out resets the hold', () => {
++  const bellows = createBellows();
++  for (let i = 0; i < 3; i++) bellows.pump();
++  assert.ok(bellows.state().inBand, `pressure ${bellows.state().pressure} in band`);
++  // Real play: short ticks, re-pump whenever pressure sags toward the band floor.
++  for (let t = 0; t < 10_000 && !bellows.state().cast; t += 250) {
++    bellows.tick(250);
++    if (bellows.state().pressure < 0.62) bellows.pump();
++  }
++  assert.equal(bellows.state().cast, true, 'held in band for a continuous 10 s');
++  const lazy = createBellows();
++  lazy.pump(); lazy.pump(); lazy.pump();
++  for (let t = 0; t < 5_000; t += 250) lazy.tick(250); // never re-pumped: decays out of the band
++  assert.equal(lazy.state().cast, false);
++  assert.equal(lazy.state().heldMs, 0);
++});
++
++test('calibration: day-derived targets, lock tolerance, full alignment', () => {
++  const day = 7;
++  const targets = dialTargets(day);
++  assert.deepEqual(dialTargets(day), targets, 'same day, same targets on every client');
++  assert.notDeepEqual(dialTargets(day + 1), targets);
++  const cal = createCalibration(day);
++  assert.equal(cal.aligned(), false);
++  for (const dial of [0, 1, 2] as const) cal.turn(dial, targets[dial]!);
++  assert.equal(cal.aligned(), true);
++});
++
++test('sorting refuses wrong bins, seals at capacity, scale keeps an honest best', () => {
++  const sorting = createSorting();
++  assert.equal(sorting.place('stardust', 'scrap'), 'refused');
++  for (let i = 0; i < 6; i++) assert.equal(sorting.place('stardust', 'stardust'), 'sorted');
++  assert.equal(sorting.place('stardust', 'stardust'), 'bin-full');
++  assert.equal(sorting.state().mistakes, 1);
++  const scale = createScale();
++  const a = scale.weigh(11); const b = scale.weigh(23);
++  assert.equal(a.kg, lumpWeightKg(11), 'weight is a fact of the lump, reweighing agrees');
++  assert.equal(scale.weigh(11).isBest, false, 'same lump never beats itself twice');
++  assert.equal(scale.bestKg(), Math.max(a.kg, b.kg));
++});
++
++test('track switch flips the next train route and resets at dawn', () => {
++  const sw = createTrackSwitch();
++  assert.equal(sw.nextTrainRoute(), 'main');
++  sw.pull();
++  assert.equal(sw.nextTrainRoute(), 'siding');
++  sw.dawnReset();
++  assert.equal(sw.nextTrainRoute(), 'main');
++});
+diff --git a/tools/voxel-tavern/town-blockout/town-crater-surface-play.ts b/tools/voxel-tavern/town-blockout/town-crater-surface-play.ts
+new file mode 100644
+index 00000000..81874478
+--- /dev/null
++++ b/tools/voxel-tavern/town-blockout/town-crater-surface-play.ts
+@@ -0,0 +1,113 @@
++/**
++ * Crater surface play rules (branch window B; design: 坑区地表玩法包
++ * 六件套). Pure state machines for the hands-on tasks at the crater's
++ * surface story points. Canon boundaries: everything is solo-
++ * completable, nothing here produces currency or materials, and all
++ * feedback lives in the world (the host renders needle/bell/switch
++ * states from these snapshots) — no popups, no cards.
++ */
++
++/* ---- Smelting workshop: work the bellows, hold the needle ------- */
++
++export const bellowsBand = { low: 0.55, high: 0.8, holdMs: 10_000, decayPerSecond: 0.22, pumpGain: 0.16 } as const;
++
++export function createBellows() {
++  let pressure = 0.3;
++  let heldMs = 0;
++  let cast = false;
++  return {
++    pump() { pressure = Math.min(1, pressure + bellowsBand.pumpGain); },
++    tick(dtMs: number) {
++      pressure = Math.max(0, pressure - bellowsBand.decayPerSecond * (dtMs / 1000));
++      if (!cast && pressure >= bellowsBand.low && pressure <= bellowsBand.high) {
++        heldMs += dtMs;
++        if (heldMs >= bellowsBand.holdMs) cast = true;
++      } else {
++        heldMs = 0;
++      }
++    },
++    state: () => ({ pressure, heldMs, inBand: pressure >= bellowsBand.low && pressure <= bellowsBand.high, cast }),
++    reset() { pressure = 0.3; heldMs = 0; cast = false; },
++  };
++}
++
++/* ---- Instrument workshop: calibrate three dials ----------------- */
++
++/** Dial targets derive from the game day so every client agrees; no clock is invented here. */
++export function dialTargets(dayIndex: number): readonly [number, number, number] {
++  const seed = (dayIndex * 2654435761) >>> 0;
++  return [0, 1, 2].map(i => (((seed >> (i * 8)) & 0xff) / 255) * Math.PI * 2) as unknown as readonly [number, number, number];
++}
++
++export const dialLockTolerance = 0.09;
++
++export function createCalibration(dayIndex: number) {
++  const targets = dialTargets(dayIndex);
++  const angles = [0, 0, 0];
++  const locked = () => angles.map((angle, i) => {
++    const diff = Math.atan2(Math.sin(angle - targets[i]!), Math.cos(angle - targets[i]!));
++    return Math.abs(diff) <= dialLockTolerance;
++  });
++  return {
++    turn(dial: 0 | 1 | 2, delta: number) { angles[dial] = (angles[dial]! + delta) % (Math.PI * 2); },
++    locked,
++    aligned: () => locked().every(Boolean),
++    angles: () => [...angles],
++  };
++}
++
++/* ---- Supply station: sort the ore baskets ----------------------- */
++
++export type OreKind = 'stardust' | 'scrap' | 'rubble';
++export const sortBasketCapacity = 6;
++
++export function createSorting() {
++  const bins: Record<OreKind, number> = { stardust: 0, scrap: 0, rubble: 0 };
++  let sortedTotal = 0;
++  let mistakes = 0;
++  return {
++    /** Place one carried lump into a bin. Right bin fills it; wrong bin is refused and counted. */
++    place(kind: OreKind, bin: OreKind): 'sorted' | 'refused' | 'bin-full' {
++      if (kind !== bin) { mistakes++; return 'refused'; }
++      if (bins[bin] >= sortBasketCapacity) return 'bin-full';
++      bins[bin]++; sortedTotal++;
++      return 'sorted';
++    },
++    state: () => ({ bins: { ...bins }, sortedTotal, mistakes, allSealed: (Object.values(bins) as number[]).every(n => n >= sortBasketCapacity) }),
++  };
++}
++
++/* ---- Ore yard: the big scale ------------------------------------ */
++
++/** A lump's weight is a fact of the lump (host-seeded by its id), never rolled at weigh time. */
++export function lumpWeightKg(lumpId: number): number {
++  const seed = (lumpId * 2246822519) >>> 0;
++  return Math.round((2 + ((seed % 1600) / 100)) * 10) / 10; // 2.0–17.9 kg
++}
++
++export function createScale() {
++  let bestKg = 0;
++  return {
++    weigh(lumpId: number): { kg: number; isBest: boolean } {
++      const kg = lumpWeightKg(lumpId);
++      const isBest = kg > bestKg;
++      if (isBest) bestKg = kg;
++      return { kg, isBest };
++    },
++    bestKg: () => bestKg,
++  };
++}
++
++/* ---- Crater station: the track switch ---------------------------- */
++
++export function createTrackSwitch() {
++  let thrown = false;
++  return {
++    pull() { thrown = !thrown; return thrown; },
++    /** The day boundary resets the points (host calls at dawn). */
++    dawnReset() { thrown = false; },
++    thrown: () => thrown,
++    /** Which siding the next empty train takes. */
++    nextTrainRoute: () => (thrown ? 'siding' : 'main'),
++  };
++}

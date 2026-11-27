@@ -1,6 +1,6 @@
 import { Group, Vector3 } from 'three';
 import { resolveUndergroundShaftRegistration } from '../../../src/presence/underground-shaft-registration.js';
-import { undergroundCampPickaxe } from '../../../src/shared/underground-camp-pickaxe.js';
+import { undergroundCampPickaxe,resolveUndergroundCampPickaxeSite,type UndergroundCampPickaxeResult } from '../../../src/shared/underground-camp-pickaxe.js';
 import { createUndergroundMineLayout, type UndergroundMineSpec } from './underground-mine-layout';
 import { mountUndergroundMineDomain } from './underground-domain-scene';
 import { createUndergroundCampRemains } from './underground-camp-remains';
@@ -9,6 +9,38 @@ import {
 } from './underground-camp-offerings';
 import { surveyZa31CraterWinch } from './town-za31-crater-winch';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
+import type { AcceptedUndergroundWaterSnapshot } from '../../../src/shared/town-c-water-snapshot-port.js';
+import type { UndergroundWater90OreVisual } from './town-c2-underground-water-minus90.js';
+import { resolveR30ShaftContract } from './town-c-r30-shaft-contract.js';
+import {r30DeepFrames,r30DeepLocalFeet,r30DeepWorldFeet,r30DepthLinks,r30DeepRoomProposals} from './town-c-r30-deep-layer-contract.js';
+import {createR30DeepHost} from './town-c-r30-deep-host.js';
+import {mountR30InterlayerLift,r30InterlayerLiftSite,splitR30LiftAperture,type R30InterlayerRide} from './town-c-r30-interlayer-lift.js';
+import {createR30C2Consumer,type R30DeepRoomPort} from './town-c-r30-c2-consumer.js';
+import {createR30OreActions} from './town-c-r30-ore-actions.js';
+import {createR30CrystalHost,type R30CrystalBridge} from './town-c-r30-crystal-host.js';
+import {makeR30CrystalFrame} from './town-c-r30-crystal-support.js';
+import {r30GateSwitchBlocks} from './underground-crystal-gate.js';
+import {mountR30HorseSeat,type R30HorseSeatBridge} from './town-c-r30-horse-seat.js';
+import {createR30DeepAssembly,type R30DeepAssemblyBridge,r30LinkDomain} from './town-c-r30-deep-assembly.js';
+import {mountR30ThinWallArt} from './town-c-r30-thin-wall-art.js';
+import {mountR30ReturnBay} from './town-c-r30-return-bay.js';
+import {mountR30MainlineHost,type R30MainlineBridge} from './town-c-r30-mainline-host.js';
+import {mountR30TutorialCart,type R30TutorialCartBridge} from './town-c-r30-tutorial-cart.js';
+import {mountR30ApproachStory} from './town-c-r30-approach-story.js';
+import {createR30CampReceiptReader,type R30CampStoryBridge} from './town-c-r30-camp-receipts.js';
+import {createR30MineAcoustics,type R30MineAudioBridge} from './town-c-r30-mine-acoustics.js';
+import type {UndergroundRecoveryFireSite} from './underground-recovery-fires.js';
+import type {UndergroundMiningTargetView} from '../../../src/shared/underground-mining.js';
+import {surveyR30Ore} from './town-c-r30-ore-survey.js';
+import {mountR30ShallowGallery} from './town-c-r30-shallow-gallery.js';
+import {mountR30DeepBank} from './town-c-r30-deep-bank.js';
+import {mountR30WaterReadout} from './town-c-r30-water-readout.js';
+import {mountR30DeepRetreat} from './town-c-r30-deep-retreat.js';
+import {mountR30CrouchRoute} from './town-c-r30-crouch-route.js';
+import {mountR30ShallowWayfinding} from './town-c-r30-shallow-wayfinding.js';
+import {surveyR30Encounters} from './town-c-r30-encounter-survey.js';
+import {mountR30EncounterArt,type R30EncounterBridge} from './town-c-r30-encounter-art.js';
+import {mountR30OreArt,type R30OreBridge} from './town-c-r30-ore-art.js';
 
 type Road = ReturnType<typeof mountWestCraterRoad>;
 type Mine = ReturnType<typeof createUndergroundMineLayout>;
@@ -20,7 +52,7 @@ export const undergroundMineSpec: UndergroundMineSpec = {
   shoreLength: 8,
   gallery: { length: 20, drop: 1, railGauge: 1, railWidth: .08 },
   collapse: { length: 3, width: 1.2, height: 1.3 },
-  camp: { length: 10, side: 'right', extension: 5, openBackForExpansion: true, crystalGate: true },
+  camp: { length: 10, side: 'right', extension: 5, openBackForExpansion: true, crystalGate: true, thinWalls:true,supportAnnex:true,returnBay:true,runningMainline:true },
   walker: { radius: .27, standingHeight: 1.8, crouchingHeight: 1.1, maxGrade: .2 },
 };
 
@@ -115,6 +147,22 @@ export type UndergroundCampBridge = Readonly<{
   isAimingAt(world: Point): boolean;
   showPickupNotice(): void;
   onRested(roomId: string): void;
+  /** The existing per-profile grantToolOnce receipt; no separate inventory.
+   * The legacy viewer omits this port until A supplies the presence route. */
+  storyReceipts?:R30CampStoryBridge;
+  pickaxeReceipt?:Readonly<{
+    read():Readonly<{playerId:string;domainId:string;claimed:boolean}>|undefined;
+    claim(playerId:string,siteId:typeof undergroundCampPickaxe.siteId):Promise<UndergroundCampPickaxeResult>;
+  }>;
+  /**
+   * Lamp authority seam (ruling 2026-11-22): the single lamp ledger lives
+   * with the shaft-head lamp room on the presence side; the camp holds no
+   * inventory. The viewer supplies the read from its presence state; while
+   * it is unsupplied the offering honestly resolves as 'no-lamp'.
+   */
+  readLampHeld?: () => boolean;
+  /** Called after a successful offering so presence can record placement. */
+  onLampPlaced?: () => void;
 }>;
 
 /**
@@ -130,6 +178,45 @@ export type UndergroundCampBridge = Readonly<{
  */
 export function mountUndergroundDomainHost(options: Readonly<{
   parent: Group; road: Road; campBridge?: UndergroundCampBridge;
+  /** Accepted movement/Presence foot only, never inferred from camera height. */
+  readAcceptedDomainFoot?:()=> (Point&Readonly<{domainId:string}>)|undefined;
+  crystalBridge?:R30CrystalBridge;
+  horseSeatBridge?:R30HorseSeatBridge;
+  mainlineBridge?:R30MainlineBridge;
+  /** Original two-push U7 authority; distinct from the U19 freight route. */
+  tutorialCartBridge?:R30TutorialCartBridge;
+  /** Residual public light budget AFTER headlamp, camp and other consumers. */
+  readIntroLightBudget?:()=>number;
+  /** Original U-13 recovery registration and self contact receipt.
+   * No heal request or health value is authored by this scene. */
+  audioBridge?:R30MineAudioBridge;
+  recoveryBridge?:Readonly<{
+    acceptsSite(site:UndergroundRecoveryFireSite):boolean;
+    readContact():Readonly<{fireId:string;layer:string;foot:Point}>|undefined;
+  }>;
+  oreBridge?:R30OreBridge;
+  encounterBridge?:R30EncounterBridge;
+  /** Sole existing mining authority's accepted layer snapshot. */
+  readAcceptedMiningTargets?:()=>readonly UndergroundMiningTargetView[]|undefined;
+  /** C2 scene roots and A/total-control room/mouth acceptance. */
+  deepAssemblyBridge?:R30DeepAssemblyBridge;
+  /** Actual pinned C2 source; room/route acceptance comes from A. */
+  deepRooms?:R30DeepRoomPort;
+  /** C2 certifies its actual roof opening; C certifies the upper mesh cut.
+   * The existing transport authority supplies the accepted trip and clock. */
+  interlayerRide?:Readonly<{read:()=>R30InterlayerRide|undefined;now:()=>number;lowerOpeningCertified:()=>boolean}>;
+  /** Production water loop (batch 103, interface aligned to C2's fix
+   * round): the mine presence room relays the single presence-side
+   * tonight() snapshot; the host forwards the raw snapshot reader
+   * plus the scene's display parameters into the scene adapter,
+   * which validates the snapshot via the certified port (single
+   * validation point). Absent bridge (or no snapshot yet) leaves
+   * the scene's baseline untouched. */
+  waterBridge?: Readonly<{
+    readWaterSnapshot?: () => AcceptedUndergroundWaterSnapshot | undefined;
+    highWaterOffsetM?: number;
+    oreVisuals?: readonly UndergroundWater90OreVisual[];
+  }>;
 }>) {
   const { parent, road } = options;
   const campBridge = options.campBridge;
@@ -142,9 +229,10 @@ export function mountUndergroundDomainHost(options: Readonly<{
 
   // Batch 3 camp state, owned here: offerings drive the light reader, so a
   // lamp offered at a niche lights that niche through the scene's own sync.
-  // The lamp itself has no inventory authority yet: takeLamp reports false
-  // and the offering honestly resolves as 'no-lamp' until a lamp source is
-  // wired (surface lamp room is another line's surface).
+  // The lamp itself answers to the single lamp ledger (lamp room, presence
+  // side — ruling 2026-11-22): the bridge reads whether this session holds
+  // a lamp, and while that read is unsupplied the offering honestly
+  // resolves as 'no-lamp'. The camp never keeps a lamp inventory.
   let toLocal: ((world: Point) => readonly [number, number, number] | undefined) | undefined;
   let toWorldPoint: ((local: readonly [number, number, number]) => Point | undefined) | undefined;
   let offerings: ReturnType<typeof createUndergroundCampOfferings> | undefined;
@@ -158,10 +246,29 @@ export function mountUndergroundDomainHost(options: Readonly<{
     nicheEmpties = new Set(niches.filter((niche) => !niche.hasSpentLamp).map((niche) => niche.id));
     offerings = createUndergroundCampOfferings(niches);
   }
+  const storyReceipts=campBridge?.storyReceipts?createR30CampReceiptReader(campBridge.storyReceipts,nicheEmpties,()=>options.readAcceptedDomainFoot?.()):undefined;
   const recordedRelics = new Set<string>();
   let pickaxeTaken = false;
+  const pickaxeReceipt=campBridge?.pickaxeReceipt;
+  function readPickaxeReceipt(){
+    const s=pickaxeReceipt?.read(),f=options.readAcceptedDomainFoot?.();
+    if(!s||!f||s.domainId!==undergroundMineLanding.domainId||f.domainId!==s.domainId||
+      typeof s.playerId!=='string'||!s.playerId.trim()||typeof s.claimed!=='boolean'||![f.east,f.north,f.height].every(Number.isFinite))return;
+    return s;
+  }
+  // Only an acknowledged, in-flight grant may hide the tool while the
+  // corresponding receipt stream catches up. Different profiles cannot
+  // inherit that local presentation suppression.
+  let acknowledgedPickaxePlayer:string|undefined;
+  function availablePickaxe(){
+    if(!pickaxeReceipt)return !pickaxeTaken;
+    const s=readPickaxeReceipt();if(!s)return false;
+    if(acknowledgedPickaxePlayer!==s.playerId)acknowledgedPickaxePlayer=undefined;
+    return !s.claimed&&acknowledgedPickaxePlayer!==s.playerId;
+  }
 
   const readLights = () => {
+    if(storyReceipts)return storyReceipts.lights();
     if (!offerings) {
       return { litNicheIds: new Set<string>(), extraCampLightCount: 0, remainingBudget: 0 };
     }
@@ -174,6 +281,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
     };
   };
 
+  let mineSeated=false;
   const campRuntime = campBridge && offerings ? {    actions: {
       promptRange: 1.15,
       restAfterMs: 2500,
@@ -184,6 +292,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
         // A camp has no authorized footing before the rigid transform exists;
         // an early synchronous sync() must not kill the entire town entry.
         if (!toLocal) return undefined;
+        if(storyReceipts){const foot=options.readAcceptedDomainFoot?.();return storyReceipts.read()&&foot?toLocal(foot):undefined}
         let foot: Point | undefined;
         try { foot = campBridge.readWorldFoot(); }
         catch (error) {
@@ -199,29 +308,49 @@ export function mountUndergroundDomainHost(options: Readonly<{
       },
       sit: (room: { id: string }) => campBridge.sit(room.id),
       stand: (room: { id: string }) => campBridge.stand(room.id),
-      setSeatedAmbience: (active: boolean) => campBridge.onSeatedChange(active),
+      setSeatedAmbience: (active: boolean) => {mineSeated=active;campBridge.onSeatedChange(active)},
       onRested: (room: { id: string }) => campBridge.onRested(room.id),
       lookAtBowl: (bowl: { position: readonly [number, number, number] }) => {
         const world = toWorldPoint?.(bowl.position);
         return world !== undefined && campBridge.isAimingAt(world);
       },
+      ...(storyReceipts?{readBowlKnown:()=>storyReceipts.read()?.bowlKnown===true}:{}),
       recordRelic: (entry: { id: string }) => {
+        if(storyReceipts)return storyReceipts.recordBowl(entry.id);
         if (recordedRelics.has(entry.id)) return 'already-recorded' as const;
         recordedRelics.add(entry.id);
         return 'recorded' as const;
       },
       canOfferLamp: (nicheId: string) =>
-        nicheEmpties.has(nicheId) && !(offerings?.snapshot().litNicheIds.includes(nicheId) ?? false),
-      offerLamp: (nicheId: string) => offerings?.offerLamp(nicheId, () => false).kind === 'offered',
+        storyReceipts?storyReceipts.canOffer(nicheId):nicheEmpties.has(nicheId) && !(offerings?.snapshot().litNicheIds.includes(nicheId) ?? false),
+      offerLamp: (nicheId: string) => {
+        if(storyReceipts)return storyReceipts.offerLamp(nicheId);
+        const offered = offerings?.offerLamp(
+          nicheId, () => campBridge.readLampHeld?.() === true).kind === 'offered';
+        if (offered) campBridge.onLampPlaced?.();
+        return offered;
+      },
     },
     pickaxe: {
-      available: () => !pickaxeTaken,
+      available: availablePickaxe,
+      receiptDriven: !!pickaxeReceipt,
       aimedAt: (point: readonly [number, number, number]) => {
         const world = toWorldPoint?.(point);
         return world !== undefined && campBridge.isAimingAt(world);
       },
       claim: async (siteId: string) => {
         if (siteId !== undergroundCampPickaxe.siteId) return 'rejected' as const;
+        if(pickaxeReceipt){
+          const s=readPickaxeReceipt();
+          if(!s)return 'rejected' as const;
+          if(s.claimed||acknowledgedPickaxePlayer===s.playerId)return 'already-granted' as const;
+          const result=await pickaxeReceipt.claim(s.playerId,undergroundCampPickaxe.siteId);
+          const current=readPickaxeReceipt();
+          if(current?.playerId!==s.playerId)return 'rejected' as const;
+          if(result!=='granted'&&result!=='already-granted')return 'rejected' as const;
+          acknowledgedPickaxePlayer=s.playerId;
+          return result;
+        }
         if (pickaxeTaken) return 'already-granted' as const;
         pickaxeTaken = true;
         return 'granted' as const;
@@ -252,19 +381,47 @@ export function mountUndergroundDomainHost(options: Readonly<{
     return { east: world.x, north: -world.z, height: world.y };
   };
   const campFireWorld = worldOf(mine.anchors.campRecovery.position);
-  const recoveryRuntime = {
-    sites: [{
-      fire: {
-        id: 'fire/camp-recovery',
-        point: { layer: undergroundMineLanding.domainId, ...campFireWorld },
-        healPerSecond: 6, recovery: true,
-      },
-      radius: 2.5, tone: 'warm' as const,
-    }],
-    supportsFire: () => true,
-    readConfirmedContact: () => undefined,
+  const localPickaxe=resolveUndergroundCampPickaxeSite(mine,undergroundMineSpec.camp);
+  const pickaxeContract=localPickaxe?{siteId:localPickaxe.id,domainId:undergroundMineLanding.domainId,
+   aim:worldOf(localPickaxe.aim),approach:worldOf(localPickaxe.approach),
+   // Server checks horizontal tool position and actual floor datum, not
+   // the height of the head lying on the table.
+   site:{domainId:undergroundMineLanding.domainId,...worldOf([localPickaxe.aim[0],localPickaxe.approach[1],localPickaxe.aim[2]])}}:undefined;
+  const recoverySite:UndergroundRecoveryFireSite={
+    fire:{id:'fire/camp-recovery',point:{layer:undergroundMineLanding.domainId,...campFireWorld},
+      healPerSecond:6,recovery:true},
+    radius:2.5,tone:'warm',
   };
-  const readGateStage = () => 'closed' as const;
+  function readRecoveryContact(){
+    const bridge=options.recoveryBridge;
+    if(bridge?.acceptsSite(recoverySite)!==true)return;
+    const accepted=options.readAcceptedDomainFoot?.(),s=bridge.readContact();
+    if(!s||!accepted||accepted.domainId!==recoverySite.fire.point.layer||
+       s.layer!==accepted.domainId||s.fireId!==recoverySite.fire.id||
+       ![accepted.east,accepted.north,accepted.height,s.foot.east,s.foot.north,s.foot.height].every(Number.isFinite)||
+       Math.hypot(s.foot.east-accepted.east,s.foot.north-accepted.north,s.foot.height-accepted.height)>.25)return;
+    return {fireId:s.fireId,layer:s.layer};
+  }
+  const recoveryRuntime = {
+    sites:[recoverySite],
+    supportsFire:()=>true, // physical authored anchor, not authority registration
+    readConfirmedContact:readRecoveryContact,
+  };
+  let crystalHost:ReturnType<typeof createR30CrystalHost>|undefined;
+  const readGateStage = () => crystalHost?.stage()??'closed';
+
+  // Water loop consumption (interface aligned to C2's fix round): the
+  // host forwards the bridge's raw snapshot reader as the adapter's
+  // AcceptedWaterReader, plus the scene's display parameters; the
+  // adapter validates the snapshot via the certified port (single
+  // validation point — the host does not pre-validate). The high-water
+  // rise defaults to C2's fixture value (1 m) until the scene
+  // difference verification certifies a layout datum.
+  const waterRuntime = options.waterBridge ? {
+    highWaterOffsetM: options.waterBridge.highWaterOffsetM ?? 1,
+    readAcceptedWater: () => options.waterBridge?.readWaterSnapshot?.(),
+    oreVisuals: options.waterBridge.oreVisuals,
+  } : undefined;
 
   const mounted = mountUndergroundMineDomain({
     parent, registration, mine,
@@ -280,6 +437,7 @@ export function mountUndergroundDomainHost(options: Readonly<{
     campRuntime,
     recoveryRuntime,
     readGateStage,
+    ...(waterRuntime ? { waterRuntime } : {}),
   });
   if (mounted.kind !== 'ready') return { kind: 'unregistered', reason: mounted.kind } as const;
   // World -> mine-local passage query, for the movement host: the layout's own
@@ -287,16 +445,91 @@ export function mountUndergroundDomainHost(options: Readonly<{
   const originW = mounted.toWorld([0, 0, 0]);
   const basisXW = mounted.toWorld([1, 0, 0]);
   const basisZW = mounted.toWorld([0, 0, 1]);
-  function passageAt(east: number, north: number) {
+  const thinWalls=mountR30ThinWallArt(mounted.group,worldOf,mine.expansion?.hasThinWalls===true);
+  const returnBay=mountR30ReturnBay(mounted.group,mine.hasReturnBay,worldOf);
+  let openThinWalls:ReadonlySet<string>=new Set();
+  let interlayerLift:ReturnType<typeof mountR30InterlayerLift>|undefined;
+  let shallowGallery:ReturnType<typeof mountR30ShallowGallery>|undefined;
+  let deepBank:ReturnType<typeof mountR30DeepBank>|undefined;
+  let waterReadout:ReturnType<typeof mountR30WaterReadout>|undefined;
+  let approachStory:ReturnType<typeof mountR30ApproachStory>|undefined;
+  let horseSeat:Extract<ReturnType<typeof mountR30HorseSeat>,{kind:'ready'}>|undefined;
+  const gateLayout=mine.expansion?.gate;
+  const gateWinchLocal=gateLayout&&[gateLayout.position[0]-gateLayout.width/2-.28,gateLayout.position[1],gateLayout.position[2]-.78] as const;
+  function queryMineClearance(east:number,north:number,radius:number,bodyHeight:number){
     if (!originW || !basisXW || !basisZW) return undefined;
     const dx = east - originW.east, dn = north - originW.north;
     const bxE = basisXW.east - originW.east, bxN = basisXW.north - originW.north;
     const bzE = basisZW.east - originW.east, bzN = basisZW.north - originW.north;
     const localX = dx * bxE + dn * bxN;
     const localZ = dx * bzE + dn * bzN;
-    return mine.queryPassage(localX, localZ, undergroundMineSpec.walker.radius,
-      undergroundMineSpec.walker.standingHeight);
+    if(mounted.wreck?.blocks(localX,localZ,radius))return;
+    const passage=mine.queryPassage(localX, localZ, radius,
+      bodyHeight,readGateStage(),openThinWalls);
+    // The camp's real furnishings (including R30 hearth) own their collision
+    // locally. Keep the original passage metadata when the standing capsule fits.
+    if(passage?.zone==='camp'&&!mounted.camp?.queryPassage(localX,localZ,
+      radius,bodyHeight))return;
+    if(passage&&horseSeat?.blocks(localX,localZ,passage.floor,radius,bodyHeight))return;
+    if(passage&&gateWinchLocal&&r30GateSwitchBlocks(localX-gateWinchLocal[0],passage.floor-gateWinchLocal[1],localZ-gateWinchLocal[2],radius,bodyHeight))return;
+    if(passage&&thinWalls.blocks(localX,localZ,radius))return;
+    if(passage&&mounted.workbay?.blocks(localX,localZ,passage.floor,radius,bodyHeight))return;
+    if(passage&&mounted.supportAnnex?.blocksRearStorage(localX,localZ,passage.floor,radius,bodyHeight))return;
+    if(passage&&mounted.galleryArt?.blocks(localX,localZ,passage.floor,radius,bodyHeight))return;
+    if(passage&&approachStory?.blocks(localX,localZ,passage.floor,radius,bodyHeight))return;
+    if(passage&&shallowGallery?.blocks(localX,localZ,passage.floor,radius,bodyHeight))return;
+    if(passage&&deepBank?.blocks(localX,localZ,passage.floor,radius,bodyHeight))return;
+    if(passage&&waterReadout?.blocks(localX,localZ,passage.floor,radius,bodyHeight))return;
+    if(passage&&interlayerLift?.blocks(undergroundMineLanding.domainId,{east,north,height:passage.floor}))return;
+    return passage;
   }
+  approachStory=mountR30ApproachStory(mounted.group,{enabled:mine.expansion?.deepWorks===true,frames:mounted.galleryArt?.frames??[],toWorld:worldOf,
+    support:(x,z,r,h)=>{const p=worldOf([x,-91,z]),q=queryMineClearance(p.east,p.north,r,h);return q?.waterDepth===0?q.floor:undefined},
+    readAcceptedFoot:options.readIntroLightBudget?options.readAcceptedDomainFoot:undefined,readRemainingLightBudget:options.readIntroLightBudget});
+  shallowGallery=mountR30ShallowGallery(mounted.group,(x,z,r,h)=>{const p=worldOf([x,-91,z]),q=queryMineClearance(p.east,p.north,r,h);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01},mine.expansion?.deepWorks===true);
+  const shallowWayfinding=mine.expansion?.deepWorks?mountR30ShallowWayfinding(mounted.group,shallowGallery,(x,z,r,h)=>{const p=worldOf([x,-91,z]),q=queryMineClearance(p.east,p.north,r,h);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01}):undefined;
+  deepBank=mountR30DeepBank(mounted.group,(x,z,r,h)=>{const p=worldOf([x,-91,z]),q=queryMineClearance(p.east,p.north,r,h);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01},mine.expansion?.deepWorks===true);
+  waterReadout=mine.expansion?.deepWorks?mountR30WaterReadout(mounted.group,deepBank):undefined;
+  const tutorialCart=mine.expansion?.deepWorks?mountR30TutorialCart({parent,toWorld:worldOf,bridge:options.tutorialCartBridge,
+    supports:(p,r,h)=>{const q=queryMineClearance(p.east,p.north,r,h);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01}}):undefined;
+  let tutorialLastFrame=performance.now();
+  const mainline=mine.expansion?.hasRunningMainline?mountR30MainlineHost({parent,worldOf,bridge:options.mainlineBridge,
+    supports:(p,r,h)=>{const q=queryMineClearance(p.east,p.north,r,h);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01}}):undefined;
+  function passageAt(east:number,north:number,posture:'standing'|'crouching'='standing'){
+    if(posture!=='standing'&&posture!=='crouching')return undefined;
+    const h=posture==='crouching'?undergroundMineSpec.walker.crouchingHeight:undergroundMineSpec.walker.standingHeight;
+    const q=queryMineClearance(east,north,undergroundMineSpec.walker.radius,h);
+    if(q&&tutorialCart?.kind==='ready'&&tutorialCart.blocks(east,north,q.floor,undergroundMineSpec.walker.radius,h))return;
+    if(q&&mainline?.kind==='ready'&&(mainline.scene.blocks(east,north,q.floor,undergroundMineSpec.walker.radius,h)||mainline.motion.blocked(east,north,q.floor,undergroundMineSpec.walker.radius,h)))return;
+    return q;
+  }
+  if(mounted.camp&&mine.expansion?.deepWorks){
+    const seat=mountR30HorseSeat(mounted.group,{toWorld:worldOf,bridge:options.horseSeatBridge,
+      supports:(x,z,r,h)=>{const p=worldOf([x,-91,z]),q=queryMineClearance(p.east,p.north,r,h);return q?.zone==='camp'&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01},
+      readFoot:()=>{const f=options.readAcceptedDomainFoot?.();if(f?.domainId!==undergroundMineLanding.domainId)return;const q=passageAt(f.east,f.north);return q&&Math.abs(q.floor-f.height)<.025?f:undefined}});
+    if(seat.kind==='ready')horseSeat=seat;
+  }
+  const soundSites:Parameters<typeof createR30MineAcoustics>[0][number][]=[];
+  const hearth=mounted.camp?.r30Hearth.at;
+  if(hearth)soundSites.push({id:'camp-hearth',kind:'hearth',point:worldOf([hearth[0],hearth[1]+.3,hearth[2]]),radius:8});
+  for(const [id,x,z,radius,kind] of [
+    ['pool-drip',1.6,5.7,7,'drip'],['bank-drip-1',5.8,119,9,'drip'],
+    ['bank-drip-2',5.8,132,9,'drip'],['gate-rumble',0,136.5,22,'rumble']
+  ] as const){
+   const p=worldOf([x,-91,z]),q=queryMineClearance(p.east,p.north,.05,.1);
+   if(!q||(kind==='drip'&&q.waterDepth<=0))continue;
+   soundSites.push({id,kind,point:{...p,height:q.floor+(kind==='drip'?1.25:1.0)},radius});
+  }
+  const acoustics=options.audioBridge?createR30MineAcoustics(soundSites,options.audioBridge,()=>options.readAcceptedDomainFoot?.(),()=>mineSeated):undefined;
+  const deepRetreat=mountR30DeepRetreat(mounted.group,(x,z,r,h)=>{const p=worldOf([x,-91,z]),q=queryMineClearance(p.east,p.north,r,h);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01&&!(mainline?.kind==='ready'&&mainline.scene.blocks(p.east,p.north,q.floor,r,h))},mine.expansion?.deepWorks===true);
+  const crouchRoute=mountR30CrouchRoute(mounted.group,mine.crouchInterval,(x,z,posture)=>{const p=worldOf([x,-91,z]);return passageAt(p.east,p.north,posture)},mine.expansion?.deepWorks===true);
+  const oreSurvey=surveyR30Ore(mounted.group,worldOf,p=>{const q=passageAt(p.east,p.north);return !!q&&q.waterDepth===0&&Math.abs(q.floor-p.height)<.01});
+  const oreArt=oreSurvey.kind==='ready'?mountR30OreArt(mounted.group,oreSurvey,options.oreBridge):undefined;
+  const oreActions=oreSurvey.kind==='ready'&&oreArt&&options.oreBridge?.interaction?createR30OreActions({survey:oreSurvey,art:oreArt,bridge:options.oreBridge,interaction:options.oreBridge.interaction,
+    readFoot:()=>options.readAcceptedDomainFoot?.(),supports:p=>{const q=passageAt(p.east,p.north);return !!q&&Math.abs(q.floor-p.height)<.025}}):undefined;
+  const safeCenters=[campFireWorld,...(mine.supportStation?[worldOf([mine.supportStation.x,mine.supportStation.y,mine.supportStation.z])]:[])];
+  const encounterSurvey=oreSurvey.kind==='ready'?surveyR30Encounters(worldOf,p=>passageAt(p.east,p.north),oreSurvey,safeCenters):undefined;
+  const encounterArt=encounterSurvey?.ready?mountR30EncounterArt(mounted.group,encounterSurvey,options.encounterBridge,(e,n)=>passageAt(e,n)):undefined;
   if (originW && basisXW && basisZW) {
     const bxE = basisXW.east - originW.east, bxN = basisXW.north - originW.north;
     const bzE = basisZW.east - originW.east, bzN = basisZW.north - originW.north;
@@ -307,11 +540,133 @@ export function mountUndergroundDomainHost(options: Readonly<{
     ] as const;
     toWorldPoint = (local) => mounted.toWorld(local);
   }
+  // R30: publish the actual mounted shaft/room seam to B, C2 and A. This
+  // report does not open the well, grant movement, or replace entry authority.
+  const winch = surveyZa31CraterWinch(road);
+  const shaftContract = winch ? resolveR30ShaftContract({
+    registration, winch, mineYaw: road.anchor.yaw,
+    toWorld: local => mounted.toWorld(local),
+    supportsMineFoot: local => {
+      const p = mine.queryPassage(local[0],local[2],undergroundMineSpec.walker.radius,
+        undergroundMineSpec.walker.standingHeight,'closed');
+      return !!p && Math.abs(p.floor-local[1]) <= .01;
+    },
+    supportAt: (east,north) => road.heightAt(east,north),
+    lampRoom: road.lampRoom?.footprint,
+  }) : { kind: 'unregistered-shaft' as const };
+  const registeredSeam=shaftContract.kind==='ready'&&shaftContract.deep.kind==='registered';
+  interlayerLift=registeredSeam?mountR30InterlayerLift(mounted.group):undefined;
+  const crystalFrame=registeredSeam?makeR30CrystalFrame(mounted.toWorld,road.anchor.yaw):undefined;
+  const mineThreshold=mounted.toWorld([0,-91,139.5])!,mineWinch=mounted.toWorld(gateWinchLocal??[-2.28,-91,138.02])!;
+  crystalHost=createR30CrystalHost({parent,frame:crystalFrame,mineThreshold,mineWinch,
+    supportsMineThreshold:()=>!!mine.queryPassage(0,139.5,.27,1.8,'open'),
+    installMouth:mounted.installCrystalMouth,bridge:options.crystalBridge,readAcceptedFoot:options.readAcceptedDomainFoot,
+    supportsMineInteractionFoot:p=>{const q=passageAt(p.east,p.north);return !!q&&Math.abs(q.floor-p.height)<.025}});
+  let lowerApertureOpen=false;
+  const site=r30InterlayerLiftSite.aperture.lower;
+  const deepHost=createR30DeepHost({parent,seamRegistered:registeredSeam,
+    liftAperture:options.interlayerRide?{site:{lower:site,height:0,ceiling:site.ceiling},readOpen:()=>lowerApertureOpen,
+      split:(rect,hole)=>splitR30LiftAperture({minX:rect.minE,maxX:rect.maxE,minZ:rect.minN,maxZ:rect.maxN},{minX:hole.minE,maxX:hole.maxE,minZ:hole.minN,maxZ:hole.maxN})
+        .map(r=>({minE:r.minX,maxE:r.maxX,minN:r.minZ,maxN:r.maxZ}))}:undefined,
+    readAcceptedWater:()=>options.waterBridge?.readWaterSnapshot?.(),
+    readAcceptedFoot:options.readAcceptedDomainFoot,
+    blocks:(domain,point,radius)=>interlayerLift?.blocks(domain,point,radius)===true||deepAssembly.blocksLayerBoundary(domain,point,radius)});
+  const c2Consumer=options.deepRooms&&!options.deepAssemblyBridge?createR30C2Consumer(options.deepRooms,deepHost):undefined;
+  const deepAssembly=createR30DeepAssembly({parent,seamRegistered:registeredSeam,
+    bridge:c2Consumer?.bridge??options.deepAssemblyBridge,readAcceptedFoot:options.readAcceptedDomainFoot,
+    supportsSecondMine:p=>deepHost.supportsArrival('underground/mine-2',p),secondMineMouthReady:mouth=>deepHost.acceptsMouth(mouth)});
+  // Existing viewer already invokes mounted.sync()/dispose(). Preserve its
+  // entry point and lifecycle, even before A supplies accepted domain feet.
+  /** Swept local move for the single public movement owner. This returns a
+   * legal proposal only; no player pose or authority is changed here. */
+  function resolveMineStep(from:Point,to:Readonly<{east:number;north:number}>,posture:'standing'|'crouching'){
+    if(![from.east,from.north,from.height,to.east,to.north].every(Number.isFinite))return;
+    const distance=Math.hypot(to.east-from.east,to.north-from.north);
+    if(distance>3)return; // a frame step, never a teleport across a wall
+    const initial=passageAt(from.east,from.north,posture);
+    if(!initial||Math.abs(initial.floor-from.height)>.25)return;
+    const count=Math.max(1,Math.ceil(distance/.08));let previous=initial;
+    for(let i=1;i<=count;i++){
+      const p=passageAt(from.east+(to.east-from.east)*i/count,from.north+(to.north-from.north)*i/count,posture);
+      if(!p||Math.abs(p.floor-previous.floor)>.22)return;
+      previous=p;
+    }
+    return {foot:{...to,height:previous.floor},posture,clearance:previous.clearance,
+      eyeHeight:posture==='crouching'?1.0:1.67,requiresCrouch:previous.requiresCrouch};
+  }
+  /** A's single domain-indexed underground floor query. The accepted
+   * domain is the only selector; never infer a floor from elevation. */
+  function domainPassageAt(domain:string,east:number,north:number,posture:'standing'|'crouching'='standing'){
+    const foot=options.readAcceptedDomainFoot?.();
+    if(!foot||foot.domainId!==domain||![foot.east,foot.north,foot.height,east,north].every(Number.isFinite)||
+      (posture!=='standing'&&posture!=='crouching'))return;
+    if(domain===undergroundMineLanding.domainId)return passageAt(east,north,posture);
+    if(domain==='underground/crystal')return crystalHost?.passageAt(domain,east,north,posture);
+    if(domain==='underground/mine-2'){
+      const p=deepHost.passageAt(domain,east,north,undergroundMineSpec.walker.radius,posture==='crouching'?undergroundMineSpec.walker.crouchingHeight:undergroundMineSpec.walker.standingHeight);
+      return p?{...p,requiresCrouch:p.clearance<undergroundMineSpec.walker.standingHeight}:undefined;
+    }
+    const q=deepAssembly.passageAt(domain,east,north,undergroundMineSpec.walker.radius,
+      posture==='crouching'?undergroundMineSpec.walker.crouchingHeight:undergroundMineSpec.walker.standingHeight);
+    return q?{...q,requiresCrouch:q.clearance<undergroundMineSpec.walker.standingHeight}:undefined;
+  }
+  function resolveUndergroundStep(from:Point&Readonly<{domainId:string}>,to:Readonly<{east:number;north:number}>,posture:'standing'|'crouching'){
+    const accepted=options.readAcceptedDomainFoot?.();
+    if(!accepted||from.domainId!==accepted.domainId||![from.east,from.north,from.height,to.east,to.north].every(Number.isFinite)||
+       Math.hypot(from.east-accepted.east,from.north-accepted.north,from.height-accepted.height)>.025)return;
+    const distance=Math.hypot(to.east-from.east,to.north-from.north);
+    if(distance>3)return;
+    const initial=domainPassageAt(from.domainId,from.east,from.north,posture);
+    if(!initial)return;
+    // The registered first-fall receipt is at the water surface (-90),
+    // while the real pool supports the walking body on its bed (-91.2).
+    // Permit exactly a vertical settle at that accepted arrival point;
+    // never waive the ordinary step height or horizontal collision.
+    if(from.domainId===undergroundMineLanding.domainId&&distance<=.001&&
+       Math.hypot(from.east-undergroundMineLanding.east,from.north-undergroundMineLanding.north,from.height-undergroundMineLanding.height)<=.001&&
+       'zone' in initial&&initial.zone==='pool'&&'waterDepth' in initial&&typeof initial.waterDepth==='number'&&initial.waterDepth>0&&
+       Math.abs(initial.floor+initial.waterDepth-from.height)<.001){
+      return {foot:{east:from.east,north:from.north,height:initial.floor,domainId:from.domainId},posture,clearance:initial.clearance,
+       eyeHeight:posture==='crouching'?1:1.67,requiresCrouch:initial.requiresCrouch,waterSettle:true as const};
+    }
+    if(Math.abs(initial.floor-from.height)>.25)return;
+    const count=Math.max(1,Math.ceil(distance/.08));let previous=initial;
+    for(let i=1;i<=count;i++){
+      const p=domainPassageAt(from.domainId,from.east+(to.east-from.east)*i/count,from.north+(to.north-from.north)*i/count,posture);
+      if(!p||Math.abs(p.floor-previous.floor)>.22)return;
+      previous=p;
+    }
+    return {foot:{...to,height:previous.floor,domainId:from.domainId},posture,clearance:previous.clearance,
+      eyeHeight:posture==='crouching'?1:1.67,requiresCrouch:previous.requiresCrouch};
+  }
+  const composed={...mounted,sync(){horseSeat?.sync();approachStory?.sync();if(tutorialCart?.kind==='ready'){const t=performance.now();tutorialCart.sync();tutorialCart.update(Math.max(0,Math.min(.15,(t-tutorialLastFrame)/1000)));tutorialLastFrame=t}encounterArt?.sync();oreArt?.sync();if(mainline?.kind==='ready')mainline.sync();openThinWalls=thinWalls.sync(options.readAcceptedMiningTargets?.());crystalHost?.sync();mounted.sync();acoustics?.sync();waterReadout?.sync(mounted.waterOverlay?.stats());deepHost.sync();deepAssembly.sync();
+    // When the physically connected passage is active, retain the adjacent
+    // second-mine geometry without enabling its movement domain.
+    if(deepHost.mounted&&deepAssembly.activeDomain()===r30LinkDomain(r30DepthLinks[0])&&deepAssembly.openLinks().includes(r30DepthLinks[0].id))
+      deepHost.mounted.group.visible=true;
+    interlayerLift?.showDomain(deepHost.status()==='ready'?'underground/mine-2':undefined);
+    if(options.interlayerRide&&interlayerLift){
+      const lower=options.interlayerRide.lowerOpeningCertified()&&deepHost.lowerApertureReady();
+      const opened=lower&&mounted.installUpperLiftAperture();
+      const cue=interlayerLift.present(options.interlayerRide.read(),options.interlayerRide.now(),opened);
+      lowerApertureOpen=!!cue&&!cue.arrived;
+      deepHost.mounted?.syncLiftAperture();
+    }
+  },dispose(){horseSeat?.dispose();acoustics?.dispose();approachStory?.dispose();if(tutorialCart?.kind==='ready')tutorialCart.dispose();deepRetreat.dispose();waterReadout?.dispose();crouchRoute.dispose();deepBank?.dispose();shallowWayfinding?.dispose();shallowGallery?.dispose();encounterArt?.dispose();oreArt?.dispose();if(mainline?.kind==='ready')mainline.dispose();returnBay.dispose();thinWalls.dispose();deepAssembly.dispose();c2Consumer?.dispose();crystalHost?.dispose();interlayerLift?.dispose();deepHost.dispose();mounted.dispose()}};
   return {
-    kind: 'ready', registration, mounted, passageAt,
-    floorAt: (east: number, north: number) => passageAt(east, north)?.floor,
+    kind: 'ready', registration, mounted:composed, passageAt, shaftContract,deepHost,interlayerLift,crystalHost,deepAssembly,thinWalls,returnBay,mainline,tutorialCart,approachStory,acoustics,soundSites,oreSurvey,oreArt,oreActions,encounterSurvey,encounterArt,shallowGallery,shallowWayfinding,deepBank,crouchRoute,waterReadout,deepRetreat,
+    crouchGuidance(){const foot=options.readAcceptedDomainFoot?.();if(foot?.domainId!==undergroundMineLanding.domainId)return;const local=toLocal?.(foot);if(!local)return;const q=passageAt(foot.east,foot.north,'crouching');if(!q||Math.abs(q.floor-foot.height)>.25)return;return crouchRoute.guidance(local[0],local[2])},
+    // Layout contract only. The actual city/palace receiving shells and
+    // movement/presence host must approve before mounting or allowing travel.
+    deepLayerContract:shaftContract.kind==='ready'&&shaftContract.deep.kind==='registered'
+      ?{frames:r30DeepFrames,localFeet:r30DeepLocalFeet,worldFeet:r30DeepWorldFeet,
+        links:r30DepthLinks,roomProposals:r30DeepRoomProposals,productionReady:false as const}:undefined,
+    resolveMineStep,domainPassageAt,resolveUndergroundStep,
+    canStandUpInDomain:(domain:string,east:number,north:number)=>domainPassageAt(domain,east,north,'standing')!==undefined,
+    canStandUp:(east:number,north:number)=>passageAt(east,north,'standing')!==undefined,
+    floorAt: (east: number, north: number,posture:'standing'|'crouching'='standing') => passageAt(east, north,posture)?.floor,
     toLocal: (world: Point) => toLocal?.(world),
-    offeringsSnapshot: () => offerings?.snapshot(),
-    campFireWorld,
+    offeringsSnapshot: () => storyReceipts?{litNicheIds:[...storyReceipts.lights().litNicheIds],extraCampLightCount:storyReceipts.lights().extraCampLightCount}:offerings?.snapshot(),
+    campFireWorld,pickaxeContract,horseSeat,recoverySite,readRecoveryContact,
   } as const;
 }

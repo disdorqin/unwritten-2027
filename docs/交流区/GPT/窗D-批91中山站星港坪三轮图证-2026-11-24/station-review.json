@@ -1,0 +1,187 @@
+{
+  "passed": true,
+  "reviewOnly": true,
+  "frames": [
+    {
+      "name": "station-1-day.jpg",
+      "frames": 85,
+      "selected": 0,
+      "night": false,
+      "foot": {
+        "name": "中山站候车区",
+        "east": 440,
+        "north": 517.6020000000003,
+        "height": 140,
+        "yaw": 0
+      },
+      "yaw": 0,
+      "walked": 0.801999999999999,
+      "draws": 264,
+      "tris": 177004,
+      "reviewOnly": true
+    },
+    {
+      "name": "station-1-night.jpg",
+      "frames": 95,
+      "selected": 0,
+      "night": true,
+      "foot": {
+        "name": "中山站候车区",
+        "east": 440,
+        "north": 517.6020000000003,
+        "height": 140,
+        "yaw": 0
+      },
+      "yaw": 0,
+      "walked": 0.801999999999999,
+      "draws": 264,
+      "tris": 177004,
+      "reviewOnly": true
+    },
+    {
+      "name": "station-2-day.jpg",
+      "frames": 103,
+      "selected": 1,
+      "night": false,
+      "foot": {
+        "name": "中山站时刻牌",
+        "east": 442.7,
+        "north": 522.1,
+        "height": 140,
+        "yaw": 1.5707963267948966
+      },
+      "yaw": 1.5707963267948966,
+      "walked": 0.801999999999999,
+      "draws": 22,
+      "tris": 147548,
+      "reviewOnly": true
+    },
+    {
+      "name": "station-2-night.jpg",
+      "frames": 110,
+      "selected": 1,
+      "night": true,
+      "foot": {
+        "name": "中山站时刻牌",
+        "east": 442.7,
+        "north": 522.1,
+        "height": 140,
+        "yaw": 1.5707963267948966
+      },
+      "yaw": 1.5707963267948966,
+      "walked": 0.801999999999999,
+      "draws": 22,
+      "tris": 147548,
+      "reviewOnly": true
+    },
+    {
+      "name": "station-3-day.jpg",
+      "frames": 118,
+      "selected": 2,
+      "night": false,
+      "foot": {
+        "name": "星港坪装配场",
+        "east": 324,
+        "north": 654.5,
+        "height": 347,
+        "yaw": 0
+      },
+      "yaw": 0,
+      "walked": 0.801999999999999,
+      "draws": 410,
+      "tris": 185158,
+      "reviewOnly": true
+    },
+    {
+      "name": "station-3-night.jpg",
+      "frames": 127,
+      "selected": 2,
+      "night": true,
+      "foot": {
+        "name": "星港坪装配场",
+        "east": 324,
+        "north": 654.5,
+        "height": 347,
+        "yaw": 0
+      },
+      "yaw": 0,
+      "walked": 0.801999999999999,
+      "draws": 412,
+      "tris": 185162,
+      "reviewOnly": true
+    },
+    {
+      "name": "station-4-day.jpg",
+      "frames": 137,
+      "selected": 3,
+      "night": false,
+      "foot": {
+        "name": "星港坪工具台",
+        "east": 318.3,
+        "north": 656.8,
+        "height": 347,
+        "yaw": 0
+      },
+      "yaw": 0,
+      "walked": 0.801999999999999,
+      "draws": 407,
+      "tris": 185130,
+      "reviewOnly": true
+    },
+    {
+      "name": "station-4-night.jpg",
+      "frames": 145,
+      "selected": 3,
+      "night": true,
+      "foot": {
+        "name": "星港坪工具台",
+        "east": 318.3,
+        "north": 656.8,
+        "height": 347,
+        "yaw": 0
+      },
+      "yaw": 0,
+      "walked": 0.801999999999999,
+      "draws": 409,
+      "tris": 185134,
+      "reviewOnly": true
+    },
+    {
+      "name": "station-5-day.jpg",
+      "frames": 155,
+      "selected": 4,
+      "night": false,
+      "foot": {
+        "name": "星港坪围观区",
+        "east": 342,
+        "north": 654.2,
+        "height": 347,
+        "yaw": 0
+      },
+      "yaw": 0,
+      "walked": 0.801999999999999,
+      "draws": 300,
+      "tris": 185026,
+      "reviewOnly": true
+    },
+    {
+      "name": "station-5-night.jpg",
+      "frames": 163,
+      "selected": 4,
+      "night": true,
+      "foot": {
+        "name": "星港坪围观区",
+        "east": 342,
+        "north": 654.2,
+        "height": 347,
+        "yaw": 0
+      },
+      "yaw": 0,
+      "walked": 0.801999999999999,
+      "draws": 302,
+      "tris": 185030,
+      "reviewOnly": true
+    }
+  ],
+  "errors": []
+}

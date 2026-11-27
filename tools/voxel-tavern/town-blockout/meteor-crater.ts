@@ -1,3 +1,6 @@
+import type { TownC2CraterCentralMoundModel } from './town-c2-crater-central-mound';
+import { bR30CraterBed } from './town-b-r30-crater-relief';
+
 export const meteorCraterRimRadius = 55;
 export const meteorCraterFloorRadius = 20;
 export const meteorCraterDepth = 35;
@@ -29,6 +32,13 @@ export type MeteorCraterPlan = Readonly<{
   mainTrail: MeteorCraterTrail;
 }>;
 
+export type MeteorCraterOptions = Readonly<{
+  /** Optional C2-01 height-authority overlay. Omit it to keep the neutral B-01 fixture unchanged. */
+  centralMound?: TownC2CraterCentralMoundModel;
+  /** 3.0-R relief; old radial plan remains available only to legacy survey fixtures. */
+  naturalRelief?: boolean;
+}>;
+
 /** B-01's reviewed relative shape. The enclosing town host supplies its absolute datum. */
 export const meteorCraterFixturePlan: MeteorCraterPlan = {
   terraces: [
@@ -44,7 +54,8 @@ function positiveAngle(angle: number) {
   return remainder < 0 ? remainder + fullTurn : remainder;
 }
 
-export function createMeteorCrater({ terraces, mainTrail }: MeteorCraterPlan) {
+export function createMeteorCrater({ terraces, mainTrail }: MeteorCraterPlan,
+  { centralMound, naturalRelief = false }: MeteorCraterOptions = {}) {
   if (terraces.length !== 3) throw new RangeError('The crater needs three terraces.');
 
   const profile = [{ radius: meteorCraterRimRadius, depth: 0 }];
@@ -101,11 +112,32 @@ export function createMeteorCrater({ terraces, mainTrail }: MeteorCraterPlan) {
     }
   }
 
+  function bedAt(east: number, north: number) {
+    return naturalRelief ? bR30CraterBed(east, north) : terraceHeightOffsetAt(Math.hypot(east, north));
+  }
+
+  function moundAt(east:number,north:number,bed:number) {
+    const original=centralMound?.heightOverrideAtLocal(east,north,bed);
+    if(!naturalRelief || original===undefined || !centralMound)return original;
+    // Skew the hill shoulders, not the protected well/return corridor. The
+    // approved center and maximum height remain exact; zero rise stays zero.
+    const de=east-centralMound.localCenter.east,dn=north-centralMound.localCenter.north;
+    const r=Math.hypot(de,dn),a=Math.atan2(de,dn);
+    const envelope=Math.min(1,r/5)*Math.min(1,Math.max(0,(centralMound.settings.radius-r)/5));
+    const rise=(original-bed)*(1+envelope*(.13*Math.sin(a*3+.4)+.07*Math.cos(a*5-r*.12)));
+    return bed+Math.max(0,Math.min(centralMound.settings.height,rise));
+  }
+
   function heightOffsetAt(east: number, north: number) {
     const radius = Math.hypot(east, north);
-    const bowlHeight = terraceHeightOffsetAt(radius);
+    const bowlHeight = bedAt(east, north);
+    // C2-01: compose once against the existing bowl, then max the finished trail blend.
+    // The neutral fixture remains byte-for-byte equivalent when no mound is supplied.
+    const moundOverride = bowlHeight === undefined ? undefined :
+      moundAt(east, north, bowlHeight);
+    const groundHeight = moundOverride ?? bowlHeight;
     if (bowlHeight === undefined || radius <= meteorCraterFloorRadius || radius >= meteorCraterRimRadius) {
-      return bowlHeight;
+      return groundHeight;
     }
 
     const angle = positiveAngle(Math.atan2(east, north) - bearing);
@@ -129,7 +161,7 @@ export function createMeteorCrater({ terraces, mainTrail }: MeteorCraterPlan) {
       }
     }
 
-    if (distance >= corridorRadius) return bowlHeight;
+    if (distance >= corridorRadius) return groundHeight;
     const shoulder = Math.max(0, distance - halfWidth) / shoulderWidth;
     const shoulderBlend = shoulder * shoulder * (3 - 2 * shoulder);
     const trailBoundaryDistance = descentRadius * Math.min(trailProgress, 1 - trailProgress);
@@ -138,7 +170,8 @@ export function createMeteorCrater({ terraces, mainTrail }: MeteorCraterPlan) {
     const boundaryBlend = boundaryFeather === 0 ? 1 : Math.min(1,
       Math.min(meteorCraterRimRadius - radius, radius - meteorCraterFloorRadius) / boundaryFeather);
     const trailHeight = -meteorCraterDepth * trailProgress;
-    return bowlHeight + (trailHeight - bowlHeight) * (1 - shoulderBlend) * boundaryBlend;
+    const trailBlend = bowlHeight + (trailHeight - bowlHeight) * (1 - shoulderBlend) * boundaryBlend;
+    return moundOverride === undefined ? trailBlend : Math.max(moundOverride, trailBlend);
   }
 
   /** Preview mesh only. Its indexed Float32 triangles are also the walk sample surface. */
@@ -151,7 +184,8 @@ export function createMeteorCrater({ terraces, mainTrail }: MeteorCraterPlan) {
     const apron = meteorCraterRimRadius + 2 * corridorRadius;
     const minAngle = -radianPadding, maxAngle = sweep + radianPadding;
     const offsets = [-corridorRadius, -halfWidth, 0, halfWidth, corridorRadius];
-    const fixedRadii = [shaftRadius, ...profile.map(row => row.radius), apron];
+    const fixedRadii = [...new Set([shaftRadius, ...profile.map(row => row.radius), apron,
+      ...(naturalRelief ? Array.from({ length: 57 }, (_, i) => i + 2) : [])])].sort((a,b)=>a-b);
     const spokes = Math.ceil(apron * fullTurn / .75);
     const angles = Array.from({ length: spokes + 1 }, (_, i) => i * fullTurn / spokes);
     for (const angle of [0, sweep, minAngle, maxAngle]) angles.push(positiveAngle(angle));
@@ -171,7 +205,10 @@ export function createMeteorCrater({ terraces, mainTrail }: MeteorCraterPlan) {
     }
     const radiusAt = (angle: number) => meteorCraterRimRadius - descentRadius * angle / sweep;
     function vertexHeight(angle: number, radius: number) {
-      const ground = terraceHeightOffsetAt(radius) ?? 0;
+      const localEast = radius * Math.sin(angle + bearing);
+      const localNorth = radius * Math.cos(angle + bearing);
+      const baseGround = bedAt(localEast, localNorth) ?? 0;
+      const ground = moundAt(localEast, localNorth, baseGround) ?? baseGround;
       let distance = corridorRadius, trailAngle = 0;
       for (const turn of turnsAt(angle)) {
         const candidate = angle + turn * fullTurn;
@@ -257,6 +294,7 @@ export function createMeteorCrater({ terraces, mainTrail }: MeteorCraterPlan) {
 
   return {
     heightOffsetAt,
+    bedAt,
     terraceHeightOffsetAt,
     maxMainTrailGrade,
     buildPreviewSurface,

@@ -258,6 +258,56 @@ function buildForecourt() {
     add('forecourt',band%3?'gold':'aged','u11/arena/gate-crown-'+band,
       -5.3+band*.353,floor+9.85+(band%3)*.03,125.3,.32,.16,.55);
 }
+// Chapter 1: only the outer face is built and visible. The D shell's blind
+// backing and its collision/guardian remain authoritative. No new vault action.
+function buildSealedGateFace() {
+  const prefix='u11/arena/sealed-face';
+  // Two full stone leaves, inset into D's actual 7.2m × 9m opening.
+  for(const side of [-1,1]){
+    add('forecourt','shadow',prefix+'/leaf-body-'+side,side*1.81,floor+4.5,126.22,3.58,9,.44);
+    for(let row=0;row<24;row++)for(let col=0;col<8;col++){
+      const x=side*(.245+col*.422),y=floor+.23+row*.36;
+      add('forecourt',(row+col)%9===0?'aged':(row*3+col)%5?'blue':'stone',
+        prefix+'/facing-'+side+'-'+row+'-'+col,x,y,125.975,.411,.348,.095);
+      if((row*17+col*11)%19===0)add('forecourt','shadow',prefix+'/chip-'+side+'-'+row+'-'+col,
+        x+.09,y-.08,125.92,.09,.065,.02);
+    }
+    for(let row=0;row<28;row++){
+      for(const x of [.095,3.44])add('forecourt',row%5===0?'gold':'aged',prefix+'/border-'+side+'-'+row+'-'+x,
+        side*x,floor+.18+row*.31,125.87,.13,.295,.13);
+    }
+    for(const y of [1.15,4.45,7.75])for(let i=0;i<14;i++){
+      add('forecourt',i%4?'gold':'aged',prefix+'/strap-'+side+'-'+y+'-'+i,
+        side*(.18+i*.235),floor+y,125.84,.23,.24,.13);
+      if(i%2===0)add('forecourt','pale',prefix+'/rivet-'+side+'-'+y+'-'+i,
+        side*(.18+i*.235),floor+y,125.755,.09,.09,.04);
+    }
+    // Low-relief ancient ram motif, only on stone; no writing/new narrative.
+    for(let horn=0;horn<2;horn++)for(let k=0;k<24;k++){
+      const a=k*.31,r=.20+k*.023;
+      add('forecourt','gold',prefix+'/ram-relief-'+side+'-'+horn+'-'+k,
+        side*1.80+(horn?1:-1)*(.34+Math.cos(a)*r),floor+5.72+Math.sin(a)*r,125.79,.115,.12,.11);
+    }
+    for(let r=0;r<13;r++)add('forecourt','aged',prefix+'/ram-body-'+side+'-'+r,
+      side*1.8+(r%5-2)*.16,floor+5.15+Math.floor(r/5)*.16,125.80,.16,.15,.09);
+  }
+  // Inlaid lintel frieze and monumental shoulder masonry. Stay entirely
+  // at the existing north rock face, outside the six cover and retreat path.
+  for(let row=0;row<5;row++)for(let col=0;col<34;col++){
+    add('forecourt',row%2?'aged':'blue',prefix+'/entablature-'+row+'-'+col,
+      -6.6+col*.40,floor+9.12+row*.34,125.79,.386,.32,.32);
+  }
+  for(const side of [-1,1])for(let row=0;row<22;row++)for(let col=0;col<5;col++){
+    add('forecourt',(row+col)%5?'stone':'shadow',prefix+'/shoulder-'+side+'-'+row+'-'+col,
+      side*(5.55+col*.46),floor+.23+row*.42,125.81,.45,.40,.35);
+  }
+  // Flush court paver seams are only thin painted-in stone inlays, no hitboxes.
+  for(let row=0;row<34;row++)for(let col=0;col<38;col++){
+    const n=105.7+row*.57,e=-10.9+col*.58;
+    if(Math.hypot(e,n-126)>21.4||(Math.abs(e)<1.55&&n<111))continue;
+    if((row+col)%3===0)add('forecourt','aged',prefix+'/paving-seam-'+row+'-'+col,e,floor+.002,n,.54,.008,.045);
+  }
+}
 function buildVaultReserve() {
   // Only a visual, optional vault-interior continuation beyond D's blind wall.
   // It is NOT attached until U-5 authorizes the door and the host opens it.
@@ -347,6 +397,7 @@ buildColonnade();
 buildThrone();
 buildExitShrine();
 buildForecourt();
+buildSealedGateFace();
 buildVaultReserve();
 buildStoneSconce('colonnade','west-27',-5.7,floor+6.2,27);
 buildStoneSconce('colonnade','east-40',5.7,floor+6.2,40);

@@ -17,6 +17,8 @@ type Options = CampOptions & {
   readLights(): { litNicheIds: ReadonlySet<string>; extraCampLightCount: number; remainingBudget: number };
   pickaxe: {
     available(): boolean;
+    /** In production the existing profile receipt controls availability. */
+    receiptDriven?: boolean;
     aimedAt(point: Point): boolean;
     claim(siteId: typeof undergroundCampPickaxe.siteId): Promise<UndergroundCampPickaxeResult>;
     showPickupNotice(): void;
@@ -47,12 +49,24 @@ export function mountUndergroundCampScene({ parent, actions, ambience, readLight
   const { aim, approach } = pickaxeSite;
   const geometry = new BoxGeometry();
   const material = new MeshLambertMaterial();
+  // One original old tool, on the original surveyed table. Worn shaft,
+  // leather grip, iron collar, tapered asymmetric pick head. No second
+  // collectible or extra collision is created by the decorative parts.
   const parts = [
     { x: 0, z: -.01, size: [.044, .055, .48], color: '#74573c' },
     { x: 0, z: -.21, size: [.052, .059, .083], color: '#55432f' },
-    { x: 0, z: .24, size: [.20, .066, .070], color: '#747779' },
-    { x: -.13, z: .218, size: [.082, .059, .047], color: '#5b5e60' },
-    { x: .135, z: .222, size: [.083, .049, .045], color: '#595b5d' },
+    ...Array.from({length:6},(_,i)=>({x:0,z:-.25+i*.024,size:[.055,.060,.016],color:i%2?'#55432f':'#66503b'})),
+    ...Array.from({length:5},(_,i)=>({x:.020,z:-.085+i*.055,size:[.009,.037,.039],color:i%2?'#927653':'#654d35'})),
+    { x: 0, z: .18, size: [.063, .064, .07], color: '#766456' },
+    { x: 0, z: .24, size: [.11, .066, .079], color: '#747779' },
+    { x: -.076, z: .235, size: [.055, .060, .064], color: '#626767' },
+    { x: -.121, z: .219, size: [.044, .052, .052], color: '#5b5e60' },
+    { x: -.158, z: .203, size: [.033, .039, .036], color: '#51595d' },
+    { x: -.182, z: .185, size: [.020, .027, .024], color: '#8a9090' },
+    { x: .073, z: .238, size: [.049, .062, .065], color: '#696864' },
+    { x: .115, z: .228, size: [.036, .056, .053], color: '#5f5f5a' },
+    { x: .145, z: .215, size: [.026, .047, .043], color: '#8a8c83' },
+    { x: .020, z: .261, size: [.042, .048, .016], color: '#8c7256' },
   ];
   const tool = new InstancedMesh(geometry, material, parts.length);
   tool.name = undergroundCampPickaxe.siteId;
@@ -80,7 +94,7 @@ export function mountUndergroundCampScene({ parent, actions, ambience, readLight
   }
 
   function canCollect(at: Point) {
-    return !taken && pickaxe.available() && !interactions.snapshot().seatedRoomId &&
+    return (!taken || pickaxe.receiptDriven === true) && pickaxe.available() && !interactions.snapshot().seatedRoomId &&
       Math.hypot(at[0] - aim[0], at[2] - aim[2]) <= undergroundCampPickaxe.horizontalReach &&
       Math.abs(at[1] - approach[1]) <= undergroundCampPickaxe.verticalReach &&
       Math.abs((camp.queryPassage(at[0], at[2], layout.walker.radius, layout.walker.standingHeight)?.floor ?? Infinity) - approach[1]) <= .002 &&
@@ -99,7 +113,7 @@ export function mountUndergroundCampScene({ parent, actions, ambience, readLight
     const active = footing() !== undefined;
     camp.group.visible = active;
     mix?.setInCamp(active);
-    tool.visible = active && !taken && pickaxe.available();
+    tool.visible = active && (!taken || pickaxe.receiptDriven === true) && pickaxe.available();
     if (active) {
       const { litNicheIds, extraCampLightCount, remainingBudget } = readLights();
       lights.sync(litNicheIds, extraCampLightCount, remainingBudget);

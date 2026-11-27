@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
-  parseQualityTier, particleDensityScale, qualityPixelRatioCap, qualityTier,
+  initialQualityTier, parseQualityTier, particleDensityScale, qualityPixelRatioCap, qualityTier,
   qualityTierKey, qualityTierOrder, qualityTierParams, scaledDrawCount,
   scaledParticleCount, setQualityTier,
 } from '../tools/voxel-tavern/town-blockout/town-quality.ts';
@@ -15,6 +15,13 @@ test('quality tiers: balanced reproduces the pre-tier behaviour exactly', () => 
   assert.equal(qualityTierParams.smooth.label, '流畅');
   assert.equal(qualityTierParams.fine.label, '精美');
   assert.deepEqual([...qualityTierOrder], ['smooth', 'balanced', 'fine']);
+});
+
+test('first visit uses smooth on mobile and preserves saved choices', () => {
+  assert.equal(initialQualityTier(null, true), 'smooth');
+  assert.equal(initialQualityTier(undefined, false), 'balanced');
+  assert.equal(initialQualityTier('fine', true), 'fine');
+  assert.equal(initialQualityTier('smooth', false), 'smooth');
 });
 
 test('quality tiers: both knobs rise monotonically across the tiers', () => {

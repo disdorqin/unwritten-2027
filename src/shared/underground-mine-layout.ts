@@ -1,5 +1,9 @@
 import type { UndergroundMineGateStage } from '../presence/underground-mine-gate.js';
 import { createUndergroundMineExpansionShell } from './underground-mine-expansion-shell.js';
+import {createFirstMineWorkfaces,createFirstMineSupportStation,workfaceBlocks} from './town-c-first-mine-workfaces.js';
+import {firstMineDeepWorks} from './town-c-first-mine-deep-works.js';
+import {firstMineShallowWorks} from './town-c-first-mine-shallow-works.js';
+import {r30ReturnBay,r30ReturnBayBlocks} from './town-c-r30-return-bay.js';
 
 export const undergroundMineDepth = -90;
 export const undergroundMineGalleryWidth = 4;
@@ -10,7 +14,7 @@ export type UndergroundMineSpec = {
   shoreLength: number;
   gallery: { length: number; drop: number; railGauge: number; railWidth: number };
   collapse: { length: number; width: number; height: number };
-  camp: { length: number; side: 'left' | 'right'; extension: number; openBackForExpansion?: boolean; crystalGate?: boolean };
+  camp: { length: number; side: 'left' | 'right'; extension: number; openBackForExpansion?: boolean; crystalGate?: boolean;thinWalls?:boolean;supportAnnex?:boolean;returnBay?:boolean;runningMainline?:boolean };
   walker: { radius: number; standingHeight: number; crouchingHeight: number; maxGrade: number };
 };
 
@@ -109,8 +113,20 @@ export function createUndergroundMineLayout(spec: UndergroundMineSpec) {
   const expansion = campBackOpening && createUndergroundMineExpansionShell({
     ...campBackOpening,
     layerStartZ: poolSpan.start,
-    crystalGate: camp.crystalGate,
+    crystalGate: camp.crystalGate,thinWalls:camp.thinWalls,supportAnnex:camp.supportAnnex,runningMainline:camp.runningMainline,
   });
+  const hasReturnBay=!!camp.returnBay&&expansion?.deepWorks===true&&main.start===12&&main.end===32&&main.floorStart===-90&&main.floorEnd===-91;
+  const gallerySlice=(start:number,end:number,left=main.left):Span=>({...main,start,end,left,floorStart:floorAt(main,start),floorEnd:floorAt(main,end)});
+  const geometrySpans=hasReturnBay?[poolSpan,shore,gallerySlice(main.start,r30ReturnBay.minZ),
+    gallerySlice(r30ReturnBay.minZ,r30ReturnBay.maxZ,r30ReturnBay.minX),gallerySlice(r30ReturnBay.maxZ,main.end),gap,campSpan]:spans;
+  const workfaces=expansion ? createFirstMineWorkfaces(expansion.bounds,campFloor).filter(a=>
+    expansion.queryPassage(a.x,a.z,Math.min(a.depth,a.width)/2,a.height,'open') &&
+    expansion.queryPassage(...[a.foot[0],a.foot[2],walker.radius,walker.standingHeight,'open'] as const)) : [];
+  const station=expansion&&createFirstMineSupportStation(expansion.bounds,campFloor);
+  const supportStation=station&&expansion?.queryPassage(station.x,station.z,station.width/2,station.height,'open')&&
+    expansion.queryPassage(station.foot[0],station.foot[2],walker.radius,walker.standingHeight,'open')?station:undefined;
+  const deepFixtures=expansion?.deepWorks?[...firstMineDeepWorks.fixtures,...firstMineShallowWorks.fixtures]:[];
+  const staticFixtures=[...workfaces,...(supportStation?[supportStation]:[]),...deepFixtures];
   const poolLanding: Point = [0, level, pool.length / 2];
   const aperture = pool.shaftAperture;
   const poolShaftOpening = aperture && {
@@ -147,9 +163,9 @@ export function createUndergroundMineLayout(spec: UndergroundMineSpec) {
     else quad('rock', a, d, c, b);
   }
 
-  for (const span of spans) {
+  for (const span of geometrySpans) {
     const { start, end, left, right, floorStart, floorEnd, height } = span;
-    if (span === main) {
+    if (span.zone === 'gallery') {
       const halfGauge = gallery.railGauge / 2;
       const halfRail = gallery.railWidth / 2;
       const edges = [left, -halfGauge - halfRail, -halfGauge + halfRail,
@@ -191,9 +207,9 @@ export function createUndergroundMineLayout(spec: UndergroundMineSpec) {
   } else {
     faceAt(campSpan.end, campSpan.left, campSpan.right, campFloor, campFloor + campSpan.height, false);
   }
-  for (let index = 1; index < spans.length; index++) {
-    const before = spans[index - 1];
-    const after = spans[index];
+  for (let index = 1; index < geometrySpans.length; index++) {
+    const before = geometrySpans[index - 1];
+    const after = geometrySpans[index];
     const y = after.floorStart;
     const z = after.start;
     const overlapLeft = Math.max(before.left, after.left);
@@ -224,17 +240,20 @@ export function createUndergroundMineLayout(spec: UndergroundMineSpec) {
 
   /** Sweeps the player's footprint across joins and retains the most limiting floor and ceiling. */
   function queryPassage(x: number, z: number, radius: number, bodyHeight: number,
-      gateStage: UndergroundMineGateStage = 'closed') {
+      gateStage: UndergroundMineGateStage = 'closed',openThinWalls:ReadonlySet<string>=new Set()) {
     if (![x, z, radius, bodyHeight].every(Number.isFinite) || radius < 0 || bodyHeight <= 0 ||
         z - radius < poolSpan.start) return;
     const touchesExpansion = expansion && z + radius >= campSpan.end;
-    const rear = touchesExpansion ? expansion.queryPassage(x, z, radius, bodyHeight, gateStage) : undefined;
+    const rear = touchesExpansion ? expansion.queryPassage(x, z, radius, bodyHeight, gateStage,openThinWalls) : undefined;
     if ((touchesExpansion || z + radius > campSpan.end) && !rear) return;
-    if (rear && z - radius >= campSpan.end) return rear;
+    if (rear && z - radius >= campSpan.end) {
+      if(workfaceBlocks(staticFixtures,x,z,radius,bodyHeight,rear.floor))return;
+      return rear;
+    }
     const center = spans.find(span => z < span.end) ?? campSpan;
     let highestFloor = -Infinity;
     let lowestCeiling = Infinity;
-    for (const span of spans) {
+    for (const span of geometrySpans) {
       const first = Math.max(span.start, z - radius);
       const last = Math.min(span.end, z + radius);
       if (first > last) continue;
@@ -253,6 +272,7 @@ export function createUndergroundMineLayout(spec: UndergroundMineSpec) {
     const usableClearance = clearance + 1e-9;
     if (usableClearance < bodyHeight) return;
     const y = floorAt(center, z);
+    if(hasReturnBay&&r30ReturnBayBlocks(x,z,radius,bodyHeight,y))return;
     return {
       zone: center.zone,
       floor: y,
@@ -279,7 +299,10 @@ export function createUndergroundMineLayout(spec: UndergroundMineSpec) {
   return {
     mesh,
     route,
-    expansion,
+    expansion,hasReturnBay,
+    workfaces,
+    supportStation,
+    deepFixtures,
     crouchInterval: [gap.start - walker.radius, gap.end + walker.radius] as const,
     anchors: {
       poolLanding,

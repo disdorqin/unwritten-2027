@@ -1,12 +1,20 @@
 import {
   BoxGeometry, BufferGeometry, CanvasTexture, Color, ConeGeometry, CylinderGeometry,
   DataTexture, DodecahedronGeometry, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial,
-  NearestFilter, PlaneGeometry, PointLight, SRGBColorSpace, TorusGeometry,
+  NearestFilter, PlaneGeometry, PointLight, RepeatWrapping, SRGBColorSpace, TorusGeometry, RingGeometry,
 } from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
+import {mountAR30StaticBatches} from './town-a-r30-static-batches';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
+import { industrialBuilder, type IndustryPoint, type IndustryWindow } from './town-a-r30-industrial-shell';
+import { orientedSupportBox, supportFootprintOverlaps } from './town-a-r30-oriented-support';
+import { oreYardFootway, coldFurnaceFootway, waterTowerFootway, ruinedShedFootway, sealedStorehouseFootway, sortingShedFootway, salvagePipeFootway, outerLandscapeFootways } from './town-a-r30-west-landscape';
+import { northFootwayPosts } from './town-a-r30-north-connector';
+import { createZa36StrataTexture } from './town-za36-crater-ejecta';
 
 type CraterRoad = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'heightAt'>;
+export type CraterTowerWalkPoint = Readonly<{east:number;north:number;height:number}>;
+export type CraterTowerRoute = Readonly<{id:string;entry:CraterTowerWalkPoint;stairs:readonly CraterTowerWalkPoint[];lookout:CraterTowerWalkPoint;rubbing:CraterTowerWalkPoint;rubbingUse:CraterTowerWalkPoint}>;
 export type CraterOuterSite = Readonly<{
   id: string; east: number; north: number; height: number; radius: number;
   topHeight?: number;
@@ -38,6 +46,37 @@ function pixelMaterial(base: string, shade: string, seed: number, accent = shade
   return new MeshStandardMaterial({ map, roughness: 1 });
 }
 
+/** Calm, continuous industrial surfaces. The random high-contrast legacy
+ * pixels stay on the old props; walls and equipment use joined boards,
+ * staggered brick courses or rolled sheet, with restrained tonal variation. */
+function industrialSurface(kind:'wood'|'brick'|'sheet'|'plaster',base:number){
+  const size=32,data=new Uint8Array(size*size*4);
+  const r=base>>16&255,g=base>>8&255,b=base&255;
+  for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+    let tone=0;
+    if(kind==='wood'){
+      const board=Math.floor(x/8),seam=x%8===0;
+      tone=seam?-23:((board*13)%15-7)+((x*7+Math.floor(y/9)*3)%7-3);
+    }else if(kind==='brick'){
+      const row=Math.floor(y/8),bx=(x+(row%2)*8)%16;
+      tone=y%8===0||bx===0?-24:((row*17+Math.floor((x+(row%2)*8)/16)*11)%13-6);
+    }else if(kind==='plaster'){
+      tone=Math.round(3*Math.sin(x*.47+y*.31)+2*Math.cos(y*.68-x*.16));
+    }else{
+      tone=x%8===0?-18:x%8===1?8:((Math.floor(y/8)+x*3)%5-2);
+    }
+    const c=(v:number)=>Math.max(0,Math.min(255,v+tone));
+    data.set([c(r),c(g),c(b),255],(y*size+x)*4);
+  }
+  const map=new DataTexture(data,size,size);
+  map.magFilter=map.minFilter=NearestFilter;
+  map.wrapS=map.wrapT=RepeatWrapping;
+  map.colorSpace=SRGBColorSpace;map.needsUpdate=true;
+  const material=new MeshStandardMaterial({map,roughness:kind==='sheet'?.86:1});
+  material.userData.metricTextureSpan=kind==='plaster'?1.6:.84;
+  return material;
+}
+
 function hash(n: number) {
   const x = Math.sin(n * 127.1 + 311.7) * 43758.5453;
   return x - Math.floor(x);
@@ -48,7 +87,12 @@ const d2r = (deg: number) => deg * Math.PI / 180;
 /** Narrow-gauge corridor reserved for mainline 3: station (105°) along the belt's
  * inner edge to the smelter door (207°). Nothing in this module may intrude. */
 export const craterBeltTrackCorridor: readonly (readonly [number, number])[] = [
-  [100, 80], [120, 79], [140, 79], [150, 81.5], [160, 84], [176, 84], [190, 80], [207, 80],
+  // Freight-side departure (west of the passenger and freight tracks),
+  // then a single smooth S around the real supply stairs. Coordinates are
+  // local EN offsets from the canonical crater anchor, not world teleports.
+  ...([[62.5,-11],[59,-24],[52,-34],[47,-45],[48,-54],[50.4,-61],[48,-67.5],[42,-75]] as const)
+    .map(([e,n])=>[Math.atan2(e,n)*180/Math.PI,Math.hypot(e,n)] as const),
+  [160,84],[176,76],[190,75],[201,75],[207,80],
 ];
 
 /**
@@ -103,6 +147,9 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   const group = new Group();
   group.name = 'crater-outer-works';
   const sites: CraterOuterSite[] = [];
+  const towerRoutes: CraterTowerRoute[] = [];
+  const industrialRoutes:{id:string;points:IndustryPoint[]}[]=[];
+  const gatehouseSeats:{id:string;east:number;north:number;height:number;useEast:number;useNorth:number;yaw:number}[]=[];
   // S-1 collision (分支窗 A): structural wall boxes + standable floors in
   // world coordinates, exported for the za22 top group's userData. Solid
   // shells get one mass box each; designed gaps (wall gate, fence-ring
@@ -134,10 +181,27 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     color: palette.windowWarm, emissive: palette.ember, emissiveIntensity: 1.25, roughness: .8,
   });
 
+  const workshopWood=industrialSurface('wood',0x7b6148);
+  const workshopBrick=industrialSurface('brick',0x74665d);
+  const workshopSheet=industrialSurface('sheet',0x54575a);
+  const workshopRust=industrialSurface('sheet',0x715044);
+  const tankPatina=industrialSurface('sheet',0x43584e);
+  const towerMasonry=industrialSurface('brick',0x686d62);
+  const shoulderRock=new MeshStandardMaterial({map:createZa36StrataTexture(0x77716a,0x625a50,0xa08c70,37),roughness:1,flatShading:true});
+  shoulderRock.name='A-R02-outer-shoulder-strata';
+  const basaltRock=new MeshStandardMaterial({map:createZa36StrataTexture(0x55514b,0x47433f,0x645e55,19),roughness:1,flatShading:true});
+  const weatheredBed=new MeshStandardMaterial({map:createZa36StrataTexture(0xa38956,0x806b45,0xb39a6b,23),roughness:1,flatShading:true});
+  basaltRock.name='A-R02-weathered-basalt';weatheredBed.name='A-R02-ochre-bedding';
+  const wallPlaster=industrialSurface('plaster',0x9b885f);
+  const cleanSnow=new MeshStandardMaterial({color:0xdce5ee,roughness:1});
+  const frostedGlass=new MeshStandardMaterial({color:0x99846b,roughness:.6,emissive:0xffb767,emissiveIntensity:.24});
+  const coldGlass=new MeshStandardMaterial({color:0x6c8291,roughness:.65,emissive:0x657786,emissiveIntensity:.06});
+  const windowRows=(xs:readonly number[],width:number,low:number,high:number):IndustryWindow[]=>
+    ([1,-1] as const).flatMap(side=>xs.map(x=>({side,x,width,low,high})));
   const batches = new Map<MeshStandardMaterial, BufferGeometry[]>();
   function part(mat: MeshStandardMaterial, geo: BufferGeometry, east: number, h: number, north: number,
     yaw = 0, pitch = 0, roll = 0) {
-    const g = geo.index ? geo.toNonIndexed() : geo;
+    const g = geo;
     if (roll) g.rotateZ(roll);
     if (pitch) g.rotateX(pitch);
     if (yaw) g.rotateY(yaw);
@@ -145,11 +209,21 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     const batch = batches.get(mat) ?? [];
     batch.push(g);
     batches.set(mat, batch);
-    if (g !== geo) geo.dispose();
+    // Transferred to the static batch; release after merging.
   }
   function box(mat: MeshStandardMaterial, east: number, h: number, north: number,
     sx: number, sy: number, sz: number, yaw = 0, pitch = 0, roll = 0) {
-    part(mat, new BoxGeometry(sx, sy, sz), east, h, north, yaw, pitch, roll);
+    const geo=new BoxGeometry(sx,sy,sz);
+    const span=mat.userData.metricTextureSpan;
+    if(typeof span==='number'&&span>0){
+      const uv=geo.getAttribute('uv'),normal=geo.getAttribute('normal');
+      // Constant physical texture size on different wall/prop dimensions.
+      for(let i=0;i<uv.count;i++){
+        const x=Math.abs(normal.getX(i))>.5,y=Math.abs(normal.getY(i))>.5;
+        uv.setXY(i,uv.getX(i)*(x?sz:sx)/span,uv.getY(i)*(y?sz:sy)/span);
+      }
+    }
+    part(mat,geo,east,h,north,yaw,pitch,roll);
   }
   function cyl(mat: MeshStandardMaterial, east: number, h: number, north: number,
     rTop: number, rBottom: number, height: number, segments = 10, yaw = 0, pitch = 0, roll = 0) {
@@ -232,58 +306,236 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     // Yard pad and hall: stone base, corrugated walls, timber posts, slate gable.
     const pad = fr.at(0, 0);
     cyl(stoneDark, pad.east, g + .07, pad.north, 19.5, 20.5, .14, 4, fr.yaw);
-    put(stone, 0, g + .6, 0, 28, 1.2, 11);
-    // A-4: 28m long hall, real 18m gable ridge (not the former 12.3m
-    // warehouse roof). Eaves overhang 1.2m and frame follows the tall wall.
-    put(corrugated, 0, g + 7.05, 0, 28, 11.7, 11);
-    for (const dx of [-13.5, -6.75, 0, 6.75, 13.5]) put(timber, dx, g + 7.05, 5.45, .45, 11.7, .3);
-    put(slate, -7.05, g + 15.35, 0, 14.6, .28, 12.6, 0, .43);
-    put(slate, 7.05, g + 15.35, 0, 14.6, .28, 12.6, 0, -.43);
-    put(timber, 0, g + 18.45, 0, 28.6, .38, .55);
-    for (const dx of [-10.5, -3.5, 3.5, 10.5]) {
-      put(stoneDark, dx, g + 10.4, 5.61, 2.25, 1.65, .12);
-      put(timberWarm, dx, g + 11.25, 5.67, 2.4, .13, .16);
+    const hall=industrialBuilder(fr,g,put,colliders,floors);
+    hall.slab(workshopBrick,0,0,28,11,1.2,1.2);
+    // The cold-sealed furnace aperture remains decorative; a separate
+    // service entrance at +4.7m gives the actual hall its walkable interior.
+    hall.shell(workshopSheet,28,11,1.2,12.9,4.7,3.2,3.5,
+      {openings:windowRows([-10.5,-3.5,3.5,10.5],2.25,9.4,11.1),frame:timber,glass:coldGlass});
+    const access=hall.stairs(stone,4.7,8.30,'z',-1,5,.56,2.65,0,1.2);
+    industrialRoutes.push({id:'smelter-plant',points:[hall.point(4.7,8.85,0),...access,hall.point(4.7,3.4,1.2),hall.point(4.7,0,1.2),hall.point(8,0,1.2)]});
+    // Working hall: columns, riveted furnace mass, ducting, ingot bench
+    // and overhead crossbeams. The center remains occupied by real equipment.
+    for(const side of [-1,1])for(const dx of [-12,-6,6,12]){
+      hall.piece(workshopSheet,dx,side*4.7,.38,.38,1.2,12.9);
+      put(workshopWood,dx,g+12.45,0,.3,.4,10.3);
+      put(workshopRust,dx,g+1.44,side*4.7,.60,.48,.60);
+      put(workshopSheet,dx,g+12.7,side*4.7,.62,.25,.62);
     }
-    // Oxidized seams and coherent short snow caps break the old solar-panel silhouette.
-    for (const side of [-1, 1]) for (const dz of [-4.5, 0, 4.5])
-      put(snow, side * 8.65, g + 15.3, dz, 3.8, .08, 1.5, 0, -side * .43);
+    hall.piece(workshopBrick,0,-.3,3.2,3.1,1.2,2.1);
+    hall.piece(workshopRust,0,-.3,2.5,2.5,2.1,6.1);
+    // Cold furnace: structural rings, bolted access cover and an overhead
+    // duct. The cover remains closed; no heat, reward or process authority.
+    for(const h of [2.24,3.64,5.89]){
+      for(const s of [-1,1]){
+        put(workshopSheet,s*1.26,g+h,-.3,.12,.18,2.64);
+        put(workshopSheet,0,g+h,-.3+s*1.26,2.64,.18,.12);
+      }
+    }
+    put(workshopSheet,0,g+3.25,1.01,1.42,1.78,.16);
+    put(dark,0,g+3.25,1.10,1.05,1.41,.035);
+    for(const x of [-.59,.59])for(const h of [2.49,3.12,3.90])
+      put(brass,x,g+h,1.12,.10,.10,.075);
+    put(workshopSheet,.35,g+3.2,1.18,.13,.13,.30);
+    // Flush plates and pipework fit inside the masonry footing.
+    for(const s of [-1,1]){
+      put(workshopSheet,s*1.32,g+3.62,-.3,.14,2.0,1.72);
+      put(workshopRust,s*1.40,g+3.62,-.3,.06,1.72,1.42);
+      for(const z of [-.94,.34])for(const h of [2.86,3.62,4.38])
+        put(workshopSheet,s*1.44,g+h,z,.07,.11,.11);
+      put(workshopSheet,s*1.34,g+3.32,-.19,.21,.13,.58);
+      for(const z of [-1.16,.56]){
+        put(workshopSheet,s*1.36,g+4.22,z,.18,3.88,.18);
+        for(const h of [2.48,4.68,5.72])put(workshopRust,s*1.40,g+h,z,.23,.15,.23);
+      }
+    }
+    put(iron,0,g+7.25,-.3,1.25,2.3,1.25);
+    put(workshopRust,-4.7,g+8.6,-.3,10.5,.65,.65);
+    for(const x of [-8.9,-6.2,-3.5,-.8]){
+      put(workshopSheet,x,g+8.6,-.3,.16,.80,.80);
+      put(timber,x,g+10.65,-.3,.12,3.45,.12);
+    }
+    for(const dx of [-9,-6,9,12]){
+      hall.piece(workshopWood,dx,-3.6,2.0,1.2,1.2,2.35);
+      for(let k=0;k<3;k++)put(iron,dx-.6+k*.6,g+2.48,-3.6,.45,.25,.7);
+    }
+    for(const dx of [3.1,6.3])put(iron,dx,g+3.0,5.5,.18,3.6,.34);
+    put(iron,4.7,g+4.83,5.5,3.45,.22,.34);
+    for (const dx of [-13.5, -6.75, 0, 6.75, 13.5]) put(timber, dx, g + 7.05, 5.45, .45, 11.7, .3);
+    // The ridge runs along the 28m length, not across the hall.
+    // Both roof halves and snow caps share the same pitch and ridge.
+    const eaves = 12.9, roofRise = 5.55, roofRun = 6.35;
+    const roofPitch = Math.atan2(roofRise, roofRun);
+    const roofSlant = Math.hypot(roofRise, roofRun);
+    for (const side of [-1, 1]) {
+      put(slate, 0, g + eaves + roofRise / 2, side * roofRun / 2,
+        29.2, .22, roofSlant + .05, side * roofPitch);
+      for (let bay = 0; bay < 14; bay++) {
+        const dx = -13.55 + bay * 2.08;
+        for (let row = 0; row < 3; row++) {
+          const t = (row + .5) / 3;
+          put(row === 0 && bay % 4 === 0 ? rustIron : slate,
+            dx, g + eaves + roofRise * t + .19, side * roofRun * (1 - t),
+            2.13, .09, roofSlant / 3 + .14, side * roofPitch);
+        }
+        if (bay % 3 === 0) {
+          const t = .22 + (bay % 2) * .13;
+          put(snow, dx, g + eaves + roofRise * t + .29, side * roofRun * (1-t),
+            1.85, .1, 1.45, side * roofPitch);
+        }
+      }
+      put(timber, 0, g + eaves + .06, side * roofRun, 29.3, .3, .24);
+    }
+    // End walls meet the roof rather than leaving two open triangular gaps.
+    for (const side of [-1, 1]) for (let course = 0; course < 10; course++) {
+      const t = (course + 1) / 10;
+      put(corrugated, side * 13.93, g + eaves + roofRise * (course + .5) / 10,
+        0, .20, roofRise / 10 + .015, Math.max(.14, 11 * (1-t)));
+    }
+    put(timber, 0, g + 18.6, 0, 29.3, .24, .35);
+    // Recessed stone lintels above actual glazing; no false dark window
+    // plates over the newly constructed openings.
+    for(const side of [-1,1])for(const dx of [-10.5,-3.5,3.5,10.5]){
+      put(stoneDark,dx,g+11.23,side*5.52,2.58,.23,.27);
+      put(stoneDark,dx,g+9.29,side*5.52,2.55,.18,.29);
+    }
+    for(const dx of [-10.5,-3.5,3.5,10.5]){
+      // Visible timber trusses under the roof. They span both walls and meet
+      // the ridge; the cold furnace has no animated fire or new authority.
+      put(timber,dx,g+12.58,0,.25,.3,10.8);
+      put(timber,dx,g+15.54,0,.22,5.9,.22);
+      for(const side of [-1,1])put(timber,dx,g+15.4,side*2.85,.25,8.0,.25,side*.78);
+    }
+    // Small hoist and bucket at the original loading side, away from the
+    // open service entrance. Structural footing and hook are separate.
+    hall.piece(stoneDark,-12,8.5,1.15,1.15,0,.48);
+    hall.piece(timber,-12,8.5,.36,.36,.48,4.6);
+    put(timber,-10.5,g+4.50,8.5,3.4,.35,.35);
+    put(timber,-11.1,g+3.35,8.5,2.55,.22,.25,0,.69);
+    put(iron,-9.0,g+3.25,8.5,.07,2.2,.07);
+    const bucket=fr.at(-9.0,8.5);
+    cyl(rustIron,bucket.east,g+1.65,bucket.north,.5,.39,.72,10,fr.yaw);
+    cyl(iron,bucket.east,g+2.03,bucket.north,.52,.52,.08,10,fr.yaw);
+    hall.piece(timberWarm,-11.0,-2.7,1.8,1.0,1.2,2.3);
+    // Roof snow is now generated on the sloped tile plane above.
     // Cold furnace mouth on the yard face: dark arch inset, iron door ajar.
     put(dark, -4, g + 2.2, 5.56, 3.4, 4.4, .18);
     const doorP = fr.at(-2.1, 5.75);
     box(iron, doorP.east, g + 2.1, doorP.north, 1.7, 4.2, .14, fr.yaw + .5);
-    // Tall brick chimney, cold.
-    put(rustIron, 10.5, g + 13.0, -2, 1.5, 18, 1.5);
-    put(stoneDark, 10.5, g + 22.25, -2, 1.9, .5, 1.9);
+    // Cold chimney: restrained masonry courses and a recessed dark flue.
+    // All projecting detail is above the roof or within the existing stack.
+    // Start at the actual roof penetration; the old full solid shaft
+    // ran through the occupied hall below without a corresponding wall.
+    put(workshopBrick,10.5,g+19.35,-2,1.5,5.30,1.5);
+    put(workshopRust,10.5,g+16.76,-2,2.05,.15,2.05);
+    for(const h of [19.0,20.15,21.3]){
+      put(workshopRust,10.5,g+h,-2,1.59,.13,1.59);
+      for(const x of [-.58,.58])for(const s of [-1,1])
+        put(workshopSheet,10.5+x,g+h,-2+s*.80,.08,.08,.06);
+    }
+    put(stoneDark,10.5,g+22.10,-2,1.9,.20,1.9);
+    for(const s of [-1,1]){
+      put(workshopBrick,10.5+s*.78,g+22.36,-2,.34,.32,1.9);
+      put(workshopBrick,10.5,g+22.36,-2+s*.78,1.22,.32,.34);
+    }
+    put(dark,10.5,g+22.215,-2,1.22,.025,1.22);
     // Ingot stacks and crates left where the last shift dropped them.
-    for (let s = 0; s < 3; s++) {
-      for (let layer = 0; layer < 3 - s; layer++) {
-        for (let i = 0; i < 4 - layer; i++) {
-          put(iron, 6 + s * 2.6, g + .45 + layer * .62, 9.5, 1.9, .55, .8);
+    // Actual staggered billets on pallets rather than coincident meshes.
+    // Preserve the center service lane.
+    for(let s=0;s<3;s++){
+      const x=7.6+s*2.65,z=10.35,levels=3-s;
+      hall.piece(timber,x,z,2.05,2.3,0,.16);
+      for(let layer=0;layer<levels;layer++){
+        const count=4-layer;
+        for(let i=0;i<count;i++){
+          const q=z+(i-(count-1)/2)*.47;
+          hall.piece(workshopSheet,x,q,1.75-layer*.19,.43,.16+layer*.32,.47+layer*.32);
         }
       }
     }
-    put(timberWarm, -9, g + .8, 9, 1.6, 1.6, 1.6);
-    put(timberWarm, -7.2, g + .7, 9.4, 1.4, 1.4, 1.4, 0, .2);
+    hall.piece(timberWarm,-9,10.65,1.6,1.6,0,1.6);
+    hall.piece(timber,-7.2,10.85,1.4,1.4,0,1.4);
+    for(const side of [-1,1])for(let bay=0;bay<7;bay++){
+      const x=-12.8+bay*4.25;
+      put(snow,x,g+12.98,side*6.31,1.05,.11,.37);
+      for(let j=0;j<3;j++){
+        const h=.22+.14*((bay+j*2)%4);
+        put(snow,x-.35+j*.25,g+12.90-h/2,side*6.42,.105,h,.105);
+      }
+    }
     // Blast-furnace tower, independent at the west end: tapered iron stack, cold mouth.
     const bf = fr.at(-19.5, 0);
-    cyl(rustIron, bf.east, g + 5, bf.north, 1.9, 2.7, 10, 12);
-    cyl(iron, bf.east, g + 10.3, bf.north, 2.15, 2.15, .6, 12);
-    const bfDoor = fr.at(-19.5, 2.55);
-    box(dark, bfDoor.east, g + 1.1, bfDoor.north, 1.6, 2.2, .2, fr.yaw);
-    cone(slag, fr.at(-19.5, 6.5).east, g + 1.1, fr.at(-19.5, 6.5).north, 3.4, 2.2, 10);
-    cone(slag, fr.at(-24, -5).east, g + .9, fr.at(-24, -5).north, 2.8, 1.8, 10);
-    // S-1 collision: the hall is a solid mass (the furnace mouth is a dark
-    // inset, the iron door ajar ON the face — no enterable interior), so one
-    // mass box for the hall and one for the blast-furnace stack.
-    { const c = fr.at(0, 0); hitBox(colliders, c.east, c.north, fr.yaw, 28, 11, g, g + 12.9); }
-    hitBox(colliders, bf.east, bf.north, fr.yaw, 5.4, 5.4, g, g + 10);
-    // Hand cart, handles down, mid-yard.
-    const cart = fr.at(2, 8);
-    box(timber, cart.east, g + .75, cart.north, 1.7, .18, 1.05, fr.yaw);
-    for (const s of [-1, 1]) {
-      const w = fr.at(2 + s * .95, 8);
-      cyl(iron, w.east, g + .42, w.north, .42, .42, .12, 10, fr.yaw, Math.PI / 2);
+    hall.slab(workshopBrick,-19.5,0,6.0,6.0,.24,.24);
+    cyl(workshopRust, bf.east, g + 5.12, bf.north, 1.9, 2.7, 9.76, 12,fr.yaw);
+    // Tapered load-bearing shell, restrained hoop reinforcement and riveted
+    // seams. Bands stay inside the original 5.4m solid collision envelope.
+    for(const h of [1.5,3.3,5.2,7.1,8.9]){
+      const r=2.7-.08*h;
+      cyl(workshopSheet,bf.east,g+h,bf.north,r+.06,r+.06,.18,12,fr.yaw);
+      for(let i=0;i<12;i++){
+        const theta=i*Math.PI/6;
+        const x=-19.5+Math.sin(theta)*(r+.03),z=Math.cos(theta)*(r+.03);
+        put(workshopSheet,x,g+h,z,.12,.09,.12);
+      }
     }
+    cyl(workshopSheet,bf.east,g+10.3,bf.north,2.15,2.15,.6,12,fr.yaw);
+    // Cold-sealed discharge throat with a masonry arch and a real closed
+    // metal leaf. No fake glowing or enterable furnace.
+    const bfDoor=fr.at(-19.5,2.74);
+    box(dark,bfDoor.east,g+1.40,bfDoor.north,1.38,1.90,.13,fr.yaw);
+    for(const s of [-1,1]){
+      hall.piece(workshopBrick,-19.5+s*.91,2.75,.42,.63,.24,2.50);
+      put(workshopSheet,-19.5+s*.61,g+1.40,2.83,.11,1.84,.12);
+      for(const h of [.69,1.39,2.09])put(workshopRust,-19.5+s*.61,g+h,2.91,.14,.14,.05);
+    }
+    hall.piece(workshopBrick,-19.5,2.75,2.25,.66,2.38,2.82);
+    put(workshopRust,-19.5,g+1.41,2.84,1.12,1.76,.10);
+    for(const h of [.76,1.42,2.08])put(workshopSheet,-19.5,g+h,2.915,1.16,.085,.07);
+    put(iron,-19.08,g+1.40,3.01,.22,.08,.18);
+    colliders.push(orientedSupportBox(bfDoor.east,bfDoor.north,fr.yaw,1.38,.25,g+.45,g+2.35));
+    // A real polygonal footprint: slice the tapered base in 0.9m strips
+    // instead of a rotated enclosing AABB that blocks the empty corners.
+    for(let i=-3;i<=3;i++){
+      const z=i*.77,r=2.68;
+      const x=Math.sqrt(Math.max(.02,r*r-(Math.abs(z)+.385)**2));
+      const p=fr.at(-19.5,z);
+      colliders.push(orientedSupportBox(p.east,p.north,fr.yaw,2*x,.77,g+.24,g+10.6));
+    }
+    // Solid slag heaps shaped in coherent, uneven terraces, not simple
+    // cones that let players walk through the visible mass.
+    for(const [cx,cz,r,h] of [[-19.5,6.5,3.0,1.8],[-24,-5,2.4,1.48]] as const){
+      const step=r/3.2;
+      for(let i=-2;i<=2;i++)for(let j=-2;j<=2;j++){
+        const rr=Math.hypot(i,j)/3.1;
+        if(rr>.94||rr>.71&&hash(i*23+j*13+cx)>.68)continue;
+        const x=cx+i*step,z=cz+j*step;
+        const p=fr.at(x,z),ground=heightAt(p.east,p.north)??g;
+        const bottom=Math.min(g,ground)-.045;
+        const top=g+Math.max(.25,h*(1-rr)*(.78+.22*hash(i*11+j*29+cz)));
+        const w=step*.93,d=step*.91;
+        put(slag,x,(bottom+top)/2,z,w,top-bottom,d);
+        colliders.push(orientedSupportBox(p.east,p.north,fr.yaw,w,d,bottom,top));
+        if(top-g>.65){
+          const cap=fr.at(x+.04,z-.025),hh=top+.17;
+          put(stoneDark,x+.04,top+.085,z-.025,w*.64,.17,d*.62);
+          colliders.push(orientedSupportBox(cap.east,cap.north,fr.yaw,w*.64,d*.62,top,hh));
+        }
+      }
+    }
+    const furnaceRoute=coldFurnaceFootway.map(([east,north])=>({east,north,height:heightAt(east,north)}));
+    if(furnaceRoute.every(p=>p.height!==undefined))industrialRoutes.push({id:'cold-furnace',points:furnaceRoute as IndustryPoint[]});
+    // The hand cart is parked beside the terminal, not across the new
+    // narrow-gauge loading throat or the service stairs at local x=4.7.
+    const cartX=-3.5,cartZ=8.4;
+    hall.piece(workshopWood,cartX,cartZ,1.7,1.05,.62,.80);
+    for(const s of [-1,1]){
+      hall.piece(workshopWood,cartX+s*.79,cartZ,.12,1.05,.80,1.05);
+      const w=fr.at(cartX+s*.95,cartZ);
+      cyl(iron,w.east,g+.42,w.north,.42,.42,.12,10,fr.yaw,Math.PI/2);
+      put(timber,cartX+s*.42,g+.73,cartZ+1.04,.10,.12,1.2);
+    }
+    hall.piece(workshopSheet,cartX,cartZ,2.10,.32,.22,.59);
+    put(workshopWood,cartX,g+.91,cartZ-.46,1.58,.26,.12);
     // Works signage (牌面 §五): cast-iron name plate right of the furnace
     // mouth; the chalk duty board left of it, its last line trailing off.
     // K-06/K-07 (《设计-全图文字件总表》，总控裁定 批55)：炉膛口铁牌挂炉口
@@ -360,53 +612,215 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     };
     const pad = fr.at(0, 0);
     cyl(stoneDark, pad.east, g + .07, pad.north, 15, 16, .14, 4, fr.yaw);
-    put(stone, 0, g + 2.1, 0, 20, 4.2, 10);
-    // A-4: two full storeys plus pitched attic, ridge at g+17m;
-    // the original g+10m lid read as a squat one-storey workshop.
-    put(timberWarm, 0, g + 8.4, 0, 20, 8.4, 10);
-    put(slate, -5.05, g + 14.5, 0, 10.6, .26, 11.4, 0, .48);
-    put(slate, 5.05, g + 14.5, 0, 10.6, .26, 11.4, 0, -.48);
-    put(timber, 0, g + 17.02, 0, 20.6, .31, .42);
-    for(const side of [-1,1]) for(const dz of [-3.6,0,3.6])
-      put(snow, side * 6.15, g + 14.4, dz, 2.9, .08, 1.45, 0, -side * .48);
-    // Two rows of dark windows; two boarded up.
-    for (const dx of [-8, -4.8, -1.6, 1.6, 4.8, 8]) {
-      put(dark, dx, g + 2.6, 5.03, 1.7, 1.9, .1);
-      put(dark, dx, g + 6.8, 5.03, 1.7, 1.7, .1);
+    const hall=industrialBuilder(fr,g,put,colliders,floors);
+    hall.slab(stone,0,0,20,10,.9,.9);
+    hall.shell(workshopBrick,20,10,.9,4.2,0,2.8,2.8,
+      {openings:windowRows([-8,-4.8,4.8,8],1.7,1.65,3.55),frame:timber,glass:coldGlass});
+    // Upper shell is separate, with a genuine mezzanine and stair opening.
+    hall.shell(workshopWood,20,10,4.2,12.6,0,0,0,
+      {openings:windowRows([-8,-4.8,-1.6,1.6,4.8,8],1.7,5.95,7.65),frame:timber,glass:frostedGlass});
+    hall.slab(workshopWood,0,1.05,19.5,7.45,4.2,.24);
+    hall.slab(workshopWood,5.5,-3.55,8.5,2.15,4.2,.24);
+    hall.slab(workshopWood,-9.1,-3.55,1.1,2.15,4.2,.24);
+    const access=hall.stairs(stone,0,9.98,'z',-1,3,.56,2.4,0,.9);
+    const stair=hall.stairs(timber,-8.05,-3.55,'x',1,12,.63,1.45,.9,4.2);
+    hall.slab(timber,.3,-3.55,1.65,1.45,4.2,.20);
+    hall.piece(iron,-4.45,-2.8,8.1,.12,4.2,5.2);
+    hall.piece(iron,4.85,-2.8,7.1,.12,4.2,5.2);
+    // Real calibration benches, instrument cases and stock shelves.
+    for(const dx of [-6,-3,3,6]){
+      hall.piece(workshopWood,dx,2.4,1.6,1.0,.9,1.85);
+      for(let k=0;k<3;k++)put(brass,dx-.5+k*.5,g+2.02,2.4,.24,.32,.35);
+    }
+    hall.piece(iron,0,0,1.45,1.35,.9,2.7);
+    for(const dx of [-5,0,5]){
+      hall.piece(workshopWood,dx,2.75,2.0,1.05,4.2,5.5);
+      put(brass,dx,g+5.65,2.75,.7,.25,.6);
+    }
+    industrialRoutes.push({id:'instrument-plant',points:[hall.point(0,10.5,0),...access,hall.point(0,6.2,.9),hall.point(0,3.4,.9),hall.point(-8,3.4,.9),hall.point(-8,-1.0,.9),hall.point(-8.05,-3.55,.9),...stair,hall.point(.3,-3.55,4.2),hall.point(.3,-1.6,4.2),hall.point(3,-1.6,4.2)]});
+    // Longitudinal ridge, pitched panels and end infill share an actual roof
+    // plane, distinct from the taller chimney. Repeat the bay structure on
+    // both long elevations instead of a single unbroken upper mass.
+    const eaves=12.6,rise=4.42,run=5.8,pitch=Math.atan2(rise,run),slant=Math.hypot(rise,run);
+    for(const side of [-1,1]){
+      put(slate,0,g+eaves+rise/2,side*run/2,21.1,.24,slant+.04,side*pitch);
+      put(timber,0,g+eaves,side*run,21.2,.26,.2);
+      for(let bay=0;bay<10;bay++){
+        const x=-9.45+bay*2.1;
+        for(let row=0;row<3;row++){
+          const t=(row+.5)/3;
+          put(slate,x,g+eaves+rise*t+.16,side*run*(1-t),2.15,.075,slant/3+.1,side*pitch);
+        }
+        if(bay%3!==1)put(snow,x,g+eaves+rise*.21+.24,side*run*.79,1.7,.09,1.3,side*pitch);
+      }
+      for(let course=0;course<8;course++){
+        const t=(course+1)/8;
+        put(timberWarm,side*9.96,g+eaves+rise*(course+.5)/8,0,.16,rise/8+.01,Math.max(.12,10*(1-t)));
+      }
+      for(const x of [-9.8,-6.4,-3.2,0,3.2,6.4,9.8])
+        put(timber,x,g+8.4,side*5.08,.21,8.4,.19);
+      put(stoneDark,0,g+4.25,side*5.08,20.2,.31,.22);
+      put(timber,0,g+9.55,side*5.08,20.2,.18,.22);
+    }
+    put(timber,0,g+17.12,0,21.15,.27,.35);
+    // Reference K08: copper pipework and banded structural bays.
+    // Pipes are mounted outside the wall above entry head clearance.
+    for(const side of [-1,1]){
+      put(rustIron,0,g+4.84,side*5.36,19.4,.28,.28);
+      for(const dx of [-8,-4.8,-1.6,1.6,4.8,8])
+        put(iron,dx,g+4.84,side*5.36,.16,.39,.39);
+      for(const dx of [-9.45,9.45]){
+        put(rustIron,dx,g+7.5,side*5.37,.26,5.4,.28);
+        put(rustIron,dx,g+10.18,side*5.37,.48,.48,.36);
+      }
+    }
+    // A bank of brass analog instrument faces and trays on the real
+    // worktables; decorative readouts, not counterfeit game objectives.
+    for(const dx of [-6,-3,3,6]){
+      const p=fr.at(dx,2.4);
+      cyl(brass,p.east,g+2.31,p.north,.28,.28,.12,12,fr.yaw,Math.PI/2);
+      const face=fr.at(dx,2.468);
+      cyl(dark,face.east,g+2.31,face.north,.239,.239,.018,12,fr.yaw,Math.PI/2);
+      for(let k=0;k<9;k++){
+        const theta=-Math.PI*.70+k*Math.PI*.175;
+        put(brass,dx+Math.sin(theta)*.19,g+2.31+Math.cos(theta)*.19,2.487,.026,.055,.012,0,theta);
+      }
+      put(brass,dx+.025,g+2.35,2.49,.025,.19,.016,0,-.35);
+      put(iron,dx,g+2.31,2.505,.045,.045,.026);
+      put(timber,dx,g+1.22,2.38,1.25,.1,.75);
+      // Workbench cabinet face and small pull handles, within the existing
+      // registered bench envelope; the aisle remains unobstructed.
+      for(const x of [-.40,.40]){
+        put(workshopSheet,dx+x,g+1.51,2.895,.70,.50,.012);
+        put(brass,dx+x,g+1.62,2.901,.19,.035,.012);
+      }
+    }
+    for(const dx of [-5,0,5]){
+      put(iron,dx,g+5.68,2.75,1.55,.14,.65);
+      for(const j of [-1,0,1])put(brass,dx+j*.42,g+5.9,2.75,.22,.30,.22);
+    }
+    for(const side of [-1,1])for(const dx of [-9,-3,3,9]){
+      put(timber,dx,g+12.40,0,.25,.34,9.8);
+      put(timber,dx,g+14.68,side*2.6,.22,6.2,.22,side*.86);
     }
     for (const dx of [-4.8, 4.8]) {
       put(timber, dx, g + 6.8, 5.12, 1.9, .28, .08, 0, .6);
       put(timber, dx, g + 6.8, 5.12, 1.9, .28, .08, 0, -.6);
     }
-    // Tall independent chimney: ~34m total, near twice the 17m roof ridge.
-    put(rustIron, -8, g + 18.0, -2, 1.1, 31, 1.1);
-    put(stoneDark, -8, g + 33.75, -2, 1.5, .45, 1.5);
+    // Tall chimney starts at the roof, not inside the player's stair
+    // and calibration room. Continuous brick courses and flashings.
+    put(workshopBrick,-8,g+24.45,-2,1.15,18.10,1.15);
+    put(workshopRust,-8,g+15.5,-2,1.85,.16,1.85);
+    for(const h of [18.4,22.1,25.8,29.5,32.5]){
+      put(workshopSheet,-8,g+h,-2,1.23,.13,1.23);
+      for(const s of [-1,1])put(workshopRust,-8+s*.61,g+h,-2,.065,.07,.85);
+    }
+    put(stoneDark,-8,g+33.65,-2,1.52,.30,1.52);
+    for(const s of [-1,1]){
+      put(workshopBrick,-8+s*.62,g+33.95,-2,.28,.30,1.50);
+      put(workshopBrick,-8,g+33.95,-2+s*.62,.97,.30,.28);
+    }
+    put(dark,-8,g+33.81,-2,.97,.025,.97);
     // Loading platform, crates, and a burst instrument crate spilling brass parts.
-    put(stone, 0, g + .45, 6.8, 8, .9, 2.6);
-    // S-1 collision: solid two-storey shell (no enterable interior — the
-    // K-09/K-10 facade precedent) as one mass box; the loading platform is a
-    // raised face with no steps, so it blocks as a low mass.
-    { const c = fr.at(0, 0); hitBox(colliders, c.east, c.north, fr.yaw, 20, 10, g, g + 12.6); }
-    { const pf = fr.at(0, 6.8); hitBox(colliders, pf.east, pf.north, fr.yaw, 8, 2.6, g, g + .9); }
-    put(timberWarm, 2.5, g + 1.6, 6.8, 1.5, 1.5, 1.5);
-    put(timber, -2.8, g + 1.35, 7.1, 1.3, 1.1, 1.3, 0, .35);
+    hall.slab(stone,0,6.65,8,3.30,.9,.9);
+    for(const dx of [-1.48,1.48])put(timber,dx,g+2.3,5.04,.16,2.8,.18);
+    put(timber,0,g+3.78,5.04,3.1,.22,.18);
+    // Collision follows framed crates. Leave the central stair lane clear.
+    for(const [dx,dz,w,h] of [[2.8,6.8,1.4,1.35],[-2.9,7.0,1.3,1.0]] as const){
+      hall.piece(workshopWood,dx,dz,w,w,.9,.9+h);
+      for(const s of [-1,1]){
+        put(timber,dx+s*w*.39,g+.9+h/2,dz,.12,h+.04,w+.05);
+        put(iron,dx,g+.9+h*.32,dz+s*w*.5,w,.07,.06);
+      }
+    }
+    for(const side of [-1,1])for(let bay=0;bay<5;bay++){
+      const dx=-8.7+bay*4.3;
+      put(snow,dx,g+12.67,side*5.81,1.1,.09,.33);
+      for(let k=0;k<3;k++){
+        const h=.18+.12*((bay+k)%4);
+        put(snow,dx-.32+k*.24,g+12.59-h/2,side*5.91,.09,h,.09);
+      }
+    }
     for (let i = 0; i < 5; i++) {
       const p = fr.at(-3.6 + hash(i * 3) * 1.6, 8 + hash(i * 7) * .8);
       box(brass, p.east, g + 1.05, p.north, .34, .22, .34, hash(i) * 3);
     }
-    // Water tower: four legs, tank, cone cap.
-    const wt = fr.at(15.5, -1);
-    for (const [lx, lz] of [[-1.6, -1.6], [1.6, -1.6], [-1.6, 1.6], [1.6, 1.6]]) {
-      const p = fr.at(15.5 + lx, -1 + lz);
-      box(timber, p.east, g + 3.4, p.north, .32, 6.8, .32, fr.yaw, lz > 0 ? .06 : -.06, lx > 0 ? -.06 : .06);
+    // Water tower: independent grounded piers, actual four-sided bracing
+    // and a clear service aisle. Tall braces stay above the player's head.
+    const wt=fr.at(15.5,-1),cx=15.5,cz=-1,leg=1.65;
+    hall.slab(workshopBrick,cx,cz,4.6,4.6,.20,.26);
+    for(const x of [-leg,leg])for(const z of [-leg,leg]){
+      const p=fr.at(cx+x,cz+z),soil=heightAt(p.east,p.north)??g;
+      const low=Math.min(soil-g-.08,.02);
+      hall.piece(workshopBrick,cx+x,cz+z,.69,.69,low,.48);
+      hall.piece(workshopWood,cx+x,cz+z,.36,.36,.48,6.69);
+      put(workshopRust,cx+x,g+.57,cz+z,.44,.18,.44);
+      put(workshopSheet,cx+x,g+6.42,cz+z,.46,.22,.46);
     }
-    cyl(corrugated, wt.east, g + 8.4, wt.north, 2.3, 2.3, 3.2, 12);
-    cone(slate, wt.east, g + 10.9, wt.north, 2.7, 1.8, 12);
+    const dy=3.95,dx=leg*2,angle=Math.atan2(dx,dy),diag=Math.hypot(dx,dy);
+    for(const s of [-1,1]){
+      const x=cx+s*leg,z=cz+s*leg;
+      put(workshopWood,cx,g+6.46,z,3.7,.33,.31);
+      put(workshopWood,x,g+6.46,cz,.31,.33,3.7);
+      for(const sign of [-1,1]){
+        put(workshopWood,cx,g+4.45,z,.20,diag,.21,0,sign*angle);
+        put(workshopWood,x,g+4.45,cz,.21,diag,.20,sign*angle);
+      }
+      for(const h of [2.45,6.42]){
+        for(const off of [-1,1]){
+          put(workshopRust,cx+off*leg,g+h,z,.44,.27,.09);
+          put(workshopRust,x,g+h,cz+off*leg,.09,.27,.44);
+        }
+      }
+    }
+    // K06: oxidised green tank plates over dark iron ring girders.
+    // The twelve seams are located on the cylinder's actual vertices.
+    cyl(iron,wt.east,g+6.83,wt.north,2.48,2.48,.29,12,fr.yaw);
+    cyl(tankPatina,wt.east,g+8.41,wt.north,2.3,2.3,3.14,12,fr.yaw);
+    for(let i=0;i<12;i++){
+      const theta=i*Math.PI/6;
+      const x=cx+Math.sin(theta)*2.295,z=cz+Math.cos(theta)*2.295;
+      put(workshopRust,x,g+8.43,z,.095,2.96,.095);
+      for(const h of [7.35,7.72,8.09,8.83,9.20,9.57])
+        put(iron,x,g+h,z,.13,.07,.13);
+      // The real underside reinforcement reaches the ring girder.
+      const q=fr.at(cx+Math.sin(theta)*1.95,cz+Math.cos(theta)*1.95);
+      box(workshopRust,q.east,g+6.62,q.north,1.02,.20,.14,fr.yaw+theta+Math.PI/2);
+    }
+    for(const h of [7.05,8.45,9.82]){
+      cyl(iron,wt.east,g+h,wt.north,2.36,2.36,.14,12,fr.yaw);
+      for(let i=0;i<12;i++){
+        const theta=i*Math.PI/6;
+        put(workshopRust,cx+Math.sin(theta)*2.35,g+h,cz+Math.cos(theta)*2.35,.10,.09,.10);
+      }
+    }
+    // A continuous drain pipe runs along the ground-side service wall.
+    // Its bends and valve are real geometry and the low pipe is solid.
+    hall.piece(workshopRust,13.15,-1,.25,.25,.83,6.86);
+    hall.piece(workshopRust,11.68,-1,2.95,.25,.82,1.08);
+    for(const h of [1.25,3.1,5.3,6.65])put(workshopSheet,13.15,g+h,-1,.40,.16,.40);
+    for(const x of [10.5,12.3])put(workshopSheet,x,g+.95,-1,.14,.40,.40);
+    hall.piece(workshopBrick,12.05,-1,.45,.45,0,.82);
+    put(workshopSheet,13.15,g+1.32,-1,.40,.46,.36);
+    put(workshopRust,13.15,g+1.35,-.72,.10,.10,.51);
+    const valve=fr.at(13.15,-.42);
+    cyl(workshopSheet,valve.east,g+1.35,valve.north,.24,.24,.085,10,fr.yaw,Math.PI/2);
+    // Tank roof has a projecting metal eave, low snow cap and vent.
+    cone(slate,wt.east,g+10.9,wt.north,2.7,1.8,12);
+    cyl(workshopSheet,wt.east,g+10.02,wt.north,2.7,2.7,.10,12,fr.yaw);
+    // Broken snow patches follow the conical roof instead of a single
+    // unrelated cylinder on top. Same roof pitch, slightly raised skin.
+    for(const [start,arc]of [[0,Math.PI*.57],[Math.PI*.82,Math.PI*.36],[Math.PI*1.47,Math.PI*.39]] as const)
+      part(cleanSnow,new CylinderGeometry(.48,1.38,.60,Math.ceil(12*arc/(2*Math.PI)),1,true,start,arc),wt.east,g+11.19,wt.north,fr.yaw);
+    cyl(cleanSnow,wt.east,g+11.58,wt.north,.30,.58,.18,12,fr.yaw);
+    cyl(workshopRust,wt.east,g+11.88,wt.north,.13,.15,.44,8,fr.yaw);
+    const tankRoute=waterTowerFootway.map(([east,north])=>({east,north,height:heightAt(east,north)}));
+    if(tankRoute.every(p=>p.height!==undefined))industrialRoutes.push({id:'water-tower',points:tankRoute as IndustryPoint[]});
     // Works signage (牌面 §六): brass name plate between the ground-floor
     // windows; the brittle paper notice nailed beside where the door reads.
     const plateP = fr.at(0, 5.16);
     siteAt('instrument-sign', plateP.east, plateP.north, 1);
-    sign(plateP.east, g + 2.5, plateP.north, fr.yaw, 1.9, .62, brass, (c, w, h) => {
+    sign(plateP.east, g + 3.89, plateP.north, fr.yaw, 1.9, .62, brass, (c, w, h) => {
       const grad = c.createLinearGradient(0, 0, 0, h);
       grad.addColorStop(0, '#a3803c'); grad.addColorStop(1, '#86652c');
       c.fillStyle = grad; c.fillRect(0, 0, w, h);
@@ -487,34 +901,116 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     const piles: [number, number, number, number, MeshStandardMaterial][] = [
       [-6, -2, 3.6, 2.6, ore], [-1, 3.5, 2.8, 2, oreOchre], [4.5, -3, 3.1, 2.2, oreGrey], [8, 2.5, 2.2, 1.5, ore],
     ];
-    for (const [dx, dz, r, h, mat] of piles) {
-      const p = fr.at(dx, dz);
-      cone(mat, p.east, g + h / 2, p.north, r, h, 10);
-      // S-1 collision: a cone pile blocks as its base square.
-      hitBox(colliders, p.east, p.north, fr.yaw, r * 2, r * 2, g, g + h);
+    const yardStructure=industrialBuilder(fr,g,put,colliders,floors);
+    // Surveyed public approach, grounded against the same carrier that
+    // paints the packed snow. The sealed warehouse remains closed.
+    const route=oreYardFootway.map(([east,north])=>({east,north,height:heightAt(east,north)}));
+    if(route.every(p=>p.height!==undefined))industrialRoutes.push({id:'ore-yard',points:route as IndustryPoint[]});
+    for(const [dx,dz,r,h,mat] of piles){
+      if(mat===oreOchre){
+        for(let layer=0;layer<4;layer++){
+          const count=7-layer,width=r*1.70-layer*.38;
+          for(let j=0;j<count;j++){
+            const x=dx+(j-(count-1)/2)*.49;
+            yardStructure.piece(workshopWood,x,dz,.46,width,.015+layer*.46,.475+layer*.46);
+            for(const side of [-1,1])put(timberWarm,x,g+.245+layer*.46,dz+side*(width/2+.005),.38,.38,.012);
+          }
+        }
+        for(const z of [-1.25,1.25])yardStructure.piece(workshopRust,dx,dz+z,3.8,.15,0,.24);
+      }else{
+        // Physical voxel rubble: each tapered tier has its own footprint;
+        // the old square collider no longer blocks empty corners.
+        const step=r/3.7;
+        for(let i=-3;i<=3;i++)for(let j=-3;j<=3;j++){
+          const x=i*step,z=j*step,theta=Math.atan2(z,x),rr=Math.hypot(x,z);
+          const edge=r*(.85+.08*Math.cos(theta*3+dx)+.06*Math.sin(theta*5+dz));
+          if(rr>edge-step*.32)continue;
+          const top=Math.max(.24,h*(1-(rr/r)**1.2)*(.87+.13*hash(i*31+j*17+dx)));
+          const tiers=Math.max(1,Math.ceil(top/.53));
+          for(let k=0;k<tiers;k++){
+            const width=step*(.96-.06*(k%3)),depth=step*(.97-.04*((i+j+k+30)%3));
+            const xx=dx+x+.03*step*Math.sin(k+i),zz=dz+z+.02*step*Math.cos(k+j);
+            yardStructure.piece((i+j+k+30)%5===0?stoneDark:mat,xx,zz,width,depth,top*k/tiers,top*(k+1)/tiers);
+          }
+        }
+      }
     }
-    // Sorting shed: four posts, flat roof, sorted boxes beneath.
+    // A real stone floor and narrow open rear sorting aisle. The
+    // existing poles remain in their original plan.
+    const shedSoils=[-3.05,0,3.05].flatMap(x=>[-2.65,0,2.65].map(z=>{
+      const p=fr.at(-8+x,-6+z);return heightAt(p.east,p.north)??g;
+    }));
+    yardStructure.piece(workshopBrick,-8,-6,6.10,5.30,Math.min(g,...shedSoils)-g-.09,.12,true);
+    for(let i=0;i<6;i++)for(let j=0;j<5;j++){
+      const x=-10.5+i,z=-8.12+j*1.06;
+      yardStructure.slab((i+j)%4===0?stoneDark:stone,x,z,.985,1.04,.16,.04);
+    }
+    // Sorting shed: visible columns with exact player blockers.
     for (const [px, pz] of [[-2.6, -2.2], [2.6, -2.2], [-2.6, 2.2], [2.6, 2.2]]) {
-      put(timber, -8 + px, g + 1.5, -6 + pz, .26, 3, .26);
+      yardStructure.piece(workshopWood,-8+px,-6+pz,.26,.26,0,3);
+      yardStructure.piece(workshopBrick,-8+px,-6+pz,.38,.38,0,.18);
     }
-    put(corrugated, -8, g + 3.2, -6, 6.4, .22, 5.6);
-    put(snow, -8, g + 3.42, -6, 6.2, .16, 5.4);
-    for (let i = 0; i < 3; i++) put(timberWarm, -9.4 + i * 1.5, g + .55, -6, 1.25, 1.1, 1.25);
-    // Derrick: two A-frames, crossbeam, hook hanging over the yard.
-    for (const s of [-1, 1]) {
-      const p = fr.at(7 + s * 2.2, -6);
-      box(timber, p.east, g + 2.6, p.north, .3, 5.6, .3, fr.yaw, 0, s * .38);
+    // Sorting shelter: a real pitched roof, rafters, snow and framed bins.
+    const shedPitch=Math.atan2(.72,2.8),shedSlant=Math.hypot(.72,2.8);
+    for(const side of [-1,1]){
+      put(workshopSheet,-8,g+3.49,-6+side*1.4,6.4,.14,shedSlant,side*shedPitch);
+      put(snow,-8,g+3.60,-6+side*1.4,6.1,.09,shedSlant-.19,side*shedPitch);
+      put(workshopWood,-8,g+3.04,-6+side*2.2,5.7,.21,.21);
+      for(const x of [-10.6,-8,-5.4])put(workshopWood,x,g+3.43,-6+side*1.4,.13,.15,shedSlant,side*shedPitch);
+    }
+    put(workshopWood,-8,g+3.91,-6,6.45,.17,.21);
+    // Three open sorting bins, with actual walls, ribbed joinery and
+    // contrasting ore/timber/slag contents. No new collection authority.
+    for(const [i,x]of [-9.4,-7.9,-6.4].entries()){
+      yardStructure.piece(workshopWood,x,-6,1.25,1.25,.16,.30,true);
+      for(const s of [-1,1]){
+        yardStructure.piece(workshopWood,x+s*.55,-6,.15,1.25,.30,1.03);
+        yardStructure.piece(workshopWood,x,-6+s*.55,.95,.15,.30,1.03);
+        put(workshopRust,x,g+.43,-6+s*.635,1.2,.09,.035);
+        put(workshopRust,x,g+.92,-6+s*.635,1.2,.075,.035);
+        put(timberWarm,x+s*.56,g+1.06,-6,.18,.085,1.28);
+        put(timberWarm,x,g+1.06,-6+s*.56,1.15,.085,.18);
+      }
+      for(let j=0;j<3;j++)for(let k=0;k<3;k++){
+        const seed=i*101+j*13+k*29,h=.18+.29*hash(seed+5);
+        const dx=x+(j-1)*.28,z=-6+(k-1)*.27;
+        yardStructure.piece(i===0?ore:i===1?workshopWood:oreGrey,dx,z,.24,.23,.30,.30+h);
+      }
+    }
+    industrialRoutes.push({id:'sorting-shed',points:sortingShedFootway.map(([east,north],i)=>({
+      east,north,height:(heightAt(east,north)??g)+(i===sortingShedFootway.length-1?.16:0)
+    }))});
+    // Derrick: four anchored posts and overhead braces, with a clear
+    // working bay underneath rather than disconnected floating legs.
+    for(const s of [-1,1])for(const z of [-6.65,-5.35]){
+      yardStructure.piece(workshopWood,7+s*2.2,z,.26,.26,0,5.2);
+      yardStructure.piece(workshopBrick,7+s*2.2,z,.46,.46,0,.28);
+      put(workshopRust,7+s*2.2,g+4.95,z,.35,.24,.35);
+    }
+    for(const z of [-6.65,-5.35]){
+      put(workshopWood,7,g+4.9,z,4.7,.28,.26);
+      for(const s of [-1,1])put(workshopWood,7+s*1.82,g+4.31,z,.19,1.40,.19,0,s*.59);
     }
     const beam = fr.at(7, -6);
     box(timber, beam.east, g + 5.2, beam.north, 5.6, .34, .34, fr.yaw);
     const hook = fr.at(7, -6);
     box(iron, hook.east, g + 3.9, hook.north, .1, 1.1, .1, fr.yaw);
     part(iron, new TorusGeometry(.3, .06, 5, 10), hook.east, g + 3.2, hook.north, fr.yaw);
-    // Loose ore chunks scattered at the pile feet.
-    for (let i = 0; i < 14; i++) {
-      const p = fr.at(-8 + hash(i * 13 + 1) * 17, -5 + hash(i * 7 + 3) * 10);
-      const s = .3 + hash(i * 5) * .5;
-      part(ore, new DodecahedronGeometry(s, 0), p.east, g + s * .4, p.north, hash(i) * 3);
+    // Grounded fragments avoid the surveyed public footway and existing
+    // physical structures. Every exposed chip has a real support top.
+    const routeGap=(e:number,n:number)=>Math.min(...oreYardFootway.slice(1).map((b,i)=>{
+      const a=oreYardFootway[i]!,de=b[0]-a[0],dn=b[1]-a[1];
+      const t=Math.max(0,Math.min(1,((e-a[0])*de+(n-a[1])*dn)/(de*de+dn*dn)));
+      return Math.hypot(e-a[0]-t*de,n-a[1]-t*dn);
+    }));
+    let scatterCount=0;
+    for(let i=0;i<70&&scatterCount<22;i++){
+      const p=fr.at(-9+hash(i*13+1)*18,-5+hash(i*7+3)*10),h=heightAt(p.east,p.north);
+      const w=.18+.25*hash(i*5),d=.16+.22*hash(i*17),top=.10+.23*hash(i*11),yaw=hash(i)*Math.PI;
+      if(h===undefined||routeGap(p.east,p.north)<1.15||colliders.some(b=>h+.02<b.max[1]&&h+top>b.min[1]&&supportFootprintOverlaps(p.east,p.north,b,.38)))continue;
+      box(i%4===0?oreGrey:ore,p.east,h+top/2,p.north,w,top,d,yaw);
+      floors.push(orientedSupportBox(p.east,p.north,yaw,w,d,h,h+top));
+      scatterCount++;
     }
     // K-16 (总表）: shed plate on the sorting shed's roof fascia, yard side.
     const shedPlateP = fr.at(-8, -3.14);
@@ -530,14 +1026,17 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     const faceYard = (east: number, north: number) => Math.atan2(yard.east - east, -(yard.north - north));
     const pileSigns: [string, string, number, number][] = [
       ['ore-pile-ore-sign', '矿料', -1.8, -2.0],
-      ['ore-pile-timber-sign', '木料', -1, 0.1],
+      ['ore-pile-timber-sign', '木料', -1, .95],
       ['ore-pile-slag-sign', '渣料', 8.2, -3.0],
     ];
     for (const [id, word, dx, dz] of pileSigns) {
       const p = fr.at(dx, dz);
-      put(timber, dx, g + .55, dz, .12, 1.1, .12);
+      const h=heightAt(p.east,p.north)??g;
+      box(workshopWood,p.east,h+.55,p.north,.12,1.1,.12,fr.yaw);
+      box(workshopRust,p.east,h+.07,p.north,.20,.14,.20,fr.yaw);
+      colliders.push(orientedSupportBox(p.east,p.north,fr.yaw,.12,.12,h,h+1.1));
       siteAt(id, p.east, p.north, 1);
-      sign(p.east, g + .95, p.north, faceYard(p.east, p.north), .8, .35, timber, (c, w, h) => {
+      sign(p.east, h + .95, p.north, faceYard(p.east, p.north), .8, .35, timber, (c, w, h) => {
         c.fillStyle = '#5d4630'; c.fillRect(0, 0, w, h);
         c.font = 'bold 56px "Noto Sans SC", sans-serif';
         c.fillStyle = '#e8e0cc'; c.textAlign = 'center'; c.textBaseline = 'middle';
@@ -549,33 +1048,72 @@ export function buildCraterOuterWorks(road: CraterRoad) {
     // hangs the plate above its iron door. The door is sealed with a white band.
     const store = fr.at(-1.5, -7.5);
     siteAt('sealed-storehouse', store.east, store.north, 3);
-    put(stone, -1.5, g + .15, -7.5, 4.8, .3, 3.6);
-    put(timber, -1.5, g + 1.6, -9.2, 4.6, 2.6, .2);
-    put(timber, -3.7, g + 1.6, -7.5, .2, 2.6, 3.4);
-    put(timber, 0.7, g + 1.6, -7.5, .2, 2.6, 3.4);
-    put(timber, -2.95, g + 1.6, -5.8, 1.7, 2.6, .2);
-    put(timber, -0.05, g + 1.6, -5.8, 1.7, 2.6, .2);
-    put(timber, -1.5, g + 2.55, -5.8, 1.2, .7, .2);
-    put(slate, -1.5, g + 3.15, -8.35, 5.0, .14, 2.0, -.42, 0);
-    put(slate, -1.5, g + 3.15, -6.65, 5.0, .14, 2.0, .42, 0);
-    put(iron, -1.5, g + 1.4, -5.76, 1.2, 2.2, .1);
-    put(snow, -1.5, g + 1.15, -5.67, .9, .16, .06);
+    const storeSoil=[-2.4,0,2.4].flatMap(x=>[-1.8,0,1.8].map(z=>{
+      const p=fr.at(-1.5+x,-7.5+z);return heightAt(p.east,p.north)??g;
+    }));
+    yardStructure.piece(workshopBrick,-1.5,-7.5,4.8,3.6,Math.min(...storeSoil,g)-g-.08,.30,true);
+    // Close all four walls, but render the actual surviving timber
+    // panels, posts and frame rather than a textured cube.
+    for(const [x,z,w,d] of [[-1.5,-9.2,4.6,.2],[-3.7,-7.5,.2,3.4],[.7,-7.5,.2,3.4],[-2.95,-5.8,1.7,.2],[-.05,-5.8,1.7,.2]] as const){
+      put(workshopWood,x,g+1.6,z,w,2.6,d);
+      const axis=w>d?'x':'z',count=Math.ceil(Math.max(w,d)/.51);
+      for(let i=0;i<=count;i++){
+        const t=i/count-.5;
+        put(workshopWood,x+(axis==='x'?w*t:0),g+1.6,z+(axis==='z'?d*t:0),axis==='x'?.085:.26,2.6,axis==='x'?.26:.085);
+      }
+    }
+    put(workshopWood,-1.5,g+2.55,-5.8,1.2,.7,.2);
+    for(const x of [-3.7,.7])for(const z of [-9.2,-5.8]){
+      put(workshopWood,x,g+1.60,z,.28,2.6,.28);
+      put(workshopRust,x,g+.47,z,.33,.32,.33);
+    }
+    for(const z of [-9.2,-5.8]){
+      put(workshopWood,-1.5,g+2.85,z,4.6,.19,.27);
+      put(workshopBrick,-1.5,g+.33,z,4.6,.14,.25);
+    }
+    const storeRun=1.92,storeRise=.76,storePitch=Math.atan2(storeRise,storeRun);
+    for(const s of [-1,1]){
+      put(slate,-1.5,g+2.98+storeRise/2,-7.5+s*storeRun/2,5.0,.14,Math.hypot(storeRun,storeRise),s*storePitch);
+      put(snow,-1.5,g+3.09+storeRise/2,-7.5+s*storeRun/2,4.78,.09,Math.hypot(storeRun,storeRise)-.14,s*storePitch);
+      for(let i=0;i<4;i++){
+        const t=(i+.5)/4;
+        put(workshopWood,-1.5+s*2.18,g+2.9+storeRise*t,-7.5,.17,storeRise/4+.012,3.4*(1-(i+1)/4)+.08);
+      }
+    }
+    put(workshopWood,-1.5,g+3.84,-7.5,5.05,.14,.24);
+    put(workshopSheet,-1.5,g+1.4,-5.76,1.2,2.2,.10);
+    for(const s of [-1,1]){
+      put(workshopRust,-1.5+s*.65,g+1.4,-5.70,.13,2.28,.14);
+      for(const h of [.62,1.4,2.18])put(workshopRust,-1.5+s*.48,g+h,-5.69,.22,.12,.09);
+    }
+    for(const h of [.45,2.35])put(workshopRust,-1.5,g+h,-5.68,1.20,.12,.10);
+    put(iron,-1.5,g+1.08,-5.62,.78,.10,.10);
+    put(workshopRust,-1.24,g+1.01,-5.58,.16,.22,.12);
+    put(snow,-1.5,g+1.15,-5.58,.9,.16,.025);
+    // Two shallow real treads outside the locked leaf; not an unlocked
+    // entrance or another salvage interaction.
+    yardStructure.slab(workshopBrick,-1.5,-5.37,1.52,.58,.16,.24);
+    yardStructure.slab(workshopBrick,-1.5,-5.68,1.52,.20,.30,.24);
+    industrialRoutes.push({id:'sealed-storehouse',points:sealedStorehouseFootway.map(([east,north])=>({east,north,height:heightAt(east,north)??g}))});
     // S-1 collision: the storehouse is sealed — the iron door fills the
     // front span flush between the two front segments, so the front reads
     // as one continuous wall. Four wall boxes, no opening.
     for (const [dx, dz, sx, sz] of [[-1.5, -9.2, 4.6, .2], [-3.7, -7.5, .2, 3.4], [0.7, -7.5, .2, 3.4], [-1.5, -5.8, 4.6, .2]] as const) {
       const p = fr.at(dx, dz);
-      hitBox(colliders, p.east, p.north, fr.yaw, sx, sz, g + .3, g + 2.9);
+      colliders.push(orientedSupportBox(p.east,p.north,fr.yaw,sx,sz,g+.3,g+2.9));
     }
-    const storePlateP = fr.at(-1.5, -5.64);
+    // Mount the plate onto the clear lintel, above the locked door,
+    // rather than intersecting its projecting iron strap.
+    put(workshopWood,-1.5,g+2.68,-5.64,1.48,.42,.18);
+    const storePlateP = fr.at(-1.5, -5.51);
     siteAt('sealed-storehouse-plate', storePlateP.east, storePlateP.north, 1);
-    sign(storePlateP.east, g + 2.45, storePlateP.north, fr.yaw, 1.1, .4, iron, (c, w, h) => {
+    sign(storePlateP.east, g + 2.68, storePlateP.north, fr.yaw, 1.1, .30, iron, (c, w, h) => {
       c.fillStyle = '#3b3835'; c.fillRect(0, 0, w, h);
       c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
       c.strokeRect(8, 8, w - 16, h - 16);
       c.font = 'bold 64px "Noto Sans SC", sans-serif';
       c.fillStyle = '#d3cbb9'; c.textAlign = 'center'; c.textBaseline = 'middle';
-      c.fillText('封存仓', w / 2, h / 2 + 2);
+      c.fillText('封存仓', w / 2, h / 2 + 2,w-36);
     });
   }
 
@@ -589,33 +1127,167 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       const p = fr.at(dx, dz);
       box(mat, p.east, h, p.north, sx, sy, sz, fr.yaw, pitch, roll);
     };
-    put(corrugated, 0, g + 1.3, -2.4, 5.4, 2.6, .14);
-    put(corrugated, -2.65, g + 1.3, 0, .14, 2.6, 4.8);
-    put(corrugated, 2.65, g + 1.05, 0, .14, 2.1, 4.8);
-    // Roof half-collapsed: one end still on the walls, the other on the ground.
-    put(corrugated, 0, g + 2.1, .4, 5.8, .16, 5.6, .62);
-    put(timberWarm, -1, g + .6, .5, 1.3, 1.2, 1.3, 0, .2);
-    put(timber, 1.2, g + .5, -.8, 1.1, 1, 1.1);
+    const ruin=industrialBuilder(fr,g,put,colliders,floors);
+    // The surviving floor is a fractured, low masonry foundation. Keep
+    // the open front lip flush with the exterior snow.
+    const soil=[-2.7,0,2.7].flatMap(x=>[-2.4,0,2.4].map(z=>{
+      const p=fr.at(x,z);return heightAt(p.east,p.north)??g;
+    }));
+    ruin.piece(workshopBrick,0,0,5.4,4.8,Math.min(g,...soil)-g-.09,.12,true);
+    for(let i=0;i<6;i++)for(let j=0;j<4;j++){
+      const x=-2.25+i*.9,z=-1.8+j*1.2;
+      put((i+j)%3===0?stoneDark:stone,x,g+.14,z,.88,.04,1.17);
+      const p=fr.at(x,z);
+      floors.push(orientedSupportBox(p.east,p.north,fr.yaw,.88,1.17,g+.12,g+.16));
+    }
+    // Keep the three ruined walls, but expose their timber frames and
+    // individual distorted metal sheets rather than one featureless slab.
+    put(workshopSheet,0,g+1.3,-2.4,5.4,2.6,.14);
+    put(workshopSheet,-2.65,g+1.3,0,.14,2.6,4.8);
+    put(workshopSheet,2.65,g+1.05,0,.14,2.1,4.8);
+    for(const x of [-2.48,-.82,.82,2.48]){
+      put(workshopWood,x,g+1.3,-2.28,.18,2.6,.18);
+      put(workshopRust,x,g+.22,-2.28,.22,.17,.20);
+    }
+    for(const s of [-1,1])for(const z of [-2.2,-.65,.95,2.2]){
+      const h=s<0?2.6:2.1;
+      put(workshopWood,s*2.55,g+h/2,z,.18,h,.17);
+    }
+    // Collapsed roof follows a continuous slope down to the old floor.
+    // Visible narrow panels, split rafters and broken ends; omit the right
+    // front panels to retain the original open approach.
+    const roofRun=4.65,rise=2.38,pitch=Math.atan2(rise,roofRun);
+    for(let i=0;i<7;i++){
+      const x=-2.35+i*.77;
+      const run=i>3?2.05:roofRun;
+      const mid=-2.3+run/2;
+      const top=2.63-rise*run/(2*roofRun);
+      put(i%3===0?workshopRust:workshopSheet,x,g+top,mid,.74,.13,run/Math.cos(pitch),pitch);
+      put(workshopWood,x-.31,g+top-.12,mid,.12,.14,run/Math.cos(pitch),pitch);
+      for(let j=0;j<Math.floor(run/.75);j++){
+        const z=-2.3+(j+.5)*.75,y=2.63-rise*(z+2.3)/roofRun;
+        put(workshopRust,x,g+y+.07,z,.70,.045,.10,pitch);
+      }
+    }
+    // Original interior debris now has actual obstruction bounds.
+    ruin.piece(workshopWood,-1,.5,1.3,1.3,.16,1.2);
+    ruin.piece(workshopWood,1.2,-.8,1.1,1.1,.16,1);
+    // The broken floor retains a low tool rack and discarded planks in
+    // the blocked rear half. Nothing is a new quest item.
+    ruin.piece(workshopWood,-1.5,-1.65,1.7,.45,.16,.88);
+    for(let i=0;i<4;i++){
+      put(workshopRust,-2.05+i*.32,g+.91,-1.65,.20,.07,.29);
+      put(workshopWood,-2.05+i*.32,g+.965,-1.65,.06,.05,.43);
+    }
+    for(let i=0;i<3;i++){
+      const x=-1.7+i*.28,z=1.05+i*.08;
+      ruin.piece(workshopWood,x,z,.19,1.50,.16,.28,true);
+    }
+    // Right front bay is genuinely open to the sky; retain the rear
+    // collapsed roof and make the former blocked inspection bay walkable.
+    const entry=fr.at(1.50,4.7);
+    industrialRoutes.push({id:'ruined-shed',points:[
+      ...ruinedShedFootway.slice(0,-1).map(([east,north])=>({east,north,height:heightAt(east,north)??g})),
+      {...entry,height:heightAt(entry.east,entry.north)??g},
+      ruin.point(1.50,2.85,0),ruin.point(1.50,1.65,.16),ruin.point(1.50,.85,.16)
+    ]});
+    // Low fallen roof strips occupy the same existing ruin footprint.
+    for(let i=0;i<7;i++){
+      const run=i>3?2.05:roofRun,segments=Math.ceil(run/.72),step=run/segments;
+      for(let j=0;j<segments;j++){
+        const x=-2.35+i*.77,z=-2.3+(j+.5)*step;
+        const y=2.63-rise*(z+2.3)/roofRun;
+        const p=fr.at(x,z),dy=rise*step/(2*roofRun);
+        colliders.push(orientedSupportBox(p.east,p.north,fr.yaw,.74,step,g+y-dy-.18,g+y+dy+.07));
+      }
+    }
     // S-1 collision: the ruin's three standing walls (front is collapsed
     // open where the roof came down).
-    for (const [dx, dz, sx, sz] of [[0, -2.4, 5.4, .14], [-2.65, 0, .14, 4.8], [2.65, 0, .14, 4.8]] as const) {
-      const p = fr.at(dx, dz);
-      hitBox(colliders, p.east, p.north, fr.yaw, sx, sz, g, g + 2.6);
+    for (const [dx,dz,sx,sz,h] of [[0,-2.4,5.4,.14,2.6],[-2.65,0,.14,4.8,2.6],[2.65,0,.14,4.8,2.1]] as const) {
+      const p=fr.at(dx,dz);
+      colliders.push(orientedSupportBox(p.east,p.north,fr.yaw,sx,sz,g,g+h));
     }
   }
   // Rusted pipe sections east of the smelter, one half-buried.
   for (let i = 0; i < 3; i++) {
     const p = site(`pipe-section-${i + 1}`, 198 + i * 2.2, 97 + (i % 2) * 3, 3);
     if (!p) continue;
-    cyl(rustIron, p.east, p.height + (i === 1 ? .35 : .8), p.north, .85, .85, 5.2, 12, d2r(198 + i * 2.2) + Math.PI / 2, 0, Math.PI / 2);
+    const yaw=d2r(198+i*2.2)+Math.PI/2,y=p.height+(i===1?.35:.8);
+    // Open-ended pipe with genuine inner bore and rolled flanges.
+    part(workshopRust,new CylinderGeometry(.85,.85,5.2,12,1,true),p.east,y,p.north,yaw,0,Math.PI/2);
+    const inner=new CylinderGeometry(.73,.73,5.2,12,1,true);inner.scale(-1,1,1);inner.computeVertexNormals();
+    part(workshopSheet,inner,p.east,y,p.north,yaw,0,Math.PI/2);
+    const at=(t:number,z:number)=>({east:p.east+Math.cos(yaw)*t+Math.sin(yaw)*z,north:p.north+Math.sin(yaw)*t-Math.cos(yaw)*z});
+    for(const t of [-2.58,-.9,.9,2.58]){
+      const q=at(t,0);
+      const rim=Math.abs(t)>2?.87:.84;
+      part(workshopRust,new TorusGeometry(rim,.075,6,12),q.east,y,q.north,yaw+Math.PI/2);
+      for(let k=0;k<10;k++){
+        const theta=k*Math.PI/5,z=Math.sin(theta)*rim,hy=y+Math.cos(theta)*rim;
+        const b=at(t,z);
+        if(hy<(heightAt(b.east,b.north)??p.height)+.04)continue;
+        box(workshopSheet,b.east,hy,b.north,.13,.10,.10,yaw);
+      }
+    }
+    // Close the shell thickness with a real annulus, while leaving
+    // the 1.46m bore visually open at each end.
+    for(const s of [-1,1]){
+      const q=at(s*2.63,0);
+      part(workshopRust,new RingGeometry(.73,.91,12),q.east,y,q.north,yaw+s*Math.PI/2);
+    }
+    // Narrow frost skins follow the pipe curvature, not a floating cube.
+    for(const [t,len]of [[-1.92,.57],[.28,.88],[1.78,.36]] as const){
+      if(i===1&&t<0)continue;
+      const q=at(t,0);
+      part(cleanSnow,new CylinderGeometry(.861,.861,len,4,1,true,Math.PI*.34,Math.PI*.31),q.east,y,q.north,yaw,0,Math.PI/2);
+    }
+    // Buried saddle blocks carry the exposed pipe; the middle pipe is
+    // half buried and deliberately has no above-ground cradles.
+    if(i!==1)for(const t of [-1.75,1.75]){
+      const q=at(t,0),soils=[-.5,.5].flatMap(x=>[-.5,.5].map(z=>{
+        const b=at(t+x*.52,z*1.54);return heightAt(b.east,b.north)??p.height;
+      }));
+      const bottom=Math.min(...soils)-.09,top=y-.48;
+      if(top<=bottom)continue;
+      box(workshopBrick,q.east,(bottom+top)/2,q.north,.52,top-bottom,1.54,yaw);
+      colliders.push(orientedSupportBox(q.east,q.north,yaw,.52,1.54,bottom,top));
+      for(const side of [-1,1]){
+        const b=at(t,side*.51);
+        box(workshopRust,b.east,y-.39,b.north,.48,.20,.20,yaw,side*.55);
+      }
+    }
+    // Match the cylindrical envelope with several height bands, avoiding
+    // the old oversized world AABB. Bore is smaller than a standing player.
+    for(let k=0;k<5;k++){
+      const lo=y-.85+k*.34,hi=lo+.34;
+      if(hi<=p.height)continue;
+      const near=Math.max(0,Math.abs((lo+hi)/2-y)-.17),r=Math.sqrt(.85*.85-near*near);
+      colliders.push(orientedSupportBox(p.east,p.north,yaw,5.2,2*r,Math.max(p.height,lo),hi));
+    }
+    for(const t of [-2.58,2.58]){
+      const q=at(t,0);
+      colliders.push(orientedSupportBox(q.east,q.north,yaw,.17,1.89,Math.max(p.height,y-.945),y+.945));
+    }
   }
+  industrialRoutes.push({id:'salvage-pipes',points:salvagePipeFootway.map(([east,north])=>({east,north,height:heightAt(east,north)!}))});
   // Concrete foundation stubs along the belt's outer edge.
   for (let i = 0; i < 6; i++) {
     const b = 112 + i * 19 + hash(i * 7) * 6;
     const p = site(`foundation-stub-${i + 1}`, b, 101 + hash(i * 3) * 6, 2.5);
     if (!p) continue;
     const s = 1.6 + hash(i * 11) * 1.8;
-    box(concrete, p.east, p.height + .3 + hash(i) * .3, p.north, s, .6 + hash(i * 5) * .7, s * .8, hash(i * 13) * 3);
+    const yaw=hash(i*13)*3,hh=.6+hash(i*5)*.7;
+    // Footing follows sampled ground corners and its flat top is actually
+    // standable. Bolt stubs are short inlays, not invisible obstacles.
+    const c=Math.cos(yaw),q=Math.sin(yaw);
+    const soils=[-1,1].flatMap(x=>[-1,1].map(z=>heightAt(p.east+c*x*s/2+q*z*s*.4,p.north+q*x*s/2-c*z*s*.4)??p.height));
+    const bottom=Math.min(p.height,...soils)-.10,top=p.height+hh;
+    box(workshopBrick,p.east,(bottom+top)/2,p.north,s,top-bottom,s*.8,yaw);
+    floors.push(orientedSupportBox(p.east,p.north,yaw,s,s*.8,bottom,top));
+    for(const x of [-.28,.28])for(const z of [-.25,.25]){
+      const e=p.east+c*x*s+q*z*s,n=p.north+q*x*s-c*z*s;
+      box(workshopRust,e,top-.01,n,.13,.045,.13,yaw);
+    }
   }
 
   // ================= 2b · three-layer isolation + outer band =================
@@ -625,35 +1297,76 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   siteAt('wall-south-end', wallEast, 10, 3);
   siteAt('wall-gate', wallEast, wallGateNorth, 3.4);
   siteAt('wall-north-end', wallEast, 310, 3);
-  for (let n = 13; n <= 307; n += 6) {
-    if (Math.abs(n - wallGateNorth) < 4.2) continue;
-    const g = heightAt(wallEast, n);
-    if (g === undefined) continue;
-    box(stone, wallEast, g + .6, n, 1.5, 1.2, 6.15);
-    box(earthWall, wallEast, g + 3, n, 1.15, 3.6, 6.15);
-    box(stoneDark, wallEast, g + 5.15, n, 1.45, .7, 6.3);
-    box(snow, wallEast, g + 5.56, n, 1.3, .12, 6.2);
-    // S-1 collision: base + rammed earth + cap read as one wall mass.
-    hitBox(colliders, wallEast, n, 0, 1.5, 6.15, g, g + 5.5);
+  function wallBay(n:number,length:number,index:number){
+    const g=heightAt(wallEast,n);
+    if(g===undefined)return;
+    // A footing reaches the lowest surveyed point along this real bay.
+    // It cannot float over the town-height seam; the cap remains stepped.
+    const soils=[-1,0,1].flatMap(side=>[-.5,0,.5].map(t=>heightAt(wallEast+side*.75,n+t*length)??g));
+    const bottom=Math.min(...soils,g)-.12;
+    const plinth=g+1.20;
+    box(workshopBrick,wallEast,(bottom+plinth)/2,n,1.5,plinth-bottom,length);
+    box(wallPlaster,wallEast,g+3,n,1.15,3.6,length);
+    box(workshopBrick,wallEast,g+5.15,n,1.45,.7,length+.1);
+    box(cleanSnow,wallEast,g+5.56,n,1.30,.12,length);
+    hitBox(colliders,wallEast,n,0,1.5,length,bottom,g+5.62);
+    // Weathered masonry blocks set into the plaster face. The shallow
+    // relief stays inside the load-bearing stone plinth's footprint.
+    for(const side of [-1,1]){
+      for(let k=0;k<3;k++){
+        const z=n+length*((k+.5)/3-.5);
+        const y=g+1.54+((index+k)%3)*.28;
+        box(workshopBrick,wallEast+side*.605,y,z,.12,.39,Math.min(.74,length/4));
+      }
+      if(length>4&&index%4===0){
+        box(workshopBrick,wallEast+side*.65,g+2.78,n,.18,3.22,.66);
+        box(stoneDark,wallEast+side*.65,g+4.47,n,.20,.23,.84);
+      }
+    }
   }
+  for(let n=13;n<=307;n+=6){
+    if(Math.abs(n-wallGateNorth)<4.2)continue;
+    wallBay(n,6.15,Math.round((n-13)/6));
+  }
+  // Restore the two unequal side returns left by the old skipped bay
+  // arithmetic. The only opening in this local span is the intended gate.
+  wallBay((154.075+155.05)/2,155.05-154.075,24);
+  wallBay((162.95+165.925)/2,165.925-162.95,25);
   {
     // Gate frame and two leaves standing open — the guard turns you back, not the door.
     const g = heightAt(wallEast, wallGateNorth);
     if (g !== undefined) {
       for (const s of [-1, 1]) {
-        box(stone, wallEast, g + 3.1, wallGateNorth + s * 3.4, 1.7, 6.2, 1.1);
+        const postN=wallGateNorth+s*3.4;
+        box(workshopBrick,wallEast,g+3.1,postN,1.7,6.2,1.1);
+        box(stoneDark,wallEast,g+.34,postN,1.88,.68,1.30);
+        for(let course=0;course<7;course++){
+          const y=g+.82+course*.74;
+          for(const side of [-1,1])
+            box(workshopBrick,wallEast+side*.875,y,postN,.10,.52,.92);
+        }
+        box(stoneDark,wallEast,g+6.25,postN,1.92,.20,1.34);
+        box(snow,wallEast,g+6.42,postN,1.85,.14,1.30);
         const leafN = wallGateNorth + s * 2.2;
-        box(timber, wallEast - 1.1, g + 2.2, leafN, .14, 4.4, 2.7, s * .85);
-        box(iron, wallEast - 1.1, g + 3.4, leafN, .18, .3, 2.7, s * .85);
+        box(workshopWood,wallEast-1.1,g+2.2,leafN,.14,4.4,2.7,s*.85);
+        for(const y of [1.02,3.4])box(workshopSheet,wallEast-1.1,g+y,leafN,.18,.22,2.7,s*.85);
       }
       // S-1 collision: gate posts and the two leaves standing open — the
       // guard turns you back, not the door (design), so the channel between
       // the leaves' inner edges (≈2.6 m) stays walkable.
       for (const s of [-1, 1]) {
-        hitBox(colliders, wallEast, wallGateNorth + s * 3.4, 0, 1.7, 1.1, g, g + 6.2);
+        hitBox(colliders,wallEast,wallGateNorth+s*3.4,0,1.88,1.30,g,g+.68);
+        hitBox(colliders,wallEast,wallGateNorth+s*3.4,0,1.85,1.1,g+.68,g+6.2);
         hitBox(colliders, wallEast - 1.1, wallGateNorth + s * 2.2, s * .85, .14, 2.7, g, g + 4.4);
       }
-      box(timber, wallEast, g + 6.35, wallGateNorth, 1.2, .45, 8.2);
+      box(workshopWood,wallEast,g+6.35,wallGateNorth,1.2,.45,8.2);
+      // Reference gate's warm lantern and timber support, kept outside the
+      // walking channel. Emissive glass uses the existing material budget.
+      const lampN=wallGateNorth-3.4,lampE=wallEast+.99;
+      box(timber,lampE,g+4.72,lampN,.13,.24,.66);
+      box(iron,lampE+.13,g+4.41,lampN,.06,.48,.06);
+      box(glow,lampE+.13,g+4.07,lampN,.30,.32,.30);
+      for(const h of [3.88,4.27])box(iron,lampE+.13,g+h,lampN,.38,.06,.38);
       // Town-office notice, fresh paint, on the south post's passage face
       // (牌面 §一, verbatim — the town era still speaks gently).
       siteAt('wall-gate-notice', wallEast, 156.2, 1);
@@ -675,8 +1388,60 @@ export function buildCraterOuterWorks(road: CraterRoad) {
         c.font = '600 36px "Noto Sans SC", sans-serif'; c.textAlign = 'right';
         c.fillText('未写镇公所', w - 40, h * .93);
       });
+      // K-27 (《设计-全图文字件总表》卡08): direction board on the north
+      // post's passage face, mirroring the town-office notice opposite.
+      siteAt('wall-gate-direction', wallEast, 161.8, 1);
+      sign(wallEast, g + 3.3, 161.82, Math.PI, 1.6, .48, timber, (c, w, h) => {
+        c.fillStyle = '#3a352d'; c.fillRect(0, 0, w, h);
+        c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
+        c.strokeRect(10, 10, w - 20, h - 20);
+        c.font = '600 46px "Noto Sans SC", sans-serif';
+        c.fillStyle = '#e8e2d2'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText('北行坑区 · 请走正门', w / 2, h / 2 + 2);
+      });
     }
   }
+  // Worn stone road flanks the gate, using the same batches as the wall.
+  // Keep the swing leaves and pillar returns clear, and leave the north
+  // station turn open. The individual stones are real low step supports,
+  // with foundations sunk into the sampled surface, never floating decals.
+  const roadStone=(e:number,n:number,w:number,d:number,rise:number)=>{
+    const ys=[-1,1].flatMap(x=>[-1,1].map(z=>heightAt(e+x*w/2,n+z*d/2)??heightAt(e,n)??anchor.rimHeight));
+    const bottom=Math.min(...ys)-.09,top=Math.max(...ys)+rise;
+    box(workshopBrick,e,(bottom+top)/2,n,w,top-bottom,d);
+    hitBox(floors,e,n,0,w,d,bottom,top);
+  };
+  for(const [start,end] of [[-14,-7],[-35,-23]] as const){
+    for(let e=start+.35;e<end-.25;e+=.82){
+      for(const side of [-1,1]){
+        // Keep the exit to the passenger station free of curbs.
+        if(side===1&&e<-28.5&&e>-34.5)continue;
+        const n=wallGateNorth+side*(3.13+.07*Math.sin(e*2.1));
+        roadStone(e,n,.74,.37,.10+.035*hash(e+side*13));
+      }
+      // Sparse exposed flagstones within the snow rather than a second
+      // coplanar road sheet; the slight rise is comfortably walkable.
+      for(let j=0;j<5;j++){
+        const n=wallGateNorth+(j-2)*.95+.08*Math.sin(e*3+j);
+        if(hash(e*11+j*23)>.48)
+          roadStone(e+.08*Math.sin(j+e),n,.65,.80,.014);
+      }
+    }
+  }
+
+  // North pedestrian shoulder markers belong to the actual west carrier,
+  // not to a separate road layer. Keep the 2m walking lane and rails clear.
+  for(const p of northFootwayPosts){
+    const g=heightAt(p.east,p.north);
+    if(g===undefined)continue;
+    box(workshopBrick,p.east,g+.10,p.north,.42,.36,.42);
+    box(workshopWood,p.east,g+.65,p.north,.16,.92,.16);
+    box(workshopSheet,p.east,g+1.03,p.north,.22,.12,.22);
+    box(cleanSnow,p.east,g+1.13,p.north,.23,.08,.23);
+    hitBox(colliders,p.east,p.north,0,.42,.42,g-.08,g+.28);
+    hitBox(colliders,p.east,p.north,0,.23,.23,g+.28,g+1.17);
+  }
+
   // Gatehouse: enterable stone-and-timber hut on the town side of the gate, door to the road.
   const gatehouse = siteAt('gatehouse', -13, 150.5, 4);
   if (gatehouse) {
@@ -687,27 +1452,70 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       const p = fr.at(dx, dz);
       box(mat, p.east, h, p.north, sx, sy, sz, fr.yaw, pitch, roll);
     };
-    put(stone, 0, g + .5, 0, 5, 1, 4);
-    put(timber, 0, g + 2.2, -1.93, 5, 2.6, .16);
-    put(timber, -2.43, g + 2.2, 0, .16, 2.6, 4);
-    put(timber, 2.43, g + 2.2, 0, .16, 2.6, 4);
-    put(timber, -1.55, g + 2.2, 1.93, 1.75, 2.6, .16);
-    put(timber, 1.85, g + 2.2, 1.93, 1.15, 2.6, .16);
-    put(timber, .15, g + 3.35, 1.93, 2.25, .35, .16);
-    // S-1 collision: stone base as a standable floor (a doorway ramp
-    // bridges the 1 m rise), walls as colliders; the front doorway
-    // between the two segments stays 1.95 m open.
-    { const c = fr.at(0, 0); hitBox(floors, c.east, c.north, fr.yaw, 5, 4, g, g + 1); }
-    hitRamp(ramps, fr, 3.05, 1.45, .95, g, g + 1);
-    for (const [dx, dz, sx, sz] of [[0, -1.93, 5, .16], [-2.43, 0, .16, 4], [2.43, 0, .16, 4], [-1.55, 1.93, 1.75, .16], [1.85, 1.93, 1.15, .16]] as const) {
-      const p = fr.at(dx, dz);
-      hitBox(colliders, p.east, p.north, fr.yaw, sx, sz, g + .9, g + 3.5);
+    const hut=industrialBuilder(fr,g,put,colliders,floors);
+    hut.slab(workshopBrick,0,0,5,4,1,1.12);
+    hut.shell(workshopWood,5,4,1,4.05,.3,1.95,2.35,{
+      openings:[{side:-1,x:0,width:1.7,low:2.15,high:3.35}],
+      frame:timber,glass:frostedGlass,
+    });
+    // Actual entry treads, not the old invisible ramp. Each tread extends
+    // down to the local ground and the last meets the original stone floor.
+    const entry=fr.at(.3,5.55);
+    const low=(heightAt(entry.east,entry.north)??g)-g;
+    const count=4,run=.68,doorZ=2.0;
+    const path=[hut.point(.3,5.55,low)];
+    for(let i=0;i<count;i++){
+      const z=doorZ+(count-i-.5)*run,top=low+(1-low)*(i+1)/count;
+      const p=fr.at(.3,z);
+      const base=Math.min(top-.12,(heightAt(p.east,p.north)??g)-g-.07);
+      hut.slab(workshopBrick,.3,z,1.85,run+.008,top,top-base);
+      put(timber,.3,g+top+.018,z+run/2-.04,1.72,.036,.085);
+      path.push(hut.point(.3,z,top));
     }
-    put(slate, 0, g + 4.35, -1.05, 5.7, .2, 2.6, .5);
-    put(slate, 0, g + 4.35, 1.05, 5.7, .2, 2.6, -.5);
-    // Interior: table, bench, duty board; lamp by the door.
-    put(timberWarm, 0, g + 1.35, -.6, 1.7, .12, .9);
-    put(timber, -.8, g + 1.3, .6, 1.5, .1, .45);
+    path.push(hut.point(.3,1.35,1),hut.point(.3,.35,1));
+    industrialRoutes.push({id:'gatehouse',points:path});
+    for(const dx of [-2.36,2.36])for(const dz of [-1.86,1.86])
+      put(timber,dx,g+2.53,dz,.20,3.06,.20);
+    // K-26 (《设计-全图文字件总表》卡08): hut name board on the front wall
+    // over the doorway, centred on the door gap (dx +0.3), under the lintel.
+    const gateSignP = fr.at(.3, 2.02);
+    siteAt('gatehouse-sign', gateSignP.east, gateSignP.north, 1);
+    sign(gateSignP.east, g + 3.68, gateSignP.north, fr.yaw, .95, .32, timber, (c, w, h) => {
+      c.fillStyle = '#3a352d'; c.fillRect(0, 0, w, h);
+      c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
+      c.strokeRect(10, 10, w - 20, h - 20);
+      c.font = 'bold 92px "Noto Sans SC", sans-serif';
+      c.fillStyle = '#e8e2d2'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('门房', w / 2, h / 2 + 4);
+    });
+    // A continuous pitched roof with real gable infill and exposed rafters.
+    const eaves=4.05,rise=1.22,runRoof=2.30,pitch=Math.atan2(rise,runRoof);
+    for(const side of [-1,1]){
+      put(slate,0,g+eaves+rise/2,side*runRoof/2,5.7,.18,Math.hypot(rise,runRoof),side*pitch);
+      put(cleanSnow,0,g+eaves+rise/2+.14,side*runRoof/2,5.55,.08,Math.hypot(rise,runRoof)-.1,side*pitch);
+      put(timber,0,g+eaves,side*runRoof,5.75,.18,.18);
+      for(let k=0;k<6;k++){
+        const t=(k+.5)/6;
+        put(workshopWood,side*2.42,g+eaves+rise*t,0,.18,rise/6+.01,4*(1-t)+.02);
+      }
+    }
+    put(timber,0,g+eaves+rise+.12,0,5.8,.22,.31);
+    for(const x of [-1.75,0,1.75])put(timber,x,g+3.97,0,.15,.18,4);
+    // Furniture occupies its actual footprint. Keep the center walk lane
+    // and a clear turning circle at the inside end of the stairs.
+    hut.piece(workshopWood,-1.23,-.95,1.65,.68,1,1.77);
+    put(timberWarm,-1.23,g+1.81,-.95,1.80,.10,.79);
+    hut.piece(workshopWood,1.6,-.62,.48,1.7,1,1.48);
+    put(timber,1.6,g+1.52,-.62,.56,.10,1.82);
+    put(timber,1.86,g+1.86,-.62,.13,.62,1.8);
+    const seat=fr.at(1.6,-.62),stand=fr.at(.72,-.62);
+    gatehouseSeats.push({id:'gatehouse-bench',...seat,height:g+1,useEast:stand.east,useNorth:stand.north,yaw:0});
+    hut.piece(workshopWood,-1.72,1.03,.64,.72,1,2.32);
+    for(let y=0;y<3;y++)put(timberWarm,-1.72,g+1.28+y*.41,1.03,.72,.07,.8);
+    put(timber,-1.23,g+2.59,-1.81,1.62,.72,.10);
+    for(let k=0;k<3;k++)put(brass,-1.72+k*.48,g+2.52,-1.72,.035,.25,.035);
+    put(glow,-1.23,g+2.05,-.95,.21,.36,.21);
+    put(iron,-1.23,g+2.27,-.95,.27,.08,.27);
     const lampP = fr.at(1.4, 2.6);
     box(timber, lampP.east, g + 1, lampP.north, .14, 2, .14);
     box(glow, lampP.east, g + 2.15, lampP.north, .3, .38, .3);
@@ -745,22 +1553,23 @@ export function buildCraterOuterWorks(road: CraterRoad) {
       part(rustIron, new ConeGeometry(.11, .42, 5), east, h + 4.9, north, -rad);
       fencePosts.push({ bearing: b, radius: r });
       if (prev && b - prev.b === 2) {
-        const midB = d2r((b + prev.b) / 2);
-        const midR = (r + ringRadius(prev.b)) / 2;
-        const me = anchor.east + midR * Math.sin(midB);
-        const mn = anchor.north + midR * Math.cos(midB);
-        const mh = heightAt(me, mn);
-        if (mh !== undefined) {
-          const chord = 2 * midR * Math.sin(d2r(1)) + .15;
-          for (const ry of [1.15, 2.6, 4.05]) box(rustIron, me, mh + ry, mn, chord, .12, .07, -midB);
-          for (let bar = 0; bar < 4; bar++) {
-            const bb = d2r(prev.b + .4 + bar * .4);
-            const br = ringRadius(prev.b + .4 + bar * .4);
-            const be = anchor.east + br * Math.sin(bb);
-            const bn = anchor.north + br * Math.cos(bb);
-            const bh = heightAt(be, bn);
-            if (bh !== undefined) box(rustIron, be, bh + 2.3, bn, .07, 4.4, .07, -bb);
-          }
+        // Fit the actual post-to-post chord, including the abrupt radius
+        // transitions at the industrial reservations. Rails and the solid
+        // collision segment now share the same centreline.
+        const de=east-prev.east,dn=north-prev.north,dh=h-prev.h;
+        const run=Math.hypot(de,dn),yaw=Math.atan2(dn,de),roll=Math.atan2(dh,run);
+        const me=(east+prev.east)/2,mn=(north+prev.north)/2,mh=(h+prev.h)/2;
+        const chord=Math.hypot(run,dh)+.13;
+        for(const ry of [1.15,2.6,4.05])box(rustIron,me,mh+ry,mn,chord,.12,.07,yaw,0,roll);
+        // Long diagonal transitions need more pickets, not wider holes.
+        // Ground each picket and terminate it just below the sloped cap.
+        const count=Math.max(4,Math.ceil(run/.70)-1);
+        for(let bar=1;bar<=count;bar++){
+          const t=bar/(count+1),be=prev.east+t*de,bn=prev.north+t*dn;
+          const ground=heightAt(be,bn),line=prev.h+t*dh;
+          if(ground===undefined)continue;
+          const base=Math.min(ground-.06,line+.10),top=Math.max(ground+.25,line+4.50);
+          box(rustIron,be,(base+top)/2,bn,.07,top-base,.07,yaw);
         }
       }
       // S-1 collision: one segment box per drawn panel span. The skip
@@ -835,114 +1644,489 @@ export function buildCraterOuterWorks(road: CraterRoad) {
   // ---------- layer 3: three stone-iron defense towers ----------
   /** The north tower's real lamp — the warm chain's only outer-works light. */
   let northTowerLight: PointLight | undefined;
-  function tower(origin: { east: number; north: number; height: number }, totalH: number,
+  function tower(origin: CraterOuterSite, totalH: number,
     mode: 'active' | 'tilted' | 'broken-ladder', faceDeg: number) {
-    const fr = frame(origin, faceDeg);
-    const g = origin.height;
-    const put = (mat: MeshStandardMaterial, dx: number, h: number, dz: number,
-      sx: number, sy: number, sz: number, pitch = 0, roll = 0) => {
-      const p = fr.at(dx, dz);
-      box(mat, p.east, h, p.north, sx, sy, sz, fr.yaw, pitch, roll);
+    // Batch 83: each original defense tower becomes a genuinely walkable
+    // two-turn square spiral around a solid masonry core. Cardinal frames
+    // keep the actual rendered wall/tread rectangles and AABB authority equal.
+    const fr = frame(origin, faceDeg), g=origin.height;
+    const put = (mat:MeshStandardMaterial,dx:number,h:number,dz:number,
+      sx:number,sy:number,sz:number,pitch=0,roll=0)=>{
+      const p=fr.at(dx,dz);box(mat,p.east,h,p.north,sx,sy,sz,fr.yaw,pitch,roll);
     };
-    const shaftH = totalH - 2.6;
-    put(stone, 0, g + shaftH * .28, 0, 3.9, shaftH * .56, 3.9);
-    put(stone, 0, g + shaftH * .78, 0, 3.3, shaftH * .44, 3.3);
-    for (const fy of [.3, .62, .92]) put(iron, 0, g + shaftH * fy, 0, 4, .28, 4);
-    put(stoneDark, 0, g + shaftH + .25, 0, 4.7, .5, 4.7);
-    // S-1 collision: shaft mass + platform slab (the cabin sits on the slab).
-    hitBox(colliders, origin.east, origin.north, fr.yaw, 3.9, 3.9, g, g + shaftH);
-    hitBox(colliders, origin.east, origin.north, fr.yaw, 4.7, 4.7, g + shaftH, g + shaftH + .5);
-    for (let m = 0; m < 8; m++) {
-      const a = m * Math.PI / 4;
-      const p = fr.at(Math.sin(a) * 2.15, Math.cos(a) * 2.15);
-      box(stone, p.east, g + shaftH + .95, p.north, .85, .85, .4, fr.yaw + a);
+    const solid=(mat:MeshStandardMaterial,x:number,z:number,w:number,d:number,low:number,high:number)=>{
+      put(mat,x,g+(low+high)/2,z,w,high-low,d);
+      const p=fr.at(x,z);hitBox(colliders,p.east,p.north,fr.yaw,w,d,g+low,g+high);
+    };
+    const slab=(mat:MeshStandardMaterial,x:number,z:number,w:number,d:number,top:number,thickness=.13)=>{
+      put(mat,x,g+top-thickness/2,z,w,thickness,d);
+      const p=fr.at(x,z);hitBox(floors,p.east,p.north,fr.yaw,w,d,g+top-thickness,g+top);
+    };
+    const wp=(x:number,z:number,y:number):CraterTowerWalkPoint=>({...fr.at(x,z),height:g+y});
+    const shaftH=totalH-2.6, deck=shaftH+.5, half=2.3, c=1.48, width=1.2;
+    // Keep a genuine load-bearing center (the former center-blocking test
+    // remains valid), while all four stair lanes are now hollow.
+    solid(towerMasonry,0,0,.88,.88,0,shaftH);
+    const wall=.18, outer=half-wall/2;
+    // Ground doorway, 1.28m clear, centred on the first stair corner.
+    const doorL=-c-.64,doorR=-c+.64;
+    solid(towerMasonry,(doorL-half)/2,outer,doorL+half,wall,0,deck);
+    solid(towerMasonry,(doorR+half)/2,outer,half-doorR,wall,0,deck);
+    solid(towerMasonry,-c,outer,1.28,wall,2.35,deck);
+    // Side/back walls have repeated small narrow light slots. Their 0.30m
+    // aperture is smaller than the .54m player diameter; no false passage.
+    function flank(axis:'x'|'z',side:number){
+      const slot=.30, bands=Math.floor(deck/2.4);
+      const panel=(a:number,b:number,low:number,high:number)=>{
+        if(axis==='x')solid(towerMasonry,side*outer,(a+b)/2,wall,b-a,low,high);
+        else solid(towerMasonry,(a+b)/2,side*outer,b-a,wall,low,high);
+      };
+      let low=0;
+      for(let k=0;k<bands;k++){
+        const sill=k*2.4+1.02,head=sill+.62;
+        panel(-half,half,low,sill);
+        panel(-half,-slot/2,sill,head);
+        panel(slot/2,half,sill,head);
+        low=head;
+      }
+      panel(-half,half,low,deck);
     }
-    // Cabin on the platform; the west tower's cabin lists where its frame gave.
-    const tilt = mode === 'tilted' ? .13 : 0;
-    put(timber, .6, g + shaftH + 1.55, -.5, 2.3, 2.1, 2.3, 0, tilt);
-    const roofP = fr.at(.6, -.5);
-    part(slate, new ConeGeometry(2, 1.1, 4), roofP.east, g + shaftH + 3.15, roofP.north, fr.yaw + Math.PI / 4, 0, tilt);
-    // Ladder up the crater-facing side; the gate tower's ladder ends mid-shaft.
-    const ladderTop = mode === 'broken-ladder' ? .55 : 1;
-    const rungs = Math.floor(shaftH * ladderTop / .45);
-    for (const s of [-1, 1]) put(iron, s * .42, g + shaftH * ladderTop / 2, 2.02, .07, shaftH * ladderTop, .07);
-    for (let i = 0; i < rungs; i++) put(iron, 0, g + .3 + i * .45, 2.02, .9, .06, .06);
-    if (mode === 'broken-ladder') {
-      const fallen = fr.at(1.6, 3.4);
-      box(iron, fallen.east, g + .25, fallen.north, .85, .08, 3.4, fr.yaw + .4, 0, .04);
+    flank('x',-1);flank('x',1);flank('z',-1);
+    for(const y of [deck*.31,deck*.62,deck-.28]){
+      for(const side of [-1,1]){
+        put(workshopRust,side*half,g+y,0,.08,.18,4.6);
+        put(workshopRust,0,g+y,side*half,4.6,.18,.08);
+        for(const z of [-1.76,1.76]){
+          put(workshopSheet,side*(half+.045),g+y,z,.065,.11,.14);
+          put(workshopSheet,z,g+y,side*(half+.045),.14,.11,.065);
+        }
+      }
     }
-    if (mode === 'active') {
-      const lampP = fr.at(-1.7, 1.7);
-      box(iron, lampP.east, g + shaftH + 1.5, lampP.north, .1, 2, .1);
-      box(glow, lampP.east, g + shaftH + 2.6, lampP.north, .34, .42, .34);
-      const light = new PointLight(new Color(palette.ember), 14, 32, 2);
-      light.position.set(lampP.east, g + shaftH + 2.6, -lampP.north);
-      group.add(light);
-      northTowerLight = light;
+    // 8 straight flights, 5 treads per flight. Every tread is an actual
+    // standable floor slab. Corner landings connect the next 90-degree run.
+    const corners=[[-c,c],[c,c],[c,-c],[-c,-c]] as const;
+    const rises=8, treads=5, climb=deck/rises;
+    const stairs:CraterTowerWalkPoint[]=[wp(-c,c,0)];
+    for(let flight=0;flight<rises;flight++){
+      const a=corners[flight%4]!,b=corners[(flight+1)%4]!;
+      const dx=Math.sign(b[0]-a[0]),dz=Math.sign(b[1]-a[1]);
+      const startX=a[0]+dx*width/2,startZ=a[1]+dz*width/2;
+      const length=2*c-width, depth=length/treads;
+      for(let k=0;k<treads;k++){
+        const dist=(k+.5)*depth, x=startX+dx*dist,z=startZ+dz*dist;
+        const h=climb*(flight+(k+1)/treads);
+        slab(k%2===0?workshopBrick:towerMasonry,x,z,dx?depth+.006:width,dz?depth+.006:width,h);
+        // Embedded contrasting nosing, never a second collision surface.
+        put(iron,x+dx*(depth/2-.025),g+h-.016,z+dz*(depth/2-.025),
+          dx?.045:width,.026,dz?.045:width);
+      }
+      const landing=climb*(flight+1);
+      slab(workshopBrick,b[0],b[1],width,width,landing);
+      stairs.push(wp(b[0],b[1],landing));
+      // Small visible warm fixtures do not add point-light budget.
+      const lightX=b[0]*1.38,lightZ=b[1]*1.38;
+      put(glow,lightX,g+landing+1.4,lightZ,.13,.24,.13);
     }
+    // Open BOTH uppermost stair flights for player headroom: the rear
+    // penultimate run and left-hand final run are uncovered until the top
+    // landing. The deck occupies the inner/front quadrant and exit tongue.
+    slab(workshopBrick,.75,.75,3.1,3.1,deck,.22);
+    slab(workshopBrick,-1.55,1.57,1.5,1.46,deck,.22);
+    solid(iron,-.80,.02,.10,1.64,deck,deck+1.02);
+    solid(iron,.75,-.80,3.10,.10,deck,deck+1.02);
+    for(const side of [-1,1]){
+      solid(towerMasonry,side*2.23,0,.19,4.6,deck,deck+.92);
+      solid(towerMasonry,0,side*2.23,4.6,.19,deck,deck+.92);
+      put(cleanSnow,side*2.23,g+deck+.94,0,.17,.04,4.45);
+      put(cleanSnow,0,g+deck+.94,side*2.23,4.45,.04,.17);
+      for(const x of [-1.75,0,1.75]){
+        put(workshopBrick,x,g+deck+1.02,side*2.23,.48,.20,.35);
+        put(workshopBrick,side*2.23,g+deck+1.02,x,.35,.20,.48);
+        put(cleanSnow,x,g+deck+1.145,side*2.23,.44,.045,.31);
+        put(cleanSnow,side*2.23,g+deck+1.145,x,.31,.045,.44);
+      }
+    }
+    // Open canopy, rather than an inaccessible cabin mass. Preserve the
+    // three towers' active / tilted / damaged silhouettes.
+    const tilt=mode==='tilted'?.10:0;
+    for(const x of [-.58,2.06])for(const z of [-.54,.94])
+      solid(timber,x,z,.12,.12,deck,deck+2.15);
+    const roofP=fr.at(.74,.20);
+    part(slate,new ConeGeometry(1.90,.65,4),roofP.east,g+deck+2.35,roofP.north,
+      fr.yaw+Math.PI/4,0,tilt);
+    // The different tower-number rubbings share the stone plinth form.
+    solid(stone,1.55,.15,.66,.65,deck,deck+.83);
+    put(stoneDark,1.55,g+deck+.89,.15,.74,.12,.73);
+    const marks=mode==='active'?1:mode==='tilted'?2:3;
+    for(let i=0;i<marks;i++)
+      put(brass,1.55+(i-(marks-1)/2)*.14,g+deck+.96,.15,.07,.025,.37);
+    if(mode==='broken-ladder'){
+      const fallen=fr.at(1.55,3.1);
+      box(iron,fallen.east,g+.15,fallen.north,.65,.08,2.6,fr.yaw+.4,0,.04);
+    }
+    if(mode==='active'){
+      const lampP=fr.at(-1.96,1.98);
+      box(iron,lampP.east,g+deck+1.5,lampP.north,.1,2,.1);
+      box(glow,lampP.east,g+deck+2.45,lampP.north,.34,.42,.34);
+      const light=new PointLight(new Color(palette.ember),14,32,2);
+      light.position.set(lampP.east,g+deck+2.45,-lampP.north);
+      group.add(light);northTowerLight=light;
+      // K-29/K-30 (《设计-全图文字件总表》卡10, north tower only — the west
+      // tower takes no board per K-31): name plate on the shaft's entrance
+      // face, duty plate on the platform parapet.
+      const nameP = fr.at(.20, 2.34);
+      siteAt('north-tower-sign', nameP.east, nameP.north, 1);
+      sign(nameP.east, g + 1.6, nameP.north, fr.yaw, .7, .3, iron, (c, w, h) => {
+        c.fillStyle = '#3b3835'; c.fillRect(0, 0, w, h);
+        c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
+        c.strokeRect(8, 8, w - 16, h - 16);
+        c.font = 'bold 100px "Noto Sans SC", sans-serif';
+        c.fillStyle = '#d3cbb9'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText('北塔', w / 2, h / 2 + 4);
+      });
+      const dutyP = fr.at(.6, 2.34);
+      siteAt('north-tower-duty', dutyP.east, dutyP.north, 1);
+      sign(dutyP.east, g + deck + .52, dutyP.north, fr.yaw, .8, .5, timber, (c, w, h) => {
+        c.fillStyle = '#3a352d'; c.fillRect(0, 0, w, h);
+        c.strokeStyle = 'rgba(211, 203, 185, .35)'; c.lineWidth = 3;
+        c.strokeRect(10, 10, w - 20, h - 20);
+        c.font = 'bold 110px "Noto Sans SC", sans-serif';
+        c.fillStyle = '#e8e2d2'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.fillText('守塔', w / 2, h / 2 + 4);
+      });
+    }
+    const entry=wp(-c,3.25,0),lookout=wp(1.38,1.39,deck);
+    const rubbing=wp(1.55,.15,deck),rubbingUse=wp(.16,.15,deck);
+    stairs.push(wp(.1,1.48,deck),lookout,wp(.16,1.1,deck),rubbingUse);
+    towerRoutes.push({id:origin.id,entry,stairs,lookout,rubbing,rubbingUse});
   }
   const northTower = site('north-tower', 358, 67.5, 4, 13.5);
-  if (northTower) tower(northTower, 13.5, 'active', 358 + 180);
+  if (northTower) tower(northTower, 13.5, 'active', 0);
   const westTower = site('west-tower', 262, 64, 4, 12.5);
-  if (westTower) tower(westTower, 12.5, 'tilted', 262 + 180);
+  if (westTower) tower(westTower, 12.5, 'tilted', 270);
   const gateTower = siteAt('gate-tower', -30, 174, 4, 12);
   if (gateTower) tower(gateTower, 12, 'broken-ladder', 90);
 
+  // Four outlying lenses sit on the actual fractured carrier, separate
+  // from the B-owned crater interior. Keep the south traverse at N51 free.
+  const shoulderStacks:{east:number;north:number;bottom:number;top:number;width:number;depth:number}[]=[];
+  const shoulderGroups=[
+    [[-208,109],[-203,109],[-212,101],[-206,101]],
+    [[-221,269],[-216,269],[-211,269],[-214,261]],
+    [[-165,308],[-174,300],[-168,300]],
+    [[-169,55],[-164,55],[-162,47],[-167,46]],
+  ] as const;
+  for(const [ci,cluster]of shoulderGroups.entries())for(const [i,[e,n]]of cluster.entries()){
+    const w=1.6+hash(ci*37+i*11)*.95,d=.92+hash(ci*19+i*13)*.64;
+    const samples=[-1,1].flatMap(x=>[-1,1].map(z=>heightAt(e+x*w/2,n+z*d/2)));
+    if(samples.some(y=>y===undefined))continue;
+    const base=Math.min(...samples as number[])-.12,ground=Math.max(...samples as number[]);
+    if(colliders.some(b=>b.min[0]<e+w/2+.2&&b.max[0]>e-w/2-.2&&b.min[2]<-n+d/2+.2&&b.max[2]>-n-d/2-.2&&b.max[1]>base&&b.min[1]<ground+1.4))continue;
+    const stackHeight=.62+hash(ci*13+i*17)*.52;
+    const layers=[{e,n,w,d,low:base,high:ground+.32},
+      {e:e+w*.07,n:n-d*.09,w:w*.81,d:d*.75,low:ground+.32,high:ground+stackHeight*.78},
+      {e:e+w*.16,n:n-d*.13,w:w*.53,d:d*.54,low:ground+stackHeight*.78,high:ground+stackHeight}];
+    // Stagger actual rectangular fragments instead of stacking three
+    // identical slabs. Each visible fragment has its own matching support.
+    function fragment(east:number,north:number,width:number,depth:number,bottom:number,top:number,snowCap=false){
+      if(top<=bottom)return;
+      box(shoulderRock,east,(bottom+top)/2,north,width,top-bottom,depth);
+      hitBox(floors,east,north,0,width,depth,bottom,top);
+      shoulderStacks.push({east,north,bottom,top,width,depth});
+      if(snowCap){
+        box(cleanSnow,east,top+.025,north,width*.83,.05,depth*.87);
+        hitBox(floors,east,north,0,width*.83,depth*.87,top,top+.05);
+      }
+    }
+    for(const [li,l]of layers.entries()){
+      const seam=.065+.04*hash(ci*17+i*29+li*11);
+      const split=.34+.30*hash(ci*43+i*19+li*23);
+      const left=l.w*split-seam/2,right=l.w*(1-split)-seam/2;
+      // Different break lines and depths on every layer; keep top pieces
+      // seated inside the lower slab's bounds rather than hanging over air.
+      fragment(l.e-l.w/2+left/2,l.n-.035*l.d,left,l.d*.94,l.low,l.high,li===2&&(ci+i)%3===0);
+      fragment(l.e+l.w/2-right/2,l.n+.055*l.d,right,l.d*.83,l.low,l.high,li===2&&(ci+i)%4===1);
+    }
+    // Small detached chips, sunk into the carrier on the outer flank.
+    const sign=n>=51?1:-1;
+    for(let k=0;k<3;k++){
+      const re=e+(k-1)*.64,rn=n+sign*(d*.65+.5+k*.31);
+      const rw=.28+hash(ci*41+i*7+k*17)*.28,rd=.24+hash(ci*23+i*9+k*31)*.31;
+      const heights=[-1,1].flatMap(x=>[-1,1].map(z=>heightAt(re+x*rw/2,rn+z*rd/2)));
+      if(heights.some(h=>h===undefined))continue;
+      const low=Math.min(...heights as number[])-.06,high=Math.max(...heights as number[])+.10+.13*hash(k+i*13+ci*19);
+      if(Math.abs(rn-51)<2.8&&re>-175&&re<-150)continue;
+      if(colliders.some(b=>b.min[0]<re+rw/2&&b.max[0]>re-rw/2&&b.min[2]<-rn+rd/2&&b.max[2]>-rn-rd/2&&b.max[1]>low&&b.min[1]<high))continue;
+      fragment(re,rn,rw,rd,low,high,(k+ci+i)%4===0);
+    }
+  }
   // ---------- outer-band mid-ground clusters (north/west band + approach) ----------
   const clusterSpots: [number, number][] = [[232, 84], [258, 96], [288, 86], [315, 102], [340, 90], [22, 98], [48, 84], [72, 106]];
-  clusterSpots.forEach(([b, r], ci) => {
-    const p = site(`outer-cluster-${ci + 1}`, b, r, 7);
-    if (!p) return;
-    const g = p.height;
-    for (let i = 0; i < 4; i++) {
-      const e = p.east + (hash(ci * 31 + i * 7) - .5) * 11;
-      const n = p.north + (hash(ci * 17 + i * 3) - .5) * 11;
-      const h = heightAt(e, n);
-      if (h === undefined) continue;
-      const s = 1.2 + hash(i * 13 + ci) * 2.4;
-      part(i % 2 ? stoneDark : stone, new DodecahedronGeometry(s, 0), e, h + s * .3, n, hash(i + ci) * 3);
-    }
-    // One or two dead pines per cluster, bare trunks leaning.
-    for (let i = 0; i < 2; i++) {
-      const e = p.east + (hash(ci * 7 + i * 19) - .5) * 9;
-      const n = p.north + (hash(ci * 23 + i * 5) - .5) * 9;
-      const h = heightAt(e, n);
-      if (h === undefined) continue;
-      const lean = .08 + hash(i * 3 + ci) * .12;
-      cyl(timber, e, h + 3.4, n, .14, .24, 7, 7, 0, 0, lean);
-      cone(timber, e, h + 6.4, n, 1.5, 2.6, 7, 0, 0, lean);
+  const outerClusterPieces:{id:string;kind:'rock'|'pine';east:number;north:number;support:CraterHitBox}[]=[];
+  // Generation-only footprints preserve the surveyed spacing after removing
+  // the rendered rectangular pedestals. Never added to player collisions.
+  const clusterReservations:CraterHitBox[]=[];
+  // Preserve the already exercised public routes and north rail corridor.
+  const protectedLines:number[][][]=[
+    [[0,159],[-67,159]], [[-12,118],[-12,450]],
+    [[-40,159],[-37,168],[-39,175],[-62,201],[-68,220],[-83,235],[-98,243],[-120,256],[-123.84,255.71]],
+    [[-40,159],[-80,126],[-95,128],[-110,124],[-126,123],[-151,129],[-170,148],[-178,163],[-186.63,174.61]],
+    [[-43,159],[-67,136],[-144,105],[-151.75,112.34]],
+    [[-23,159],[-23,95],[-60,55],[-164,51]],
+    [[-46,158],[-41,196],[-38,248],[-36,318]],
+  ];
+  const distanceTo=(e:number,n:number,a:readonly number[],b:readonly number[])=>{
+    const dx=b[0]-a[0],dn=b[1]-a[1],t=Math.max(0,Math.min(1,((e-a[0])*dx+(n-a[1])*dn)/(dx*dx+dn*dn||1)));
+    return Math.hypot(e-a[0]-dx*t,n-a[1]-dn*t);
+  };
+  function clearCluster(e:number,n:number,w:number,d:number){
+    const margin=Math.hypot(w,d)/2+.65;
+    if(e+w/2>=-1||e-w/2<=-240||n-d/2<=0||n+d/2>=336)return false;
+    if(Math.hypot(e-anchor.east,n-anchor.north)<67+margin)return false;
+    if(protectedLines.some(line=>line.slice(1).some((b,j)=>distanceTo(e,n,line[j]!,b)<margin+2.2)))return false;
+    if(fencePosts.some(p=>Math.hypot(e-anchor.east-p.radius*Math.sin(d2r(p.bearing)),n-anchor.north-p.radius*Math.cos(d2r(p.bearing)))<margin+2.1))return false;
+    if([...colliders,...floors,...clusterReservations].some(q=>q.min[0]<e+w/2+.45&&q.max[0]>e-w/2-.45&&q.min[2]<-n+d/2+.45&&q.max[2]>-n-d/2-.45))return false;
+    return true;
+  }
+  clusterSpots.forEach(([b,r],ci)=>{
+    const p=site(`outer-cluster-${ci+1}`,b,r,7);
+    if(!p)return;
+    let rocks=0,pines=0;
+    for(let j=0;j<84&&(rocks<4||pines<2);j++){
+      const pine=rocks>=4;
+      const phase=j*2.399963+ci*.73;
+      const radius=2.8+(j%11)*.68;
+      const e=p.east+Math.cos(phase)*radius,n=p.north+Math.sin(phase)*radius;
+      const w=pine?1.1:1.65+hash(ci*31+j*7)*1.9,d=pine?1.1:1.1+hash(ci*17+j*13)*1.3;
+      if(!clearCluster(e,n,w,d))continue;
+      const ys=[-1,1].flatMap(x=>[-1,1].map(z=>heightAt(e+x*w/2,n+z*d/2)));
+      if(ys.some(y=>y===undefined))continue;
+      const low=Math.min(...ys as number[])-.12,h=Math.max(...ys as number[]);
+      const record=(kind:'rock'|'pine',q:CraterHitBox,x=e,z=n)=>outerClusterPieces.push({id:p.id,kind,east:x,north:z,support:q});
+      if(!pine){
+        // Ref 13: eroded ochre beds below a cluster of dark jointed
+        // basalt columns. Build the geology inside the already surveyed
+        // rock envelope, not as a new obstacle across the trail.
+        hitBox(clusterReservations,e,n,0,w,d,low,h+.31);
+        const rows=2,cols=w>2.45?3:2;
+        let representative:{q:CraterHitBox;x:number;z:number;distance:number}|undefined;
+        const cw=w/cols,cd=d/rows,seed=ci*103+j*31;
+        for(let ix=0;ix<cols;ix++)for(let iz=0;iz<rows;iz++){
+          const k=ix*rows+iz,phase=seed+k*19;
+          if(k===cols*rows-1&&(ci+j)%3===1)continue;
+          const x=e-w/2+cw*(ix+.5)+.05*cw*Math.sin(phase);
+          const z=n-d/2+cd*(iz+.5)+.05*cd*Math.cos(phase);
+          const ww=cw*(.82+.08*hash(phase)),dd=cd*(.80+.10*hash(phase+3));
+          const corner=[-.5,0,.5].flatMap(i=>[-.5,0,.5].map(j=>heightAt(x+i*ww,z+j*dd)??h));
+          const bottom=Math.min(...corner)-.10,localGround=Math.max(...corner);
+          const bed=localGround+.10+.10*hash(phase+2);
+          const layerH=.24+.14*hash(phase+7);
+          const bandTop=bed+layerH;
+          const ashTop=bandTop+.10+.05*hash(phase+11);
+          const top=ashTop+.58+1.65*hash(phase+23)+(ix===1?.32:0);
+          const slab=(mat:MeshStandardMaterial,y0:number,y1:number,sx:number,sz:number,cx=x,cz=z)=>{
+            box(mat,cx,(y0+y1)/2,cz,sx,y1-y0,sz);
+            hitBox(floors,cx,cz,0,sx,sz,y0,y1);
+          };
+          // Every column is rooted separately into the ground. Fracture
+          // lines reach through the yellow strata instead of a common plinth.
+          slab(shoulderRock,bottom,bed,ww,dd);
+          const distance=Math.hypot(x-p.east,z-p.north);
+          if(!representative||distance<representative.distance)representative={q:floors.at(-1)!,x,z,distance};
+          slab(weatheredBed,bed,bandTop,ww*.97,dd*.97);
+          slab(shoulderRock,bandTop,ashTop,ww*.94,dd*.92);
+          const broken=top-.18-.16*hash(phase+27);
+          slab(basaltRock,ashTop,broken,ww*.94,dd*.94);
+          slab(k%3===0?shoulderRock:basaltRock,broken,top,ww*.80,dd*.82,x+ww*.045,z-dd*.035);
+          if((ci+j+k)%3===0)slab(cleanSnow,top,top+.055,ww*.66,dd*.68,x+ww*.045,z-dd*.035);
+        }
+        if(representative)record('rock',representative.q,representative.x,representative.z);
+        // Low angular chips at vacant edges; they remain inside the
+        // primary support and do not grow the original walking envelope.
+        for(let k=0;k<3;k++){
+          const x=e+(k-1)*w*.27,z=n-d*.43;
+          const ww=w*.15,dd=d*.10;
+          const hs=[-.5,.5].flatMap(i=>[-.5,.5].map(j=>heightAt(x+i*ww,z+j*dd)??h));
+          const bottom=Math.min(...hs)-.06,top=Math.max(...hs)+.08+.12*hash(seed+k);
+          box(k%2?weatheredBed:basaltRock,x,(bottom+top)/2,z,ww,top-bottom,dd);
+          hitBox(floors,x,z,0,ww,dd,bottom,top);
+        }
+        rocks++;
+      }else{
+        const trunkH=4.5+hash(ci*31+j*17)*2.2;
+        const stem=.28+hash(ci*13+j)*.09;
+        // Box-section trunk and roots use exact visible collision; short
+        // broken branches sit above player head height.
+        box(workshopWood,e,(low+h+.24)/2,n,1.02,h+.24-low,.34);
+        box(workshopWood,e,(low+h+.24)/2,n,.34,h+.24-low,1.02);
+        hitBox(floors,e,n,0,1.02,.34,low,h+.24);
+        hitBox(floors,e,n,0,.34,1.02,low,h+.24);
+        // Taper the trunk above the walking envelope. Each section owns
+        // a matching solid; bark plates and jagged splinters are visible.
+        const joints=[{e,n,lo:low,hi:h+2.3,w:stem},
+          {e:e+.045,n:n-.025,lo:h+2.3,hi:h+trunkH*.72,w:stem*.82},
+          {e:e+.075,n:n-.055,lo:h+trunkH*.72,hi:h+trunkH,w:stem*.58}];
+        for(const [k,s] of joints.entries()){
+          box(workshopWood,s.e,(s.lo+s.hi)/2,s.n,s.w,s.hi-s.lo,s.w);
+          hitBox(colliders,s.e,s.n,0,s.w,s.w,s.lo,s.hi);
+          if(k===0)record('pine',colliders.at(-1)!);
+        }
+        for(const side of [-1,1]){
+          box(timber,e+side*stem*.47,h+.94,n,.05,1.38,stem*.62);
+          box(timber,e,h+1.24,n+side*stem*.47,stem*.52,1.74,.045);
+        }
+        const branchCount=3+((ci+j)%3);
+        for(let k=0;k<branchCount;k++){
+          const angle=ci*.89+j*.63+k*2.399963;
+          const y=h+2.55+k*(trunkH-2.85)/branchCount;
+          const len=(.78+hash(j*17+k*19+ci)*.88)*(1-k*.11);
+          const dx=Math.cos(angle),dn=Math.sin(angle),slope=.23+.42*hash(ci*11+j+k*7);
+          const bx=e+dx*len*.42,bn=n+dn*len*.42;
+          // Local X follows the branch azimuth; positive local X rises.
+          box(workshopWood,bx,y+len*.12,bn,len,.13,.16,angle,0,slope);
+          if((ci+j+k)%2===0)box(cleanSnow,bx,y+len*.12+.09,bn,len*.55,.045,.11,angle,0,slope);
+          const fx=e+dx*len*.79,fn=n+dn*len*.79;
+          box(timber,fx,y+len*.23+.19,fn,.09,.47,.10,angle,0,-.22);
+          if(k%2===0)box(timber,fx-dn*.15,y+len*.23+.12,fn+dx*.15,.37,.075,.08,angle+Math.PI/2,0,.45);
+        }
+        const crown=joints[2]!;
+        for(const [k,side]of [-1,1].entries())
+          box(workshopWood,crown.e+side*crown.w*.24,h+trunkH+.12+k*.08,crown.n,crown.w*.42,.24+k*.16,crown.w*.73);
+        pines++;
+      }
     }
   });
-  for (const [e0, n0] of [[-6, 118], [-6, 208]] as const) {
-    const p = siteAt(`approach-cluster-${n0}`, e0, n0, 6);
-    if (!p) continue;
-    for (let i = 0; i < 3; i++) {
-      const e = p.east + (hash(i * 7 + n0) - .5) * 7;
-      const n = p.north + (hash(i * 3 + 1) - .5) * 7;
-      const h = heightAt(e, n);
-      if (h === undefined) continue;
-      const s = 1 + hash(i * 11) * 1.8;
-      part(stone, new DodecahedronGeometry(s, 0), e, h + s * .3, n, hash(i) * 3);
+  // Reference 15: individual exposed beds on four real outlying slopes.
+  // Coherent local strikes and dipping faces, rather than isolated cubes.
+  const shoulderRibs:{id:string;east:number;north:number;support:CraterHitBox}[]=[];
+  const exposures=[
+    {id:'shoulder-west',e:-208,n:105,yaw:.62},
+    {id:'shoulder-northwest',e:-216,n:265,yaw:-.48},
+    {id:'shoulder-north',e:-170,n:304,yaw:.30},
+    {id:'shoulder-south',e:-164,n:51,yaw:-.68},
+  ];
+  for(const [ci,c]of exposures.entries()){
+    const along=(u:number,v:number)=>({east:c.e+u*Math.cos(c.yaw)-v*Math.sin(c.yaw),north:c.n+u*Math.sin(c.yaw)+v*Math.cos(c.yaw)});
+    // Two discontinuous bands on opposite flanks, with common bedding
+    // strike but independently fractured silhouettes.
+    for(const side of [-1,1])for(let i=0;i<7;i++){
+      const u=(i-3)*2.85,seed=ci*71+(side+1)*17+i*13;
+      const v=side*(4.65+.75*Math.sin(i*.8+ci));
+      const p=along(u,v),yaw=c.yaw+.12*Math.sin(seed);
+      const w=2.25+.64*hash(seed),d=1.15+.55*hash(seed+3);
+      const ww=Math.abs(Math.cos(yaw))*w+Math.abs(Math.sin(yaw))*d;
+      const dd=Math.abs(Math.sin(yaw))*w+Math.abs(Math.cos(yaw))*d;
+      if(!clearCluster(p.east,p.north,ww,dd))continue;
+      const clearance=Math.hypot(w,d)/2+1.55;
+      if(outerLandscapeFootways.some(r=>r.points.slice(1).some((b,j)=>distanceTo(p.east,p.north,r.points[j]!,b)<clearance)))continue;
+      if(ci===3&&Math.abs(p.north-51)<dd/2+2.8)continue;
+      const samples=[-.5,0,.5].flatMap(x=>[-.5,0,.5].map(z=>
+        heightAt(p.east+x*ww,p.north+z*dd)));
+      if(samples.some(h=>h===undefined))continue;
+      const low=Math.min(...samples as number[])-.13,g=Math.max(...samples as number[]);
+      const piece=(mat:MeshStandardMaterial,x:number,n:number,sx:number,sz:number,bottom:number,top:number)=>{
+        if(top<=bottom)return;
+        box(mat,x,(bottom+top)/2,n,sx,top-bottom,sz,yaw);
+        const support=orientedSupportBox(x,n,yaw,sx,sz,bottom,top);
+        floors.push(support);
+        shoulderRibs.push({id:c.id,east:x,north:n,support});
+      };
+      // The base follows actual slope corner samples. Lower ochre bed,
+      // charcoal ash seam, thicker dark rock and fragmented snow cap.
+      const lower=g+.23,ochreTop=lower+.26+.18*hash(seed+5),ashTop=ochreTop+.095;
+      piece(shoulderRock,p.east,p.north,w,d,low,lower);
+      piece(weatheredBed,p.east,p.north,w*.96,d*.94,lower,ochreTop);
+      piece(slag,p.east,p.north,w*.94,d*.91,ochreTop,ashTop);
+      for(let k=0;k<3;k++){
+        const a=(k-1)*w*.30;
+        const x=p.east+a*Math.cos(yaw),n=p.north+a*Math.sin(yaw);
+        const h=ashTop+.42+.76*hash(seed+k*31)+(k===1?.28:0);
+        const width=w*.28,depth=d*(.78+.12*hash(seed+k*13));
+        piece(basaltRock,x,n,width,depth,ashTop,h);
+        if((i+k+ci)%3===0)piece(cleanSnow,x,n,width*.82,depth*.83,h,h+.05);
+      }
+    }
+  }
+  // Rebuild the two old decorative approach clusters as low, grounded
+  // fractured shelves. Both stay between the town seam and the E-12
+  // north walking lane, with the existing site anchors unchanged.
+  const approachRockSupports:CraterHitBox[]=[];
+  for(const [e0,n0]of [[-6,118],[-6,208]] as const){
+    const p=siteAt(`approach-cluster-${n0}`,e0,n0,6);
+    if(!p)continue;
+    for(const [i,[dx,dn,w,d,rise]]of [[-1.3,-2.9,1.7,1.3,.58],[1.0,.2,1.8,1.4,.82],[-1.6,2.6,1.45,1.1,.46]].entries()){
+      const e=e0+dx,n=n0+dn;
+      const groundSamples=[-1,1].flatMap(x=>[-1,1].map(z=>heightAt(e+x*w/2,n+z*d/2)));
+      if(groundSamples.some(h=>h===undefined))continue;
+      const bottom=Math.min(...groundSamples as number[])-.12,top=Math.max(...groundSamples as number[]);
+      const before=approachRockSupports.length;
+      const make=(ce:number,cn:number,cw:number,cd:number,lo:number,hi:number,mat:MeshStandardMaterial)=>{
+        box(mat,ce,(lo+hi)/2,cn,cw,hi-lo,cd);
+        hitBox(approachRockSupports,ce,cn,0,cw,cd,lo,hi);
+      };
+      make(e,n,w,d,bottom,top+.27,shoulderRock);
+      make(e+w*.09,n-d*.08,w*.72,d*.76,top+.27,top+rise,shoulderRock);
+      if(i%2===0)make(e+w*.09,n-d*.08,w*.62,d*.65,top+rise,top+rise+.06,cleanSnow);
+      floors.push(...approachRockSupports.slice(before));
     }
   }
 
-  // ---------- merge batches ----------
-  for (const [mat, geos] of batches) {
-    const joined = mergeGeometries(geos.map(g => g.index ? g.toNonIndexed() : g));
-    if (!joined) continue;
-    joined.computeBoundingSphere();
-    const mesh = new Mesh(joined, mat);
-    mesh.name = `crater-outer-${(mat as MeshStandardMaterial).uuid.slice(0, 6)}`;
-    group.add(mesh);
+  const landscapeRoutes=outerLandscapeFootways.map(route=>({
+    id:route.id,views:route.views,
+    points:route.points.map(([east,north])=>({east,north,height:heightAt(east,north)})),
+  })).filter(route=>route.points.every(p=>p.height!==undefined)) as {id:string;views:readonly {index:number;site:string}[];points:IndustryPoint[]}[];
+  // Three real rest points on the surveyed outer shoulders. Low stone
+  // footings follow the carrier, with a timber seat and weathered back.
+  // The benches face the exposed rock, not the player's access route.
+  const scenicSeats:{id:string;east:number;north:number;height:number;useEast:number;useNorth:number;yaw:number}[]=[];
+  const restPlans=[
+    {id:'rest-west',e:-210.6,n:108.3,target:[-208,105],from:[-205,105],via:[]},
+    {id:'rest-northwest',e:-217.6,n:256.9,target:[-216,265],from:[-216,255],via:[[-216,257.7]]},
+    {id:'rest-north',e:-167.5,n:295,target:[-170,304],from:[-170,295],via:[[-168.5,296.1]]},
+  ];
+  for(const plan of restPlans){
+    const g=heightAt(plan.e,plan.n);
+    if(g===undefined)continue;
+    const heading=Math.atan2(plan.target[0]!-plan.e,plan.target[1]!-plan.n);
+    const fr=frame({east:plan.e,north:plan.n,height:g},heading*180/Math.PI);
+    const center=fr.at(0,.38),stand=fr.at(0,.84);
+    const hs=[-1,0,1].flatMap(x=>[-1,0,1].map(z=>{
+      const p=fr.at(x*1.10,.38+z*.97);return heightAt(p.east,p.north)??g;
+    }));
+    const low=Math.min(...hs)-.08,deck=Math.max(...hs)+.05;
+    box(workshopBrick,center.east,(low+deck-.055)/2,center.north,2.20,deck-.055-low,1.94,fr.yaw);
+    floors.push(orientedSupportBox(center.east,center.north,fr.yaw,2.20,1.94,low,deck));
+    for(let i=0;i<4;i++){
+      const p=fr.at(-.825+i*.55,.38);
+      box(workshopWood,p.east,deck-.0275,p.north,.545,.055,1.94,fr.yaw);
+    }
+    const seat=fr.at(0,0);
+    box(workshopWood,seat.east,deck+.46,seat.north,1.54,.08,.44,fr.yaw);
+    colliders.push(orientedSupportBox(seat.east,seat.north,fr.yaw,1.54,.44,deck,deck+.50));
+    const back=fr.at(0,-.23);
+    box(workshopWood,back.east,deck+.79,back.north,1.54,.34,.11,fr.yaw);
+    colliders.push(orientedSupportBox(back.east,back.north,fr.yaw,1.54,.11,deck+.50,deck+.96));
+    for(const side of [-1,1]){
+      const p=fr.at(side*.62,0),q=fr.at(side*.62,-.23);
+      box(workshopRust,p.east,deck+.22,p.north,.12,.44,.34,fr.yaw);
+      box(workshopWood,q.east,deck+.48,q.north,.12,.96,.12,fr.yaw);
+      box(workshopRust,q.east,deck+.64,q.north,.17,.11,.14,fr.yaw);
+    }
+    scenicSeats.push({id:plan.id,...seat,height:deck,useEast:stand.east,useNorth:stand.north,yaw:-heading});
+    const points=[plan.from,...plan.via].map(([east,north])=>({east:east!,north:north!,height:heightAt(east!,north!)??g}));
+    landscapeRoutes.push({id:plan.id,views:[],points:[...points,{...stand,height:deck}]});
   }
+  // ---------- merge batches ----------
+  mountAR30StaticBatches(group,batches,'crater-outer');
   // North-tower lamp follows the warm chain: on at night, off by day
   // (previously always on — same correction as the mouth-works lights).
   function setNight(value: boolean) {
     if (northTowerLight) northTowerLight.intensity = value ? 14 : 0;
+    frostedGlass.emissiveIntensity=value?.70:.24;
   }
   setNight(true);
   return {
-    group, sites, fencePosts, setNight,
+    group, sites, fencePosts, setNight, towerRoutes,industrialRoutes,gatehouseSeats,shoulderStacks,approachRockSupports,outerClusterPieces,landscapeRoutes,shoulderRibs,scenicSeats,
     wallLine: { east: wallEast, northStart: 13, northEnd: 307 },
     colliders, floors, ramps,
   };

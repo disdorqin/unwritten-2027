@@ -7,7 +7,8 @@
 export const craterFloorWorklightSites = Object.freeze([
   { id:'c2/winch-watch', east:9.8, north:-3.2 },
   { id:'c2/south-brace',east:3.4, north:-10.6 },
-  { id:'c2/haulage-turn',east:-7.5,north:-8.2 },
+  // Batch98: retain the true-light chain; move away from the lamp-room door pool.
+  { id:'c2/haulage-turn',east:15,north:-6 },
   { id:'c2/west-platform',east:-11,north:1.2 },
   { id:'c2/north-rest',east:-5.5,north:9.5 },
   { id:'c2/return-side',east:6.0,north:9.2 },

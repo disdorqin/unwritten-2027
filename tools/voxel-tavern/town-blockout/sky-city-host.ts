@@ -2,7 +2,7 @@ import { Group, type Object3D } from 'three';
 import type { AircraftPoint, AircraftWorld, createAircraftFlight } from '../../../src/shared/aircraft-flight';
 import { createSkyCityLanding } from './sky-city-approach';
 import type { SkyCitySite } from './sky-city-site';
-import { mountSkyCity, skyCityTier } from './sky-city';
+import { mountSkyCity, skyCityTier, skyCityPrewarmMetres } from './sky-city';
 
 type SkyCityHostView =
   | { kind: 'ground' | 'summit' | 'city' }
@@ -29,6 +29,7 @@ export function mountSkyCityHost(scene: Object3D, site: SkyCitySite) {
       ? Math.hypot(view.feet.east - site.origin.east, view.feet.north - site.origin.north)
       : Infinity;
     const tier = skyCityTier(view.kind, distance);
+    if(view.kind==='aircraft'&&distance<=skyCityPrewarmMetres&&tier==='silhouette')city.prepare();
     city.show(tier);
     if (tier === 'hidden') frame.removeFromParent();
     else if (!frame.parent) scene.add(frame);

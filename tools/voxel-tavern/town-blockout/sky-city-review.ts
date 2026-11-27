@@ -1,7 +1,7 @@
 import { AmbientLight, BufferGeometry, Color, DirectionalLight, Float32BufferAttribute, Fog, Group,
   IcosahedronGeometry, Mesh, MeshBasicMaterial, MeshLambertMaterial, PerspectiveCamera, Scene, Vector3, WebGLRenderer } from 'three';
 import { createDesktopLook } from './desktop-look';
-import { mountSkyCity, skyCityTier, type SkyCityFoot } from './sky-city';
+import { mountSkyCity, skyCityTier, skyCityPrewarmMetres, type SkyCityFoot } from './sky-city';
 import { createSkyCityApproach, skyCityApproachSite, skyCityDeparture, skyCityDepartureBounds, skyCityDepartureFloorAt } from './sky-city-approach';
 import type { AircraftThrottle } from '../../../src/shared/aircraft-flight';
 
@@ -10,7 +10,9 @@ const sky = new Color('#a6c6ca');
 scene.background = sky;
 const fog = new Fog(sky, 95, 570);
 scene.fog = fog;
-scene.add(new AmbientLight('#e3eff2', 1.38));
+const ambient=new AmbientLight('#e3eff2',1.38);
+scene.add(ambient);
+let reviewNight=false;
 const sunlight = new DirectionalLight('#fff1ca', 2.6);
 sunlight.position.set(-42, 130, 65);
 scene.add(sunlight);
@@ -102,7 +104,7 @@ function setView(next: View) {
   } else {
     departure.visible = false;
     status.textContent = '天空之城 · 观测站';
-    controls.textContent = 'WASD 行走，鼠标或方向键转身';
+    controls.textContent = 'WASD 行走，鼠标或方向键转身 · N 切换空城昼夜';
     city.show('full');
   }
 }
@@ -119,6 +121,11 @@ function reset(next: 'ground' | 'summit') {
 groundButton.onclick = () => reset('ground');
 summitButton.onclick = () => reset('summit');
 addEventListener('keydown', event => {
+  if(event.code==='KeyN'&&!event.repeat&&!event.altKey&&!event.ctrlKey&&!event.metaKey){
+    reviewNight=!reviewNight;sky.set(reviewNight?'#243343':'#a6c6ca');fog.color.copy(sky);
+    ambient.color.set(reviewNight?'#9dc8ce':'#e3eff2');ambient.intensity=reviewNight?.55:1.38;
+    sunlight.intensity=reviewNight?.25:2.6;return;
+  }
   if (!keys.has(event.code) || event.altKey || event.ctrlKey || event.metaKey) return;
   event.preventDefault();
   held.add(event.code);
@@ -169,7 +176,8 @@ addEventListener('resize', resize);
 resize();
 setView('summit');
 renderer.setAnimationLoop(now => {
-  const dt = Math.min(.064, (now - (previous ?? now)) / 1000);
+  const rawDt = (now - (previous ?? now)) / 1000;
+  const dt = Math.min(.064,rawDt);
   previous = now;
   const elapsed = now / 1000;
   if (view === 'ground') {
@@ -185,6 +193,7 @@ renderer.setAnimationLoop(now => {
     const origin = skyCityApproachSite.origin;
     const distance = Math.hypot(state.feet.east - origin.east, state.feet.north - origin.north);
     const tier = skyCityTier('aircraft', distance);
+    if(distance<=skyCityPrewarmMetres&&tier==='silhouette')city.prepare();
     city.show(tier);
     if (tier === 'full') departure.visible = false;
     approach.advance(dt, { throttle,
@@ -206,7 +215,7 @@ renderer.setAnimationLoop(now => {
   city.update(elapsed);
   renderer.render(scene, camera);
   document.dispatchEvent(new CustomEvent('sky-city-frame', { detail: {
-    view, tier: city.current(), foot, yaw, drawCalls: renderer.info.render.calls,
+    view, tier: city.current(), foot, yaw, night:reviewNight, prepared:city.prepared(), fps:rawDt>0?Math.round(1/rawDt):0, drawCalls: renderer.info.render.calls,
     triangles: renderer.info.render.triangles, flight: approach.snapshot().flight,
   } }));
 });

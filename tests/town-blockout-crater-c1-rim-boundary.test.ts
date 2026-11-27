@@ -16,7 +16,7 @@ test('C-1 preflight corrects all 741 original R1 pieces intruding into B-01 rim 
   assert.equal(craterInteriorDressingStats.terraces,terraces.length);
   assert.equal(craterInteriorDressingStats.floor,floor.length);
   assert.equal(craterInteriorDressingStats.sealedWell,well.length);
-  assert.equal(floor.length,2665,'C2 removed only 180 visual shards at six existing worklight feet');
+  assert.equal(floor.length,2673,'batch98 relocation clears 172 visual shards at the six current worklight feet');
   assert.equal(well.length,348,'C1 clipping never removes sealed-well trim');
   assert.ok(terraces.length>2500 && terraces.length<3826);
   for(const part of terraces){

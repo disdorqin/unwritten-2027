@@ -184,13 +184,19 @@ function texture(family:Family) {
   map.needsUpdate=true;
   return map;
 }
-export function mountCraterInteriorDressing(owner:Group) {
+export function mountCraterInteriorDressing(owner:Group, options: { slopeDressing?: boolean } = {}) {
+  // R30 now models the wall itself. Keep historic fixture data available,
+  // but do not mount its concentric visual-only rock arrays over the new wall.
+  // R30 uses the real geology, discrete S5 outcrops and C's existing shaft
+  // installation. The old visual-only floor scatter and circular brace rings
+  // have no separate collision or gameplay ownership. Do not duplicate them.
+  const pieces=options.slopeDressing===false ? [] : craterInteriorDressingPieces;
   const group=new Group();
   group.name='c3-crater-interior-dressing-visual-only';
   const geometry=new BoxGeometry(1,1,1);
   const instance=new Object3D();
   const matrices=new Map<Family,Matrix4[]>();
-  for(const part of craterInteriorDressingPieces){
+  for(const part of pieces){
     instance.position.set(part.center[0],part.center[1],-part.center[2]);
     instance.scale.set(...part.size);
     instance.rotation.set(0,0,0);
@@ -218,7 +224,7 @@ export function mountCraterInteriorDressing(owner:Group) {
   }
   owner.add(group);
   let released=false;
-  return {group,meshes,stats:craterInteriorDressingStats,
+  return {group,meshes,stats:{count:pieces.length,terraces:pieces.filter(p=>p.zone==='terraces').length,floor:pieces.filter(p=>p.zone==='floor').length,sealedWell:pieces.filter(p=>p.zone==='sealed-well').length,materialBatches:meshes.length},
     dispose(){
       if(released)return;
       released=true;

@@ -31,7 +31,8 @@ export function buildSkyCityBuildings() {
   cloister.name = 'Arched cloister and west bridge';
   const growth = new Group();
   growth.name = 'Spring ivy and planter growth';
-  group.add(masonry, furniture, cloister, growth);
+  const warmWindows=new Group();warmWindows.name='sky-city-dormitory-dream-windows';warmWindows.visible=false;
+  group.add(masonry, furniture, cloister, growth,warmWindows);
 
   const solids: Solid[] = [];
   const material = Object.fromEntries(Object.entries(palette).map(([finish, color]) => [
@@ -257,6 +258,10 @@ export function buildSkyCityBuildings() {
     }
   }
 
+  const windowGlow=new MeshLambertMaterial({color:'#c18d56',emissive:'#f3b874',emissiveIntensity:.75});
+  for(const z of [north,south])for(const x of [-34.7,-30.3,-25.7,-21.3]){
+    const window=new Mesh(box,windowGlow);window.position.set(x,2.02,z+Math.sign(z-dormZ)*.34);window.scale.set(2.05,.88,.035);warmWindows.add(window);
+  }
   const dormRoute: readonly FloorPoint[] = [
     [-13, 0, 12], [-18, 0, 12], [-20, 0, 12], [-26, 0, 12],
     [-31.4, 0, 12], [-31.4, 0, 15.5], [-27.8, 0, 15.5],
@@ -269,5 +274,5 @@ export function buildSkyCityBuildings() {
       return Math.hypot(dx, dz) < radius;
     });
   }
-  return { group, blocked, dormRoute };
+  return { group, blocked, dormRoute,setDreamLighting(active:boolean){warmWindows.visible=active} };
 }

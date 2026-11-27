@@ -1,6 +1,7 @@
 {$TOWN_PREVIEW_SITE:town.disdorqin.cn} {
     encode zstd gzip
     root * /srv
+    header /healthz Cache-Control "no-store"
     respond /healthz "town-preview {$TOWN_RELEASE:local}" 200
     @mountain path /presence-mountain /presence-mountain/*
     handle @mountain {
@@ -21,6 +22,11 @@
     handle @mine {
         uri replace /presence-mine /presence
         reverse_proxy presence:8094
+    }
+    @mine2 path /presence-mine-2 /presence-mine-2/*
+    handle @mine2 {
+        uri replace /presence-mine-2 /presence
+        reverse_proxy presence:8095
     }
     @townPresence path /presence /presence/*
     reverse_proxy @townPresence presence:8090
