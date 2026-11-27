@@ -28,4 +28,21 @@ test('line two uses actual same-source terrain, twin towers, physical docks and 
  now=r.cable.legMs+1000;assert.deepEqual(a.exit(ride),r.cable.ropes[0].dock('summit').approach);
  clear=false;assert.equal(a.exit(ride),undefined);clear=true;day=false;assert.equal(a.board(r.cable.ropes[0].dock('summit').approach,0),undefined);assert.ok(a.exit(ride));
  day=true;now=r.cable.cycleMs+1000;assert.deepEqual(a.exit(ride),start);synced=false;assert.equal(a.board(start,0),undefined);now=undefined;assert.equal(a.ridePose(ride),undefined);
+ const epoch=Date.UTC(2026,0,1);let wake:number|undefined,opened:number|undefined;
+ const partial=createZa36CableRepair(2);now=epoch+1000;
+ const first=createNightBLine2Service({...input,state:()=>partial.snapshot(),firstRun:{wokeAt:()=>wake,openedAt:()=>opened,dawnEpoch:()=>epoch}});
+ const upper=r.cable.ropes[0].dock('summit').approach,other=r.cable.ropes[1].dock('summit').approach;
+ assert.ok(first.present().every(c=>c.station==='summit'));assert.equal(first.board(upper,0),undefined);
+ wake=now;partial.apply({kind:'wake',impact:'night-window'});
+ const released=first.board(upper,0);assert.ok(released);assert.equal(first.board(other,1),undefined);
+ now=wake+110000;const moving=first.ridePose(released)!;assert.ok(moving.whiteout);assert.equal(first.exit(released),undefined);
+ first.present();const car=r.group.getObjectByName('summit-line2-cabin-0')!;
+ assert.ok(Math.hypot(car.position.x-moving.ropePoint.east,car.position.y-moving.ropePoint.height,car.position.z+moving.ropePoint.north)<1e-8);
+ assert.equal(first.present()[1]!.station,'summit');
+ now=wake+first.firstMs;assert.deepEqual(first.exit(released),start);assert.equal(first.board(start,0),undefined);const stopped=first.present();
+ for(const event of [{kind:'wake',impact:'sled'},...Array.from({length:9},()=>({kind:'strike-rust'})),{kind:'pull-brake'},{kind:'pry-cable',effort:1},...Array.from({length:3},()=>({kind:'tighten-cable'})),...[0,1,2,3].flatMap(index=>[{kind:'take-weight',index},{kind:'hang-weight',index}])] as Parameters<typeof partial.apply>[0][])partial.apply(event);
+ opened=now;assert.ok(first.serviceOpen() || first.dispatch()?.parked);assert.deepEqual(first.present().map(c=>c.ropePoint),stopped.map(c=>c.ropePoint));
+ // A fresh adapter uses exactly the same immutable timestamps after reconnect.
+ const rejoin=createNightBLine2Service({...input,state:()=>partial.snapshot(),firstRun:{wokeAt:()=>wake,openedAt:()=>opened,dawnEpoch:()=>epoch}});
+ assert.deepEqual(rejoin.present(),first.present());
 });

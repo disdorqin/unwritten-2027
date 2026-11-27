@@ -1,4 +1,5 @@
 import {nightBCableDispatch,type CableDispatchInput} from './town-night-b-summit-dispatch';
+import {cableFirstRunTimeline,cableFirstRunServiceDispatch,type CableFirstRunInput} from './town-night-b-summit-first-run';
 import {createNorthRidgeCableClock} from './north-ridge-cable-clock';
 import type {surveyRidgeCableSpans,auditRidgeCableSweep} from './town-d-r30-cable-facilities';
 import type {Za36CableRepairState} from './town-za36-cable-repair';
@@ -14,6 +15,8 @@ export type FrontCableServiceInput=Readonly<{
  state:()=>Za36CableRepairState|undefined;
  now:()=>number|undefined;
  dispatch?:CableDispatchInput;
+ /** Production first trip; mutually exclusive with the legacy dispatch adapter. */
+ firstRun?:CableFirstRunInput;
  daylight:()=>boolean|undefined;
  /** The host certifies real deck/approach support and external obstruction. */
  dockClear:(station:Station,foot:Foot)=>boolean;
@@ -30,10 +33,35 @@ export function createNightBFrontService(input:FrontCableServiceInput){
   const a=s.path[lo]!,b=s.path[hi]!,t=Math.max(0,Math.min(1,(distance-s.measure[lo]!)/(s.measure[hi]!-s.measure[lo]!)));
   return {east:a.east+(b.east-a.east)*t+(cabin===0?-1.55:1.55),north:a.north+(b.north-a.north)*t,height:a.height+(b.height-a.height)*t};
  }
- const dispatch=()=>{const t=input.now();if(typeof t!=='number'||!Number.isFinite(t))return;return input.dispatch?nightBCableDispatch(t,input.dispatch.openedAt(),input.dispatch.dawnEpoch(),clock.oneWayMs):{virtualMs:t,boarding:true,parked:false};};
+ const firstMs=frontCableTerminalDwellMs+Math.ceil((s.length-s.lowerMetres)*200),repositionMs=Math.ceil(s.lowerMetres*200);
+ const first=()=>{const t=input.now(),f=input.firstRun,state=input.state();if(!f||t===undefined||state?.line!==1||(state.stage!=='dormant'&&f.wokeAt()===undefined))return;return cableFirstRunTimeline(t,state.stage==='dormant'?undefined:f.wokeAt(),state.stage==='full-line'?f.openedAt():undefined,f.dawnEpoch(),firstMs,repositionMs,true);};
+ const dispatch=()=>{const t=input.now();if(typeof t!=='number'||!Number.isFinite(t))return;
+  if(input.firstRun){const f=input.firstRun,state=input.state();if(state?.line!==1||state.stage!=='full-line')return;return cableFirstRunServiceDispatch(t,f.wokeAt(),f.openedAt(),f.dawnEpoch(),firstMs,repositionMs,clock.oneWayMs,true);}
+  return input.dispatch?nightBCableDispatch(t,input.dispatch.openedAt(),input.dispatch.dawnEpoch(),clock.oneWayMs):{virtualMs:t,boarding:true,parked:false};};
  const time=()=>dispatch()?.virtualMs;
  function serviceOpen(){const state=input.state();return physical&&state?.line===1&&state.stage==='full-line'&&input.daylight()===true&&dispatch()?.boarding===true;}
  function cabinsAt(t:number){return clock.cabinsAt(t).map((c,i)=>({...c,feet:sample(c.distanceMetres,i as Cabin)}));}
+ type State=ReturnType<typeof cabinsAt>[number];
+ const stopped=(cabin:Cabin,distanceMetres:number,station:Station|null):State=>({direction:'down',distanceMetres,station,feet:sample(distanceMetres,cabin)});
+ const initial=()=>[stopped(0,s.length,'summit'),stopped(1,s.length,'summit')];
+ let lastStates=initial();
+ function cabinStates():State[]|undefined{
+  if(!physical)return;
+  const t=time();
+  if(t!==undefined)return cabinsAt(t);
+  if(!input.firstRun)return;
+  const f=first();if(!f)return;
+  const other=stopped(1,s.length,'summit');
+  if(f.phase==='dormant')return initial();
+  if(f.phase==='first'){
+   const fraction=Math.max(0,Math.min(1,(f.elapsed-frontCableTerminalDwellMs)/(firstMs-frontCableTerminalDwellMs)));
+   return [stopped(0,s.length-(s.length-s.lowerMetres)*fraction,f.elapsed<=frontCableTerminalDwellMs?'summit':null),other];
+  }
+  if(f.phase==='waiting-repair')return [stopped(0,s.lowerMetres,'middle'),other];
+  if(f.phase==='reposition')return [stopped(0,s.lowerMetres*(1-f.elapsed/repositionMs),f.elapsed===0?'middle':null),other];
+  return;
+ }
+ function present(){const states=cabinStates();if(states)lastStates=states;return lastStates;}
  /** Map the SAME timetable onto the existing production cabin presentation,
   * which consumes the original no-terminal-dwell clock. No speed changes. */
  function presentationMs(t:number){
@@ -41,16 +69,18 @@ export function createNightBFrontService(input:FrontCableServiceInput){
   const leg=p-(down?clock.oneWayMs:0);return (down?legacy.oneWayMs:0)+Math.max(0,leg-frontCableTerminalDwellMs);
  }
  function board(foot:Foot,cabin:Cabin):Ride|undefined{
-  const t=time();if(t===undefined||!serviceOpen()||(cabin!==0&&cabin!==1))return;
-  const at=cabinsAt(t)[cabin]!;if(!at.station||!input.dockClear(at.station,foot))return;
+  if((cabin!==0&&cabin!==1)||!physical||![foot.east,foot.north,foot.height].every(Number.isFinite))return;
+  const f=first(),at=cabinStates()?.[cabin];
+  const firstBoard=input.firstRun&&cabin===0&&f?.phase==='first'&&f.boarding&&f.elapsed<frontCableTerminalDwellMs&&input.daylight()===true;
+  if((!serviceOpen()&&!firstBoard)||!at?.station||!input.dockClear(at.station,foot))return;
   if(Math.hypot(foot.east-at.feet.east,foot.north-at.feet.north)>.9||Math.abs(foot.height-at.feet.height)>.43)return;
   return Object.freeze({cabin});
  }
  let lastPresentation=0;
- return {clock,physical,serviceOpen,cabinsAt,presentationMs,board,dispatch,
+ return {clock,physical,serviceOpen,cabinsAt,presentationMs,board,dispatch,firstRun:first,firstMs,repositionMs,cabinStates,present,
   presentationTime(){const t=time();if(physical&&t!==undefined)lastPresentation=presentationMs(t);return lastPresentation;},
-  ridePose(ride:Ride){const t=time();if(t===undefined)return;return cabinsAt(t)[ride.cabin];},
-  exit(ride:Ride){const t=time();if(t===undefined)return;const at=cabinsAt(t)[ride.cabin];if(!at?.station)return;
+  ridePose(ride:Ride){return cabinStates()?.[ride.cabin];},
+  exit(ride:Ride){const at=cabinStates()?.[ride.cabin];if(!at?.station)return;
    // The surveyed deck supports the cabin floor; host must supply actual clear exit.
    const p={...at.feet,north:at.feet.north-2.1};return input.dockClear(at.station,p)?p:undefined;
   }

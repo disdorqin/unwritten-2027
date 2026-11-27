@@ -54,7 +54,7 @@ export function mountMainSummitCable(owner: Group, cable: Cable, groundAt: (east
       group.add(deck);
     }
 
-    const car = new Group();
+    const car = new Group();car.name='summit-line2-cabin-'+index;
     const width = summitCableSpec.cabinHalfWidth * 2;
     const depth = summitCableSpec.cabinHalfLength * 2;
     const floor = -summitCableSpec.cabinFloorBelowRope;
@@ -106,16 +106,8 @@ export function mountMainSummitCable(owner: Group, cable: Cable, groundAt: (east
     decks:Object.freeze(decks.map(d=>Object.freeze({...d}))),
     supportAt(e:number,n:number,r=.27){for(const d of decks){if(d.interference)continue;const p=local(d,e,n);if(Math.abs(p.x)<=2.4-r&&Math.abs(p.z)<=2.5-r)return d.height;}},
     deckBlocked(e:number,n:number,h:number,r=.27){return decks.some(d=>{const p=local(d,e,n);return h+1.8>d.height&&h<d.height+1.02&&p.x*(d.cabin===0?1:-1)>.16-r&&p.x*(d.cabin===0?1:-1)<2.29+r&&Math.abs(Math.abs(p.z)-2.38)<.07+r;});},
-    update(nowMs: number) {
-      const states = cable.cabinsAt(nowMs);
-      for (const state of states) {
-        const { car, door } = cars[state.index]!;
-        car.position.copy(asVector(state.ropePoint));
-        car.rotation.y = -state.ropePoint.heading;
-        door.position.z = state.canBoardOrExit ? 1.05 : 0;
-      }
-      return states;
-    },
+    update(nowMs: number) { return updateStates(cable.cabinsAt(nowMs)); },
+    updateStates,
     dispose() {
       group.removeFromParent();
       for(const b of deckBatches)b.dispose();group.clear();
@@ -123,4 +115,13 @@ export function mountMainSummitCable(owner: Group, cable: Cable, groundAt: (east
       for (const material of [red, window, frame, gold, platform, pierMaterial, cableMaterial]) material.dispose();
     },
   };
+  function updateStates(states: ReturnType<Cable['cabinsAt']>) {
+      for (const state of states) {
+        const { car, door } = cars[state.index]!;
+        car.position.copy(asVector(state.ropePoint));
+        car.rotation.y = -state.ropePoint.heading;
+        door.position.z = state.canBoardOrExit ? 1.05 : 0;
+      }
+      return states;
+  }
 }

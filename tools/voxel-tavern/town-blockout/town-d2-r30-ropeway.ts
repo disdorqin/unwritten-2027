@@ -142,6 +142,8 @@ export function createTownD2R30Ropeway(options: TownD2R30RopewayOptions = {}) {
     group,
     /** The canonical cable and stations, so the legacy host can keep its rules. */
     cable,
+    epochMs,
+    terminalDwellMs,
     stations,
     decks:cableView.decks,
     supportAt:cableView.supportAt,
@@ -152,6 +154,11 @@ export function createTownD2R30Ropeway(options: TownD2R30RopewayOptions = {}) {
       if (disposed) return [];
       if (!Number.isFinite(nowMs)) throw new RangeError('D2-R09 needs a finite timestamp.');
       return cableView.update(nowMs);
+    },
+    /** Same actual cabin transforms for the staged, pre-repair journey. */
+    updateStates(states: Parameters<typeof cableView.updateStates>[0]) {
+      if(disposed)return [];
+      return cableView.updateStates(states);
     },
     setNight(value: boolean) {
       if (disposed) throw new Error('The D2-R09 ropeway is disposed.');

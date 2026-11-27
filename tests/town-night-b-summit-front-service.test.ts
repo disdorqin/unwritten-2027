@@ -34,5 +34,22 @@ test('front service uses surveyed dual cabins, actual repair authority and termi
   const actual=facilities.update(service.presentationMs(time));
   for(const [i,c] of service.cabinsAt(time).entries())assert.ok(Math.hypot(c.feet.east-actual[i]!.east,c.feet.north-actual[i]!.north,c.feet.height-actual[i]!.height)<1e-7);
  }
+ // First-run production adapter keeps both actual surveyed lanes, but only
+ // car zero moves during the initial downhill run and reposition.
+ const epoch=Date.UTC(2026,0,1);let wake:number|undefined,opened:number|undefined;
+ const partial=createZa36CableRepair(1);
+ const first=createNightBFrontService({...input,state:()=>partial.snapshot(),now:()=>t,firstRun:{wokeAt:()=>wake,openedAt:()=>opened,dawnEpoch:()=>epoch}});
+ t=epoch+1000;const initial=first.present();assert.ok(initial.every(c=>c.station==='summit'));assert.equal(first.board(initial[0]!.feet,0),undefined);
+ wake=t;partial.apply({kind:'wake',impact:'sled'});
+ const firstRide=first.board(initial[0]!.feet,0);assert.ok(firstRide);assert.equal(first.board(initial[1]!.feet,1),undefined);
+ t=wake+first.firstMs/2;assert.equal(first.ridePose(firstRide)?.station,null);assert.equal(first.exit(firstRide),undefined);
+ t=wake+first.firstMs;assert.equal(first.ridePose(firstRide)?.station,'middle');assert.ok(first.exit(firstRide));assert.equal(first.board(first.ridePose(firstRide)!.feet,0),undefined);
+ for(let i=0;i<9;i++)partial.apply({kind:'strike-rust'});
+ partial.apply({kind:'pull-brake'});partial.apply({kind:'pry-cable',effort:1});for(let i=0;i<3;i++)partial.apply({kind:'tighten-cable'});
+ for(let i=0;i<4;i++){partial.apply({kind:'take-weight',index:i});partial.apply({kind:'hang-weight',index:i});}
+ opened=t;assert.equal(first.present()[0]!.station,'middle');assert.equal(first.serviceOpen(),false);
+ t=opened+first.repositionMs-1;const before=first.present();assert.ok(before[0]!.distanceMetres<.01);assert.equal(before[1]!.station,'summit');
+ t=opened+first.repositionMs;assert.equal(first.present()[0]!.station,'base');assert.equal(first.serviceOpen(),true);
+ assert.ok(Math.hypot(before[0]!.feet.east-first.present()[0]!.feet.east,before[0]!.feet.north-first.present()[0]!.feet.north,before[0]!.feet.height-first.present()[0]!.feet.height)<.01);
  }finally{facilities.dispose();}
 });
