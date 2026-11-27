@@ -9,6 +9,7 @@ import {mountRidgeRoadFurniture} from './town-d-r30-road-furniture';
 import {mountRidgeRetainingBanks} from './town-d-r30-retaining-banks';
 import {mountNorthRidgeMiddleStation} from './north-ridge-middle-station';
 import {mountRidgeCableFacilities,auditRidgeCableSweep,surveyRidgeCableSpans} from './town-d-r30-cable-facilities';
+import {mountRidgeCloudTerrace,auditProductionCloudSeam} from './town-d-r30-cloud-terrace';
 type Grid=ReturnType<typeof createTerrainGrid>;
 type Options=Parameters<typeof createAR30RidgeOwnership>[0];
 /** M1 production only: actual rail geometry defines the protected H0.
@@ -50,6 +51,8 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
  const serviceExit=roads.includes(lower)&&Math.abs((field.heightAt(522,355)??-1)-26)<.001;
  const facilities=stationReady&&cableAudit.groundHits===0&&cableAudit.minMoving>=.25
   ?mountRidgeCableFacilities(owner,field,true,true,serviceExit):undefined;
+ const cloudSeam=auditProductionCloudSeam(field);
+ const terrace=cloudSeam.physicalReady?mountRidgeCloudTerrace(owner,field,(e,n,y,r)=>!!facilities?.blocked(e,n,y,r),true):undefined;
  function heightAt(e:number,n:number){
   return patch.ownsCell(Math.floor(e),Math.floor(n))?grid.heightAt(e,n):undefined;
  }
@@ -65,9 +68,9 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
   const d=Math.hypot(to.east-from.east,to.north-from.north);
   return d<1e-6||h1-h0<=.85*d+1e-5;
  }
- return {field,ownership,ownsCell:patch.ownsCell,changedVertices:patch.changedVertices,roads,stationReady,model,forest,heightAt,allowsUphill,facilities,cableAudit,serviceExit,
-  blocked(e:number,n:number,h:number,r=.27){return forest.blocked(e,n,h,r)||!!station?.blocked(e,n,h,r)||!!facilities?.blocked(e,n,h,r)||furniture.some(f=>f.blocked(e,n,h,r))||banks.some(b=>b.blocked(e,n,h,r))},
-  setNight(night:boolean){station?.setNight(night);facilities?.setNight(night);furniture.forEach(f=>f.setNight(night))},
+ return {field,ownership,ownsCell:patch.ownsCell,changedVertices:patch.changedVertices,roads,stationReady,model,forest,heightAt,allowsUphill,facilities,cableAudit,serviceExit,terrace,cloudSeam,
+  blocked(e:number,n:number,h:number,r=.27){return forest.blocked(e,n,h,r)||!!station?.blocked(e,n,h,r)||!!facilities?.blocked(e,n,h,r)||!!terrace?.blocked(e,n,h,r)||furniture.some(f=>f.blocked(e,n,h,r))||banks.some(b=>b.blocked(e,n,h,r))},
+  setNight(night:boolean){station?.setNight(night);facilities?.setNight(night);terrace?.setNight(night);furniture.forEach(f=>f.setNight(night))},
   updateView(e:number,n:number){model.updateView(e,n);forest.updateView(e,n);banks.forEach(b=>b.updateView(e,n));facilities?.updateView(e,n)},
   transportReady:false as const,
  };

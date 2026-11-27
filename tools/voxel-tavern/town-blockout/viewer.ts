@@ -61,6 +61,8 @@ import { mountTownFillReedMarsh } from './town-fill-reed-marsh';
 import { mountTownFillPlumSlope } from './town-fill-plum-slope';
 import { mountTownFillNorthWest } from './town-fill-north-west';
 import { mountProductionRidge } from './town-d-r30-production-ridge';
+import {setCraterExteriorRenderRoots} from './town-r30-crater-perf';
+import {applyCraterUndergroundRenderGate} from './town-r30-crater-perf-occlusion';
 import { createTownSkyClouds } from './town-sky-clouds';
 
 import { createFrontRidgeCloudBand } from './front-ridge-cloud-band';
@@ -253,6 +255,8 @@ const subcellAt = (east: number, north: number) => (east & subcellMask) +
 let productionRidge: ReturnType<typeof mountProductionRidge> | undefined;
 let outdoorTerrainContract:ReturnType<typeof createTerrainSupportContract>|undefined;
 let undergroundDomain: ReturnType<typeof mountUndergroundDomainHost> | undefined;
+let undergroundRenderParent:Group|undefined;
+let craterExteriorDirty=true,craterExteriorCertified=false;
 type DreamChain = Extract<ReturnType<typeof createUndergroundDreamChain>, { kind: 'ready' }>;
 let dreamChain: DreamChain | undefined;
 let dreamDescent: ReturnType<typeof mountUndergroundDescent> | undefined;
@@ -292,6 +296,7 @@ function ensureWestCraterRoad() {
     dreamRopeStay = surveyZa36RopeStay(westCraterRoad);
     const undergroundParent = new Group();
     undergroundParent.name = 'underground-domain-host';
+    undergroundRenderParent=undergroundParent;
     scene.add(undergroundParent);
     undergroundDomain = mountUndergroundDomainHost({
       parent: undergroundParent, road: westCraterRoad,
@@ -1010,6 +1015,7 @@ function place(plot: Pick<TownPlot, 'id' | 'origin'>, group: Group) {
   architecture.get(plot.id)?.removeFromParent();
   architecture.set(plot.id, group);
   scene.add(group);
+  craterExteriorDirty=true;
 }
 for (const plot of layout.plots) place(plot, builders[plot.id](plot));
 place({ id: 'mascot-sheep-pen', origin: [0, 0, 0] }, buildMascotPen(grid.heightAt));
@@ -1733,6 +1739,7 @@ function prepareExtensionStreets() {
   return extensionStreetsLoad ??= import('./extension-streets').then(({ buildExtensionStreets }) => {
     extensionStreets = buildExtensionStreets(grid, railway.keepClear, districts.keepClear);
     scene.add(extensionStreets.group);
+    craterExteriorDirty=true;
     walkGeometry = geometry();
     activitySpots.push(...createCourtyardSeatSpots(extensionStreets, activityContext, canStandAtActivity));
     registerHomeDoors(extensionStreets.housePortals);
@@ -2798,6 +2805,8 @@ function currentAction() {
       ridePitch = 0;
     } };
   }
+  const terraceAction=!homeReturn&&productionRidge?.terrace?.action({east:x,north:n,height:ground});
+  if(terraceAction)return {label:terraceAction.title,run(){announceActivity(terraceAction.message)}};
   if (!homeReturn && (Math.hypot(x-526,n-329)<18 || Math.hypot(x-526,n-354)<12 || Math.hypot(x-440,n-520)<12 || Math.hypot(x-336,n-640)<12) && !productionRidge?.transportReady) return {
     label:'缆车线路检修中',run(){announceActivity('新山地形已启用，缆车与上山道路正在施工，请沿现有安全地面探索。');}
   };
@@ -4004,6 +4013,19 @@ renderer.setAnimationLoop(now => {
       }
     }
   }
+  // P2 production hookup: register explicit static roots only when their
+  // lifecycle changes. The leaf performs bounded warmup and pass restoration.
+  if(craterExteriorDirty&&westCraterRoad){
+    craterExteriorDirty=false;
+    craterExteriorCertified=setCraterExteriorRenderRoots(westCraterRoad.group,
+      [landscape,detailedBridges,...architecture.values(),...(extensionStreets?[extensionStreets.group]:[])]);
+  }
+  if(undergroundRenderParent){
+    const known=undergroundDomain?.kind==='ready'&&!!dreamChain;
+    applyCraterUndergroundRenderGate(undergroundRenderParent,{known,inMine:dreamInMine(),
+      transition:dreamControlsLocked||dreamTripActive||!!dreamActiveTripId||!!dreamReturnRecovery,
+      coverOpen:dreamChain?.coverOpen()??true});
+  }
   presence.setWestDomain(walking && !homeReturn && x < 0);
   presence.sample(walking,
     boardingGround ? camera.position.x : seated?.x ?? x,
@@ -4341,7 +4363,8 @@ renderer.setAnimationLoop(now => {
         calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, cameraY: camera.position.y, detailMs,
         weatherMs, weatherTier: weather.tier, snowIntensity: effectiveSnowIntensity, snowCover: visualSnowCover,
         fogNear: weatherFog.near, fogFar: weatherFog.far, points: renderer.info.render.points,
-        ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities,cableInstances:productionRidge.facilities?.visibleInstances()},
+        craterPerf:{exteriorCertified:craterExteriorCertified,undergroundVisible:undergroundRenderParent?.visible},
+        ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities,cableInstances:productionRidge.facilities?.visibleInstances(),terraceMounted:!!productionRidge.terrace,cloudSeam:productionRidge.cloudSeam},
         ...(skylinePeak ? { summitSkyline: { draws: summitSkylineDraws, peakNdc: skylinePeak.toArray(),
           camera: camera.position.toArray(), far: camera.far } } : {}),
       } }));

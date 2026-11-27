@@ -9,6 +9,7 @@ import {mountProductionRidge} from '../tools/voxel-tavern/town-blockout/town-d-r
 import {addTerrainMeshes} from '../tools/voxel-tavern/town-blockout/terrain-mesh';
 import {buildRailwayStation} from '../tools/voxel-tavern/town-blockout/landmark-station';
 import {auditRidgeCableSweep} from '../tools/voxel-tavern/town-blockout/town-d-r30-cable-facilities';
+import {ridgeCloudHandoff,productionCloudSeam} from '../tools/voxel-tavern/town-blockout/town-d-r30-cloud-terrace';
 test('production ridge consumes real railway mask and replaces only owned terrain cells',()=>{
  const grid=createTerrainGrid(),before=grid.elevation.slice(),root=new Group();
  const west=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
@@ -16,6 +17,16 @@ test('production ridge consumes real railway mask and replaces only owned terrai
  const ridge=mountProductionRidge(root,grid,{loop:rail.route.points,branch:branch.samples});
  assert.ok(ridge.changedVertices>100000);assert.equal(ridge.roads.length,3);assert.equal(ridge.stationReady,true);
  assert.equal(ridge.transportReady,false);
+ assert.equal(ridge.cloudSeam.physicalReady,true);assert.equal(ridge.cloudSeam.domainReady,false);
+ assert.equal(ridge.cloudSeam.seamNorth,663.25);assert.equal(ridge.cloudSeam.gateNorth,666);
+ assert.ok(ridge.terrace);const terrace=ridge.terrace!;
+ for(const goal of [...ridgeCloudHandoff.lookouts,ridgeCloudHandoff.assemblyVisitor,ridgeCloudHandoff.runway.start,ridgeCloudHandoff.runway.end]){
+  const path=terrace.survey(ridgeCloudHandoff.terminal,goal,1.2);
+  assert.ok(path.length>1,'missing physical cloud path '+goal.east+','+goal.north);
+  assert.ok(path.every(p=>p.height===347&&!ridge.blocked(p.east,p.north,p.height)));
+ }
+ assert.equal(ridge.blocked(productionCloudSeam.east,productionCloudSeam.north,347),true);
+ console.log('cloud seam',JSON.stringify(ridge.cloudSeam),'paving',terrace.paving);
  assert.ok(ridge.facilities);const facilities=ridge.facilities!;
  const hall=buildRailwayStation(),boxes=[...(hall.userData.colliders??[]),...(hall.userData.floors??[])].map(q=>({min:[q.min[0]+526,q.min[1]+26,q.min[2]-329],max:[q.max[0]+526,q.max[1]+26,q.max[2]-329]}));
  const all=[...boxes,...rail.group.userData.colliders,...rail.group.userData.floors,...branch.group.userData.colliders,...branch.group.userData.floors];
