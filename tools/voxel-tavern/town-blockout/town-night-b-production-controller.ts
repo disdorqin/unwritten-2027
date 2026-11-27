@@ -34,7 +34,10 @@ export function nightBProductionAuthority(p:Presence,line:1|2){
  * actual accepted scene/domain transfer, never a speculative teleport. */
 export function createNightBProductionController(input:Input){
  const p=input.presence,front=input.front?.ready?input.front:undefined,upper=input.upper?.ready?input.upper:undefined;
- const ride=createNightBCableRideHost({front:front?.service,frontFacilities:front?.facilities,upper:upper?.service,upperRopeway:input.ropeway,upperOrigin:input.upperOrigin,
+ // Only the exact objects certified by the installer may drive repair or ride.
+ if(upper&&(input.ropeway&&input.ropeway!==upper.ropeway||input.workshop&&input.workshop!==upper.workshop))throw Error('Mismatched certified upper operation assets');
+ const workshop=upper?.workshop;
+ const ride=createNightBCableRideHost({front:front?.service,frontFacilities:front?.facilities,upper:upper?.service,upperRopeway:upper?.ropeway,upperOrigin:input.upperOrigin,
  domain:()=>{const d=input.domain();return d==='mountain'?'town':d;},acceptLanding:input.acceptLanding});
  const repair=input.frontRepair&&createCableRepairHost(1,input.frontRepair.anchors);
  const boards=front&&createNightBFrontBoardPresenter(front.facilities.group.parent??front.facilities.group,front.facilities.survey);
@@ -49,13 +52,13 @@ export function createNightBProductionController(input:Input){
  }
  function actions(feet:Foot){
   if(![feet.east,feet.north,feet.height].every(Number.isFinite))return [];
-  if(ride.riding())return [{id:'exit',label:'下车'}];
+  if(ride.riding())return ride.exitCandidate()?[{id:'exit',label:'下车'}]:[];
   const d=input.domain(),line=d==='summit'?2:1;
   if(d!=='town'&&d!=='mountain'&&d!=='summit')return [];
   const available:{id:string;label:string}[]=[];
   for(const cabin of [0,1] as const)if(ride.boardCandidate(feet,line,cabin))available.push({id:'board-'+cabin,label:'登乘'+(cabin+1)+'号车厢'});
   if(line===2&&upper&&p.getCableLineState(2)?.stage==='dormant'&&p.cableServerNow()!==undefined&&summitReleaseApproaches[0]&&Math.hypot(feet.east-summitReleaseApproaches[0].east,feet.north-summitReleaseApproaches[0].north)<=1.35&&Math.abs(feet.height-800)<=.43)available.push({id:'release',label:'放下绝顶缆车'});
-  if(line===2&&upper&&input.workshop&&p.getCableLineState(2)?.stage==='one-station')for(const a of input.workshop.repairActions(local(feet)))available.push({id:a.id,label:a.label});
+  if(line===2&&upper&&workshop&&p.getCableLineState(2)?.stage==='one-station')for(const a of workshop.repairActions(local(feet)))available.push({id:a.id,label:a.label});
   if(line===1&&front&&input.frontRepair&&repair&&Math.abs(feet.height-(input.frontRepair.surfaceAt(feet.east,feet.north)??Infinity))<=.43&&input.frontRepair.clear(feet)){
    const s=p.getCableLineState(1);if(s)for(const a of repair.actions(s,feet))available.push({id:a.id,label:a.label});
   }
@@ -68,7 +71,7 @@ export function createNightBProductionController(input:Input){
   if(id==='board-0'||id==='board-1')return {accepted:ride.board(feet,line,id==='board-0'?0:1)};
   if(id==='release')return {accepted:p.sendSummitCableRelease()};
   const state=p.getCableLineState(line);
-  const list=line===2?input.workshop?.repairActions(local(feet)):state&&repair?.actions(state,feet);
+  const list=line===2?workshop?.repairActions(local(feet)):state&&repair?.actions(state,feet);
   const a=list?.find(a=>a.id===id);
   return {accepted:!!a&&p.sendCableRepair(line,a.event)};
  }

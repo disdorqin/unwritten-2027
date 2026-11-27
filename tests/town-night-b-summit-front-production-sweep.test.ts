@@ -117,7 +117,8 @@ assert.equal(closed.group.parent,null);assert.equal(accepted.facilities.group.pa
  const firstRideFrame=controller.tick(0)!;assert.ok(firstRideFrame.synchronized&&reported===1);
  now+=20000;assert.equal(controller.tick(0)?.station,null);
  const actual=controller.pose()!.feet;const legacy=accepted.facilities.update(0)[0]!;assert.deepEqual({east:legacy.east,north:legacy.north,height:legacy.height},actual);
- assert.equal(controller.action('exit',base).accepted,false);
+ assert.equal(controller.action('exit',base).accepted,false);assert.deepEqual(controller.actions(base),[]);
+ const sameDomainFeet=controller.pose()!.feet;domain='summit';assert.equal(controller.pose()?.synchronized,false);assert.deepEqual(controller.pose()?.feet,sameDomainFeet);assert.deepEqual(controller.actions(base),[]);domain='town';
  const held=controller.pose()!.feet;now=undefined;assert.deepEqual(controller.tick(0)?.feet,held);assert.equal(controller.pose()?.synchronized,false);
  now=openedAt!+accepted.service.repositionMs+accepted.service.clock.oneWayMs;const arrived=controller.action('exit',base);assert.ok(arrived.accepted&&arrived.landing);assert.equal(activity,0);
  console.log('six local approach links certified; production controller uses authoritative E and repair events, holds last foot during reconnect');

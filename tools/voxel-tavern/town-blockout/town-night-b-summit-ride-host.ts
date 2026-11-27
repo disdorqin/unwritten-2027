@@ -38,12 +38,12 @@ export function createNightBCableRideHost(input:Input){
  }
  function pose():CableRideFrame|undefined{
   if(!ride)return;
-  if(ride.line===1){const p=input.front?.ridePose({cabin:ride.cabin});if(p)last={line:1,cabin:ride.cabin,feet:{...p.feet},whiteout:false,station:p.station,synchronized:true};}
-  else {const p=input.upper?.ridePose({cabinIndex:ride.cabin});if(p)last={line:2,cabin:ride.cabin,feet:world(p.feet),whiteout:p.whiteout,station:p.station,synchronized:true};}
+  if(input.domain()!==(ride.line===1?'town':'summit'))return last&&{...last,feet:{...last.feet},synchronized:false};
+  const p=ride.line===1?input.front?.ridePose({cabin:ride.cabin}):input.upper?.ridePose({cabinIndex:ride.cabin});
+  if(p)last={line:ride.line,cabin:ride.cabin,feet:ride.line===1?{...p.feet}:world(p.feet),whiteout:'whiteout'in p&&p.whiteout,station:p.station,synchronized:true};
   // During a network gap, keep the last valid location and lock walking.
   // No local wall-clock extrapolation and no teleport to a station.
-  const current=ride.line===1?input.front?.cabinStates():input.upper?.cabinStates();
-  return last&&{...last,feet:{...last.feet},synchronized:!!current};
+  return last&&{...last,feet:{...last.feet},synchronized:!!p};
  }
  function boardCandidate(feet:Foot,line:1|2,cabin:Cabin){
   if(ride||!finite(feet)||(cabin!==0&&cabin!==1))return false;
@@ -54,12 +54,13 @@ export function createNightBCableRideHost(input:Input){
   if(!boardCandidate(feet,line,cabin))return false;
   ride={line,cabin};last=undefined;const p=pose();if(!p?.synchronized){ride=undefined;last=undefined;return false;}return true;
  }
- function exit(){
+ function exitCandidate(){
   if(!ride)return;const p=pose();if(!p?.synchronized||!p.station)return;
   const candidate=ride.line===1?input.front?.exit({cabin:ride.cabin}):input.upper?.exit({cabinIndex:ride.cabin});
   if(!candidate)return;const foot=ride.line===1?candidate:world(candidate);
   if(!finite(foot)||!input.acceptLanding(ride.line,foot,p.station))return;
-  ride=undefined;last=undefined;return foot;
+  return foot;
  }
- return {updateVisuals,pose,boardCandidate,board,exit,riding:()=>!!ride,frontBound,upperBound};
+ function exit(){const foot=exitCandidate();if(!foot)return;ride=undefined;last=undefined;return foot;}
+ return {updateVisuals,pose,boardCandidate,board,exitCandidate,exit,riding:()=>!!ride,frontBound,upperBound};
 }

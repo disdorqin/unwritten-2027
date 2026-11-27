@@ -48,6 +48,6 @@ export function installNightBUpperOperation(input:Input){
   if(input.certifyApproaches(docks)!==true)return reject('walking-route-not-certified',audit,docks);
   const service=createNightBLine2Service({...input,audit,dockClear});
   if(!service.physical)return reject('service-physical-gate',audit,docks);
-  return {ready:true as const,service,audit,docks,update(){if(disposed)return;input.workshop.sync(input.state());return service.present();},dispose};
+  return {ready:true as const,service,ropeway:r,workshop:input.workshop,audit,docks,update(){if(disposed)return;input.workshop.sync(input.state());return service.present();},dispose};
  }catch(e){dispose();throw e;}
 }
