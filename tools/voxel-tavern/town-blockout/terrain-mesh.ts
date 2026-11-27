@@ -1,6 +1,6 @@
 import {
   Box3, BufferAttribute, BufferGeometry, Color, DynamicDrawUsage, Frustum, Group, Matrix4, Mesh,
-  MeshLambertMaterial, type Camera, type Object3D,
+  MeshLambertMaterial, Quaternion, Vector3, type Camera, type Object3D,
 } from 'three';
 import { gridStep, layout, waterHeight, type createTerrainGrid } from './terrain';
 
@@ -8,9 +8,10 @@ const terrainChunkCells = 64 / gridStep;
 const aerialTileCells = 4 / gridStep;
 const clipTolerance = .0001;
 type TerrainSpan = { start: number; count: number; bounds: Box3 };
+type WalkingChunk={mesh:Mesh;first:number;count:number;spans:TerrainSpan[];index?:BufferAttribute};
 const palette = ['#d8e1ef', '#9a887c', '#bcac97', '#c7b795', '#78b8d9'].map(value => new Color(value));
 
-export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof createTerrainGrid>) {
+export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof createTerrainGrid>, ridgeOwnsCell?: (east:number,north:number)=>boolean) {
   const { elevation, surfaces, gridWidth, gridDepth } = grid;
   const cellWidth = gridWidth - 1;
   const cellDepth = gridDepth - 1;
@@ -35,6 +36,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
   parent.add(detailed);
   let wideTerrain: Mesh | undefined;
   const aerialTiles: TerrainSpan[] = [];
+  const walkingChunks:WalkingChunk[]=[];
   const totalVertices = cellWidth * cellDepth * 6;
   const positions = new BufferAttribute(new Float32Array(totalVertices * 3), 3).setUsage(DynamicDrawUsage);
   const vertexColors = new BufferAttribute(new Float32Array(totalVertices * 3), 3).setUsage(DynamicDrawUsage);
@@ -55,6 +57,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
     const colors = new Float32Array(length);
     const retention = new Uint8Array(length / 3);
     let offset = 0;
+    const firstTile=aerialTiles.length;
 
     function vertex(index: number, color: Color, shade: number, snow: number) {
       position[offset] = (index % gridWidth) * gridStep;
@@ -86,6 +89,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
         const first = offset;
         for (let j = tileNorth; j < Math.min(tileNorth + tile, northEnd); j += stride) {
           for (let i = tileEast; i < Math.min(tileEast + tile, eastEnd); i += stride) {
+            if(stride===1&&ridgeOwnsCell?.(i*gridStep,j*gridStep))continue;
             const a = j * gridWidth + i;
             const b = a + Math.min(stride, eastEnd - i);
             const c = a + Math.min(stride, northEnd - j) * gridWidth;
@@ -96,7 +100,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
             triangle(b, d, c, variation);
           }
         }
-        if (stride === 1) {
+        if (stride === 1 && offset>first) {
           const bounds = new Box3();
           bounds.min.set(tileEast * gridStep, Infinity, -Math.min(tileNorth + tile, northEnd) * gridStep);
           bounds.max.set(Math.min(tileEast + tile, eastEnd) * gridStep, -Infinity, -tileNorth * gridStep);
@@ -110,9 +114,9 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
     }
 
     const geometry = new BufferGeometry();
-    geometry.setAttribute('position', new BufferAttribute(position, 3));
-    geometry.setAttribute('color', new BufferAttribute(colors, 3));
-    geometry.setAttribute('snowRetention', new BufferAttribute(retention, 1, true));
+    geometry.setAttribute('position', new BufferAttribute(position.subarray(0,offset), 3));
+    geometry.setAttribute('color', new BufferAttribute(colors.subarray(0,offset), 3));
+    geometry.setAttribute('snowRetention', new BufferAttribute(retention.subarray(0,offset/3), 1, true));
     geometry.computeVertexNormals();
     geometry.computeBoundingSphere();
     if (stride === 1) {
@@ -134,11 +138,13 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
     }
     const mesh = new Mesh(geometry, material);
     mesh.name = `Terrain ${east * gridStep},${north * gridStep}`;
+    if(stride===1&&offset)walkingChunks.push({mesh,first:nextVertex-offset/3,count:offset/3,spans:aerialTiles.slice(firstTile)});
     return mesh;
   }
 
   function addChunk(east: number, north: number) {
-    detailed.add(createChunk(east, north, Math.min(east + terrainChunkCells, cellWidth), Math.min(north + terrainChunkCells, cellDepth)));
+    const mesh=createChunk(east, north, Math.min(east + terrainChunkCells, cellWidth), Math.min(north + terrainChunkCells, cellDepth));
+    if(mesh.geometry.getAttribute('position').count)detailed.add(mesh);else mesh.geometry.dispose();
   }
 
   for (let north = 0; north < cellDepth; north += terrainChunkCells) {
@@ -221,8 +227,69 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
     aerialIndex.needsUpdate = true;
   }
 
-  return function prepareTerrain(x: number, n: number, overview: boolean, wide: boolean, cover = 0, camera?: Camera) {
+  // Normal walking uses the same original per-chunk attributes and
+  // triangle ranges as the aerial stream, without uploading the full
+  // aggregate buffer on entry. Only the index of a partly visible chunk
+  // changes. Padded frusta make reuse safe while the eye translates or
+  // rotates slightly; newly loaded chunks stay fully visible until refresh.
+  const walkingEye=new Vector3(),walkingRotation=new Quaternion(),eye=new Vector3(),rotation=new Quaternion(),walkingProjection=new Matrix4();
+  let walkingActive=false,walkingVertices=-1,walkingLastUpdate=-Infinity;
+  function restoreWalking(){
+    if(!walkingActive)return;
+    walkingActive=false;
+    for(const c of walkingChunks){
+      c.mesh.visible=true;
+      if(c.mesh.geometry.index){c.mesh.geometry.setIndex(null);c.mesh.geometry.setDrawRange(0,c.count);}
+    }
+  }
+  function renderWalkingTerrain(camera:Camera){
+    camera.updateMatrixWorld();
+    eye.setFromMatrixPosition(camera.matrixWorld);
+    rotation.setFromRotationMatrix(camera.matrixWorld);
+    const now=performance.now();
+    if(walkingActive&&walkingProjection.equals(camera.projectionMatrix)&&walkingEye.distanceToSquared(eye)<=9&&walkingRotation.angleTo(rotation)<=.065&&
+       (walkingVertices===nextVertex||now-walkingLastUpdate<250))return;
+    walkingActive=true;walkingEye.copy(eye);walkingRotation.copy(rotation);walkingProjection.copy(camera.projectionMatrix);
+    walkingVertices=nextVertex;walkingLastUpdate=now;
+    viewProjection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);
+    frustum.setFromProjectionMatrix(viewProjection);
+    for(const c of walkingChunks){
+      let count=0;
+      const selected:TerrainSpan[]=[];
+      for(const tile of c.spans){
+        const {min,max}=tile.bounds;
+        const distance=Math.hypot(Math.max(Math.abs(min.x-eye.x),Math.abs(max.x-eye.x)),
+          Math.max(Math.abs(min.y-eye.y),Math.abs(max.y-eye.y)),Math.max(Math.abs(min.z-eye.z),Math.abs(max.z-eye.z)));
+        // Plane normal rotation <= 2 sin(theta/2). Include the 3m
+        // cache translation and additional head/camera motion margin.
+        const pad=4+.11*distance;
+        let visible=true;
+        for(const p of frustum.planes){
+          const n=p.normal;
+          if(n.x*(n.x<0?min.x:max.x)+n.y*(n.y<0?min.y:max.y)+n.z*(n.z<0?min.z:max.z)+p.constant < -pad){visible=false;break;}
+        }
+        if(visible){selected.push(tile);count+=tile.count;}
+      }
+      c.mesh.visible=count>0;
+      if(!count||count>=c.count*.88){
+        if(c.mesh.geometry.index){c.mesh.geometry.setIndex(null);c.mesh.geometry.setDrawRange(0,c.count);}
+        continue;
+      }
+      c.index??=new BufferAttribute(new Uint32Array(c.count),1).setUsage(DynamicDrawUsage);
+      const indices=c.index.array;let offset=0;
+      for(const tile of selected)for(let v=tile.start-c.first;v<tile.start-c.first+tile.count;v++)indices[offset++]=v;
+      if(c.mesh.geometry.index!==c.index)c.mesh.geometry.setIndex(c.index);
+      c.mesh.geometry.setDrawRange(0,count);
+      c.index.clearUpdateRanges();c.index.addUpdateRange(0,count);c.index.needsUpdate=true;
+    }
+  }
+
+  return function prepareTerrain(x: number, n: number, overview: boolean, wide: boolean, cover = 0, camera?: Camera, walkingCull=false) {
     snowCover.value = cover;
+    // A masked terrain uses the exact disjoint ridge/town mesh partition;
+    // never draw the coarse unmasked panorama on top of the ridge.
+    if(ridgeOwnsCell&&wide){wide=false;overview=true;}
+    if(!walkingCull||overview||wide||!camera)restoreWalking();
     detailed.visible = !wide && !(overview && camera);
     if (aerialTerrain) aerialTerrain.visible = false;
     if (wide) {
@@ -252,6 +319,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
       addChunk(east, north);
     }
     if (overview && camera) renderAerialTerrain(camera);
+    else if(walkingCull&&camera)renderWalkingTerrain(camera);
   };
 }
 

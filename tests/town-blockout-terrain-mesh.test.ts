@@ -33,6 +33,31 @@ test('walking draws upload only their local slices of the unchanged aerial terra
   assert.equal(visibleAttributes.size, visible.length * 4);
   assert.ok(walkingUpload > 0 && walkingUpload < aggregateUpload);
 
+  // Walking cull retains each original triangle that is not wholly
+  // excluded by a camera plane, including subsequent cached small motion.
+  const originals=new Map(detail.children.map(o=>[o,(o as Mesh<BufferGeometry>).geometry.getAttribute('position')]));
+  function assertCoverage(){
+    camera.updateMatrixWorld(true);
+    const f=new Frustum().setFromProjectionMatrix(new Matrix4().multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
+    let selected=0,full=0;
+    for(const child of detail.children as Mesh<BufferGeometry>[]){
+      const g=child.geometry,p=g.getAttribute('position');full+=p.count;
+      if(originals.has(child))assert.equal(p,originals.get(child));
+      const index=g.index,keep=child.visible?(index?new Set<number>(Array.from(index.array.subarray(0,g.drawRange.count))):undefined):new Set<number>();
+      if(child.visible)selected+=g.drawRange.count;
+      if(!keep)continue;
+      for(let i=0;i<p.count;i+=3){
+        if(keep.has(i)&&keep.has(i+1)&&keep.has(i+2))continue;
+        assert.ok(f.planes.some((plane:import('three').Plane)=>[i,i+1,i+2].every(v=>plane.normal.x*p.getX(v)+plane.normal.y*p.getY(v)+plane.normal.z*p.getZ(v)+plane.constant<-.00001)),'walking cull removed potentially visible terrain triangle');
+      }
+    }
+    assert.ok(selected>0&&selected<full);
+  }
+  prepare(543.6,412,false,false,.55,camera,true);assertCoverage();
+  camera.position.x-=1;camera.rotateY(.035);prepare(542.6,412,false,false,.55,camera,true);assertCoverage();
+  camera.rotateY(.9);prepare(542.6,412,false,false,.55,camera,true);assertCoverage();
+  prepare(542.6,412,false,false);assert.ok(detail.children.every(o=>o.visible&&!(o as Mesh<BufferGeometry>).geometry.index));
+  camera.position.set(543.6,11.8934618+1.65,-412);camera.lookAt(camera.position.x-1,camera.position.y,camera.position.z);
   prepare(543.6, 412, true, false, .55, camera);
   const aerial = scene.getObjectByName('Walkable terrain visible tiles') as Mesh<BufferGeometry>;
   assert.ok(!detail.visible && aerial.visible && aerial.geometry.drawRange.count > 0);

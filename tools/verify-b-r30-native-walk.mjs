@@ -25,15 +25,18 @@ const positionPattern = /东\s*(-?[\d.]+)\s*m\s*·\s*北\s*(-?[\d.]+)\s*m/;
 const hardware = process.env.ZA22_HARDWARE === '1';
 const graphicsArgs = hardware ? (process.platform === 'win32' ? ['--use-gl=angle', '--use-angle=d3d11'] : [])
   : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
-const report = { url: url.href, segment, viewport, quality: 'smooth', gpu: null, paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [] };
+const report = { url: url.href, segment, viewport, deviceScaleFactor, quality: 'smooth', gpu: null, paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [] };
 
 await mkdir(output, { recursive: true });
 let browser;
 let lastPage;
 let lastEvidence;
 let measuring = true;
-// Keep the browser run inside the local execution tool's time budget.
-const runDeadline=Date.now()+225_000;
+// A complete 824m descent plus return needs more time than the previous
+// single-descent evidence budget. Keep an explicit bounded deadline.
+const budget=Number(process.env.ZA22_ROUTE_BUDGET_MS??(segment==='roundtrip'?480_000:225_000));
+assert.ok(Number.isInteger(budget)&&budget>=225_000&&budget<=600_000,'Invalid native route budget');
+const runDeadline=Date.now()+budget;report.routeBudgetMs=budget;
 function remaining(){const left=runDeadline-Date.now();assert.ok(left>1000,'Native route evidence budget exhausted');return left;}
 
 async function openTown(name) {
@@ -95,7 +98,11 @@ async function openTown(name) {
     Object.defineProperty(Element.prototype, 'requestPointerLock', { value: undefined });
     // This is the viewer's ordinary saved graphics setting. It does not change the world or movement.
     localStorage.setItem('unwritten.quality.tier.v1', 'smooth');
-    document.addEventListener('town-frame-profile', event => { window.__za22Frame = event.detail; }, true);
+    window.__za22Stage='entry';window.__za22Samples=[];
+    document.addEventListener('town-frame-profile', event => {
+      const f=event.detail;window.__za22Frame=f;
+      if(window.__za22Samples.length<30000&&Number.isFinite(f.frameMs)&&f.frameMs>0)window.__za22Samples.push([window.__za22Stage,f.frameMs,f.calls,f.triangles,f.movementMs,f.detailMs,f.weatherMs]);
+    }, true);
   });
   const response = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 90_000 });
   assert.equal(response?.status(), 200);
@@ -195,12 +202,12 @@ async function waitForWire(page, evidence, predicate = pose => Boolean(pose), ti
   return pose;
 }
 
-async function face(page, evidence, desired) {
+async function face(page, evidence, desired, tolerance=.009) {
   for (let attempt = 0; attempt < 16; ++attempt) {
     remaining();
     const before = await waitForWire(page, evidence);
     const delta = yawDistance(before.yaw, desired);
-    if (Math.abs(delta) <= .009) return;
+    if (Math.abs(delta) <= tolerance) return;
     const dx = Math.max(-maxDrag, Math.min(maxDrag, Math.round(delta / .003)));
     const anchor = await page.evaluate(({ width, height, dx, attempt }) => {
       const canvas = document.querySelector('#scene canvas');
@@ -224,7 +231,7 @@ async function face(page, evidence, desired) {
   assert.fail(`Native mouse drag could not face ${desired}`);
 }
 
-async function walkTo(page, evidence, target, label) {
+async function walkTo(page, evidence, target, label, precise=false) {
   const [east, north] = target;
   let after = await readPose(page);
   for (let attempt = 0; attempt < 6; ++attempt) {
@@ -233,29 +240,29 @@ async function walkTo(page, evidence, target, label) {
     const from = after;
     const dx = east - from.east, dn = north - from.north;
     const distance = Math.hypot(dx, dn);
-    if (distance <= .46) {
+    if (distance <= (precise?.19:.46)) {
       evidence.checkpoints.push({ label, target, ...from, wire: evidence.poses.at(-1) });
       console.log(JSON.stringify({ phase: label, east: from.east, north: from.north, y: from.height }));
       return;
     }
     const desired = Math.atan2(dx, dn);
-    await face(page, evidence, desired);
+    await face(page, evidence, desired,precise?.004:.009);
     // For small final corrections use the slow backward movement, avoiding double-W sprint.
     const backwards = distance < 1.4;
-    if (backwards) await face(page, evidence, desired + Math.PI);
+    if (backwards) await face(page, evidence, desired + Math.PI,precise?.004:.009);
     const key = backwards ? 's' : 'w';
-    const fast = !backwards && distance > 3;
+    const fast = !precise && !backwards && distance > 3;
     if (fast) await page.keyboard.down('Shift');
     await page.keyboard.down(key);
     try {
-      await page.waitForFunction(({ pattern, start, east, north, dx, dn, distance }) => {
+      await page.waitForFunction(({ pattern, start, east, north, dx, dn, distance, tolerance }) => {
         const point = new RegExp(pattern).exec(document.querySelector('#position')?.textContent ?? '');
         if (!point) return false;
         const x = Number(point[1]), n = Number(point[2]);
-        if (Math.hypot(x - east, n - north) <= .32) return true;
+        if (Math.hypot(x - east, n - north) <= tolerance) return true;
         const forward = ((x - start.east) * dx + (n - start.north) * dn) / distance;
         return forward >= distance;
-      }, { pattern: positionPattern.source, start: from, east, north, dx, dn, distance },
+      }, { pattern: positionPattern.source, start: from, east, north, dx, dn, distance,tolerance:precise?.13:.32 },
       { timeout: Math.min(remaining(),Math.ceil(30_000 + distance * 1000)) });
     } catch (error) {
       const stopped = await readPose(page);
@@ -314,7 +321,10 @@ try{
   await page.locator('#jump').selectOption({label:'陨石坑口'});
   if(await page.locator('#town-settings').evaluate(d=>d.open))await page.locator('#town-settings-close').click();
   await page.waitForFunction(pattern=>{const m=new RegExp(pattern).exec(document.querySelector('#position')?.textContent??'');return m&&Math.hypot(+m[1]-2,+m[2]-159)<1.2;},positionPattern.source,{timeout:45000});
-  await follow(page,evidence,[[-12,159],[-40,159],[-67,159]],'approach');
+  await page.evaluate(()=>{window.__za22Stage='approach';});
+  await follow(page,evidence,[[-12,159],[-40,159]],'approach');
+  for(const [i,p] of route.approach.points.entries())await walkTo(page,evidence,[p.east,p.north],'certified-approach-'+i,true);
+  await page.evaluate(()=>{window.__za22Stage='night-permission';});
   const deadline=Math.min(Date.now()+120000,runDeadline-1000);
   while(Date.now()<deadline){
     const f=westWindow();
@@ -329,6 +339,7 @@ try{
   await waitForWire(page,evidence,p=>p?.area==='west'&&p.east<-70.55);
   await snapshot(page,evidence,'rim-night');await save();
   async function traverse(knots,key){
+    await page.evaluate(stage=>{window.__za22Stage=stage;},key);
     for(let i=0;i<knots.length;i++){
       const q=knots[i];
       await walkTo(page,evidence,[q.east,q.north],key+'-'+q.t.toFixed(3));
@@ -340,8 +351,10 @@ try{
   }
   if(segment==='rim-return'){
     // Separate actual upper segment; not a full bottom-to-rim round trip.
-    const upper=route.points.filter(p=>p.t<=.12);
-    result.scope='normal entry/actual authorized rim and t0..0.12 round trip only; no floor or full descent claim';
+    const limit=Number(process.env.ZA22_RIM_RETURN_T??.12);
+    assert.ok(Number.isFinite(limit)&&limit>=.12&&limit<=.30,'Invalid upper return limit');
+    const upper=route.points.filter(p=>p.t<=limit);
+    result.scope='normal entry/actual authorized rim and t0..'+limit+' round trip only; no floor or full descent claim';result.upperLimit=limit;
     await traverse(upper,'down');
     await snapshot(page,evidence,'upper-turnback');
     await traverse([...upper].reverse(),'up');
@@ -372,6 +385,11 @@ try{
 }finally{
   measuring=false;
   report.errors=report.pageErrors.length+report.consoleErrors.length+report.requestFailures.length+report.httpErrors.length;
+  if(lastPage&&!lastPage.isClosed()&&!bare){try{
+    const data=await lastPage.evaluate(()=>({rows:window.__za22Samples??[],canvas:[document.querySelector('#scene canvas')?.width,document.querySelector('#scene canvas')?.height]}));
+    const stats=a=>{a=a.filter(Number.isFinite).sort((x,y)=>x-y);return a.length?{median:a[Math.floor((a.length-1)/2)],p95:a[Math.max(0,Math.ceil(a.length*.95)-1)]}:null;};
+    report.nativePerformance={canvas:data.canvas,scope:'actual normal entrance; native player keyboard and pointer route, includes turning/checkpoints, not fixed-camera A/B',stages:[...new Set(data.rows.map(r=>r[0]))].map(stage=>{const rows=data.rows.filter(r=>r[0]===stage),get=i=>stats(rows.map(r=>r[i]));return {stage,frames:rows.length,fps:1000*rows.length/rows.reduce((a,r)=>a+r[1],0),frameMs:get(1),draws:get(2),triangles:get(3),movementMs:get(4),detailMs:get(5),weatherMs:get(6)};})};
+  }catch(e){report.nativePerformanceError=String(e);}}
   await writeFile(join(output,'za22-live-walk.json'),JSON.stringify(report,null,2));
   console.log(JSON.stringify({segment,down:report.bR30?.down,up:report.bR30?.up,complete:report.bR30?.complete,errors:report.errors,failure:report.failure,poses:report.paths[0]?.poses.length}));
   await browser?.close();

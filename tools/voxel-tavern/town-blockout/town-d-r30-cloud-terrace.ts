@@ -5,6 +5,8 @@ import {summitAssemblyAnchor} from './main-summit-assembly';
 import {za22GateSeamNorth} from './town-za22-mountain-gate';
 import {mountCloudTerraceArt} from './main-summit-cloud-terrace-art';
 import {mountStarportAssemblySite} from './starport-assembly-site';
+import {townD2CloudTerraceContract} from './town-d2-cloud-terrace-transform';
+import {sampleTownD2R30Height} from './town-d2-r30-domain';
 
 export type TerraceFoot={east:number;north:number;height:number};
 export const ridgeCloudHandoff=Object.freeze({
@@ -52,7 +54,18 @@ export function surveyCloudFootpath(field:FrontRidgeR30Field,start:TerraceFoot,t
  }
  return [];
 }
-export function mountRidgeCloudTerrace(owner:Group,field:FrontRidgeR30Field,extraBlocked:Obstacle=()=>false){
+export const productionCloudSeam=Object.freeze({east:townD2CloudTerraceContract.worldAnchor.east,
+ north:townD2CloudTerraceContract.worldAnchor.north+townD2CloudTerraceContract.seamNorthLocal,
+ height:townD2CloudTerraceContract.arrivalHeight,gateNorth:za22GateSeamNorth});
+export function auditProductionCloudSeam(field:FrontRidgeR30Field){
+ const s=productionCloudSeam;let samples=0,maxError=0;
+ for(let e=s.east-5.5;e<=s.east+5.5;e+=.25)for(let n=654.5;n<=s.gateNorth;n+=.25){
+  const h=field.heightAt(e,n);samples++;maxError=Math.max(maxError,Math.abs((h??Infinity)-s.height));
+ }
+ const gateHeight=sampleTownD2R30Height(0,-10);
+ return {samples,maxError,gateHeight,seamNorth:s.north,gateNorth:s.gateNorth,physicalReady:maxError<=.025&&gateHeight===s.height,domainReady:false as const};
+}
+export function mountRidgeCloudTerrace(owner:Object3D,field:FrontRidgeR30Field,extraBlocked:Obstacle=()=>false,closedSeam=false){
  const group=new Group();group.name='d-r30-cloud-terrace-physical';owner.add(group);
  const local=new Group();local.position.set(summitAssemblyAnchor.east,0,-summitAssemblyAnchor.north);group.add(local);
  const art=mountCloudTerraceArt(local);
@@ -115,6 +128,35 @@ export function mountRidgeCloudTerrace(owner:Group,field:FrontRidgeR30Field,extr
   const board=new Mesh(new PlaneGeometry(1.28,.56),new MeshBasicMaterial({map}));
   board.rotation.y=i===0?Math.PI:-Math.PI/2;board.position.set(e,347+.98,-n);group.add(board);boards.push(board);
  }
+ // The canonical swap is 2.75m before the main-summit mesh. Its
+ // walking datum is real terrain, not an elevated teleport pad.
+ // While the independent authority is absent, show a physical closed
+ // gate across the surveyed approach instead of an invisible domain wall.
+ if(closedSeam){
+  const s=productionCloudSeam;
+  if(auditProductionCloudSeam(field).physicalReady){
+   for(const e of [s.east-5.6,s.east-2,s.east+2,s.east+5.6]){
+    add(e,s.north,347+.55,.48,.55,1.1,'#78848c',true);
+    add(e,s.north,348.18,.26,.26,.65,'#48555b',true);
+    add(e,s.north,348.53,.48,.48,.12,'#ccd6db');
+   }
+   for(const e of [s.east-3.8,s.east,s.east+3.8]){
+    add(e,s.north,347+.62,e===s.east?3.75:3.35,.16,1.24,'#5b625f',true);
+    add(e,s.north,348.04,e===s.east?3.75:3.35,.2,.14,'#bca06b');
+   }
+   for(const e of [s.east-2,s.east+2])add(e,s.north,349.4,.45,.48,2.2,'#56636a',true);
+   add(s.east,s.north,350.55,4.5,.6,.40,'#6d5240');
+   if(typeof document!=='undefined'){
+    const canvas=document.createElement('canvas');canvas.width=768;canvas.height=256;const ctx=canvas.getContext('2d');
+    if(ctx){ctx.fillStyle='#343e43';ctx.fillRect(0,0,768,256);ctx.strokeStyle='#c6a675';ctx.lineWidth=10;ctx.strokeRect(8,8,752,240);
+     ctx.fillStyle='#f6e9d3';ctx.textAlign='center';ctx.font='bold 58px Microsoft YaHei,sans-serif';ctx.fillText('主峰山门 · 暂闭',384,102);
+     ctx.font='36px Microsoft YaHei,sans-serif';ctx.fillText('跨域线路验收中 · 请返回云海台',384,191,720);
+     const map=new CanvasTexture(canvas);map.colorSpace=SRGBColorSpace;
+     const board=new Mesh(new PlaneGeometry(3.6,1.2),new MeshBasicMaterial({map}));
+     board.position.set(s.east,349.35,-s.north+.34);group.add(board);boards.push(board);}
+   }
+  }
+ }
  // Preserve original runway direction and width; markings are only visual.
  for(let e=za22CloudRunway.start+2;e<za22CloudRunway.end-1;e+=4)add(e,za22CloudRunway.north,347+.018,1.6,.16,.036,'#b39a69');
  const batches:InstancedMesh[]=[];
@@ -125,6 +167,8 @@ export function mountRidgeCloudTerrace(owner:Group,field:FrontRidgeR30Field,extr
  }
  function action(p:TerraceFoot){
   if(ridgeCloudFootAt(field,p.east,p.north)===undefined||blocked(p.east,p.north,p.height))return;
+  if(closedSeam&&Math.hypot(p.east-productionCloudSeam.east,p.north-(productionCloudSeam.north-1.2))<1.6)
+   return {title:'主峰山门 · 暂闭',message:'云海台与主峰接驳地表已对齐。独立主峰联机房间尚未认证，请沿云海台原路返回。'};
   const q=za07CloudLookouts.find(a=>Math.hypot(a.east-p.east,a.north-p.north)<=1.35&&Math.abs(a.height-p.height)<.55);
   if(q)return {title:q.title,message:q.message};
  }

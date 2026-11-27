@@ -1,4 +1,5 @@
-import { BufferGeometry, BoxGeometry, Color, Float32BufferAttribute, Group, Mesh, MeshLambertMaterial } from 'three';
+import { BufferGeometry, BoxGeometry, Color, Float32BufferAttribute, Group, Mesh, MeshLambertMaterial, type Camera } from 'three';
+import {installCraterRenderPerf} from './town-r30-crater-perf';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { buildCraterSeamCollar, type SurfaceVertex } from './town-a-r30-crater-seam';
 import { featherSharedCraterApron } from './town-a-r30-crater-material-seam';
@@ -366,32 +367,31 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   group.add(moltenBeads.group);
   const moltenEarth = moltenBeads.group.getObjectByName('c2-molten-beads-scorched-earth');
   let lastMoltenX = NaN, lastMoltenY = NaN, lastMoltenZ = NaN, lastMoltenNight: boolean | undefined;
-  if (moltenEarth instanceof Mesh) {
-    moltenEarth.onBeforeRender = (_renderer, _scene, camera) => {
-      if (c2Night === lastMoltenNight && Math.abs(camera.position.x - lastMoltenX) < .05 &&
-          Math.abs(camera.position.y - lastMoltenY) < .05 && Math.abs(camera.position.z - lastMoltenZ) < .05) return;
-      lastMoltenX = camera.position.x; lastMoltenY = camera.position.y; lastMoltenZ = camera.position.z;
-      lastMoltenNight = c2Night;
-      updateC2CraterMoltenBeads(moltenBeads, { cameraPosition: camera.position, night: c2Night });
-    };
+  function updateMolten(camera:Camera){
+    if (c2Night === lastMoltenNight && Math.abs(camera.position.x - lastMoltenX) < .05 &&
+        Math.abs(camera.position.y - lastMoltenY) < .05 && Math.abs(camera.position.z - lastMoltenZ) < .05) return;
+    lastMoltenX = camera.position.x; lastMoltenY = camera.position.y; lastMoltenZ = camera.position.z;
+    lastMoltenNight = c2Night;
+    updateC2CraterMoltenBeads(moltenBeads, { cameraPosition: camera.position, night: c2Night });
   }
+  if (moltenEarth instanceof Mesh) moltenEarth.onBeforeRender = (_renderer,_scene,camera)=>{
+    if(!renderPerf.enabled())updateMolten(camera);
+  };
   const warmLightChain = mountCraterWarmLightChain(group, surveyCraterWarmLightChain(road));
   let c2Night = false;
   let lastC2Night: boolean | undefined;
-  let lastLodDistance = -1;
-  surface.onBeforeRender = (_renderer, _scene, camera) => {
-    const distance = Math.hypot(camera.position.x - anchor.east,
-      camera.position.z + anchor.north);
-    if (Math.abs(distance - lastLodDistance) < 2) return;
-    lastLodDistance = distance;
-    crater.interiorDressing.group.visible = distance < 105;
-    centralMound.group.visible = distance < 190;
-    brokenCircle.group.visible = distance < 175;
-    moltenBeads.group.visible = distance < 80;
-    inscription.group.visible = distance < 150;
-    midgroundS5.group.visible = distance < 105;
-    moundPlanting.group.visible = distance < 190;
-  };
+  let lastLodDistance = Infinity;
+  function updateLod(camera:Camera){
+    const distance = Math.hypot(camera.position.x - anchor.east,camera.position.z + anchor.north);
+    if(Math.abs(distance-lastLodDistance)<1) return;
+    const initial=!Number.isFinite(lastLodDistance);lastLodDistance=distance;
+    for(const [item,limit] of lodGroups){
+      // Preserve the original range with a 3m hysteresis band. A
+      // moving eye near the boundary cannot re-toggle every frame.
+      item.visible=distance<(initial?limit:limit+(item.visible?3:-3));
+    }
+  }
+  surface.onBeforeRender = (_renderer,_scene,camera)=>{if(!renderPerf.enabled())updateLod(camera);};
   // Collision fix (audit 2026-11-22): the crater's built pieces register
   // walk-geometry boxes on the road's top group, generated from the
   // mounts' own placements. The viewer's west index (buildWestGeometry,
@@ -452,6 +452,10 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     staticGroup.updateMatrixWorld(true);
     staticGroup.traverse(object => { if (object instanceof Mesh) object.matrixAutoUpdate = false; });
   }
+  const lodGroups = [[crater.interiorDressing.group,105],[centralMound.group,190],
+    [brokenCircle.group,175],[moltenBeads.group,80],[inscription.group,150],
+    [midgroundS5.group,105],[moundPlanting.group,190]] as const;
+  const renderPerf=installCraterRenderPerf(group,camera=>{updateLod(camera);if(moltenBeads.group.visible)updateMolten(camera);},lampRoom?.group,{mesh:surface as Mesh,anchor,heightAt:road.heightAt});
   return { ...road, winch, lampRoom, mouthWorks, outerWorks, ejecta, midground, densityA2, ropeStay, surveyM1,
     centralMound, brokenCircle, moltenBeads, inscription, warmLightChain, midgroundS5, moundPlanting, craterActions };
 }

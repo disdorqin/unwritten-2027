@@ -153,12 +153,23 @@ export type FrontRidgeR30Field=ReturnType<typeof buildFrontRidgeR30Field>;
 /** Far geometry reuses the fine vertex buffer. Every exterior one-metre
  * edge vertex is referenced, even when a neighbouring chunk stays fine.
  * In the boundary strip a fan stitches coarse interior cells to that edge. */
-export function ridgeFarIndices(cols:number,rows:number,step=4){
+export function ridgeFarIndices(cols:number,rows:number,step=4,ownsCell?:(x:number,z:number)=>boolean){
  const result:number[]=[];const v=(x:number,z:number)=>z*cols+x;
+ const tileWidth=Math.ceil((cols-1)/step),tileDepth=Math.ceil((rows-1)/step),full=new Uint8Array(tileWidth*tileDepth);
+ for(let tz=0;tz<tileDepth;tz++)for(let tx=0;tx<tileWidth;tx++){
+  const x=tx*step,z=tz*step,r=Math.min(cols-1,x+step),b=Math.min(rows-1,z+step);
+  let all=true;
+  if(ownsCell)for(let j=z;j<b&&all;j++)for(let i=x;i<r;i++)if(!ownsCell(i,j)){all=false;break}
+  full[tz*tileWidth+tx]=all&&r-x>=2&&b-z>=2?1:0;
+ }
+ const coarse=(tx:number,tz:number)=>tx>=0&&tx<tileWidth&&tz>=0&&tz<tileDepth&&!!full[tz*tileWidth+tx];
  for(let z=0;z<rows-1;z+=step)for(let x=0;x<cols-1;x+=step){
    const r=Math.min(cols-1,x+step),b=Math.min(rows-1,z+step);
-   if(r-x<2||b-z<2){for(let j=z;j<b;j++)for(let i=x;i<r;i++)result.push(v(i,j),v(i+1,j),v(i,j+1),v(i+1,j),v(i+1,j+1),v(i,j+1));continue}
-   const top=z===0,right=r===cols-1,bottom=b===rows-1,left=x===0;
+   const tx=x/step,tz=z/step;
+   if(!coarse(tx,tz)){for(let j=z;j<b;j++)for(let i=x;i<r;i++)if(!ownsCell||ownsCell(i,j))result.push(v(i,j),v(i+1,j),v(i,j+1),v(i+1,j),v(i+1,j+1),v(i,j+1));continue}
+   // Any edge shared with a partial tile or an outside fine chunk keeps
+   // every metre vertex; all other interior edges agree at coarse ends.
+   const top=!coarse(tx,tz-1),right=!coarse(tx+1,tz),bottom=!coarse(tx,tz+1),left=!coarse(tx-1,tz);
    if(!top&&!right&&!bottom&&!left){result.push(v(x,z),v(r,z),v(x,b),v(r,z),v(r,b),v(x,b));continue}
    const ring:number[]=[v(x,z)];
    if(top)for(let i=x+1;i<=r;i++)ring.push(v(i,z));else ring.push(v(r,z));
@@ -170,17 +181,81 @@ export function ridgeFarIndices(cols:number,rows:number,step=4){
  }
  return result;
 }
+/** Conservative residual range after subtracting a common affine plane.
+ * Both triangulations interpolate residuals in the same interval, even
+ * across different diagonals. Thus their vertical difference is bounded. */
+export function ridgeCoarseTileAllowed(height:(x:number,z:number)=>number,preserve:(x:number,z:number)=>boolean,x:number,z:number,r:number,b:number,maxRange:number){
+ const origin=height(x,z),dx=(height(r,z)-origin)/(r-x),dz=(height(x,b)-origin)/(b-z);
+ let low=Infinity,high=-Infinity;
+ for(let j=z;j<=b;j++)for(let i=x;i<=r;i++){
+  const h=height(i,j);if(!Number.isFinite(h)||preserve(i,j))return false;
+  const residual=h-origin-dx*(i-x)-dz*(j-z);
+  low=Math.min(low,residual);high=Math.max(high,residual);
+  if(high-low>maxRange)return false;
+ }
+ return true;
+}
+/** Quadtree-like 8/4/1m tiling with exact ownership. Adjacent leaves share
+ * every edge break; exterior edges retain all 1m vertices. No T-junction
+ * can occur between 8m, 4m, fine or independently LOD-switched chunks. */
+export function ridgeAdaptiveIndices(cols:number,rows:number,owns:(x:number,z:number)=>boolean,allow:(x:number,z:number,r:number,b:number)=>boolean,preserve:(x:number,z:number)=>boolean){
+ type Leaf={x:number;z:number;r:number;b:number};
+ const leaves:Leaf[]=[],cells=new Int32Array((cols-1)*(rows-1)).fill(-1);
+ const ci=(x:number,z:number)=>z*(cols-1)+x;
+ function add(x:number,z:number,r:number,b:number){
+  const id=leaves.length;leaves.push({x,z,r,b});
+  for(let j=z;j<b;j++)for(let i=x;i<r;i++)cells[ci(i,j)]=id;
+ }
+ function full(x:number,z:number,r:number,b:number){
+  for(let j=z;j<b;j++)for(let i=x;i<r;i++)if(!owns(i,j))return false;return true;
+ }
+ function details(x:number,z:number,r:number,b:number){
+  for(let j=z;j<=b;j++)for(let i=x;i<=r;i++)if(preserve(i,j))return true;return false;
+ }
+ for(let z=0;z<rows-1;z+=8)for(let x=0;x<cols-1;x+=8){
+  const r=Math.min(cols-1,x+8),b=Math.min(rows-1,z+8);
+  if(r-x===8&&b-z===8&&full(x,z,r,b)&&allow(x,z,r,b)){add(x,z,r,b);continue}
+  for(let j=z;j<b;j+=4)for(let i=x;i<r;i+=4){
+   const u=Math.min(r,i+4),v=Math.min(b,j+4);
+   if(u-i>=2&&v-j>=2&&full(i,j,u,v)&&!details(i,j,u,v)){add(i,j,u,v);continue}
+   for(let jj=j;jj<v;jj++)for(let ii=i;ii<u;ii++)if(owns(ii,jj))add(ii,jj,ii+1,jj+1);
+  }
+ }
+ const v=(x:number,z:number)=>z*cols+x,result:number[]=[];
+ const neighbor=(x:number,z:number)=>x<0||z<0||x>=cols-1||z>=rows-1?-1:cells[ci(x,z)]!;
+ // Include a vertex if the adjacent cell changes, or either side is
+ // absent (outside the owned terrain). Fine leaves use original diagonal.
+ const split=(a:number,b:number)=>a<0||b<0||a!==b;
+ for(const {x,z,r,b} of leaves){
+  if(r-x===1&&b-z===1){result.push(v(x,z),v(r,z),v(x,b),v(r,z),v(r,b),v(x,b));continue}
+  const ring=[v(x,z)];
+  for(let i=x+1;i<r;i++)if(split(neighbor(i-1,z-1),neighbor(i,z-1)))ring.push(v(i,z));
+  ring.push(v(r,z));
+  for(let j=z+1;j<b;j++)if(split(neighbor(r,j-1),neighbor(r,j)))ring.push(v(r,j));
+  ring.push(v(r,b));
+  for(let i=r-1;i>x;i--)if(split(neighbor(i,b),neighbor(i-1,b)))ring.push(v(i,b));
+  ring.push(v(x,b));
+  for(let j=b-1;j>z;j--)if(split(neighbor(x-1,j),neighbor(x-1,j-1)))ring.push(v(x,j));
+  if(ring.length===4){result.push(ring[0]!,ring[1]!,ring[3]!,ring[1]!,ring[2]!,ring[3]!);continue}
+  const center=v(Math.floor((x+r)/2),Math.floor((z+b)/2));
+  for(let i=0;i<ring.length;i++)result.push(ring[i]!,ring[(i+1)%ring.length]!,center);
+ }
+ return result;
+}
 /** Spatial chunks share the same 1m vertices and cross-boundary normals.
  * No bottomless shell, doubled road surface or DoubleSide workaround. */
-export function mountFrontRidgeR30(field:FrontRidgeR30Field,roadAt?:(east:number,north:number)=>boolean){
+export function mountFrontRidgeR30(field:FrontRidgeR30Field,roadAt?:(east:number,north:number)=>boolean,ownsCell?:(east:number,north:number)=>boolean,keepDetail?:(east:number,north:number)=>boolean){
  const group=new Group();group.name='town-d-r30-front-ridge';
  const texture=makeFrontRidgePixelTexture(),material=new MeshLambertMaterial({vertexColors:true,map:texture});
  const moss=new Color('#59694b'),snow=new Color('#e0e8ed');
  const shale=new Color('#78838b'),sandstone=new Color('#b09a7b'),rust=new Color('#88624a'),frost=new Color('#c9d9e3'),gravel=new Color('#b5a58f');
  const geometries:BufferGeometry[]=[];
- const lod:{mesh:Mesh;fine:BufferGeometry;far:BufferGeometry;east:number;north:number}[]=[];
+ const lod:{mesh:Mesh;fine:BufferGeometry;far:BufferGeometry;distant:BufferGeometry;east:number;north:number}[]=[];
  for(let n0=B.south;n0<B.north;n0+=B.chunk)for(let e0=B.west;e0<B.east;e0+=B.chunk){
    const e1=Math.min(B.east,e0+B.chunk),n1=Math.min(B.north,n0+B.chunk),cols=e1-e0+1,rows=n1-n0+1;
+   let owned=0;for(let n=n0;n<n1;n++)for(let e=e0;e<e1;e++)if(!ownsCell||ownsCell(e,n))owned++;
+   if(!owned)continue;
+   const full=owned===(cols-1)*(rows-1);
    const p=new Float32Array(cols*rows*3),normal=new Float32Array(p.length),color=new Float32Array(p.length),uv=new Float32Array(cols*rows*2),indices:number[]=[];
    for(let n=n0;n<=n1;n++)for(let e=e0;e<=e1;e++){
      const i=(n-n0)*cols+e-e0,h=field.vertexAt(e,n),norm=field.normalAt(e,n);
@@ -220,23 +295,40 @@ export function mountFrontRidgeR30(field:FrontRidgeR30Field,roadAt?:(east:number
      if(roadAt?.(e,n))tint.copy(gravel).multiplyScalar(.90+.10*small);
      color.set([tint.r,tint.g,tint.b],i*3);
      uv.set([(e+h*.11)/2,(n*.72+h*.69)/2],i*2);
-     if(e<e1&&n<n1)indices.push(i,i+1,i+cols,i+1,i+cols+1,i+cols);
+     if(e<e1&&n<n1&&(!ownsCell||ownsCell(e,n)))indices.push(i,i+1,i+cols,i+1,i+cols+1,i+cols);
    }
    const g=new BufferGeometry();g.setAttribute('position',new Float32BufferAttribute(p,3));g.setAttribute('normal',new Float32BufferAttribute(normal,3));g.setAttribute('color',new Float32BufferAttribute(color,3));g.setAttribute('uv',new Float32BufferAttribute(uv,2));g.setIndex(indices);g.computeBoundingSphere();
    const far=new BufferGeometry();
    for(const attr of ['position','normal','color','uv'])far.setAttribute(attr,g.getAttribute(attr));
-   far.setIndex(ridgeFarIndices(cols,rows));far.boundingSphere=g.boundingSphere?.clone()??null;
+   far.setIndex(ridgeFarIndices(cols,rows,4,full?undefined:(x,z)=>!!ownsCell?.(e0+x,n0+z)));far.boundingSphere=g.boundingSphere?.clone()??null;
+   // Distant adaptive tier is a 4m index stream with 8m flat tiles.
+   // High-error tiles stay in the existing 4m representation; roads
+   // and seams retain fine vertices. To avoid increasing triangles, only use the
+   // distant stream when it is actually smaller than the far tier.
+   // Every chunk border retains the original one-metre samples.
+   const preserve=(i:number,j:number)=>!!keepDetail?.(e0+i,n0+j)||!!roadAt?.(e0+i,n0+j);
+   const distantIndex=ridgeAdaptiveIndices(cols,rows,(x,z)=>full||!!ownsCell?.(e0+x,n0+z),
+     (x,z,r,b)=>ridgeCoarseTileAllowed((i,j)=>field.vertexAt(e0+i,n0+j),preserve,x,z,r,b,2.0),preserve);
+   let distant=far;
+   if(distantIndex.length<(far.index?.count??0)){
+    distant=new BufferGeometry();for(const attr of ['position','normal','color','uv'])distant.setAttribute(attr,g.getAttribute(attr));
+    distant.setIndex(distantIndex);distant.boundingSphere=g.boundingSphere?.clone()??null;geometries.push(distant);
+   }
    const mesh=new Mesh(g,material);mesh.name='d-r30-ridge-'+e0+'-'+n0;group.add(mesh);geometries.push(g,far);
-   lod.push({mesh,fine:g,far,east:(e0+e1)/2,north:(n0+n1)/2});
+   lod.push({mesh,fine:g,far,distant,east:(e0+e1)/2,north:(n0+n1)/2});
  }
  let disposed=false;
- function updateView(east:number,north:number){
+ function updateView(east:number,north:number,allowDistant=true){
    for(const chunk of lod){
      const d=Math.hypot(east-chunk.east,north-chunk.north);
      // A fine neighbourhood is always retained around a real player foot.
-     if(chunk.mesh.geometry===chunk.fine&&d>192)chunk.mesh.geometry=chunk.far;
-     else if(chunk.mesh.geometry===chunk.far&&d<160)chunk.mesh.geometry=chunk.fine;
+     if(d<160)chunk.mesh.geometry=chunk.fine;
+     else if(chunk.mesh.geometry===chunk.fine&&d>192)chunk.mesh.geometry=allowDistant&&d>440?chunk.distant:chunk.far;
+     else if(chunk.mesh.geometry!==chunk.fine){
+      if(!allowDistant||d<390)chunk.mesh.geometry=chunk.far;
+      else if(d>440)chunk.mesh.geometry=chunk.distant;
+     }
    }
  }
- return {group,field,updateView,detailCounts:()=>({near:lod.filter(c=>c.mesh.geometry===c.fine).length,far:lod.filter(c=>c.mesh.geometry===c.far).length}),dispose(){if(disposed)return;disposed=true;group.removeFromParent();group.clear();geometries.forEach(g=>g.dispose());texture.dispose();material.dispose()}};
+ return {group,field,updateView,detailCounts:()=>({near:lod.filter(c=>c.mesh.geometry===c.fine).length,far:lod.filter(c=>c.mesh.geometry===c.far).length,distant:lod.filter(c=>c.distant!==c.far&&c.mesh.geometry===c.distant).length}),dispose(){if(disposed)return;disposed=true;group.removeFromParent();group.clear();geometries.forEach(g=>g.dispose());texture.dispose();material.dispose()}};
 }

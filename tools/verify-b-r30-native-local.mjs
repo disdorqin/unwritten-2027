@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const [segment, evidencePath] = process.argv.slice(2);
-assert.ok(['descent','roundtrip','rim-return'].includes(segment)&&evidencePath,'Usage: node tools/verify-b-r30-native-local.mjs <descent|roundtrip|rim-return> <fresh evidence directory>');
+assert.ok(['descent','roundtrip','rim-return','perf'].includes(segment)&&evidencePath,'Usage: node tools/verify-b-r30-native-local.mjs <descent|roundtrip|rim-return> <fresh evidence directory>');
 const run = promisify(execFile);
 const repo = fileURLToPath(new URL('../', import.meta.url));
 const viewer = join(repo, 'tools', 'voxel-tavern');
@@ -109,7 +109,7 @@ function servePreview(ports, commit) {
       else createReadStream(file).on('error', () => outgoing.destroy()).pipe(outgoing);
     }).catch(() => outgoing.writeHead(404).end());
   });
-  server.on('connection', socket => { sockets.add(socket); socket.on('close', () => sockets.delete(socket)); });
+  server.on('connection', socket => { sockets.add(socket); socket.on('error', () => socket.destroy()); socket.on('close', () => sockets.delete(socket)); });
   server.on('upgrade', (incoming, downstream, head) => {
     const route = routePresence(incoming.url, ports);
     if (!route) { downstream.destroy(); return; }
@@ -122,6 +122,7 @@ function servePreview(ports, commit) {
       downstream.pipe(upstream).pipe(downstream);
     });
     upstream.on('error', () => downstream.destroy());
+    downstream.on('error', () => upstream.destroy());
     downstream.on('close', () => upstream.destroy());
   });
   return server;
@@ -146,7 +147,23 @@ try {
   const { stdout } = await run('git', ['rev-parse', 'HEAD'], { cwd: repo, windowsHide: true });
   const commit = stdout.trim();
   await writeFile(join(output, 'source-commit.txt'), `${commit}\n`);
-  const tree = (await run('git', ['rev-parse', 'HEAD^{tree}'], { cwd: repo, windowsHide: true })).stdout;
+  // A locally staged, exact M-owned overlay is permitted for joint
+  // evidence only. Record its actual index tree, not B HEAD's tree.
+  // No unstaged tracked changes may enter either candidate.
+  await run('git',['diff','--quiet'],{cwd:repo,windowsHide:true});
+  const tree=(await run('git',['write-tree'],{cwd:repo,windowsHide:true})).stdout;
+  const headTree=(await run('git',['rev-parse','HEAD^{tree}'],{cwd:repo,windowsHide:true})).stdout;
+  if(tree.trim()!==headTree.trim()){
+    assert.ok(process.env.P_JOINT_M_SHA,'Staged overlay needs exact M source identity');
+    const m=(await run('git',['rev-parse',process.env.P_JOINT_M_SHA],{cwd:repo,windowsHide:true})).stdout.trim();
+    const files=(await run('git',['diff','--cached','--name-only'],{cwd:repo,windowsHide:true})).stdout.trim().split(/\r?\n/);
+    for(const file of files){
+      const a=(await run('git',['rev-parse',':'+file],{cwd:repo,windowsHide:true})).stdout.trim();
+      const b=(await run('git',['rev-parse',m+':'+file],{cwd:repo,windowsHide:true})).stdout.trim();
+      assert.equal(a,b,'Non-M blob in staged overlay '+file);
+    }
+    await writeFile(join(output,'source-overlay.json'),JSON.stringify({base:commit,m,tree:tree.trim(),files},null,2));
+  }
   await writeFile(join(output, 'source-tree.txt'), tree);
   await finish(startNode([vite, 'build', '--mode', 'town-preview', '--outDir', web], {}, { cwd: viewer }));
   // Presence now has a separate start.ts: compile the complete NodeNext graph,
@@ -166,7 +183,7 @@ try {
     TOWN_NIGHT_BEACON_RECEIPT: join(temporary, 'town-night-beacon-receipt.json'),
   });
   await Promise.all(Object.values(ports).map(assigned => waitForPresence(assigned, presence)));
-  driver = startNode(['--import','tsx',join(repo,'tools','verify-b-r30-native-walk.mjs'),base,output,segment], {
+  driver = startNode(['--import','tsx',join(repo,'tools',segment==='perf'?'verify-p-r30-performance.mjs':'verify-b-r30-native-walk.mjs'),base,output,segment], {
     ...(chrome ? { CHROMIUM_PATH: chrome } : {}), ZA22_HARDWARE: hardware ? '1' : '0',
   });
   await finish(driver);
