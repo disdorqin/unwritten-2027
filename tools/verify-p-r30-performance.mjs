@@ -65,7 +65,7 @@ try{
  console.log(JSON.stringify({phase:'startup',gpu:report.gpu,cpu:report.cpu,wallMs:report.startup.wallMs,canvas:report.startup.canvas}));
  const p3=process.env.P3_COMPARE==='1',p2=p3||process.env.P2_COMPARE==='1';
  const floorOnly=process.env.P1_SCOPE==='floor';
- if(production){await page.waitForFunction(()=>window.__pLatest?.pendingCells===0,{timeout:60000}).catch(()=>{report.warmupWarning='Warmup did not report zero in startup sample window';});}
+ if(production){await page.waitForFunction(()=>window.__pLatest?.pendingCells===0&&(window.__pLatest?.pendingOcclusionBounds??0)===0,{timeout:60000}).catch(()=>{report.warmupWarning='Cell or occlusion-bound warmup did not report zero in sampling window';});}
  const lightAB=production&&process.env.P_LIGHT_AB==='1',smallAB=production&&process.env.P_SMALL_INSTANCE_AB==='1';
  assert.ok(!(lightAB&&smallAB),'Isolate only one optimization in the paired run');
  if(!floorOnly){if(!production)await sample('plaza',p2,undefined,false,false,false);if(lightAB)await sample('plaza',true,undefined,false,false,true,true,false);await sample('plaza',true);}
