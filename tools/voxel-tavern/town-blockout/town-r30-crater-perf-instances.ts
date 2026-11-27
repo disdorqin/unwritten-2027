@@ -3,8 +3,8 @@ import {sphereBehindCraterWall} from './town-r30-crater-perf-occlusion';
 type Ring=Parameters<typeof sphereBehindCraterWall>[0];
 type Chunk={mesh:InstancedMesh;box:Box3;count:number;worldBox?:Box3;worldSphere?:Sphere};
 type Snapshot={mesh:InstancedMesh;matrixVersion:number;colorVersion:number;count:number;geometry:InstancedMesh['geometry'];material:InstancedMesh['material'];matrixAttribute:InstancedMesh['instanceMatrix'];colorAttribute:InstancedMesh['instanceColor'];position:ReturnType<InstancedMesh['geometry']['getAttribute']>;positionVersion:number;index:InstancedMesh['geometry']['index'];indexVersion:number};
-type Source=Snapshot&{chunks:Chunk[];world?:Matrix4};
-type Build={snap:Snapshot;bins:Map<string,number[]>;cursor:number;entries?:number[][];part:number;chunks:Chunk[];current?:{mesh:InstancedMesh;box:Box3;cursor:number;indices:number[]}};
+type Source=Snapshot&{chunks:Chunk[];world?:Matrix4;whole?:Box3;worldWhole?:Sphere};
+type Build={snap:Snapshot;bins:Map<string,number[]>;cursor:number;entries?:number[][];part:number;chunks:Chunk[];single:Box3;current?:{mesh:InstancedMesh;box:Box3;cursor:number;indices:number[]}};
 const attrVersion=(a:ReturnType<InstancedMesh['geometry']['getAttribute']>)=>a instanceof BufferAttribute?a.version:a.data.version;
 const ordinary=(m:Material)=> (m instanceof MeshStandardMaterial||m instanceof MeshLambertMaterial||m instanceof MeshBasicMaterial)&&!m.transparent&&!m.wireframe&&m.depthTest&&m.depthWrite&&!(m as MeshStandardMaterial).displacementMap&&m.onBeforeCompile===Material.prototype.onBeforeCompile;
 function eligible(o:Object3D):o is InstancedMesh{
@@ -43,19 +43,25 @@ export function createCraterInstanceCells(cellSize=32,maxExtraDraws=36){
    const source=queue.shift();if(!source)return;
    if(!eligible(source))return;
    if(!source.geometry.boundingBox)source.geometry.computeBoundingBox();if(!source.geometry.boundingBox)return;
-   job={snap:snapshot(source),bins:new Map(),cursor:0,part:0,chunks:[]};
+   job={snap:snapshot(source),bins:new Map(),cursor:0,part:0,chunks:[],single:new Box3()};
   }
   const j=job,source=j.snap.mesh,g=j.snap.geometry;
   if(!j.entries){
    if(j.cursor<j.snap.count){
     const i=j.cursor++;source.getMatrixAt(i,matrix);
-    if(matrix.determinant()<=0){discard();return;}
+    if(!matrix.elements.every(Number.isFinite)||matrix.determinant()<=0){discard();return;}
     center.setFromMatrixPosition(matrix);const k=Math.floor(center.x/cellSize)+','+Math.floor(center.z/cellSize);
     const a=j.bins.get(k)??[];a.push(i);j.bins.set(k,a);
+    if(j.bins.size===1)j.single.union(box.copy(g.boundingBox!).applyMatrix4(matrix));
     if(j.bins.size>256){discard();return;}
     return;
    }
-   if(j.bins.size<2){discard();return;}j.entries=[...j.bins.values()];
+   if(j.bins.size<2){
+    // A one-cell source needs no duplicate GPU buffers; keep its exact
+    // bound for whole-source wall rejection instead of discarding it.
+    if(unchanged(j.snap)&&!j.single.isEmpty())sources.push({...j.snap,chunks:[],whole:j.single.clone()});
+    job=undefined;return;
+   }j.entries=[...j.bins.values()];
   }
   if(j.part===j.entries.length){
    if(!unchanged(j.snap)){discard();return;}
@@ -88,7 +94,7 @@ export function createCraterInstanceCells(cellSize=32,maxExtraDraws=36){
  }
  // Synchronous only for tests and explicitly warmed diagnostic sessions.
  function register(roots:readonly Object3D[]){enqueue(roots);while(queue.length||job)warmStep(Infinity,Infinity);}
- function begin(camera:Camera,ring?:Ring){
+ function begin(camera:Camera,ring?:Ring,wholeEnabled=true){
   restore();last={sources:0,submitted:0,savedInstances:0,extraDraws:0};eye.setFromMatrixPosition(camera.matrixWorld);
   frustum.setFromProjectionMatrix(vp.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse));
   const choices:{s:Source;cells:Chunk[];saved:number;tris:number}[]=[];
@@ -99,7 +105,12 @@ export function createCraterInstanceCells(cellSize=32,maxExtraDraws=36){
    if(m.boundingSphere&&!frustum.intersectsSphere(sphere.copy(m.boundingSphere).applyMatrix4(m.matrixWorld)))continue;
    if(!s.world||!s.world.equals(m.matrixWorld)){
     (s.world??=new Matrix4()).copy(m.matrixWorld);
+    if(s.whole)box.copy(s.whole).applyMatrix4(m.matrixWorld).getBoundingSphere(s.worldWhole??=new Sphere());
     for(const c of s.chunks){(c.worldBox??=new Box3()).copy(c.box).applyMatrix4(m.matrixWorld);c.worldBox.getBoundingSphere(c.worldSphere??=new Sphere());}
+   }
+   if(s.whole){
+    if(wholeEnabled&&ring&&s.worldWhole&&sphereBehindCraterWall(ring,eye,s.worldWhole))choices.push({s,cells:[],saved:s.count,tris:s.count*(m.geometry.index?.count??m.geometry.getAttribute('position').count)/3});
+    continue;
    }
    const cells:Chunk[]=[];let n=0;
    for(const c of s.chunks){if(!frustum.intersectsBox(c.worldBox!))continue;
