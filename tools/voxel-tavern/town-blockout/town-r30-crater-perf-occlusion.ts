@@ -89,18 +89,19 @@ function opaqueMesh(o:Object3D):o is Mesh{
  * after the render pass. Small static instance sets use their complete
  * transformed geometry bounds; dynamic instancing/skinning excluded. */
 export function createCraterExteriorOcclusion(mesh:Mesh,anchor:{east:number;north:number},heightAt:Ground){
- let ring:Ring|undefined,certified=false,objects:Mesh[]=[];
+ let ring:Ring|undefined,certified=false,objects:Mesh[]=[],warmCursor=0;
  function prepare(){if(!certified){ring=certifyCraterWallRing(mesh,anchor.east,anchor.north);certified=true;}return ring;}
  const roots=new Set<Object3D>(),masked:{mesh:Mesh;mask:number}[]=[];
  const eye=new Vector3(),box=new Box3(),instance=new Matrix4(),part=new Box3();
  type Bound={geometry:Mesh['geometry'];position:ReturnType<Mesh['geometry']['getAttribute']>;version:number;world:Matrix4;instanceAttribute?:InstancedMesh['instanceMatrix'];matrixVersion?:number;count?:number;sphere:Sphere};
  const bounds=new WeakMap<Mesh,Bound>();
  const geometryBounds=new WeakMap<Mesh['geometry'],{position:Bound['position'];version:number;box:Box3}>();
- function worldBound(o:Mesh){
+ function worldBound(o:Mesh,allowBuild=true){
   const g=o.geometry,p=g.getAttribute('position');if(!p)return;
   const version=p instanceof BufferAttribute?p.version:p.data.version;
   const m=o instanceof InstancedMesh?o:undefined,old=bounds.get(o);
   if(old&&old.geometry===g&&old.position===p&&old.version===version&&old.world.equals(o.matrixWorld)&&old.instanceAttribute===m?.instanceMatrix&&old.matrixVersion===m?.instanceMatrix.version&&old.count===m?.count)return old.sphere;
+  if(!allowBuild)return;
   // Recompute from actual attributes, not a potentially stale cached box.
   let local=geometryBounds.get(g);
   if(!local||local.position!==p||local.version!==version){g.computeBoundingBox();if(!g.boundingBox||g.boundingBox.isEmpty())return;local={position:p,version,box:g.boundingBox.clone()};geometryBounds.set(g,local);}
@@ -115,7 +116,15 @@ export function createCraterExteriorOcclusion(mesh:Mesh,anchor:{east:number;nort
   restore();roots.clear();for(const r of input)roots.add(r);
   const set=new Set<Mesh>();
   for(const root of roots)root.traverse(o=>{if(o!==mesh&&opaqueMesh(o))set.add(o);});
-  objects=[...set];
+  // Small sources first: they were absent from the previous cell warmup.
+  objects=[...set].sort((a,b)=>Number(b instanceof InstancedMesh)-Number(a instanceof InstancedMesh));warmCursor=0;
+ }
+ function warmBounds(maxObjects=48,maxMs=1){
+  const started=performance.now();let n=0;
+  while(warmCursor<objects.length&&n<maxObjects&&performance.now()-started<maxMs){
+   const o=objects[warmCursor++];n++;if(o.parent&&opaqueMesh(o))worldBound(o);
+  }
+  return n;
  }
  function ringForCamera(camera:Camera){
   eye.setFromMatrixPosition(camera.matrixWorld);
@@ -126,17 +135,19 @@ export function createCraterExteriorOcclusion(mesh:Mesh,anchor:{east:number;nort
   if(ring&&eye.y<ring.minHeight-.35)return ring;
  }
  let smallInstanceCulled=0;
- function begin(camera:Camera,smallInstances=true){
+ function begin(camera:Camera,smallInstances=true,maxBuildMs=Infinity){
   restore();smallInstanceCulled=0;const activeRing=ringForCamera(camera);if(!activeRing)return 0;
+  const started=performance.now();
   for(const o of objects){
    if(!o.parent||!o.visible||!camera.layers.test(o.layers)||!opaqueMesh(o)||(!smallInstances&&o instanceof InstancedMesh))continue;
    let p:Object3D|null=o,approved=false;while(p&&p.visible){if(roots.has(p))approved=true;p=p.parent;}if(p||!approved)continue;
-   const b=worldBound(o);if(!b)continue;
+   // Cache misses fail open once this frame's build budget is exhausted.
+   const b=worldBound(o,performance.now()-started<maxBuildMs);if(!b)continue;
    if(sphereBehindCraterWall(activeRing,eye,b)){masked.push({mesh:o,mask:o.layers.mask});o.layers.mask=0;if(o instanceof InstancedMesh)smallInstanceCulled++;}
   }
   return masked.length;
  }
- return {refresh,begin,restore,prepare,ringForCamera,get ring(){return ring;},get candidates(){return objects.length;},get smallInstanceCulled(){return smallInstanceCulled;}};
+ return {refresh,begin,restore,prepare,ringForCamera,warmBounds,get pendingBounds(){return objects.length-warmCursor;},get ring(){return ring;},get candidates(){return objects.length;},get smallInstanceCulled(){return smallInstanceCulled;}};
 }
 
 /** M calls this with real domain/transition/cover state, never a camera

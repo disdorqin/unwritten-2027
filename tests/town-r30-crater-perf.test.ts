@@ -83,7 +83,9 @@ test('small static instance sources cull only when every instance is wall-hidden
  const camera=new PerspectiveCamera();camera.position.set(east+6,road.heightAt(east+6,north)!+1.65,-north);camera.updateMatrixWorld(true);
  const o=createCraterExteriorOcclusion(ground,road.anchor,road.heightAt);o.refresh([root]);assert.ok(o.prepare());
  assert.equal(o.begin(camera,false),0);assert.equal(m.layers.mask,1);
- assert.equal(o.begin(camera),1);assert.equal(o.smallInstanceCulled,1);assert.equal(m.layers.mask,0);assert.equal(dynamic.layers.mask,1);o.restore();assert.equal(m.layers.mask,1);
+ assert.equal(o.begin(camera,true,0),0);assert.equal(m.layers.mask,1,'Unwarmed bound must fail open');
+ assert.equal(o.pendingBounds,1);assert.equal(o.warmBounds(1,Infinity),1);assert.equal(o.pendingBounds,0);
+ assert.equal(o.begin(camera,true,0),1);assert.equal(o.smallInstanceCulled,1);assert.equal(m.layers.mask,0);assert.equal(dynamic.layers.mask,1);o.restore();assert.equal(m.layers.mask,1);
  m.setMatrixAt(2,matrix.makeTranslation(east+12,0,-north));m.instanceMatrix.needsUpdate=true;assert.equal(o.begin(camera),0);
  m.count=2;assert.equal(o.begin(camera),1);o.restore();other.add(m);scene.updateMatrixWorld(true);assert.equal(o.begin(camera),0);assert.equal(m.layers.mask,1);
 });
