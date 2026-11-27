@@ -70,7 +70,11 @@ export function createNightBProductionController(input:Input){
  }
  return {tick,actions,action,riding:ride.riding,pose:ride.pose,
   /** Only the verified physical impact listener may call this. */
-  reportFrontImpact(kind:'sled'|'big-snowball'|'snowball'|'snow-wall'){
-   const event=cableWakeEvent(kind);return !!front&&!!event&&p.sendCableRepair(1,event);
+  reportFrontImpact(kind:'sled'|'big-snowball'|'snowball'|'snow-wall',impact:Foot){
+   const domain=input.domain();if(!front||(domain!=='town'&&domain!=='mountain')||ride.riding()||p.getCableLineState(1)?.stage!=='dormant'||![impact.east,impact.north,impact.height].every(Number.isFinite))return false;
+   // Include the actual surveyed base dock and original station hall.
+   const stations=[...front.facilities.survey.towers.filter(t=>t.station),{east:526,north:329,height:26}];
+   if(!stations.some(s=>Math.hypot(impact.east-s.east,impact.north-s.north)<=15&&Math.abs(impact.height-s.height)<=5))return false;
+   const event=cableWakeEvent(kind);return !!event&&p.sendCableRepair(1,event);
   }};
 }

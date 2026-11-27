@@ -27,6 +27,8 @@ export function installNightBUpperOperation(input:Input){
  try{
   if(!input.authorized)return reject('host-not-authorized');
   if(!r.group.parent||!input.towers.group.parent||!input.workshop.group.parent)return reject('missing-mounted-assets');
+  if(input.towers.cable!==r.cable||!r.denseTowerMode)return reject('mismatched-or-duplicate-rope-supports');
+  if(input.towers.stats().skipNearStation!==0||input.towers.stats().towers<25)return reject('incomplete-tower-survey');
   const a=input.workshop.anchor,expected=mainSummitR30CableWorkshopAnchor;
   if(a.east!==expected.east||a.north!==expected.north||a.floor!==expected.floor)return reject('legacy-workshop');
   const bodyBlocked=(e:number,n:number,h:number,radius:number,height:number)=>r.blocked(e,n,h,radius,height)||input.towers.blocked(e,n,h,radius,height)||input.workshop.blocked(e,n,h,radius,height);

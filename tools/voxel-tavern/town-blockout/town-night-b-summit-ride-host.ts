@@ -30,10 +30,11 @@ export function createNightBCableRideHost(input:Input){
  // A parked facility has immutable static car colliders: the caller MUST
  // supply a certified open variant, not move the closed production model.
  const frontGroups=input.frontFacilities&&[-1,1].map(side=>input.frontFacilities!.group.getObjectByName('d-r30-cable-cabin-'+side));
- const frontBound=!!input.front?.physical&&!!frontGroups?.every(g=>g?.parent===input.frontFacilities!.group&&!g.getObjectByName('ridge-cable-parked-car-batch'));
+ const upperBound=!!input.upper?.physical&&!!input.upperRopeway&&input.upper.ropeway===input.upperRopeway;
+ const frontBound=!!input.front?.physical&&input.front.survey===input.frontFacilities?.survey&&!!frontGroups?.every(g=>g?.parent===input.frontFacilities!.group&&!g.getObjectByName('ridge-cable-parked-car-batch'));
  function updateVisuals(skipUpper=false){
   if(frontBound&&input.front){const states=input.front.present();states.forEach((s,i)=>{const g=frontGroups![i]!;g.position.set(s.feet.east,s.feet.height,-s.feet.north)});}
-  if(!skipUpper&&input.upper?.physical&&input.upperRopeway)input.upper.present();
+  if(!skipUpper&&upperBound)input.upper!.present();
  }
  function pose():CableRideFrame|undefined{
   if(!ride)return;
@@ -47,7 +48,7 @@ export function createNightBCableRideHost(input:Input){
  function boardCandidate(feet:Foot,line:1|2,cabin:Cabin){
   if(ride||!finite(feet)||(cabin!==0&&cabin!==1))return false;
   if(line===1)return input.domain()==='town'&&frontBound&&!!input.front?.board(feet,cabin);
-  return input.domain()==='summit'&&!!input.upperRopeway&&!!input.upper?.board(local(feet),cabin);
+  return input.domain()==='summit'&&upperBound&&!!input.upper?.board(local(feet),cabin);
  }
  function board(feet:Foot,line:1|2,cabin:Cabin){
   if(!boardCandidate(feet,line,cabin))return false;
@@ -60,5 +61,5 @@ export function createNightBCableRideHost(input:Input){
   if(!finite(foot)||!input.acceptLanding(ride.line,foot,p.station))return;
   ride=undefined;last=undefined;return foot;
  }
- return {updateVisuals,pose,boardCandidate,board,exit,riding:()=>!!ride,frontBound,upperBound:!!input.upper?.physical&&!!input.upperRopeway};
+ return {updateVisuals,pose,boardCandidate,board,exit,riding:()=>!!ride,frontBound,upperBound};
 }

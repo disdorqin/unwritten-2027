@@ -1,6 +1,6 @@
 import {
   BoxGeometry, BufferGeometry, Color, CylinderGeometry, Group, InstancedMesh, Matrix4, MeshLambertMaterial,
-  StaticDrawUsage, Vector3,
+  StaticDrawUsage,
 } from 'three';
 import { createMainSummitCable } from './main-summit-cable';
 import { sampleTownD2R30Height } from './town-d2-r30-domain';
@@ -162,7 +162,7 @@ export function createTownD2R30CableTowers(options: TownD2R30CableTowersOptions 
     westTowers:towers.filter(t=>t.west).length,foundations:towers.length,latticeMembers:memberMatrices.length,
   });
   group.userData = {
-    owner: 'D2-R02', visualOnly: true, includesWorldCollision: false,
+    owner: 'D2-R02', visualOnly: false, includesWorldCollision: true,
     modifiesHeightAt: false, modifiesCable: false, stats,
     coordinateConvention: 'x=east,y=height,z=-north',
   };
@@ -170,6 +170,7 @@ export function createTownD2R30CableTowers(options: TownD2R30CableTowersOptions 
   let disposed = false;
   return {
     group,
+    cable,
     stats: () => stats,
     footprints:towers.map(t=>Object.freeze({east:t.east,north:t.north,bottom:t.footBottom,top:t.footTop+.09,halfWidth:t.footHalf+.04,mastTop:t.ropeHeight,latticeTop:t.latticeTop,legHalf:t.legHalf})),
     blocked(e:number,n:number,h:number,r=.27,body=1.8){if(![e,n,h,r,body].every(Number.isFinite)||r<0||body<=0)return true;return towers.some(t=>nightBLatticeBlocked(t,e,n,h,r,body)||h+body>t.ground&&h<t.ropeHeight&&Math.hypot(e-t.east,n-t.north)<.62+r);},

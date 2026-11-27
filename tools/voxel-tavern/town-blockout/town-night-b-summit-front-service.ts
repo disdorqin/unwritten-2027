@@ -80,7 +80,7 @@ export function createNightBFrontService(input:FrontCableServiceInput){
   return Object.freeze({cabin});
  }
  let lastPresentation=0;
- return {clock,physical,serviceOpen,cabinsAt,presentationMs,board,dispatch,firstRun:first,firstMs,repositionMs,cabinStates,present,
+ return {clock,survey:s,physical,serviceOpen,cabinsAt,presentationMs,board,dispatch,firstRun:first,firstMs,repositionMs,cabinStates,present,
   presentationTime(){const t=time();if(physical&&t!==undefined)lastPresentation=presentationMs(t);return lastPresentation;},
   ridePose(ride:Ride){return cabinStates()?.[ride.cabin];},
   exit(ride:Ride){const at=cabinStates()?.[ride.cabin];if(!at?.station)return;

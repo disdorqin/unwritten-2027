@@ -195,11 +195,11 @@ export function mountMainSummitCableWorkshop(owner: Group, groundAt: GroundAt, a
   const global=(x:number,z:number)=>({east:anchor.east+z,north:anchor.north+x});
   const repairAnchors:RepairAnchors=anchor===mainSummitR30CableWorkshopAnchor?r30WorkshopRepairAnchors:Object.freeze({brake:global(-1.25,-2.28),cableWheel:global(-1.25,1.25),weightTower:global(1.25,2.2),weightFrame:global(.8,-2.8)});
   const repair=createCableRepairHost(2,repairAnchors);
-  let state:Za36CableRepairState|undefined;
+  let state:Za36CableRepairState|undefined,initialized=false;
   function sync(next:Za36CableRepairState|undefined){
     if(next?.line!==2)next=undefined;
-    if(state&&next&&next.version<state.version)return;
-    state=next;if(next)repair.sync(next);
+    if(initialized&&(!state&&!next||state&&next&&next.version<=state.version))return;
+    initialized=true;state=next;if(next)repair.sync(next);
     brake.rotation.z=-(next?.impacts??0)*.12-(next?.brakePulled?1.15:0);
     faultMaterial.color.set(next?.brakePulled?'#b8a077':'#a56e41');
     pulley.position.y=1.65+.58*(next?.cableHeight??0);

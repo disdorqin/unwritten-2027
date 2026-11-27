@@ -80,7 +80,7 @@ export function createNightBLine2Service(input:NightBLine2ServiceInput){
  const valid=(ride:SummitCableRide)=>ride.cabinIndex===0||ride.cabinIndex===1;
  function present(){const states=cabinStates();if(states)lastStates=states;return r.updateStates(lastStates);}
  const near=(a:SummitCablePoint,b:SummitCablePoint)=>Math.hypot(a.east-b.east,a.north-b.north)<=.900000001&&Math.abs(a.height-b.height)<=.430000001;
- return {physical,serviceOpen,present,dispatch,cabinStates,firstRun:first,firstMs,
+ return {physical,ropeway:r,serviceOpen,present,dispatch,cabinStates,firstRun:first,firstMs,
   board(feet:SummitCablePoint,cabin:0|1){
    if(!physical||![feet.east,feet.north,feet.height].every(Number.isFinite)||(cabin!==0&&cabin!==1))return;
    const f=first(),at=cabinStates()?.[cabin];

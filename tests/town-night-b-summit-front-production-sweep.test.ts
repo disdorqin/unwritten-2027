@@ -84,8 +84,10 @@ test('front production field and actual rail, station, forest, roads, banks and 
  const controller=createNightBProductionController({presence,front:accepted,upperOrigin:{east:300,north:676},domain:()=>domain,acceptLanding:(_l,p,s)=>dockClear(s,p),frontRepair:{anchors:{brake:accepted.docks[0]!.approach,cableWheel:accepted.docks[2]!.approach,weightTower:accepted.docks[3]!.approach,weightFrame:accepted.docks[2]!.approach},surfaceAt:(e,n)=>externalCableDockSupport(e,n)??station.surfaceAt(e,n)??field.heightAt(e,n),clear:p=>dockClear('',p)}});
  const summit=accepted.docks.find(d=>d.station==='summit'&&d.cabin===0)!.approach;
  assert.equal(controller.action('board-0',summit).accepted,false);
- assert.equal(controller.reportFrontImpact('snowball'),false);
- assert.equal(controller.reportFrontImpact('sled'),true);
+ assert.equal(controller.reportFrontImpact('snowball',summit),false);
+ assert.equal(controller.reportFrontImpact('sled',{...summit,height:999}),false);
+ assert.equal(controller.reportFrontImpact('sled',{east:0,north:0,height:26}),false);
+ assert.equal(controller.reportFrontImpact('sled',summit),true);
  domain='mountain';assert.equal(controller.action('board-0',summit).accepted,true);
  const firstRideFrame=controller.tick(0)!;assert.ok(firstRideFrame.synchronized&&reported===1);
  now=wokeAt!+20000;assert.equal(controller.tick(0)?.station,null);

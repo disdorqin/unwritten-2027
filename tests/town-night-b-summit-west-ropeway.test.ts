@@ -47,6 +47,8 @@ test('R30 western compound keeps real machinery out of both rope sweeps and prov
  const rejected=installNightBUpperOperation(input);assert.equal(rejected.ready,false);
  const parked=r.update(110000);assert.ok(parked.every(c=>c.station==='summit'&&!c.canBoardOrExit));
  assert.throws(()=>installNightBUpperOperation(input),/already owned/);rejected.dispose();
+ const wrong=createTownD2R30CableTowers({heightAt:g.surfaceAt});owner.add(wrong.group);t.after(()=>wrong.dispose());
+ const wrongRejected=installNightBUpperOperation({...input,towers:wrong,authorized:true});assert.equal(wrongRejected.ready,false);assert.equal(wrongRejected.reason,'mismatched-or-duplicate-rope-supports');wrongRejected.dispose();
  const routeRejected=installNightBUpperOperation({...input,authorized:true});assert.equal(routeRejected.ready,false);assert.equal(routeRejected.reason,'walking-route-not-certified');assert.ok(r.update(110000).every(c=>c.station==='summit'&&!c.canBoardOrExit));routeRejected.dispose();
  // This fixture certifies local dock approaches only, not normal-entry access.
  const accepted=installNightBUpperOperation({...input,authorized:true,certifyApproaches:ds=>ds.every(d=>{

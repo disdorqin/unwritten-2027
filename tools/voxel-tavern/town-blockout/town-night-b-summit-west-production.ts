@@ -67,7 +67,7 @@ export function mountNightBWestProduction(input:Input){
    const deck=sector.supportAt(e,n,r);return deck===undefined?ground:Math.max(ground,deck);
   },
   blocked(e:number,n:number,h:number,r=.27,body=1.8){return disposed||sector.blocked(e,n,h,r,body);},
-  updateView:sector.updateView,
+  updateView:sector.updateView,setNight:sector.setNight,
   dispose(){if(disposed)return;disposed=true;sector.dispose();for(const c of cuts){if(c.mesh.geometry===c.geometry)c.mesh.geometry=c.original;c.surface.dispose();c.geometry.dispose();}}
  };
 }

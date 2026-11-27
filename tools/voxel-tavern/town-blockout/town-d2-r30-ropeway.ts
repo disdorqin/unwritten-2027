@@ -149,6 +149,7 @@ export function createTownD2R30Ropeway(options: TownD2R30RopewayOptions = {}) {
     group,
     /** The canonical cable and stations, so the legacy host can keep its rules. */
     cable,
+    denseTowerMode:options.controlPointSupports===false,
     epochMs,
     terminalDwellMs,
     stations,
