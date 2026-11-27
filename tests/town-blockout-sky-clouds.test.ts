@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { InstancedMesh } from 'three';
+import { InstancedMesh, ShaderMaterial } from 'three';
+import { townNightWeatherAt } from '../src/shared/town-night-weather-cycle';
 import { createTownSkyClouds, townSkyCloudSpec } from '../tools/voxel-tavern/town-blockout/town-sky-clouds';
 import type { TownOutdoorWeatherState } from '../src/shared/town-outdoor-weather';
 
@@ -39,7 +40,7 @@ test('batch-67 spec: five designed clusters inside the altitude band, two smoke 
 test('batch-67 structure: two instanced meshes, 33 white puffs and 12 smoke puffs, two draws', t => {
   const clouds = createTownSkyClouds();
   t.after(() => clouds.dispose());
-  const meshes = clouds.group.children.filter(child => child instanceof InstancedMesh);
+  const meshes = clouds.group.children.filter(child => (child as InstancedMesh).isInstancedMesh);
   assert.equal(meshes.length, 2);
   const state = clouds.state();
   assert.equal(state.whitePuffs, 33);
@@ -79,13 +80,31 @@ test('batch-67 drift: puffs move slowly inside their clusters and placement is d
   const b = createTownSkyClouds();
   t.after(() => { a.dispose(); b.dispose(); });
   const meshOf = (clouds: ReturnType<typeof createTownSkyClouds>) =>
-    clouds.group.children.find(child => child instanceof InstancedMesh) as InstancedMesh;
+    clouds.group.children.find(child => (child as InstancedMesh).isInstancedMesh) as InstancedMesh;
   a.update(60_000, { weather: weather('clear-snow'), night: false });
   b.update(60_000, { weather: weather('clear-snow'), night: false });
   const first = Array.from(meshOf(a).instanceMatrix.array);
   assert.deepEqual(first, Array.from(meshOf(b).instanceMatrix.array), 'same inputs, same sky');
   a.update(180_000, { weather: weather('clear-snow'), night: false });
   assert.notDeepEqual(Array.from(meshOf(a).instanceMatrix.array), first, 'puffs drift over time');
+});
+
+test('continuous authoritative cloud palette reaches the original two cloud batches without a second clock', t => {
+ const clouds=createTownSkyClouds();t.after(()=>clouds.dispose());
+ const cloud=clouds.group.getObjectByName('town-sky-drift-clouds') as InstancedMesh;
+ const tint=(cloud.material as ShaderMaterial).uniforms.cloudTint!.value;
+ const epoch=Date.UTC(2026,0,1);
+ const phases=[.03,.3,.53,.6,.8,.99];
+ for(const phase of phases){
+  const sample=townNightWeatherAt(epoch+phase*600000,epoch);
+  const s=clouds.update(sample.now,{weather:weather('clear-snow'),night:!sample.daylight,sky:sample});
+  assert.equal(tint.getHex(),sample.cloudColor);
+  assert.equal(s.draws,2);
+ }
+ const dusk={cloudColor:0xc0948f,lampLevel:.48};
+ for(let i=1;i<=40;i++)clouds.update(epoch+600000+i*5000,{weather:weather('clear-snow'),night:false,sky:dusk});
+ assert.ok(Math.abs(clouds.state().nightBlend-.48)<.002);
+ assert.ok(Math.abs(clouds.state().cover-(.42+(.18-.42)*.48))<.002);
 });
 
 test('batch-67 dispose: update after dispose throws', t => {

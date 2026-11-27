@@ -79,7 +79,7 @@ import { createTownFireworksActivity } from './town-fireworks-activity';
 import { createTownPersonalFireworks, firecrackerStand } from './personal-firework-activity';
 import { personalFireworkRestricted } from '../../../src/presence/personal-fireworks';
 import {
-  ceremonyEveYear, ceremonyMidnight, ceremonyStateAt, createCeremonyDirector, createCeremonyOverlay, type CeremonyCue,
+  ceremonyEveYear, ceremonyMidnight, ceremonyStateAt, dimLevelAt, createCeremonyDirector, createCeremonyOverlay, type CeremonyCue,
 } from './town-ceremony';
 import { loadRehearsalClock } from './town-rehearsal-clock';
 import { ceremonyArrivalAt, ceremonyLateWindowMs, townCeremonyMidnight, type CeremonyArrival } from '../../../src/presence/ceremony-arrival';
@@ -927,13 +927,13 @@ const summitNightSky = createSouthSummitWeatherHost(cloudRoute.scene);
 let weatherDawnEpoch = presence.getTownWeatherDawnEpoch() ?? townNightWeatherDefaultDawnEpoch;
 const localLightingReview = previewOptions.has('profile') && ['127.0.0.1','localhost'].includes(location.hostname);
 let reviewNight: boolean | undefined;
-function updateNightSky() {
+function updateNightSky(dim=ceremonyDim) {
   weatherDawnEpoch = presence.getTownWeatherDawnEpoch() ?? weatherDawnEpoch;
   const now = localLightingReview && reviewNight !== undefined
     ? weatherDawnEpoch + (reviewNight ? .78 : .30) * townNightWeatherDayMs
     : presence.serverNow();
-  return cloudRoute.active() ? summitNightSky.update(now,weatherDawnEpoch,ceremonyDim)
-    : nightSky.update(now,weatherDawnEpoch,{dim:ceremonyDim});
+  return cloudRoute.active() ? summitNightSky.update(now,weatherDawnEpoch,dim)
+    : nightSky.update(now,weatherDawnEpoch,{dim});
 }
 function applyNightSide(skyFrame:TownNightWeatherSkyFrame){
   // Preserve the existing night-window authority for discrete gameplay.
@@ -3883,7 +3883,7 @@ renderer.setAnimationLoop(now => {
   cloudRoute.update({ east: x, north: n, height: ground }, !!productionRidge?.transportReady && !sledRide.active());
   // The mountain branch returns before the ordinary town weather block.
   // Apply the same authoritative cycle here, before its scene is rendered.
-  const summitSkyFrame=cloudRoute.active()?updateNightSky():undefined;
+  const summitSkyFrame=cloudRoute.active()?updateNightSky(dimLevelAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes)):undefined;
   if(summitSkyFrame)applyNightSide(summitSkyFrame);
   southEntryHost.sync(cloudRoute.assembly(),nightMode);
   updateGuardPosts();
@@ -4276,7 +4276,7 @@ renderer.setAnimationLoop(now => {
   snowCover.setWeather(weather);
   // Batch-67: clouds hang off the same single authoritative weather state
   // (ZB-20 / G-09 presence weather) — never a second weather source.
-  skyClouds.update(ceremonyState.now, { weather: presence.getTownOutdoorWeather(), night: nightMode });
+  skyClouds.update(ceremonyState.now, { weather: presence.getTownOutdoorWeather(), night: nightMode,sky:skyFrame.sample });
   // Batch-103 ruling: the cloud band reads the same ZB-20 single
   // weather state (no second weather source); forward every frame once
   // the presence weather has joined (until then the band keeps its
