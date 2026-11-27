@@ -100,7 +100,7 @@ function routePoint(point: DomainPoint): TownD2R30ReturnRoutePoint {
     east: point.east,
     north: point.north,
     height: point.height,
-    domain: point.north < mainSummitBounds.south ? 'front-ridge' : 'summit',
+    domain: point.north < townD2CloudTerraceContract.seamNorthLocal ? 'front-ridge' : 'summit',
   });
 }
 

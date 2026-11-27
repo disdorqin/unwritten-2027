@@ -84,6 +84,22 @@ test('C-2 mounted stage night switch actually toggles six light sources and 16px
   scene.interiorDressing.dispose();
 });
 
+test('R30 lamps and their foundations conform to the same sampled relief',()=>{
+  const owner=new Group();
+  const terrain=(e:number,n:number)=>-35+.18*e+.09*n;
+  const stage=mountCraterFloorWorklightChain(owner,terrain);
+  for(const [index,post] of stage.data.posts.entries()){
+    const samples=[-.36,0,.36].flatMap(de=>[-.36,0,.36].map(dn=>terrain(post.east+de,post.north+dn)));
+    assert.equal(post.footHeight,Math.max(...samples));
+    const base=stage.data.pieces.find(p=>p.id===post.id+'/foot')!;
+    assert.ok(base.position[1]-base.size[1]/2<=Math.min(...samples));
+    assert.ok(base.position[1]+base.size[1]/2>=post.footHeight);
+    assert.equal(stage.lights[index].position.y,post.footHeight+2.62);
+    assert.ok(stage.data.pieces.some(p=>p.id===post.id+'/mounting-plate'));
+  }
+  stage.dispose();
+});
+
 test('C-2 production WestCraterRoad forwards its existing town phase to bottom lamps',()=>{
   const grid=createTerrainGrid();
   const road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));

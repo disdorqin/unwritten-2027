@@ -456,6 +456,15 @@ export const crystalCavernArchitecture = Object.freeze({
   }),
 });
 
+/** R30's actual -90 side-pocket connector reuses the authored cavern.
+ * Shift only the purely geological cluster that occluded the original
+ * moonstone alcove. Preserve its original relative taper, sockets and
+ * count; the archived U3 geometry and its review fixture remain intact. */
+export const crystalCavernR30Pieces:readonly CrystalCavernBlock[]=Object.freeze(crystalCavernArchitecture.pieces.map(p=>{
+ if(!p.name.startsWith('u3/crystals/48/'))return p;
+ const [e,y,n]=p.center;
+ return Object.freeze({...p,center:[e,y+crystalCavernTrailHeight(n+6)-crystalCavernTrailHeight(n),n+6] as const});
+}));
 const colors: Readonly<Record<Family, number>> = {
   rock: 0x8a8378, shadow: 0x2c3648, slate: 0x5d4630, timber: 0xa98a56,
   rust: 0x8a4a34, moss: 0x44503c, crystal: 0x7fd4c8, water: 0x2c3648,
@@ -481,6 +490,37 @@ function texture(family: Family) {
   t.needsUpdate=true;
   return t;
 }
+/** Seamless-looking pixel strata: no painted border on every cuboid.
+ * R30 retains the original palette/shape, but reduces high-contrast grids
+ * on the giant cave panels and gives the cyan crystal a faceted grain. */
+function r30CavernTexture(family:Family){
+ const size=32,data=new Uint8Array(size*size*4),base=colors[family];
+ const rgb=[base>>16,(base>>8)&255,base&255];
+ for(let y=0;y<size;y++)for(let x=0;x<size;x++){
+  const hash=((x*17+y*29+x*y*7)%31)/30,coarse=((Math.floor(x/4)*13+Math.floor(y/3)*23)%19)/18;
+  let k=.78+.19*coarse+.07*hash;
+  if(family==='rock'||family==='shadow'||family==='slate'||family==='moss'){
+   const seam=(y+Math.floor(x/7)*2+((Math.floor(x/3)*13)%3))%11;
+   k=.66+.24*coarse+.075*hash+(seam===0?-.095:seam===1?.055:0);
+   if(family==='moss')k+=.05;
+  }else if(family==='crystal'){
+   const vein=(x*5+Math.floor(y/12))%13;
+   k=.82+.14*hash+(vein<=1?.16:vein===2?-.14:0);
+  }else if(family==='moonstone'){
+   // Soft mineral bedding, not high contrast repeated vertical stripes.
+   const seam=(y+Math.floor(x/6)*2+Math.floor(x/13))%17;
+   k=.88+.055*coarse+.035*hash+(seam===0?-.035:seam===1?.025:0);
+  }else if(family==='water'){
+   const ripple=(y+Math.floor(3*Math.sin(x*.25)))%11===0;
+   k=.68+.12*hash+(ripple?.22:0);
+  }else if(family==='timber')k=.76+.18*(.5+.5*Math.sin(x*1.9+y*.045))+.06*hash;
+  else k=.74+.23*coarse+.06*hash;
+  const off=(y*size+x)*4;
+  data.set([...rgb.map(v=>Math.round(Math.min(255,Math.max(0,v*k)))),255],off);
+ }
+ const t=new DataTexture(data,size,size);t.minFilter=t.magFilter=NearestFilter;
+ t.generateMipmaps=false;t.colorSpace=SRGBColorSpace;t.needsUpdate=true;return t;
+}
 type Options=Readonly<{
   parent: Group;
   frame?: CrystalCavernFrame;
@@ -489,6 +529,10 @@ type Options=Readonly<{
   supportsFoot(point: CrystalCavernPoint): boolean;
   acceptsCollider(box: Readonly<{ name: string; min: Local; max: Local }>): boolean;
   readLightBudget(): number;
+  /** Current accepted listener in cavern-local ENY; no new light budget. */
+  readLocalLightFocus?(): CrystalCavernPoint | undefined;
+  /** R30 production host opts in after its geometry has been certified. */
+  r30Art?:boolean;
 }>;
 export function mountUndergroundCrystalCavern(host: Options) {
   const frame=host.frame;
@@ -504,7 +548,8 @@ export function mountUndergroundCrystalCavern(host: Options) {
     if(!host.supportsFoot(getWorld([w.east,w.height,w.north])))
       return {kind:'unsupported-foot'} as const;
   }
-  const solids=crystalCavernArchitecture.pieces.filter(p=>p.solid);
+  const pieces=host.r30Art?crystalCavernR30Pieces:crystalCavernArchitecture.pieces;
+  const solids=pieces.filter(p=>p.solid);
   const colliders=solids.map(p=>{
     const [x,y,n]=p.center,[w,h,d]=p.size;
     const corners=[
@@ -527,28 +572,31 @@ export function mountUndergroundCrystalCavern(host: Options) {
   root.rotation.y=frame.yaw;
   const blocks=new Map<Family,Matrix4[]>();
   const temp=new Object3D();
-  for(const b of crystalCavernArchitecture.pieces) {
+  for(const b of pieces) {
     temp.position.set(b.center[0],b.center[1],-b.center[2]);
     temp.scale.set(...b.size);
     temp.rotation.set(0,0,b.rotationZ);
     temp.updateMatrix();
-    const batch=blocks.get(b.family)??[];
+    // Preserve all authored geometry/clearance but eliminate the
+    // inherited alternating brown squares on the mineral side gallery.
+    const family=host.r30Art&&/^u3\/moonstone-spur\/(bank-|natural-mirror-)/.test(b.name)?'moonstone':b.family;
+    const batch=blocks.get(family)??[];
     batch.push(temp.matrix.clone());
-    blocks.set(b.family,batch);
+    blocks.set(family,batch);
   }
   const geo=new BoxGeometry();
   const meshes:InstancedMesh[]=[];
   const maps:DataTexture[]=[];
   const mats:MeshStandardMaterial[]=[];
   for(const [family,matrices] of blocks) {
-    const t=texture(family);
+    const t=host.r30Art?r30CavernTexture(family):texture(family);
     const luminous=family==='crystal';
     const m=new MeshStandardMaterial({
       map:t,roughness:family==='water'?.30:.95,
       metalness:family==='rust'?.12:0,
       flatShading:true,
       ...(family==='water'?{transparent:true,opacity:.62,depthWrite:false}:{}),
-      ...(luminous?{emissive:0x7fd4c8,emissiveIntensity:.23}:{}),
+      ...(luminous?(host.r30Art?{emissive:0x86cfcb,emissiveMap:t,emissiveIntensity:.42}:{emissive:0x7fd4c8,emissiveIntensity:.23}):{}),
     });
     const batch=new InstancedMesh(geo,m,matrices.length);
     batch.name='u3-crystal-cavern/'+family;
@@ -581,7 +629,12 @@ export function mountUndergroundCrystalCavern(host: Options) {
     if(disposed)return false;
     const n=host.readLightBudget();
     const visible=Number.isFinite(n)?Math.max(0,Math.min(lights.length,Math.floor(n))):0;
-    lights.forEach((lamp,i)=>{lamp.visible=i<visible});
+    const focus=host.readLocalLightFocus?.();
+    const ranked=focus&&[focus.east,focus.north,focus.height].every(Number.isFinite)
+      ?lights.map((lamp,i)=>({lamp,i,d:Math.hypot(lamp.position.x-focus.east,lamp.position.y-focus.height,-lamp.position.z-focus.north)}))
+        .sort((a,b)=>a.d-b.d||a.i-b.i).map(row=>row.lamp):lights;
+    const selected=new Set(ranked.slice(0,visible));
+    lights.forEach(lamp=>{lamp.visible=selected.has(lamp)});
     return true;
   };
   sync();

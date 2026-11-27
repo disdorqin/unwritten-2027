@@ -32,5 +32,7 @@ test('D2-R04 presence handoff refuses an invalid unsigned union and leaves all a
   assert.deepEqual(townD2R30PresenceHandoff.requiredOwnerFields, report.missingOwnerFields);
   assert.equal(townD2R30PresenceHandoff.frontRidge.bounds.width, 640);
   assert.equal(townD2R30PresenceHandoff.frontRidge.bounds.depth, 260);
-  assert.equal(townD2R30PresenceHandoff.seam.worldNorth, 666);
+  assert.equal(townD2R30PresenceHandoff.seam.localNorth, -12.75);
+  assert.equal(townD2R30PresenceHandoff.seam.worldNorth, 663.25);
+  assert.equal(townD2R30PresenceHandoff.gateLine.worldNorth, 666);
 });

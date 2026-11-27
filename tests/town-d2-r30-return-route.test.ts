@@ -24,6 +24,10 @@ test('D2-R30 canonical summit outbound and return have continuous authoritative 
   assert.ok(route.outbound.every(point =>
     [point.east, point.north, point.height].every(Number.isFinite) &&
     (point.domain === 'summit' || point.domain === 'front-ridge')));
+  for (const point of [...route.outbound, ...route.return]) {
+    assert.equal(point.domain, point.north < townD2CloudTerraceContract.seamNorthLocal ? 'front-ridge' : 'summit');
+  }
+  assert.ok(route.outbound.some(point => point.north >= townD2CloudTerraceContract.seamNorthLocal && point.north < -10));
   assert.ok(checks.arrivalHeightSupported);
   assert.ok(checks.outboundContinuous);
   assert.ok(checks.returnContinuous);

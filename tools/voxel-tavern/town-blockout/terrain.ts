@@ -2,6 +2,7 @@ import layout from './layout.json';
 import { marketStallLayouts, marketStallLocalPoint } from './market-stall-layout';
 import { northernRiver, sampleExtension, worldBounds } from './town-extension';
 import { terrainReliefOffset } from './terrain-undulations';
+import { sampleTerrainEdge } from './town-a-r30-terrain-contract';
 
 export { layout, worldBounds };
 
@@ -65,7 +66,12 @@ function nearestRoad(x: number, north: number) {
     const px = x - a.x;
     const pn = north - a.north;
     const t = clamp((px * dx + pn * dn) / lengthSquared, 0, 1);
-    const d = Math.hypot(px - dx * t, pn - dn * t);
+    // Compare squared bounds first, but keep the original hypot for
+    // potential winners and near-ties so Float32 terrain and tie order
+    // remain identical to the surveyed height authority.
+    const ex=px-dx*t,en=pn-dn*t;
+    if(ex*ex+en*en>distance*distance*(1+8*Number.EPSILON))continue;
+    const d = Math.hypot(ex,en);
     if (d < distance) {
       distance = d;
       height = a.height + dh * t;
@@ -196,7 +202,40 @@ export function createTerrainGrid(options: { relief?: boolean } = {}) {
   function heightAt(x: number, north: number) {
     return bridgeAt(x, north)?.height ?? groundHeightAt(x, north);
   }
-  return { elevation, surfaces, gridWidth, gridDepth, heightAt, groundHeightAt };
+  const terrainReadyAt=(east:number,north:number)=>Number.isFinite(east)&&Number.isFinite(north)&&
+    east>=0&&east<=worldBounds.width&&north>=0&&north<=worldBounds.depth;
+  // D consumes H0 from the exact same 1m triangles as the town ground.
+  // The old-town grid/plots/roads are unchanged by this read-only contract.
+  const boundarySamples=(points:readonly (readonly [number,number])[])=>{
+    if(points.some(([e,n])=>!terrainReadyAt(e,n)))throw new RangeError('Boundary outside town H0 grid');
+    return sampleTerrainEdge(groundHeightAt,points);
+  };
+  // Install a reviewed patch before any terrain mesh is built. All ground
+  // consumers retain the original grid closures, not a parallel surface.
+  let patchInstalled=false;
+  function installGroundPatch(bounds:{west:number;east:number;south:number;north:number},
+    vertexAt:(e:number,n:number)=>number,allowed:(e:number,n:number)=>boolean){
+    if(patchInstalled)throw Error('Ground patch already installed');
+    const {west,east,south,north}=bounds;
+    if(![west,east,south,north].every(Number.isInteger)||!terrainReadyAt(west,south)||!terrainReadyAt(east,north)||east<=west||north<=south)throw RangeError('Ground patch bounds');
+    const changed=new Uint8Array(elevation.length),writes:[number,number][]=[];
+    for(let n=south;n<=north;n++)for(let e=west;e<=east;e++){
+      const id=n*gridWidth+e,h=Math.fround(vertexAt(e,n));
+      if(!Number.isFinite(h))throw RangeError('Nonfinite ground patch');
+      if(h===elevation[id])continue;
+      if(e===west||e===east||n===south||n===north||!allowed(e,n))throw Error('Ground patch changed frozen vertex '+e+','+n);
+      writes.push([id,h]);changed[id]=1;
+    }
+    for(const [id,h] of writes)elevation[id]=h;
+    patchInstalled=true;
+    function ownsCell(e:number,n:number){
+      if(!Number.isInteger(e)||!Number.isInteger(n)||e<west||e>=east||n<south||n>=north)return false;
+      const i=n*gridWidth+e;
+      return !!(changed[i]||changed[i+1]||changed[i+gridWidth]||changed[i+gridWidth+1]);
+    }
+    return {ownsCell,changedVertices:writes.length};
+  }
+  return { elevation, surfaces, gridWidth, gridDepth, heightAt, groundHeightAt,terrainReadyAt,boundarySamples,installGroundPatch };
 }
 
 export function canEnter(x: number, n: number) {

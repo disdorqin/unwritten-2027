@@ -1,5 +1,6 @@
 import { mountainPresenceBounds, mountainPresenceNorthOrigin } from '../../../src/shared/za22-mountain-domain';
 import { mainSummitBounds } from './main-summit-block';
+import { townD2CloudTerraceContract } from './town-d2-cloud-terrace-transform';
 import {
   sampleTownD2R30Height, townD2R30LocalPoint, townD2R30Spec, townD2R30WorldPoint,
 } from './town-d2-r30-domain';
@@ -23,7 +24,9 @@ export const townD2R30PresenceHandoff = Object.freeze({
     bounds: Object.freeze({ ...mountainPresenceBounds }),
     unchanged: true,
   }),
-  seam: Object.freeze({ localNorth: -10, worldNorth: townD2R30Spec.worldAnchor.north - 10, height: 347 }),
+  seam: Object.freeze({ localNorth: townD2CloudTerraceContract.seamNorthLocal, worldNorth: townD2R30Spec.worldAnchor.north + townD2CloudTerraceContract.seamNorthLocal, height: townD2CloudTerraceContract.arrivalHeight }),
+  // The terrain starts at N=-10; domain ownership transfers earlier on the apron.
+  gateLine: Object.freeze({ localNorth: mainSummitBounds.south, worldNorth: townD2R30Spec.worldAnchor.north + mainSummitBounds.south }),
   requiredOwnerFields: Object.freeze([
     'presencePath',
     'wireOriginEast',
@@ -86,7 +89,7 @@ export function resolveTownD2R30PresenceHandoff(): TownD2R30PresenceReport {
     return back.east === point.east && back.north === point.north && back.height === point.height;
   });
   const summitHeight = sampleTownD2R30Height(50, 1_000);
-  const gateHeight = sampleTownD2R30Height(0, seam.localNorth);
+  const gateHeight = sampleTownD2R30Height(0, handoff.gateLine.localNorth);
   const frontNorth = frontRidge.northOrigin + frontRidge.bounds.depth;
   return Object.freeze({
     status: 'proposal',

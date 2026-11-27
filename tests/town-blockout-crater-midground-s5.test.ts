@@ -14,13 +14,30 @@ const trail = Array.from({ length: 801 }, (_, i) => {
   return { east: oE + at.east * c + at.north * s, north: oN + at.north * c - at.east * s };
 });
 
-test('segment five fills the middle band deterministically, inside five batches', () => {
+test('R30 middle band keeps sparse recognizable mining relics and crystal outcrops deterministically', () => {
   const a = buildCraterMidgroundS5(road);
   const b = buildCraterMidgroundS5(road);
   assert.equal(a.placements.length, b.placements.length, 'seeded placement is stable');
   assert.deepEqual(a.placements.map(p => [p.east, p.north]), b.placements.map(p => [p.east, p.north]));
-  assert.ok(a.placements.length >= 100, `expected a real mid-ground, got ${a.placements.length} pieces`);
+  assert.ok(a.placements.length >= 12 && a.placements.length <= 55, `sparse thematic band, got ${a.placements.length} pieces`);
+  for (const kind of ['ice', 'rust', 'timber']) assert.ok(a.placements.some(p => p.kind === kind), `missing ${kind} relic`);
+  assert.ok(a.placements.every(p => p.kind !== 'scorch'), 'no decorative scorch scatter');
   assert.ok(a.batches.length <= 5, `draw batches stay inside the dressing budget: ${a.batches.length}`);
+  assert.equal(a.crystalViews.length,a.placements.filter(p=>p.kind==='ice').length);
+  assert.ok(a.crystalViews.length>=3);
+  assert.ok(a.colliders.length>0 && a.colliders.length<=a.placements.length+(a.trestle?.colliders.length??0));
+  assert.ok(a.trestle,'surveyed broken trestle must be present');
+  assert.ok(a.trestle.group.children.length>=2);
+  assert.ok(a.trestle.colliders.length===2);
+  assert.deepEqual(a.colliders,b.colliders);
+  for(const box of a.colliders){
+    assert.ok(box.max[1]-box.min[1]>.46);
+    assert.ok(trail.every(p=>Math.hypot(Math.max(box.min[0]-p.east,0,p.east-box.max[0]),Math.max(box.min[2]+p.north,0,-p.north-box.max[2]))>=2.1));
+  }
+  for(const {view} of a.crystalViews){
+    assert.ok(view.clearance>=.15 && view.distance<=12 && Math.abs(view.pitch)<=.65);
+    assert.ok(Math.abs(road.heightAt(view.foot.east,view.foot.north)!-view.foot.height)<1e-6);
+  }
 });
 
 test('every piece honours the guards: off the lane, off the lip, out of the mound disc', () => {
@@ -42,5 +59,6 @@ test('deconflicts against the za36 dressing when its placements are supplied', (
     assert.ok(za36.placements.every(q => Math.hypot(p.east - q.east, p.north - q.north) >= .72),
       'piece crowds a za36 piece');
   }
-  assert.ok(placements.length >= 60, 'deconfliction must not starve the band');
+  assert.ok(placements.length >= 12 && placements.length <= 55, 'retain sparse themed groups after deconfliction');
+  for (const kind of ['ice', 'rust', 'timber']) assert.ok(placements.some(p => p.kind === kind), `missing ${kind} after deconfliction`);
 });

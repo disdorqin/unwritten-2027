@@ -7,6 +7,8 @@ import {
   meteorCraterRimRadius,
 } from './meteor-crater';
 import type { MeteorCraterWorldAnchor } from './meteor-crater-surface';
+import { bR30HaulCrossSection } from './town-b-r30-crater-relief';
+import { smoothBR30GroundNormals } from './town-b-r30-ground-normals';
 import type { Box } from './landmark-kit';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
 
@@ -43,7 +45,7 @@ export type CraterBrokenCirclePlacement = Readonly<{
   footprint: number;
 }>;
 
-type Ground = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'heightAt'>;
+type Ground = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'heightAt'> & { group?: Group };
 type Reserved = Readonly<{ east: number; north: number }>;
 type LocalPoint = Readonly<{ east: number; north: number }>;
 type FieldSample = Readonly<{ offset: number; kind: CraterBrokenCircleFeature['kind'] | 'haul' | undefined }>;
@@ -91,7 +93,7 @@ function segmentDistance(point: LocalPoint, a: LocalPoint, b: LocalPoint) {
  * existing road.heightAt result; never replace that authoritative surface.
  * The existing spiral/haul corridor is hard-excluded, so its geometry is intact.
  */
-export function createCraterBrokenCircleHeightField(anchor: MeteorCraterWorldAnchor) {
+export function createCraterBrokenCircleHeightField(anchor: MeteorCraterWorldAnchor, options: { continuous?: boolean } = {}) {
   const { east: originE, north: originN, yaw } = anchor;
   const c = Math.cos(yaw), s = Math.sin(yaw);
   const haulRoute = Array.from({ length: 401 }, (_, index) => fixture.mainTrailPoint(index / 400));
@@ -113,6 +115,33 @@ export function createCraterBrokenCircleHeightField(anchor: MeteorCraterWorldAnc
     const radius = Math.hypot(east, north);
     if (radius < meteorCraterFloorRadius || radius >= meteorCraterRimRadius) return { offset: 0, kind: undefined };
     const point = { east, north };
+    if (options.continuous) {
+      const cross = bR30HaulCrossSection(east,north);
+      const roadFade = smooth((cross.distance-2.1)/1.15);
+      if (roadFade <= 0) return { offset: 0, kind: 'haul' };
+      const bearing = positiveAngle(Math.atan2(east,north));
+      const t = (radius-meteorCraterFloorRadius)/(meteorCraterRimRadius-meteorCraterFloorRadius);
+      const envelope = smooth((radius-meteorCraterFloorRadius)/3)*smooth((meteorCraterRimRadius-radius)/3);
+      let fan=0,channel=0;
+      for(const feature of craterBrokenCircleFeatures){
+        const center=radians(feature.bearingDeg);
+        if(feature.kind==='collapse'){
+          const half=craterCollapseWidthAtRadius(feature,radius)/2;
+          const edge=smooth(1-radius*angleDistance(bearing,center)/half);
+          // A hollow head scar and deposited toe form one continuous fan.
+          const relief=2.1*Math.exp(-(((t-.29)/.23)**2))-2.4*Math.exp(-(((t-.78)/.20)**2));
+          const value=edge*relief;
+          if(Math.abs(value)>Math.abs(fan))fan=value;
+        }else{
+          const curve=center+.026*Math.sin(t*7+center)+.012*Math.sin(t*13);
+          const across=radius*angleDistance(bearing,curve);
+          const width=feature.width*.5*(.65+.35*t);
+          channel=Math.min(channel,-craterBrokenCircleSpec.gullyMaxDepth*smooth(1-across/width));
+        }
+      }
+      const offset=(channel<0?channel:fan)*envelope*roadFade;
+      return {offset,kind:Math.abs(offset)<1e-6?undefined:channel<0?'gully':'collapse'};
+    }
     if (inHaulCorridor(point)) return { offset: 0, kind: 'haul' };
     const bearing = positiveAngle(Math.atan2(east, north));
     let collapseOffset: number | undefined;
@@ -167,12 +196,18 @@ export function createCraterBrokenCircleHeightField(anchor: MeteorCraterWorldAnc
   };
 }
 
+// Only R30's live triangle sampler observes the in-place mesh update. Do not
+// add the same cut a second time when the A-owned host wraps road.heightAt.
+const integratedR30Cuts = new WeakSet<(east:number,north:number)=>number>();
+
 /** Cut the anchored walk mesh with the final reserved-work-filtered offset field. */
 export function applyCraterBrokenCircleToWalkMesh(
   mesh: Mesh,
   anchor: MeteorCraterWorldAnchor,
   heightOffsetAt: (east: number, north: number) => number,
 ) {
+  const unified = mesh.userData.bR30UnifiedRelief === true;
+  if (unified && integratedR30Cuts.has(heightOffsetAt)) return;
   const geometry = mesh.geometry;
   const positions = geometry.getAttribute('position');
   if (!positions) throw new Error('Broken-circle walk mesh has no position attribute.');
@@ -186,12 +221,17 @@ export function applyCraterBrokenCircleToWalkMesh(
     const worldEast = anchor.east + east * c + north * s;
     const worldNorth = anchor.north + north * c - east * s;
     const offset = heightOffsetAt(worldEast, worldNorth);
-    if (Number.isFinite(offset)) positions.setY(index, positions.getY(index) + offset);
+    if (Number.isFinite(offset)) {
+      const next = positions.getY(index) + offset;
+      positions.setY(index, unified ? Math.max(-meteorCraterDepth, Math.min(0, next)) : next);
+    }
   }
   positions.needsUpdate = true;
-  geometry.computeVertexNormals();
+  if(unified)smoothBR30GroundNormals(geometry);
+  else geometry.computeVertexNormals();
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
+  if (unified) integratedR30Cuts.add(heightOffsetAt);
 }
 
 function hash2(x: number, z: number) {
@@ -318,7 +358,8 @@ export function buildTownC2CraterBrokenCircle(road: Ground,
   if (![anchor.east, anchor.north, anchor.rimHeight, anchor.yaw].every(Number.isFinite)) {
     throw new RangeError('Broken-circle terrain requires the live crater anchor.');
   }
-  const field = createCraterBrokenCircleHeightField(anchor);
+  const unified = road.group?.getObjectByName('meteor-crater-walk-mesh')?.userData.bR30UnifiedRelief === true;
+  const field = createCraterBrokenCircleHeightField(anchor, { continuous: unified });
   const group = new Group();
   group.name = 'town-c2-crater-broken-circle';
   // Skins and traces are authored in fixture coordinates, just like B-01.
@@ -360,6 +401,7 @@ export function buildTownC2CraterBrokenCircle(road: Ground,
   for (const kind of ['collapse', 'gully'] as const) {
     const subset = cells.filter(cell => cell.kind === kind);
     if (!subset.length) continue;
+    if (unified) continue; // same relief is already cut into the actual walk surface
     const mesh = new Mesh(voxelGeometry(subset, size), materials[kind]);
     mesh.name = `town-c2-broken-circle-${kind}-voxels`;
     group.add(mesh);
@@ -395,9 +437,11 @@ export function buildTownC2CraterBrokenCircle(road: Ground,
       const base = baseHeightAt(world.east, world.north);
       return { ...point, height: (base ?? anchor.rimHeight) + .035 };
     });
-    const mesh = new Mesh(trackGeometry(points, 1.05, anchor.rimHeight), trackMaterial);
-    mesh.name = `town-c2-haul-compacted-trace-${side < 0 ? 'west' : 'east'}`;
-    group.add(mesh);
+    if (!unified) {
+      const mesh = new Mesh(trackGeometry(points, 1.05, anchor.rimHeight), trackMaterial);
+      mesh.name = `town-c2-haul-compacted-trace-${side < 0 ? 'west' : 'east'}`;
+      group.add(mesh);
+    }
     points.forEach((point, index) => {
       const world = field.toWorld(point);
       if (!clearOfOldWork(world, .55)) return;
@@ -408,11 +452,16 @@ export function buildTownC2CraterBrokenCircle(road: Ground,
 
   function heightOffsetAt(east: number, north: number) {
     if (!clearOfOldWork({ east, north }, size * Math.SQRT1_2)) return 0;
-    return field.heightOffsetAt(east, north);
+    const offset=field.heightOffsetAt(east,north);
+    if(!unified)return offset;
+    // Retain the previous hard protection core, with a continuous outer feather.
+    const fade=reserved.reduce((v,p)=>Math.min(v,smooth((Math.hypot(east-p.east,north-p.north)-craterBrokenCircleSpec.oldWorkClearance-size*Math.SQRT1_2)/1.5)),1);
+    return offset*fade;
   }
   function heightAt(east: number, north: number) {
     const base = baseHeightAt(east, north);
-    return base === undefined || !Number.isFinite(base) ? base : base + heightOffsetAt(east, north);
+    return base === undefined || !Number.isFinite(base) || integratedR30Cuts.has(heightOffsetAt)
+      ? base : base + heightOffsetAt(east, north);
   }
   return { group, placements, colliders, features: craterBrokenCircleFeatures, heightOffsetAt, heightAt };
 }

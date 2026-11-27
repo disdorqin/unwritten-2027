@@ -23,7 +23,27 @@ export function createTownEntry(
   return enter;
 }
 
+export function describeTownRelease(build: string, health: string | undefined) {
+  const expected = /^[0-9a-f]{40}$/.test(build) ? build : undefined;
+  const live = /^town-preview ([0-9a-f]{40})\s*$/.exec(health ?? '')?.[1];
+  const label = expected ? expected.slice(0,8) : '本地构建';
+  if (!live) return { label: '客户端 ' + label + ' · 服务器版本未确认', matched: false };
+  if (!expected) return { label: '客户端 ' + label + ' · 服务器 ' + live.slice(0,8), matched: false };
+  return { label: '客户端 ' + label + ' · 服务器 ' + live.slice(0,8) + (expected === live ? ' · 版本一致' : ' · 版本不一致，请重新加载'), matched: expected === live };
+}
+
 if (typeof document !== 'undefined') {
+  const releaseStatus = document.getElementById('town-release-status');
+  if (releaseStatus) {
+    const build = import.meta.env.VITE_TOWN_RELEASE ?? 'local';
+    releaseStatus.textContent = describeTownRelease(build, undefined).label;
+    const abort = new AbortController();
+    const timeout = setTimeout(() => abort.abort(), 6000);
+    void fetch('/healthz', {cache:'no-store', signal:abort.signal})
+      .then(response => response.ok ? response.text() : undefined)
+      .then(health => { releaseStatus.textContent = describeTownRelease(build, health).label; })
+      .catch(() => {}).finally(() => clearTimeout(timeout));
+  }
   const embedded = isMobileChatBrowser(navigator.userAgent, navigator.maxTouchPoints);
   const entry = document.getElementById('town-entry')!;
   const loading = document.getElementById('town-entry-loading')!;
