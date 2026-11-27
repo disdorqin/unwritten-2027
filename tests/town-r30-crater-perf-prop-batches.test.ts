@@ -1,0 +1,18 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {BoxGeometry,Group,InstancedMesh,Matrix4,Mesh,MeshLambertMaterial,PerspectiveCamera,Scene,Vector3} from 'three';
+import {createCraterPropBatches} from '../tools/voxel-tavern/town-blockout/town-r30-crater-perf-prop-batches';
+test('surveyed static props preserve each original transform and material, fall back safely',()=>{
+ const scene=new Scene(),land=new Group(),root=new Group(),other=new Group();root.name='town-fill-lake-east';other.name='unapproved';
+ scene.add(land);land.add(root,other);root.position.set(10,2,-8);
+ const g=new BoxGeometry(),mat=new MeshLambertMaterial({color:0xcfe8ec});
+ const leaves=Array.from({length:12},(_,i)=>{const item=new Group();item.rotation.y=i*.13;item.position.set(i*.5,0,-1);root.add(item);const m=new Mesh(g,mat);m.position.y=1;m.scale.set(.2+i*.05,1.5,.7);m.rotation.x=.2;item.add(m);return m;});
+ other.add(new Mesh(g,mat));scene.updateMatrixWorld(true);
+ const system=createCraterPropBatches(48);system.register([land]);assert.equal(system.pending,1);system.warmStep(2,Infinity);assert.equal(system.count,1);
+ const p=root.children.find(o=>o.name==='p4-static-prop-instances') as InstancedMesh;assert.ok(p);assert.equal(p.count,12);assert.equal(p.geometry,g);assert.equal(p.material,mat);
+ const m=new Matrix4();leaves.forEach((leaf,i)=>{p.getMatrixAt(i,m);m.premultiply(p.matrixWorld);assert.ok(m.elements.every((v,k)=>Math.abs(v-leaf.matrixWorld.elements[k])<1e-6));});
+ const camera=new PerspectiveCamera(100,1,.1,100);camera.position.set(13,3,0);camera.lookAt(new Vector3(13,3,-9));camera.updateMatrixWorld(true);
+ assert.equal(system.begin(camera).savedDraws,11);assert.ok(leaves.every(l=>l.layers.mask===0));assert.equal(p.visible,true);system.restore();assert.ok(leaves.every(l=>l.layers.mask===1));assert.equal(p.visible,false);
+ leaves[0].visible=false;assert.equal(system.begin(camera).savedDraws,0);leaves[0].visible=true;leaves[1].position.y+=1;scene.updateMatrixWorld(true);assert.equal(system.begin(camera).savedDraws,0);
+ system.dispose();assert.equal(root.children.length,12);
+});
