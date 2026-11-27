@@ -2,11 +2,11 @@ import {Box3,BufferAttribute,Camera,Color,Frustum,InstancedBufferAttribute,Insta
 import {sphereBehindCraterWall} from './town-r30-crater-perf-occlusion';
 type Ring=Parameters<typeof sphereBehindCraterWall>[0];
 type Chunk={mesh:InstancedMesh;box:Box3;count:number;worldBox?:Box3;worldSphere?:Sphere};
-type Snapshot={mesh:InstancedMesh;matrixVersion:number;colorVersion:number;count:number;geometry:InstancedMesh['geometry'];material:InstancedMesh['material'];matrixAttribute:InstancedMesh['instanceMatrix'];colorAttribute:InstancedMesh['instanceColor'];position:ReturnType<InstancedMesh['geometry']['getAttribute']>;positionVersion:number;index:InstancedMesh['geometry']['index'];indexVersion:number};
+type Snapshot={mesh:InstancedMesh;matrixVersion:number;colorVersion:number;count:number;geometry:InstancedMesh['geometry'];material:InstancedMesh['material'];matrixAttribute:InstancedMesh['instanceMatrix'];colorAttribute:InstancedMesh['instanceColor'];position:ReturnType<InstancedMesh['geometry']['getAttribute']>;positionVersion:number;index:InstancedMesh['geometry']['index'];indexVersion:number;drawStart:number;drawCount:number;receiveShadow:boolean;order:number};
 type CompactRequest={key:string;cells:Chunk[];count:number};
 type CompactBuild={request:CompactRequest;chunk:Chunk;cell:number;cursor:number;written:number};
 type Source=Snapshot&{chunks:Chunk[];world?:Matrix4;whole?:Box3;worldWhole?:Sphere;selection?:string;stable?:number;request?:CompactRequest;compact?:{key:string;chunk:Chunk};building?:CompactBuild};
-type Build={snap:Snapshot;bins:Map<string,number[]>;cursor:number;entries?:number[][];part:number;chunks:Chunk[];single:Box3;current?:{mesh:InstancedMesh;box:Box3;cursor:number;indices:number[]}};
+type Build={snap:Snapshot;bins:Map<string,number[]>;cursor:number;entries?:number[][];part:number;chunks:Chunk[];single:Box3;geometryBox:Box3;current?:{mesh:InstancedMesh;box:Box3;cursor:number;indices:number[]}};
 const attrVersion=(a:ReturnType<InstancedMesh['geometry']['getAttribute']>)=>a instanceof BufferAttribute?a.version:a.data.version;
 const ordinary=(m:Material)=> (m instanceof MeshStandardMaterial||m instanceof MeshLambertMaterial||m instanceof MeshBasicMaterial)&&!m.transparent&&!m.wireframe&&m.depthTest&&m.depthWrite&&!(m as MeshStandardMaterial).displacementMap&&m.onBeforeCompile===Material.prototype.onBeforeCompile;
 function eligible(o:Object3D):o is InstancedMesh{
@@ -16,11 +16,11 @@ function eligible(o:Object3D):o is InstancedMesh{
 }
 function snapshot(m:InstancedMesh):Snapshot{
  const position=m.geometry.getAttribute('position');
- return {mesh:m,matrixVersion:m.instanceMatrix.version,colorVersion:m.instanceColor?.version??-1,count:m.count,geometry:m.geometry,material:m.material,matrixAttribute:m.instanceMatrix,colorAttribute:m.instanceColor,position,positionVersion:attrVersion(position),index:m.geometry.index,indexVersion:m.geometry.index?.version??-1};
+ return {mesh:m,matrixVersion:m.instanceMatrix.version,colorVersion:m.instanceColor?.version??-1,count:m.count,geometry:m.geometry,material:m.material,matrixAttribute:m.instanceMatrix,colorAttribute:m.instanceColor,position,positionVersion:attrVersion(position),index:m.geometry.index,indexVersion:m.geometry.index?.version??-1,drawStart:m.geometry.drawRange.start,drawCount:m.geometry.drawRange.count,receiveShadow:m.receiveShadow,order:m.renderOrder};
 }
 function unchanged(s:Snapshot){
  const m=s.mesh;
- return m.count===s.count&&m.geometry===s.geometry&&m.material===s.material&&m.instanceMatrix===s.matrixAttribute&&m.instanceColor===s.colorAttribute&&m.instanceMatrix.version===s.matrixVersion&&(m.instanceColor?.version??-1)===s.colorVersion&&m.geometry.getAttribute('position')===s.position&&attrVersion(s.position)===s.positionVersion&&m.geometry.index===s.index&&(m.geometry.index?.version??-1)===s.indexVersion&&eligible(m);
+ return m.count===s.count&&m.geometry===s.geometry&&m.material===s.material&&m.instanceMatrix===s.matrixAttribute&&m.instanceColor===s.colorAttribute&&m.instanceMatrix.version===s.matrixVersion&&(m.instanceColor?.version??-1)===s.colorVersion&&m.geometry.getAttribute('position')===s.position&&attrVersion(s.position)===s.positionVersion&&m.geometry.index===s.index&&(m.geometry.index?.version??-1)===s.indexVersion&&m.geometry.drawRange.start===s.drawStart&&m.geometry.drawRange.count===s.drawCount&&m.receiveShadow===s.receiveShadow&&m.renderOrder===s.order&&eligible(m);
 }
 /** Exact static instance partition. Source is never removed or modified;
  * child cells share original geometry/material and exact matrices/colors.
@@ -32,6 +32,7 @@ export function createCraterInstanceCells(cellSize=32,maxExtraDraws=36){
  const sources:Source[]=[],seen=new Set<InstancedMesh>(),queue:InstancedMesh[]=[],masked:{object:InstancedMesh;mask:number}[]=[],active:InstancedMesh[]=[];
  const frustum=new Frustum(),vp=new Matrix4(),matrix=new Matrix4(),sphere=new Sphere(),box=new Box3(),eye=new Vector3(),center=new Vector3(),tint=new Color();
  let job:Build|undefined;
+ const geometryBounds=new WeakMap<InstancedMesh['geometry'],{attribute:Snapshot['position'];version:number;bounds:Box3}>();
  let last={sources:0,submitted:0,savedInstances:0,extraDraws:0,compactSources:0};
  function restore(){for(const m of masked)m.object.layers.mask=m.mask;masked.length=0;for(const m of active){m.visible=false;m.layers.mask=0;}active.length=0;}
  function enqueue(roots:readonly Object3D[]){
@@ -44,8 +45,9 @@ export function createCraterInstanceCells(cellSize=32,maxExtraDraws=36){
   if(!job){
    const source=queue.shift();if(!source)return;
    if(!eligible(source))return;
-   if(!source.geometry.boundingBox)source.geometry.computeBoundingBox();if(!source.geometry.boundingBox)return;
-   job={snap:snapshot(source),bins:new Map(),cursor:0,part:0,chunks:[],single:new Box3()};
+   const snap=snapshot(source),g=source.geometry;let cached=geometryBounds.get(g);
+   if(!cached||cached.attribute!==snap.position||cached.version!==snap.positionVersion){g.computeBoundingBox();if(!g.boundingBox||g.boundingBox.isEmpty())return;cached={attribute:snap.position,version:snap.positionVersion,bounds:g.boundingBox.clone()};geometryBounds.set(g,cached);}
+   job={snap,bins:new Map(),cursor:0,part:0,chunks:[],single:new Box3(),geometryBox:cached.bounds};
   }
   const j=job,source=j.snap.mesh,g=j.snap.geometry;
   if(!j.entries){
@@ -54,7 +56,7 @@ export function createCraterInstanceCells(cellSize=32,maxExtraDraws=36){
     if(!matrix.elements.every(Number.isFinite)||matrix.determinant()<=0){discard();return;}
     center.setFromMatrixPosition(matrix);const k=Math.floor(center.x/cellSize)+','+Math.floor(center.z/cellSize);
     const a=j.bins.get(k)??[];a.push(i);j.bins.set(k,a);
-    if(j.bins.size===1)j.single.union(box.copy(g.boundingBox!).applyMatrix4(matrix));
+    if(j.bins.size===1)j.single.union(box.copy(j.geometryBox).applyMatrix4(matrix));
     if(j.bins.size>256){discard();return;}
     return;
    }
@@ -76,7 +78,7 @@ export function createCraterInstanceCells(cellSize=32,maxExtraDraws=36){
    j.current={mesh,box:new Box3(),cursor:0,indices};
   }
   const c=j.current,i=c.cursor++;
-  source.getMatrixAt(c.indices[i],matrix);c.mesh.setMatrixAt(i,matrix);c.box.union(box.copy(g.boundingBox!).applyMatrix4(matrix));
+  source.getMatrixAt(c.indices[i],matrix);c.mesh.setMatrixAt(i,matrix);c.box.union(box.copy(j.geometryBox).applyMatrix4(matrix));
   if(source.instanceColor){source.getColorAt(c.indices[i],tint);c.mesh.setColorAt(i,tint);}
   if(c.cursor===c.indices.length){
    c.mesh.instanceMatrix.needsUpdate=true;if(c.mesh.instanceColor)c.mesh.instanceColor.needsUpdate=true;
@@ -123,10 +125,10 @@ export function createCraterInstanceCells(cellSize=32,maxExtraDraws=36){
    // A stable visible subset can be copied once into one compact instance
    // stream, avoiding the previous extra-draw tradeoff. Never upload in
    // begin(); until ready use the original proven cell-selection policy.
-   if(compactEnabled&&cells.length>=2&&n<=2048&&saved>=s.count*.20&&savedTris>=2000){
+   if(compactEnabled&&cells.length>=2&&n<=2048&&saved>=s.count*.25&&savedTris>=5000){
     const key=ids.join(',');s.selection=key;s.stable=previous===key?(s.stable??0)+1:1;
     if(s.compact?.key===key){choices.push({s,cells:[s.compact.chunk],saved,tris:savedTris,compact:true});continue;}
-    if(s.stable>=6)s.request={key,cells,count:n};
+    if(s.stable>=12)s.request={key,cells,count:n};
    }else{s.stable=0;}
    if(saved>0&&((extra===0&&(cells.length===0||savedTris>=2000))||(extra>0&&saved>=s.count*.30&&savedTris>=extra*2500)))choices.push({s,cells,saved,tris:savedTris});
   }
@@ -143,10 +145,11 @@ export function createCraterInstanceCells(cellSize=32,maxExtraDraws=36){
  function warmCompacts(maxWork=256,maxMs=1){
   const started=performance.now();let work=0;
   for(const s of sources){
-   if(work>=maxWork||performance.now()-started>=maxMs)break;
+   if(work>=maxWork)break;
    const r=s.request;
    if(s.building&&(!r||s.building.request.key!==r.key||!unchanged(s))){s.building.chunk.mesh.dispose();s.building=undefined;}
    if(!r||s.compact?.key===r.key||!unchanged(s))continue;
+   if(performance.now()-started>=maxMs)break;
    if(!s.building){
     const m=new InstancedMesh(s.geometry,s.material,r.count);m.name='p2-instance-cell-compact';m.userData.p2InstanceCell=true;m.visible=false;m.layers.mask=0;m.matrixAutoUpdate=false;m.receiveShadow=s.mesh.receiveShadow;m.renderOrder=s.mesh.renderOrder;m.raycast=()=>{};
     const b=new Box3();for(const c of r.cells)b.union(c.box);m.boundingBox=b.clone();m.boundingSphere=b.getBoundingSphere(new Sphere());
