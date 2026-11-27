@@ -1,5 +1,5 @@
 import {Box3,BufferAttribute,Camera,InstancedBufferAttribute,InstancedMesh,Material,Matrix4,Mesh,MeshBasicMaterial,MeshLambertMaterial,MeshStandardMaterial,Object3D,Sphere,StaticDrawUsage,Vector3} from 'three';
-type Ring=Readonly<{east:number;north:number;radius:number;inradius:number;minHeight:number;segments:number}>;
+type Ring=Readonly<{east:number;north:number;radius:number;inradius:number;minHeight:number;segments:number;tight?:boolean}>;
 type Ground=(east:number,north:number)=>number|undefined;
 const attributeVersion=(p:ReturnType<Mesh['geometry']['getAttribute']>)=>p instanceof BufferAttribute?p.version:p.data.version;
 const authoredWallShaders=new WeakMap<MeshStandardMaterial,MeshStandardMaterial['onBeforeCompile']>();
@@ -66,9 +66,22 @@ export function sphereBehindCraterWall(ring:Ring,eye:Vector3,sphere:Sphere){
  const eyeR=Math.hypot(eye.x-ring.east,eye.z+ring.north),r=sphere.radius,c=sphere.center;
  if(![eye.x,eye.y,eye.z,r,c.x,c.y,c.z].every(Number.isFinite)||r<0||eyeR>=ring.inradius-.5||eye.y>=ring.minHeight-.35)return false;
  if(Math.hypot(c.x-ring.east,c.z+ring.north)-r<=ring.radius+.5)return false;
- const distance=Math.hypot(c.x-eye.x,c.z-eye.z)-r;
+ const dx=c.x-eye.x,dz=c.z-eye.z,centerDistance=Math.hypot(dx,dz),distance=centerDistance-r;
  if(distance<=0)return false;
- const t=Math.min(1,(ring.radius+eyeR)/distance);
+ let maxExit=ring.radius+eyeR;
+ if(ring.tight!==false&&eyeR>1e-8){
+  // All horizontal rays to the sphere lie in an angular cone of
+  // half-angle asin(r/centerDistance). Minimize e·u over that cone,
+  // then use the positive circle-exit root (the certified polygon
+  // lies INSIDE the circle). This is an upper bound on every exit.
+  const ex=eye.x-ring.east,ez=eye.z+ring.north,ux=dx/centerDistance,uz=dz/centerDistance;
+  const sn=Math.min(1,r/centerDistance),cs=Math.sqrt(Math.max(0,1-sn*sn));
+  const dot=ex*ux+ez*uz,cross=Math.abs(ex*uz-ez*ux);
+  const minDot=dot<=-eyeR*cs?-eyeR:Math.max(-eyeR,dot*cs-cross*sn-1e-7);
+  const exit=-minDot+Math.sqrt(Math.max(0,minDot*minDot+ring.radius*ring.radius-eyeR*eyeR));
+  maxExit=Math.min(maxExit,exit+1e-6);
+ }
+ const t=Math.min(1,maxExit/distance);
  const crossing=eye.y+Math.max(0,c.y+r-eye.y)*t;
  return crossing<ring.minHeight-.35;
 }
@@ -141,17 +154,17 @@ export function createCraterExteriorOcclusion(mesh:Mesh,anchor:{east:number;nort
   }
   return n;
  }
- function ringForCamera(camera:Camera){
+ function ringForCamera(camera:Camera,tight=true){
   eye.setFromMatrixPosition(camera.matrixWorld);
   if(Math.hypot(eye.x-anchor.east,eye.z+anchor.north)>=50||!mesh.visible||!camera.layers.test(mesh.layers)||Array.isArray(mesh.material)||!mesh.material.visible||mesh.material.clippingPlanes?.length)return;
   const h=heightAt(eye.x,-eye.z);if(h===undefined||eye.y<h+.05||eye.y>h+4)return;
   let node:Object3D|null=mesh;while(node){if(!node.visible)return;node=node.parent;}
   const active=prepare();
-  if(active&&eye.y<active.minHeight-.35)return active;
+  if(active&&eye.y<active.minHeight-.35)return tight?active:{...active,tight:false};
  }
  let smallInstanceCulled=0;
- function begin(camera:Camera,smallInstances=true,maxBuildMs=Infinity,excludedRoot?:Object3D){
-  restore();smallInstanceCulled=0;const activeRing=ringForCamera(camera);if(!activeRing)return 0;
+ function begin(camera:Camera,smallInstances=true,maxBuildMs=Infinity,excludedRoot?:Object3D,tight=true){
+  restore();smallInstanceCulled=0;const activeRing=ringForCamera(camera,tight);if(!activeRing)return 0;
   const started=performance.now();
   for(const o of objects){
    if(!o.parent||!o.visible||!camera.layers.test(o.layers)||!opaqueMesh(o)||(!smallInstances&&o instanceof InstancedMesh))continue;
