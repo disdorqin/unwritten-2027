@@ -4,6 +4,7 @@ import {test,type TestContext} from 'node:test';
 import {WebSocket} from 'ws';
 import {createPresenceServer} from '../../src/presence/server';
 import {createCableLineAuthority} from '../../src/presence/cable-line-authority';
+import type {Za36CableRepairEvent} from '../../src/shared/za36-cable-repair';
 import {summitPresenceBounds,summitPresenceFrame,summitReleaseApproaches,toSummitPresencePose,fromSummitPresencePose,isSummitCableReleaseRecord} from '../../src/shared/za22-summit-presence-domain';
 import {writePresencePose,visitPresenceSnapshot} from '../../tools/voxel-tavern/town-blockout/town-presence-motion';
 import {authorizeOutdoorCableRepair,authorizeRearCableRepair,r30WorkshopRepairAnchors} from '../../src/shared/za22-summit-repair-position';
@@ -68,4 +69,28 @@ test('real summit room wire preserves interest distances and authorizes release 
  rejoin.pose(atBrake,2);rejoin.event('cable-repair',strike);
  await rejoin.until(()=>authority.snapshot(2).impacts===1?true:undefined);
  assert.equal(authority.snapshot(2).impacts,1);
+ // Complete the real authorized server path from actual workshop anchors,
+ // not an injected fully repaired snapshot. This is protocol verification;
+ // it does not claim that the pose packets constitute a native walking route.
+ let seq=2;
+ async function repairAt(anchor:keyof typeof r30WorkshopRepairAnchors,event:Za36CableRepairEvent){
+  const p=r30WorkshopRepairAnchors[anchor],before=authority.snapshot(2).version;
+  await sleep(130);rejoin.pose({east:p.east+300,north:p.north+676,height:347.065},++seq);
+  rejoin.event('cable-repair',{line:2,event});
+  await rejoin.until(()=>authority.snapshot(2).version>before?true:undefined);
+ }
+ for(let i=1;i<9;i++)await repairAt('brake',{kind:'strike-rust'});
+ await repairAt('brake',{kind:'pull-brake'});
+ await repairAt('cableWheel',{kind:'pry-cable',effort:1});
+ for(let i=0;i<3;i++)await repairAt('cableWheel',{kind:'tighten-cable'});
+ for(let i=0;i<4;i++){
+  await repairAt('weightTower',{kind:'take-weight',index:i});
+  await repairAt('weightFrame',{kind:'hang-weight',index:i});
+ }
+ assert.equal(authority.snapshot(2).stage,'full-line');
+ const completed=await c.until(()=>c.frames.find(f=>f.type==='cable-line'&&f.line===2&&f.stage==='full-line'));
+ assert.ok(completed.openedAt&&completed.openedAt>=completed.wokeAt!);
+ const reconnect=await connect(t,summit,'西峰甲复归',summitPresenceFrame);
+ const restored=await reconnect.until(()=>reconnect.frames.find(f=>f.type==='cable-line'&&f.line===2&&f.stage==='full-line'));
+ assert.equal(restored.openedAt,completed.openedAt);assert.equal(restored.wokeAt,accepted.wokeAt);
 });
