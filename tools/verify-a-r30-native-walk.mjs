@@ -386,6 +386,13 @@ try{
   const advanced=page.locator('#town-advanced-settings');
   assert.equal(await advanced.evaluate(el=>el.open),false);
   await activate(advanced.locator('summary'));assert.ok(await page.locator('#quality-tier').isVisible());
+  const weatherAudio=page.locator('#town-weather-audio'),weatherVolume=page.locator('#town-weather-volume');
+  assert.equal(await weatherAudio.isChecked(),false);
+  await activate(weatherAudio);assert.equal(await weatherAudio.isChecked(),true);
+  await page.waitForFunction(()=>JSON.parse(localStorage.getItem('unwritten.weather.audio.v1')??'{}').enabled===true);
+  await weatherVolume.fill('35');
+  await page.waitForFunction(()=>JSON.parse(localStorage.getItem('unwritten.weather.audio.v1')??'{}').volume===35);
+  await activate(weatherAudio);assert.equal(await weatherAudio.isChecked(),false);
   await activate(advanced.locator('summary'));assert.equal(await page.locator('#quality-tier').isVisible(),false);
   const chat=page.locator('#town-chat-toggle');
   await chat.waitFor({state:'visible'});

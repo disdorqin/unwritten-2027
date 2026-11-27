@@ -18,8 +18,8 @@ export function createSouthWeatherAudioHost(getContext:()=>AudioContext|undefine
   if(field)audio.updateFromField(field,{indoor:indoor?1:0,enabled:active,masterVolume:volume});
   else audio.setEnabled(false);
  }
- function setEnabled(value:boolean){enabled=value;persist();if(!value)audio.stop();else gesture();}
+ function setEnabled(value:boolean){enabled=value;persist();if(!value)audio.dispose();else gesture();last=-Infinity;}
  function setVolume(value:number){if(!Number.isFinite(value))return;volume=Math.max(0,Math.min(100,Math.round(value)));persist();audio.setMasterVolume(volume);}
- function setSuspended(value:boolean){suspended=value;if(value)audio.stop();last=-Infinity;}
+ function setSuspended(value:boolean){suspended=value;if(value)audio.dispose();last=-Infinity;}
  return {gesture,sync,setEnabled,setVolume,setSuspended,settings:()=>({enabled,volume}),started:audio.isStarted,dispose:audio.dispose};
 }
