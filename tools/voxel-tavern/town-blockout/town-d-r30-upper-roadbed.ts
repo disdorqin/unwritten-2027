@@ -33,7 +33,12 @@ export const lowerEastServiceControls=Object.freeze([
  {east:558,north:426},{east:564,north:432},{east:570,north:444},{east:576,north:456},
  {east:588,north:462},{east:594,north:474},{east:600,north:486},{east:594,north:492},
  {east:600,north:504},{east:606,north:516},{east:606,north:522},{east:606,north:528},
- {east:600,north:540},{east:606,north:552},{east:600,north:564}
+ {east:600,north:540},{east:606,north:552},{east:600,north:564},
+ // Follow the rear foothill contour instead of climbing straight up the east wall.
+ {east:606,north:570},{east:600,north:576},{east:594,north:588},{east:594,north:600},
+ {east:588,north:612},{east:582,north:624},{east:576,north:636},{east:570,north:648},
+ {east:564,north:654},{east:558,north:666},{east:552,north:678},{east:546,north:690},
+ {east:534,north:696},{east:528,north:708},{east:522,north:714},{east:516,north:720}
 ]);
 // Separate south exit candidate. This is the first west-facing descent
 // section, not a finished base-station connection.
