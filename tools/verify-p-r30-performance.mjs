@@ -11,8 +11,8 @@ const report={scope:'production town-preview normal entry; paired render-only ca
 let browser,page;
 const vec=p=>[p.east,p.height+1.65,-p.north];
 const target=[route.anchor.east,route.anchor.rimHeight-24,-route.anchor.north];
-async function sample(id,enabled,camera,move=false,crosslineProbe=false){
- await page.evaluate(d=>document.dispatchEvent(new CustomEvent('town-p1-perf-control',{detail:d})),{enabled,camera,crosslineProbe});
+async function sample(id,enabled,camera,move=false,crosslineProbe=false,p2Enabled=enabled){
+ await page.evaluate(d=>document.dispatchEvent(new CustomEvent('town-p1-perf-control',{detail:d})),{enabled,camera,crosslineProbe,p2Enabled});
  await page.evaluate(()=>new Promise(resolve=>{let n=0;const start=performance.now();function f(t){if(++n>=10||t-start>9000)resolve();else requestAnimationFrame(f);}requestAnimationFrame(f);}));
  if(move)await page.keyboard.down('w');
  let result;
@@ -30,7 +30,7 @@ async function sample(id,enabled,camera,move=false,crosslineProbe=false){
  const stats=a=>{a=a.filter(Number.isFinite).sort((a,b)=>a-b);return a.length?{n:a.length,median:a[Math.floor((a.length-1)*.5)],p95:a[Math.max(0,Math.ceil(a.length*.95)-1)],max:a.at(-1)}:null;};
  const get=k=>stats(result.rows.map(x=>x[k])),viewer=k=>stats(result.frames.map(x=>x[k]));
  assert.ok(result.rows.length>0&&result.frames.length>0,'Missing actual render or viewer profile');
- const row={id,enabled,crosslineProbe,probe:!!camera,move,position:result.position,lighting:result.lighting,frames:result.gaps.length,duration:result.duration,fps:1000*result.gaps.length/result.duration,frameMs:stats(result.gaps),draws:get('draws'),tris:get('tris'),renderCpuMs:get('renderCpuMs'),gpuMs:get('gpuMs'),excludedLights:get('excludedLights'),geometries:get('geometries'),textures:get('textures'),movementMs:viewer('movementMs'),weatherMs:viewer('weatherMs'),detailMs:viewer('detailMs'),longTasks:stats(result.long),renderer:result.rows.at(-1),p95Reliable:result.gaps.length>=40};
+ const row={id,enabled,crosslineProbe,p2Enabled,probe:!!camera,move,position:result.position,lighting:result.lighting,frames:result.gaps.length,duration:result.duration,fps:1000*result.gaps.length/result.duration,frameMs:stats(result.gaps),draws:get('draws'),tris:get('tris'),renderCpuMs:get('renderCpuMs'),gpuMs:get('gpuMs'),excludedLights:get('excludedLights'),geometries:get('geometries'),textures:get('textures'),movementMs:viewer('movementMs'),weatherMs:viewer('weatherMs'),detailMs:viewer('detailMs'),longTasks:stats(result.long),renderer:result.rows.at(-1),p95Reliable:result.gaps.length>=40};
  report.samples.push({...row,raw:result});console.log(JSON.stringify(row));await writeFile(join(out,'p1-performance.json'),JSON.stringify(report,null,2));
 }
 try{
@@ -47,16 +47,20 @@ try{
  report.startup=await page.evaluate(()=>({samples:window.__pStartup,elapsed:performance.now(),resources:performance.getEntriesByType('resource').length,canvas:[document.querySelector('#scene canvas').width,document.querySelector('#scene canvas').height]}));report.startup.wallMs=Date.now()-begin;
  report.gpu=await page.evaluate(()=>{const gl=document.querySelector('#scene canvas').getContext('webgl2'),e=gl.getExtension('WEBGL_debug_renderer_info');return e?{vendor:gl.getParameter(e.UNMASKED_VENDOR_WEBGL),renderer:gl.getParameter(e.UNMASKED_RENDERER_WEBGL)}:null;});
  console.log(JSON.stringify({phase:'startup',gpu:report.gpu,cpu:report.cpu,wallMs:report.startup.wallMs,canvas:report.startup.canvas}));
+ const p2=process.env.P2_COMPARE==='1';
  const floorOnly=process.env.P1_SCOPE==='floor';
- if(!floorOnly){await sample('plaza',false);await sample('plaza',true);}
+ if(!floorOnly){await sample('plaza',p2,undefined,false,false,false);await sample('plaza',true);}
  await page.locator('#town-panel-toggle').click();await page.locator('#jump').selectOption({label:'陨石坑口'});if(await page.locator('#town-settings').evaluate(d=>d.open))await page.locator('#town-settings-close').click();
  await page.waitForFunction(()=>{const t=document.querySelector('#position')?.textContent??'',m=/东\s*(-?[\d.]+)\s*m\s*·\s*北\s*(-?[\d.]+)\s*m/.exec(t);return m&&Math.hypot(+m[1]-2,+m[2]-159)<1.2},{timeout:45000});
  for(const [id,p]of [['rim',rim],['haul',road],['floor',floor]]){
   if(floorOnly&&id!=='floor')continue;
   const camera={position:vec(p),target:id==='floor'?[route.anchor.east,route.anchor.rimHeight-35+1.4,-route.anchor.north]:target};
-  await sample(id,false,camera);await page.screenshot({path:join(out,id+'-baseline.png'),timeout:20000});await sample(id,true,camera);
+  await sample(id,p2,camera,false,false,false);await page.screenshot({path:join(out,id+'-baseline.png'),timeout:20000});await sample(id,true,camera);
   await page.screenshot({path:join(out,id+'-optimized.png'),timeout:20000});
-  if(id==='floor'){await sample(id,true,camera,false,true);await page.screenshot({path:join(out,id+'-crossline-probe.png'),timeout:20000});}
+  if(id==='floor'){
+    if(p2){await sample(id,true,camera,false,true,false);await page.screenshot({path:join(out,id+'-crossline-p1.png'),timeout:20000});}
+    await sample(id,true,camera,false,true);await page.screenshot({path:join(out,id+'-crossline-probe.png'),timeout:20000});
+  }
  }
  await page.evaluate(()=>document.dispatchEvent(new CustomEvent('town-p1-perf-control',{detail:{enabled:true}})));
  await page.locator('#scene canvas').click({position:{x:420,y:270}});

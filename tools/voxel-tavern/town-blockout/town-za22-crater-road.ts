@@ -380,19 +380,16 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
   const warmLightChain = mountCraterWarmLightChain(group, surveyCraterWarmLightChain(road));
   let c2Night = false;
   let lastC2Night: boolean | undefined;
-  let lastLodDistance = -1;
+  let lastLodDistance = Infinity;
   function updateLod(camera:Camera){
-    const distance = Math.hypot(camera.position.x - anchor.east,
-      camera.position.z + anchor.north);
-    if (Math.abs(distance - lastLodDistance) < 2) return;
-    lastLodDistance = distance;
-    crater.interiorDressing.group.visible = distance < 105;
-    centralMound.group.visible = distance < 190;
-    brokenCircle.group.visible = distance < 175;
-    moltenBeads.group.visible = distance < 80;
-    inscription.group.visible = distance < 150;
-    midgroundS5.group.visible = distance < 105;
-    moundPlanting.group.visible = distance < 190;
+    const distance = Math.hypot(camera.position.x - anchor.east,camera.position.z + anchor.north);
+    if(Math.abs(distance-lastLodDistance)<1) return;
+    const initial=!Number.isFinite(lastLodDistance);lastLodDistance=distance;
+    for(const [item,limit] of lodGroups){
+      // Preserve the original range with a 3m hysteresis band. A
+      // moving eye near the boundary cannot re-toggle every frame.
+      item.visible=distance<(initial?limit:limit+(item.visible?3:-3));
+    }
   }
   surface.onBeforeRender = (_renderer,_scene,camera)=>{if(!renderPerf.enabled())updateLod(camera);};
   // Collision fix (audit 2026-11-22): the crater's built pieces register
@@ -455,6 +452,9 @@ export function mountWestCraterRoad(northLimit: number, westTownHeightAt: (north
     staticGroup.updateMatrixWorld(true);
     staticGroup.traverse(object => { if (object instanceof Mesh) object.matrixAutoUpdate = false; });
   }
+  const lodGroups = [[crater.interiorDressing.group,105],[centralMound.group,190],
+    [brokenCircle.group,175],[moltenBeads.group,80],[inscription.group,150],
+    [midgroundS5.group,105],[moundPlanting.group,190]] as const;
   const renderPerf=installCraterRenderPerf(group,camera=>{updateLod(camera);if(moltenBeads.group.visible)updateMolten(camera);},lampRoom?.group,{mesh:surface as Mesh,anchor,heightAt:road.heightAt});
   return { ...road, winch, lampRoom, mouthWorks, outerWorks, ejecta, midground, densityA2, ropeStay, surveyM1,
     centralMound, brokenCircle, moltenBeads, inscription, warmLightChain, midgroundS5, moundPlanting, craterActions };
