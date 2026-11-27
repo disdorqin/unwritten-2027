@@ -33,7 +33,7 @@ export function createNightBCableRideHost(input:Input){
  const upperBound=!!input.upper?.physical&&!!input.upperRopeway&&input.upper.ropeway===input.upperRopeway;
  const frontBound=!!input.front?.physical&&input.front.survey===input.frontFacilities?.survey&&!!frontGroups?.every(g=>g?.parent===input.frontFacilities!.group&&!g.getObjectByName('ridge-cable-parked-car-batch'));
  function updateVisuals(skipUpper=false){
-  if(frontBound&&input.front){const states=input.front.present();states.forEach((s,i)=>{const g=frontGroups![i]!;g.position.set(s.feet.east,s.feet.height,-s.feet.north)});}
+  if(frontBound&&input.front)input.frontFacilities!.presentOperational(input.front.present());
   if(!skipUpper&&upperBound)input.upper!.present();
  }
  function pose():CableRideFrame|undefined{

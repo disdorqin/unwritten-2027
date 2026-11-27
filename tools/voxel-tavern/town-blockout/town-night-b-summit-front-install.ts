@@ -44,6 +44,7 @@ export function installNightBFrontOperation(input:Inputs){
   if(input.certifyApproaches(docks)!==true)return reject('walking-route-not-certified',audit,docks);
   const service=createNightBFrontService({survey:facilities.survey,audit,firstRun:input.firstRun,state:input.state,now:input.now,daylight:input.daylight,dockClear});
   if(!service.physical)return reject('service-physical-gate',audit,docks);
+  if(!facilities.presentOperational(service.present()))return reject('initial-cabin-presentation',audit,docks);
   parent.add(facilities.group);input.closed.dispose();installed=true;
   return {ready:true as const,facilities,service,audit,docks};
  }finally{if(!installed)facilities.dispose();}

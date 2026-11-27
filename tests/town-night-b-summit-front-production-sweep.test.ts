@@ -79,7 +79,20 @@ test('front production field and actual rail, station, forest, roads, banks and 
   const gate=d.station==='base'?{east:d.approach.east,north:346,height:26}:d.station==='middle'?{east:d.approach.east,north:517,height:140}:{east:d.approach.east,north:636,height:347};
   return checkPath(gate,d.approach)&&checkPath(d.approach,d.board);
  })});
- assert.ok(accepted.ready,JSON.stringify(accepted.ready?{}:{reason:accepted.reason,docks:accepted.docks}));assert.equal(closed.group.parent,null);assert.equal(accepted.facilities.group.parent,originalParent);assert.equal(accepted.service.serviceOpen(),false);
+ assert.ok(accepted.ready,JSON.stringify(accepted.ready?{}:{reason:accepted.reason,docks:accepted.docks}));
+ // Newly installed dormant cars must already be at the upper station
+ // before the first viewer tick, and legacy frame writers cannot move them.
+ for(const side of [-1,1]){
+  const car:import('three').Object3D=accepted.facilities.group.getObjectByName('d-r30-cable-cabin-'+side)!;
+  const batch=car.children[0] as InstancedMesh;
+  assert.equal(car.children.length,1);assert.ok(batch instanceof InstancedMesh&&batch.count>20);
+  assert.equal(car.position.y,347);
+ }
+ const beforeLegacy=accepted.facilities.update(18000);
+ assert.ok(beforeLegacy.every(c=>c.station==='summit'&&c.height===347));
+ accepted.facilities.setNight(true);
+ accepted.facilities.group.traverse(o=>{if('isPointLight'in o)assert.equal((o as any).intensity,0);});
+assert.equal(closed.group.parent,null);assert.equal(accepted.facilities.group.parent,originalParent);assert.equal(accepted.service.serviceOpen(),false);
  let domain:'town'|'mountain'|'summit'='town';
  const controller=createNightBProductionController({presence,front:accepted,upperOrigin:{east:300,north:676},domain:()=>domain,acceptLanding:(_l,p,s)=>dockClear(s,p),frontRepair:{anchors:{brake:accepted.docks[0]!.approach,cableWheel:accepted.docks[2]!.approach,weightTower:accepted.docks[3]!.approach,weightFrame:accepted.docks[2]!.approach},surfaceAt:(e,n)=>externalCableDockSupport(e,n)??station.surfaceAt(e,n)??field.heightAt(e,n),clear:p=>dockClear('',p)}});
  const summit=accepted.docks.find(d=>d.station==='summit'&&d.cabin===0)!.approach;
@@ -103,6 +116,7 @@ test('front production field and actual rail, station, forest, roads, banks and 
  assert.equal(controller.action('board-0',base).accepted,true);
  const firstRideFrame=controller.tick(0)!;assert.ok(firstRideFrame.synchronized&&reported===1);
  now+=20000;assert.equal(controller.tick(0)?.station,null);
+ const actual=controller.pose()!.feet;const legacy=accepted.facilities.update(0)[0]!;assert.deepEqual({east:legacy.east,north:legacy.north,height:legacy.height},actual);
  assert.equal(controller.action('exit',base).accepted,false);
  const held=controller.pose()!.feet;now=undefined;assert.deepEqual(controller.tick(0)?.feet,held);assert.equal(controller.pose()?.synchronized,false);
  now=openedAt!+accepted.service.repositionMs+accepted.service.clock.oneWayMs;const arrived=controller.action('exit',base);assert.ok(arrived.accepted&&arrived.landing);assert.equal(activity,0);
