@@ -1,6 +1,9 @@
 # 3.0-R 窗 A 现役交接卡
 唯一续建记录，后续更新本卡；公共看板由总控登记。本卡不复活旧任务。
 
+## 3.1 A31 联合配审打回（23:31，立即供D2/C2/B消费）
+现役总控9ec3e0c9，D2 e982c514，C2 b05e37e0（实际聚合da87cc44），B adc7e32f（控制器b1e41983）。已在原A树只读动态调用原D2/C2源码，真实安装A、B、C2三个包到同一host，四区238/220/240/160采样无缺支撑，C2的15包确实入场（15 meshes/28848 tris）。但D2 host.surfaceAt 将预切collision与各区groundAt取max，实测A 832中心线点有204点supportAt高于真实路面，最大1.762088m：E31.96781647 N47.99965098，切后地面348.554596，路面348.574574，host却350.336662。**P0打回D2唯一宿主**：明确cut coverage并以实际被替换的瓦片三角面索引为地面权威（未覆盖才回原collision），不可取原高程max；support只叠合法步面，真实中心碰撞/外障必须纳入。另install catch恢复全部原瓦片会破坏已挂A/B的切坡，须按安装前快照回滚；卸载按各包真实拥有瓦片复核，不应要求其他已装包也恢复。C2聚合可直接消费createC2EastProduction({heightAt:port.groundAt})，install(port.owner)，supportAt用topAt，blocked/updateView/setNight/dispose转接；其ground参数须复用D2而非额外构建碰撞栅格，C2协助给出接口。D2不要以旧ready为认证。B长按E控制器及同域退出契约已读，等真实front/upper认证对象才开放，不用旧repair/ride并行驱动。A31独立继续施工，不修改D2/C2/B所属文件。
+
 ## 2026-11-27 A-R3-F3/F4 独立收敛、跨线兼容与真实阻塞（792080c5）
 - 5fc5f729：完整833m实际D2现役8m正典网格（72顶面块）+ A南区原子安装，替换4块切坡，独立P3射线2499脚点、全部支撑且无阻挡、卸载恢复；新增父级坐标/宿主所属校验，脱挂立即撤销碰撞/支持/天气更新。266cf8e4精确消费B现有工作树7d1ef0e6中的west-cut源码（远端blob 72004ff55b44effddecdc3b56782a9d42c20c751），不复制不写B；相同完整路段9996脚点0阻挡，所有颜色属性齐全，恢复原网格，3/3通过。合并后测试自动采用B原模块，未合并可用 A_R30_B_CUT_MODULE=../window-b/tools/voxel-tavern/town-blockout/town-night-b-summit-west-cut.ts。注意：现役D2原版高程未消费A南坡delta，实际树林数量1294树273岩，不能冒充最终四区正典或替代原南区候选903树458岩；D2组合时需同源重跑。
 - a4adb03e正式viewer收敛单一菜单活动层：打开纪念戳册等活动关闭设置、只一层对话框、关闭回到正常输入。无profile根入口原生验收（.evidence/A-F3-menu-activity-a4adb03e）包括真实聊天/远端未读、戳册开关、键盘移动，0错；另mobile-review（.evidence/A-F3-mobile-profile-a4adb03e）真实浏览器390×844 DPR.65 Intel UHD D3D11，摇杆5.009m、停止、转向0.1279rad、跳升1.2543m，0错。广场idle120帧median8.3ms/p95 12.5ms/232draws/427120tris；坑口120帧median8.3ms/p95 12.5ms/372draws/1231167tris，最大854ms转场长帧，超过300draws目标；模拟非手机真机、低DPR/headless样本不宣称正式FPS达标。另31/31定向回归（真实Presence主/从天气同钟/重连、公开宿主、雪盖、界面、西区地面），R30 tsc通过。
