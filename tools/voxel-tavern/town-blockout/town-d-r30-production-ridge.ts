@@ -37,7 +37,7 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
  const model=mountFrontRidgeR30(field,roadAt,patch.ownsCell);owner.add(model.group);
  const clearance=ridgeForestRouteClearance(roads.map(r=>r.route));
  const forest=mountRidgeForest(field,(e,n,r)=>ownership.distance(e,n)>r+3&&clearance(e,n,r)&&!(e+r>=284&&e-r<=355&&n+r>=628&&n-r<=670));owner.add(forest.group);
- const furniture=roads.map(r=>mountRidgeRoadFurniture(field,r.route,allowed));
+ const furniture=roads.map(r=>mountRidgeRoadFurniture(field,r.route,allowed,r===lower?{title:'后坡施工终点',returnTo:'基站'}:r===east?{title:'中山施工终点',returnTo:'中站'}:undefined));
  const banks=roads.map(r=>mountRidgeRetainingBanks(field,r.route,allowed));
  for(const asset of [...furniture,...banks])owner.add(asset.group);
  // The old terminal footprint is preserved; mid station is mounted only
@@ -72,7 +72,10 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
  // LOD geometry changes invalidate P's snapshot and fail open. Only
  // these explicitly static outdoor terrain/road roots are registered;
  // operational transport, station signs and assembly interaction stay out.
- return {field,ownership,ownsCell:patch.ownsCell,changedVertices:patch.changedVertices,roads,stationReady,model,forest,heightAt,allowsUphill,facilities,cableAudit,serviceExit,terrace,cloudSeam,staticRenderRoots,reserveRoad:(e:number,n:number,r:number)=>!clearance(e,n,r),
+ return {field,ownership,ownsCell:patch.ownsCell,changedVertices:patch.changedVertices,roads,stationReady,model,forest,heightAt,allowsUphill,facilities,cableAudit,serviceExit,terrace,cloudSeam,staticRenderRoots,roadTerminalAction(e:number,n:number,h:number){
+   const sign=furniture.map(f=>f.terminalSign).find(s=>s&&Math.hypot(e-s.east,n-s.north)<5.5&&Math.abs(h-s.height)<2);
+   return sign?{title:sign.title,message:'前方道路尚未贯通，请沿已认证道路返回'+sign.returnTo+'。'}:undefined;
+  },reserveRoad:(e:number,n:number,r:number)=>!clearance(e,n,r),
   blocked(e:number,n:number,h:number,r=.27){return forest.blocked(e,n,h,r)||!!station?.blocked(e,n,h,r)||!!facilities?.blocked(e,n,h,r)||!!terrace?.blocked(e,n,h,r)||furniture.some(f=>f.blocked(e,n,h,r))||banks.some(b=>b.blocked(e,n,h,r))},
   setNight(night:boolean){station?.setNight(night);facilities?.setNight(night);terrace?.setNight(night);furniture.forEach(f=>f.setNight(night))},
   updateView(e:number,n:number,allowDistant=true){model.updateView(e,n,allowDistant);forest.updateView(e,n);banks.forEach(b=>b.updateView(e,n));facilities?.updateView(e,n)},

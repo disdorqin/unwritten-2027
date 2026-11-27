@@ -1,11 +1,11 @@
-import {BoxGeometry,Color,Group,InstancedMesh,MeshLambertMaterial,Object3D,Vector3} from 'three';
+import {BoxGeometry,CanvasTexture,Color,Group,InstancedMesh,Mesh,MeshBasicMaterial,MeshLambertMaterial,Object3D,PlaneGeometry,SRGBColorSpace,Vector3} from 'three';
 import type {FrontRidgeR30Field} from './town-d-r30-front-ridge';
 import type {RidgeRoadPoint} from './town-d-r30-road-survey';
 import {createRidgeRoadProximity,createRidgeSpatialIndex} from './town-d-r30-spatial';
 
 type P={east:number;north:number;height:number};
 type Barrier={a:P;b:P;radius:number;bottom:number;top:number};
-export function mountRidgeRoadFurniture(field:FrontRidgeR30Field,route:readonly RidgeRoadPoint[],allowed:(e:number,n:number)=>boolean){
+export function mountRidgeRoadFurniture(field:FrontRidgeR30Field,route:readonly RidgeRoadPoint[],allowed:(e:number,n:number)=>boolean,terminal?:{title:string;returnTo:string}){
  const group=new Group();group.name='d-r30-road-furniture';
  const geo=new BoxGeometry(),mat=new MeshLambertMaterial({color:'#ffffff'}),glow=new MeshLambertMaterial({color:'#ecc283'});
  const tmp=new Object3D(),tint=new Color(),parts:{matrix:import('three').Matrix4;color:string}[]=[],lights:typeof parts=[],barriers:Barrier[]=[];
@@ -48,6 +48,34 @@ export function mountRidgeRoadFurniture(field:FrontRidgeR30Field,route:readonly 
    previous=ground;
   }
  }
+ let terminalSign:{east:number;north:number;height:number;title:string;returnTo:string}|undefined;
+ const signs:{geometry:PlaneGeometry;material:MeshBasicMaterial;texture:CanvasTexture}[]=[];
+ if(terminal&&total>8){
+  const p=at(total-1.5),tip=route.at(-1)!;
+  // Use a stable shoulder, outside both the walking strip and its
+  // player radius. The original final waypoint stays traversable.
+  for(const side of [1,-1])for(const offset of [3.4,4,4.6]){
+   if(terminalSign)continue;
+   const e=p.east-p.dn*side*offset,n=p.north+p.de*side*offset,y=field.heightAt(e,n);
+   if(y===undefined||!allowed(e,n)||nearRoad(e,n,2.9)||Math.abs(y-tip.height)>1.5)continue;
+   if(![-.5,.5].every(d=>Math.abs((field.heightAt(e+d,n)??Infinity)-y)<.6))continue;
+   terminalSign={east:e,north:n,height:y,...terminal};
+   box(e,n,y+.7,.18,.18,1.6,'#5f4736');
+   barriers.push({a:{east:e,north:n,height:y},b:{east:e,north:n,height:y},radius:.75,bottom:y,top:y+2.1});
+   if(typeof document!=='undefined'){
+    const canvas=document.createElement('canvas');canvas.width=768;canvas.height=320;const c=canvas.getContext('2d');
+    if(c){
+     c.fillStyle='#3e4949';c.fillRect(0,0,768,320);c.strokeStyle='#d9a866';c.lineWidth=12;c.strokeRect(9,9,750,302);
+     c.fillStyle='#ffe5b7';c.textAlign='center';c.font='bold 58px sans-serif';c.fillText(terminal.title,384,85,716);
+     c.fillStyle='#ffffff';c.font='40px sans-serif';c.fillText('前方工程未贯通',384,172);
+     c.fillText('请原路返回'+terminal.returnTo,384,250,716);
+     const texture=new CanvasTexture(canvas);texture.colorSpace=SRGBColorSpace;
+     const geometry=new PlaneGeometry(1.8,.75),material=new MeshBasicMaterial({map:texture});
+     const board=new Mesh(geometry,material);board.position.set(e,y+1.55,-n);board.rotation.y=Math.atan2(-p.de,p.dn);group.add(board);signs.push({geometry,material,texture});
+    }
+   }
+  }
+ }
  const batches:InstancedMesh[]=[];
  for(const [material,list]of [[mat,parts],[glow,lights]] as const){
   if(!list.length)continue;
@@ -55,8 +83,8 @@ export function mountRidgeRoadFurniture(field:FrontRidgeR30Field,route:readonly 
   batch.computeBoundingSphere();group.add(batch);batches.push(batch);
  }
  const collision=createRidgeSpatialIndex(barriers,b=>({west:Math.min(b.a.east,b.b.east)-b.radius,east:Math.max(b.a.east,b.b.east)+b.radius,south:Math.min(b.a.north,b.b.north)-b.radius,north:Math.max(b.a.north,b.b.north)+b.radius}));
- return {group,postCount,railCount,lanternCount,blocked(e:number,n:number,y:number,r=.27){
+ return {group,postCount,railCount,lanternCount,terminalSign,blocked(e:number,n:number,y:number,r=.27){
   return collision.some(e,n,r,b=>{const dx=b.b.east-b.a.east,dn=b.b.north-b.a.north,t=Math.max(0,Math.min(1,((e-b.a.east)*dx+(n-b.a.north)*dn)/(dx*dx+dn*dn||1)));return y+1.8>b.bottom&&y<b.top&&Math.hypot(e-b.a.east-dx*t,n-b.a.north-dn*t)<r+b.radius});
  },setNight(night:boolean){glow.emissive.set(night?'#ecc283':'#000000');glow.emissiveIntensity=night?.75:0},
- dispose(){group.removeFromParent();batches.forEach(b=>b.dispose());geo.dispose();mat.dispose();glow.dispose()}};
+ dispose(){group.removeFromParent();batches.forEach(b=>b.dispose());signs.forEach(s=>{s.geometry.dispose();s.material.dispose();s.texture.dispose()});geo.dispose();mat.dispose();glow.dispose()}};
 }

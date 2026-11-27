@@ -2807,6 +2807,8 @@ function currentAction() {
       ridePitch = 0;
     } };
   }
+  const terminalAction=!homeReturn&&productionRidge?.roadTerminalAction(x,n,ground);
+  if(terminalAction)return {label:terminalAction.title,run(){announceActivity(terminalAction.message)}};
   const terraceAction=!homeReturn&&productionRidge?.terrace?.action({east:x,north:n,height:ground});
   if(terraceAction)return {label:terraceAction.title,run(){announceActivity(terraceAction.message)}};
   if (!homeReturn && (Math.hypot(x-526,n-329)<18 || Math.hypot(x-526,n-354)<12 || Math.hypot(x-440,n-520)<12 || Math.hypot(x-336,n-640)<12) && !productionRidge?.transportReady) return {
