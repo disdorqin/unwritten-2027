@@ -2,9 +2,22 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   base64ToArrayBuffer, base64ToBytes, buildPollBody, bytesToBase64, encodePollEvent,
-  parsePollMessages, pollSampleIntervalSeconds, pushPollEvent, requeuePollEvents,
+  parsePollMessages, pollSampleIntervalSeconds, pushPollEvent, requeuePollEvents,createCableTransportLease,retryablePollEvents,
 } from '../tools/voxel-tavern/town-blockout/town-presence-poll.ts';
 
+test('cable authority expires after six missed poll intervals and fails closed on error',()=>{
+ let now=0;const lease=createCableTransportLease(()=>now);
+ assert.equal(lease.fresh(),false);lease.renew();assert.equal(lease.fresh(),true);
+ now=3000;assert.equal(lease.fresh(),true);now=3001;assert.equal(lease.fresh(),false);
+ lease.renew();assert.equal(lease.fresh(),true);lease.invalidate();assert.equal(lease.fresh(),false);
+ now=4000;lease.renew();now=3999;assert.equal(lease.fresh(),false);
+});
+test('ambiguous poll failures cannot replay cable repair or release commands',()=>{
+ const repair=JSON.stringify({type:'event',kind:'cable-repair',line:1,event:{kind:'strike-rust'}});
+ const release=JSON.stringify({type:'event',kind:'cable-release-summit'});
+ const chat=JSON.stringify({type:'chat',text:'hello'}),bin=new Uint8Array([1,2]);
+ assert.deepEqual(retryablePollEvents([repair,chat,release,bin]),[chat,bin]);
+});
 test('poll fallback reports state at 2 Hz (0.5 s sample interval)', () => {
   assert.equal(pollSampleIntervalSeconds, 0.5);
 });

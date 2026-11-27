@@ -28,7 +28,7 @@ import { isTownAvatarPose, type TownAvatarPose } from './town-presence-pose';
 import { createPresenceLinkStatus } from './town-presence-status';
 import {
   POLL_JOIN_URL, POLL_LEAVE_URL, POLL_URL, base64ToArrayBuffer, buildPollBody, parsePollMessages,
-  pollIntervalMs, pollSampleIntervalSeconds, pushPollEvent, requeuePollEvents,
+  pollIntervalMs, pollSampleIntervalSeconds, pushPollEvent, requeuePollEvents,createCableTransportLease,retryablePollEvents,
 } from './town-presence-poll';
 import { readBellEvent, type BellEvent } from '../../../src/presence/bell-game';
 import type {
@@ -221,6 +221,8 @@ export function createTownPresence(
   let show = false;
   let haveId = false;
   let cableClockReady=false;
+  const cableLease=createCableTransportLease();
+  const cableReady=()=>haveId&&cableLineSupported&&cableClockReady&&cableLease.fresh();
   let insideSharedHome = false;
   let epoch = 0;
   let seq = 0;
@@ -307,7 +309,7 @@ export function createTownPresence(
 
   function feedPollMessages(payload: unknown) {
     const messages = parsePollMessages(payload);
-    if (!messages) return;
+    if (!messages) return false;
     receivingFrom = 'poll';
     try {
       for (const message of messages) {
@@ -315,19 +317,21 @@ export function createTownPresence(
         else receive(base64ToArrayBuffer(message.d));
       }
     } finally { receivingFrom = 'ws'; }
+    if(haveId&&!socketJoined)cableLease.renew();
+    return true;
   }
 
   async function pollJoin(channel: PollChannel): Promise<boolean> {
     try {
       const response = await fetch(presencePath(POLL_JOIN_URL), {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: getName(), ...(domain==='summit'?{presenceFrame:summitPresenceFrame}:{}) }),
+        body: JSON.stringify({ name: getName(), ...(domain==='summit'?{presenceFrame:summitPresenceFrame}:{}) }),signal:AbortSignal.timeout(4000),
       });
       if (!response.ok) return false;
       const data = await response.json() as { session?: unknown };
       if (typeof data.session !== 'string' || poll !== channel) return false;
       channel.session = data.session;
-      feedPollMessages(data);
+      if(!feedPollMessages(data))return false;
       link.useFallback(roster.size + (haveId ? 1 : 0));
       return haveId;
     } catch { return false; }
@@ -356,14 +360,14 @@ export function createTownPresence(
       const response = await fetch(presencePath(POLL_URL), {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-presence-session': channel.session },
-        body: buildPollBody(state, events),
+        body: buildPollBody(state, events),signal:AbortSignal.timeout(4000),
       });
       if (poll !== channel) return;
       if (response.status === 401 || response.status === 410) {
         // 会话已被服务端回收（超时/重启）：事件未被处理，塞回队列并重新入镇。
         requeuePollEvents(channel.outEvents, events);
         channel.session = '';
-        haveId=false;cableClockReady=false;cableLineSupported=false;clearCableFrames();
+        haveId=false;cableClockReady=false;cableLease.invalidate();cableLineSupported=false;clearCableFrames();
         townNight.disconnect();
         townWeather.disconnect();
         if (!await pollJoin(channel) && poll === channel) {
@@ -374,10 +378,10 @@ export function createTownPresence(
       }
       if (!response.ok) throw new Error('poll failed');
       const payload: unknown = await response.json();
-      if (poll === channel) feedPollMessages(payload);
+      if (poll === channel&&!feedPollMessages(payload))throw new Error('invalid poll messages');
     } catch {
       // 往返失败：事件塞回队首下轮重发；状态帧只保最新，旧帧直接丢弃。
-      if (poll === channel) requeuePollEvents(channel.outEvents, events);
+      if (poll === channel){cableLease.invalidate();requeuePollEvents(channel.outEvents,retryablePollEvents(events));channel.outEvents=retryablePollEvents(channel.outEvents);}
     } finally { channel.inFlight = false; }
   }
 
@@ -405,7 +409,7 @@ export function createTownPresence(
     socket = undefined;
     socketJoined = false;
     haveId = false;
-    cableClockReady=false;
+    cableClockReady=false;cableLease.invalidate();
     cableLineSupported=false;clearCableFrames();
     townNight.disconnect();
     townWeather.disconnect();
@@ -688,7 +692,7 @@ export function createTownPresence(
             for (const settle of [...icePalacePending.values()]) settle(false);
           }
           haveId = true;
-          cableClockReady=Number.isSafeInteger(message.epochMs)&&message.epochMs!>0;
+          cableClockReady=Number.isSafeInteger(message.epochMs)&&message.epochMs!>0;cableLease.invalidate();if(cableClockReady)cableLease.renew();
           link.joined(roster.size + 1);
           joinedId = id;
           fireworksSupported = message.fireworks === true;
@@ -797,6 +801,7 @@ export function createTownPresence(
       actor.seen = stamp;
       pushPresenceSample(actor.history, { east, north, height, yaw, seq: sequence, time });
     });
+    if(valid&&(receivingFrom==='ws'?socketJoined:!socketJoined))cableLease.renew();
     if (valid && !mascotSeen) mascotHistory.length = 0;
     if (valid) for (const actor of actors.values()) if (actor.seen !== stamp) actors.delete(actor.id);
   }
@@ -1025,18 +1030,18 @@ export function createTownPresence(
 
   return {
     serverNow: clock.now,
-    cableServerNow:()=>haveId&&cableLineSupported&&cableClockReady?clock.now():undefined,
+    cableServerNow:()=>cableReady()?clock.now():undefined,
     /** Latest server-authored cable repair state for a line, or undefined
      * when the room predates the cable authority or no frame arrived yet. */
-    getCableLineState: (line: Za36CableRepairLine) => haveId&&cableLineSupported ? cableLineStates.get(line) : undefined,
-    getCableLineOpenedAt: (line:Za36CableRepairLine)=>haveId&&cableLineSupported?cableOpenedAt.get(line):undefined,
-    getCableLineWokeAt: (line:Za36CableRepairLine)=>haveId&&cableLineSupported?cableWokeAt.get(line):undefined,
-    getCableLineFlags: (): CableLineFlags => haveId&&cableLineSupported?cableLineFlags:{cableLine1Open:false,cableLine2Open:false},
+    getCableLineState: (line: Za36CableRepairLine) => cableReady() ? cableLineStates.get(line) : undefined,
+    getCableLineOpenedAt: (line:Za36CableRepairLine)=>cableReady()?cableOpenedAt.get(line):undefined,
+    getCableLineWokeAt: (line:Za36CableRepairLine)=>cableReady()?cableWokeAt.get(line):undefined,
+    getCableLineFlags: (): CableLineFlags => cableReady()?cableLineFlags:{cableLine1Open:false,cableLine2Open:false},
     /** Submit one repair event; the authority's broadcast frame is the
      * only state change a client ever applies. Returns false offline. */
     sendCableRepair: (line: Za36CableRepairLine, event: Za36CableRepairEvent) =>
-      haveId && cableLineSupported && sendEvent(JSON.stringify({ type: 'event', kind: 'cable-repair', line, event })),
-    sendSummitCableRelease:()=>domain==='summit'&&haveId&&cableLineSupported&&sendEvent(JSON.stringify({type:'event',kind:'cable-release-summit'})),
+      cableReady() && sendEvent(JSON.stringify({ type: 'event', kind: 'cable-repair', line, event })),
+    sendSummitCableRelease:()=>domain==='summit'&&cableReady()&&sendEvent(JSON.stringify({type:'event',kind:'cable-release-summit'})),
     /** Latest per-peer ice-palace rite snapshot from the room authority;
      * every rite reads unavailable until its policy store exists. */
     getIcePalaceRiteState: (): IcePalaceRiteState => icePalaceRiteState,
@@ -1071,9 +1076,12 @@ export function createTownPresence(
       else if(domain==='town'){avatarScene=cabinScene;avatars?.setScene(avatarScene);}
       return domain==='town';
     },
-    setSummitDomain(enabled:boolean,summitScene?:Scene){
+    setSummitDomain(enabled:boolean,summitScene?:Scene,returnMountainScene?:Scene){
       if(enabled&&summitScene)switchDomain('summit',summitScene);
-      else if(!enabled&&domain==='summit')switchDomain('town');
+      else if(!enabled&&domain==='summit'){
+        if(returnMountainScene)switchDomain('mountain',returnMountainScene);
+        else switchDomain('town');
+      }
     },
     setWestDomain(enabled: boolean) {
       if (enabled && domain !== 'mountain' && domain !== 'summit' && domain !== 'sky' && domain !== 'mine') switchDomain('west');
