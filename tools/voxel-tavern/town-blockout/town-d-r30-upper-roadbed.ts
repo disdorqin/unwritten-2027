@@ -18,6 +18,17 @@ export const middleEastExtendedControls=Object.freeze([...middleEastRoadControls
  {east:511,north:533},{east:514,north:542},{east:515,north:550},{east:519,north:560},
  {east:521,north:570},{east:522,north:580},{east:521,north:590}
 ]);
+// M2 extension: follow the east ridge around its north-east shoulder.
+export const middleEastNorthControls=Object.freeze([...middleEastExtendedControls,
+ {east:517,north:600},{east:514,north:610},{east:511,north:620},{east:507,north:630},
+ {east:501,north:638},{east:496,north:646},{east:489,north:652},{east:480,north:655}
+]);
+// M2 low east service road, separate from the elevated boarding deck.
+// Terminal road-to-deck access is not asserted by this candidate.
+export const lowerEastServiceControls=Object.freeze([
+ {east:526,north:354},{east:526,north:360},{east:526,north:370},{east:523,north:380},
+ {east:520,north:390},{east:520,north:400},{east:514,north:404},{east:507,north:408}
+]);
 // Separate south exit candidate. This is the first west-facing descent
 // section, not a finished base-station connection.
 export const middleSouthRoadControls=Object.freeze([

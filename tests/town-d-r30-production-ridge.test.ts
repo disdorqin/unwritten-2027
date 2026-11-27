@@ -12,8 +12,10 @@ test('production ridge consumes real railway mask and replaces only owned terrai
  const west=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
  const rail=createTownRailway(grid,()=>0),branch=buildCraterRailExtension(grid,west,rail.route.points);
  const ridge=mountProductionRidge(root,grid,{loop:rail.route.points,branch:branch.samples});
- assert.ok(ridge.changedVertices>100000);assert.equal(ridge.roads.length,2);assert.equal(ridge.stationReady,true);
+ assert.ok(ridge.changedVertices>100000);assert.equal(ridge.roads.length,3);assert.equal(ridge.stationReady,true);
  assert.equal(ridge.transportReady,false);
+ assert.ok(ridge.roads.some(r=>(r.route.at(-1)?.cum??0)>219));
+ assert.ok(ridge.roads.some(r=>(r.route.at(-1)?.cum??0)>61&&(r.route.at(-1)?.cum??0)<62));
  let steep=0,roadSteps=0;
  for(let n=400;n<700;n+=3)for(let e=270;e<570;e+=3){
   const h=grid.groundHeightAt(e,n),h1=grid.groundHeightAt(e+.2,n);

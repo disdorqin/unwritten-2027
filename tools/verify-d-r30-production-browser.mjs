@@ -52,7 +52,7 @@ try{
  const snap=async(name)=>{
   await page.waitForTimeout(450);
   const state=await page.evaluate(()=>({position:document.querySelector('#position')?.textContent,day:document.querySelector('#lighting')?.textContent,frame:window.__m1Frame}));
-  assert.ok(state.frame.calls>0&&state.frame.ridge.roads===2);
+  assert.ok(state.frame.calls>0&&state.frame.ridge.roads===3);
   assert.ok(Math.abs(state.frame.ridge.foot[2]-state.frame.ridge.surface)<.5,'feet and actual ridge surface agree');
   await page.screenshot({path:join(out,name+'.png')});frames.push({name,...state});console.log('M1',JSON.stringify({name,position:state.position,ridge:state.frame.ridge,calls:state.frame.calls,triangles:state.frame.triangles}));
  };

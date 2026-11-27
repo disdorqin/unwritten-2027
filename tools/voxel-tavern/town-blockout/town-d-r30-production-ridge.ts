@@ -2,7 +2,7 @@ import type {Object3D} from 'three';
 import type {createTerrainGrid} from './terrain';
 import {createAR30RidgeOwnership} from './town-a-r30-ridge-ownership';
 import {buildFrontRidgeR30Field,frontRidgeR30Bounds,mountFrontRidgeR30} from './town-d-r30-front-ridge';
-import {buildMiddleEastRoadbed,middleEastExtendedControls,middleSouthRoadControls} from './town-d-r30-upper-roadbed';
+import {buildMiddleEastRoadbed,middleEastNorthControls,middleSouthRoadControls,lowerEastServiceControls} from './town-d-r30-upper-roadbed';
 import {auditRidgeRoadSurface} from './town-d-r30-roadbed';
 import {mountRidgeForest,ridgeForestRouteClearance} from './town-d-r30-forest';
 import {mountRidgeRoadFurniture} from './town-d-r30-road-furniture';
@@ -19,11 +19,13 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
  let field=natural;
  const south=buildMiddleEastRoadbed(field,allowed,middleSouthRoadControls);
  if(south.ok&&'field'in south)field=south.field;
- const east=buildMiddleEastRoadbed(field,allowed,middleEastExtendedControls);
+ const east=buildMiddleEastRoadbed(field,allowed,middleEastNorthControls);
  if(east.ok&&'field'in east)field=east.field;
  // Never publish an overlapping or protected cut merely because individual
  // segments passed. Fall back to the natural mountain, not the old shell.
- const accepted=[south,east].filter(r=>r.ok&&'field'in r);
+ const lower=buildMiddleEastRoadbed(field,allowed,lowerEastServiceControls);
+ if(lower.ok&&'field'in lower)field=lower.field;
+ const accepted=[south,east,lower].filter(r=>r.ok&&'field'in r);
  const coherent=accepted.every(r=>auditRidgeRoadSurface(field,r.route).maxGrade<=.12+1e-6)&&
  field.elevation.every((v,i)=>Math.abs(v-natural.elevation[i]!)<=8.00001);
  const roads=coherent?accepted:[];
