@@ -5,6 +5,7 @@ import {createTownD2R30Collision} from '../tools/voxel-tavern/town-blockout/town
 import {createTownD2R30CableTowers} from '../tools/voxel-tavern/town-blockout/town-d2-r30-cable-towers';
 import {auditNightBSummitCable,createNightBLine2Service,type SummitSweepProbe} from '../tools/voxel-tavern/town-blockout/town-night-b-summit-line2-service';
 import {createZa36CableRepair} from '../src/shared/za36-cable-repair';
+import {createNightBCableRideHost} from '../tools/voxel-tavern/town-blockout/town-night-b-summit-ride-host';
 test('line two uses actual same-source terrain, twin towers, physical docks and shared repair clock',t=>{
  const r=createTownD2R30Ropeway({controlPointSupports:false}),g=createTownD2R30Collision(),tower=createTownD2R30CableTowers();t.after(()=>{r.dispose();g.dispose();tower.dispose()});
  // Isolated station/tower geometry only. Production must add ALL external obstacles.
@@ -45,4 +46,12 @@ test('line two uses actual same-source terrain, twin towers, physical docks and 
  // A fresh adapter uses exactly the same immutable timestamps after reconnect.
  const rejoin=createNightBLine2Service({...input,state:()=>partial.snapshot(),firstRun:{wokeAt:()=>wake,openedAt:()=>opened,dawnEpoch:()=>epoch}});
  assert.deepEqual(rejoin.present(),first.present());
+ let landing=true,domain:'town'|'summit'='town';
+ const host=createNightBCableRideHost({upper:a,upperRopeway:r,upperOrigin:{east:300,north:676},domain:()=>domain,acceptLanding:()=>landing});
+ const world=(p:{east:number;north:number;height:number})=>({...p,east:p.east+300,north:p.north+676});
+ now=0;synced=true;assert.equal(host.board(world(start),2,0),false);domain='summit';assert.ok(host.board(world(start),2,0));
+ now=110000;host.updateVisuals();const pose=host.pose()!;assert.ok(pose.whiteout&&pose.synchronized);
+ now=undefined;synced=false;assert.deepEqual(host.pose()?.feet,pose.feet);assert.equal(host.pose()?.synchronized,false);assert.equal(host.exit(),undefined);assert.ok(host.riding());
+ now=r.cable.legMs+1000;synced=true;host.updateVisuals();assert.equal(host.pose()?.station,'summit');landing=false;assert.equal(host.exit(),undefined);landing=true;assert.deepEqual(host.exit(),world(upper));
+ assert.ok(host.board(world(upper),2,0));now=r.cable.cycleMs+1000;assert.deepEqual(host.exit(),world(start));assert.equal(host.riding(),false);
 });

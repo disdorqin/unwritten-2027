@@ -6,6 +6,7 @@ import {createTerrainGrid} from '../tools/voxel-tavern/town-blockout/terrain';
 import {buildFrontRidgeR30Field} from '../tools/voxel-tavern/town-blockout/town-d-r30-front-ridge';
 import {mountRidgeCableFacilities,auditRidgeCableSweep} from '../tools/voxel-tavern/town-blockout/town-d-r30-cable-facilities';
 import {Group} from 'three';
+import {createNightBCableRideHost} from '../tools/voxel-tavern/town-blockout/town-night-b-summit-ride-host';
 test('front service uses surveyed dual cabins, actual repair authority and terminal dwell',()=>{
  const grid=createTerrainGrid(),field=buildFrontRidgeR30Field(grid.groundHeightAt,()=>1);
  const facilities=mountRidgeCableFacilities(new Group(),field,true,false);
@@ -51,5 +52,14 @@ test('front service uses surveyed dual cabins, actual repair authority and termi
  t=opened+first.repositionMs-1;const before=first.present();assert.ok(before[0]!.distanceMetres<.01);assert.equal(before[1]!.station,'summit');
  t=opened+first.repositionMs;assert.equal(first.present()[0]!.station,'base');assert.equal(first.serviceOpen(),true);
  assert.ok(Math.hypot(before[0]!.feet.east-first.present()[0]!.feet.east,before[0]!.feet.north-first.present()[0]!.feet.north,before[0]!.feet.height-first.present()[0]!.feet.height)<.01);
+ const host=createNightBCableRideHost({front:first,frontFacilities:facilities,upperOrigin:{east:300,north:676},domain:()=> 'town',acceptLanding:()=>true});
+ assert.ok(host.frontBound);host.updateVisuals();assert.ok(host.board(first.present()[0]!.feet,1,0));
+ t+=15000;host.updateVisuals();const moving=host.pose()!;
+ assert.equal(moving.station,null);assert.equal(host.exit(),undefined);
+ const car=facilities.group.getObjectByName('d-r30-cable-cabin--1')!;
+ assert.ok(Math.hypot(car.position.x-moving.feet.east,car.position.y-moving.feet.height,car.position.z+moving.feet.north)<1e-8);
+ t=opened+first.repositionMs+first.clock.oneWayMs+1000;host.updateVisuals();assert.ok(host.exit());assert.equal(host.riding(),false);
+ const closed=mountRidgeCableFacilities(new Group(),field,true,true,true);
+ try{const blockedHost=createNightBCableRideHost({front:first,frontFacilities:closed,upperOrigin:{east:300,north:676},domain:()=> 'town',acceptLanding:()=>true});assert.equal(blockedHost.frontBound,false);}finally{closed.dispose();}
  }finally{facilities.dispose();}
 });
