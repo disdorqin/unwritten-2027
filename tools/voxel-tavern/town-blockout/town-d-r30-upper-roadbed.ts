@@ -1,10 +1,12 @@
 import {createFrontRidgeR30FieldFromRaster,frontRidgeR30Bounds,type FrontRidgeR30Field} from './town-d-r30-front-ridge';
-import {auditRidgeRoadSurface,ridgeRoadProject} from './town-d-r30-roadbed';
+import {auditRidgeRoadSurface} from './town-d-r30-roadbed';
+import {createRidgeRoadProximity} from './town-d-r30-spatial';
+import {solveRidgeGradeCore} from './town-d-r30-grade-solver';
 import {auditRidgeRoadCrossings,type RidgeRoadPoint} from './town-d-r30-road-survey';
 
 type EN={east:number;north:number};
 type Allowed=(e:number,n:number)=>boolean;
-const B=frontRidgeR30Bounds,half=2.8,shoulder=8,cutLimit=8,axisSlope=.12/Math.sqrt(2)-.00015;
+const B=frontRidgeR30Bounds,half=2.8,shoulder=8,cutLimit=8;
 // Survey waypoint is not a new gameplay anchor. It is the end of the
 // first middle-to-upper switchback construction section.
 export const middleEastRoadControls=Object.freeze([
@@ -18,6 +20,50 @@ export const middleEastExtendedControls=Object.freeze([...middleEastRoadControls
  {east:511,north:533},{east:514,north:542},{east:515,north:550},{east:519,north:560},
  {east:521,north:570},{east:522,north:580},{east:521,north:590}
 ]);
+// M2 extension: follow the east ridge around its north-east shoulder.
+export const middleEastNorthControls=Object.freeze([...middleEastExtendedControls,
+ {east:517,north:600},{east:514,north:610},{east:511,north:620},{east:507,north:630},
+ {east:501,north:638},{east:496,north:646},{east:489,north:652},{east:480,north:655},
+ // Rear middle-station traverse on the same contour, no elevated overlay.
+ {east:476,north:657},{east:472,north:661},{east:468,north:667},{east:464,north:675},
+ {east:460,north:679},{east:456,north:683},{east:452,north:687},{east:448,north:691},
+ {east:444,north:695},{east:440,north:699},{east:436,north:703},{east:432,north:705},
+ {east:428,north:708},{east:424,north:709},{east:420,north:709},{east:416,north:710},
+ {east:412,north:710},{east:408,north:712},{east:404,north:713},{east:400,north:714},
+ {east:396,north:715},{east:392,north:715},{east:388,north:715},{east:384,north:715},
+ {east:380,north:715},{east:376,north:716},{east:372,north:718},{east:368,north:719},
+ {east:364,north:721},{east:360,north:722},{east:356,north:722},{east:352,north:722},
+ {east:348,north:722},{east:344,north:722},{east:340,north:722}
+]);
+// M2 deck west exit, exact 26m terminal grade; same real raster.
+// The whole previous low service corridor is replaced, not stacked.
+export const lowerEastServiceControls=Object.freeze([
+ {east:522,north:355},{east:515,north:355},{east:508,north:357},{east:503,north:364},
+ {east:503,north:374},{east:504,north:386},{east:514,north:397},{east:507,north:408},
+ // M4 east foothill contour extension: full continuous ground road.
+ {east:522,north:414},{east:528,north:408},{east:540,north:414},{east:546,north:420},
+ {east:558,north:426},{east:564,north:432},{east:570,north:444},{east:576,north:456},
+ {east:588,north:462},{east:594,north:474},{east:600,north:486},{east:594,north:492},
+ {east:600,north:504},{east:606,north:516},{east:606,north:522},{east:606,north:528},
+ {east:600,north:540},{east:606,north:552},{east:600,north:564},
+ // Follow the rear foothill contour instead of climbing straight up the east wall.
+ {east:606,north:570},{east:600,north:576},{east:594,north:588},{east:594,north:600},
+ {east:588,north:612},{east:582,north:624},{east:576,north:636},{east:570,north:648},
+ {east:564,north:654},{east:558,north:666},{east:552,north:678},{east:546,north:690},
+ {east:534,north:696},{east:528,north:708},{east:522,north:714},{east:516,north:720},
+ // Rear traverse, surveyed on the real field with quantized grade labels.
+ {east:510,north:724},{east:504,north:728},{east:498,north:732},{east:492,north:736},
+ {east:486,north:738},{east:480,north:736},{east:474,north:734},{east:468,north:732},
+ {east:462,north:734},{east:456,north:738},{east:450,north:740},{east:444,north:742},
+ {east:438,north:744},{east:432,north:746},{east:426,north:748},{east:420,north:752},
+ {east:414,north:756},{east:408,north:758},{east:402,north:756},{east:396,north:756},
+ {east:390,north:756},{east:384,north:756},{east:378,north:756},{east:372,north:756},
+ {east:366,north:754},{east:360,north:754},{east:354,north:756},{east:348,north:758},
+ {east:342,north:758},{east:336,north:758},{east:330,north:758},{east:324,north:758},
+ {east:318,north:758},{east:312,north:758},{east:306,north:758},{east:300,north:756},
+ {east:294,north:752}
+]);
+export const lowerEastServiceTerminal=Object.freeze({startHeight:26,endHeight:87.5});
 // Separate south exit candidate. This is the first west-facing descent
 // section, not a finished base-station connection.
 export const middleSouthRoadControls=Object.freeze([
@@ -42,7 +88,7 @@ type Core={e:number;n:number;lo:number;hi:number;natural:number};
  * vertices. Feasible interval propagation enforces a conservative
  * triangle gradient bound, not just a nominal centreline profile.
  * No road overlay, no write to the source array, no authority claim. */
-export function buildMiddleEastRoadbed(field:FrontRidgeR30Field,allowed:Allowed,controls:readonly EN[]=middleEastRoadControls){
+export function buildMiddleEastRoadbed(field:FrontRidgeR30Field,allowed:Allowed,controls:readonly EN[]=middleEastRoadControls,terminal?:Readonly<{startHeight?:number;endHeight?:number}>){
  if(controls.length<2||controls.some((p,i)=>!Number.isFinite(p.east)||!Number.isFinite(p.north)||(i>0&&p.east===controls[i-1]!.east&&p.north===controls[i-1]!.north)))throw new RangeError('road controls');
  const path=smoothPath(controls);
  let cum=0;
@@ -68,21 +114,16 @@ export function buildMiddleEastRoadbed(field:FrontRidgeR30Field,allowed:Allowed,
  for(const [id,p]of near){
   const {e,n}=p,old=field.vertexAt(e,n);
   if(p.distance>half)continue;
-  const fixed=pin(e,n)||!allowed(e,n)||endpoints.some(a=>a.east===e&&a.north===n);
-  core.set(id,{e,n,natural:old,lo:fixed?old:old-cutLimit,hi:fixed?old:old+cutLimit});
+  const protectedVertex=pin(e,n)||!allowed(e,n),endpoint=endpoints.findIndex(a=>a.east===e&&a.north===n);
+  const target=endpoint===0?terminal?.startHeight:endpoint===1?terminal?.endHeight:undefined;
+  if(target!==undefined&&(!Number.isFinite(target)||Math.abs(target-old)>cutLimit+1e-6||protectedVertex&&Math.abs(target-old)>1e-6))return {ok:false as const,reason:'terminal grade violates protected height or earthwork',east:e,north:n,route};
+  const fixed=protectedVertex||endpoint>=0,datum=target??old;
+  core.set(id,{e,n,natural:old,lo:fixed?datum:old-cutLimit,hi:fixed?datum:old+cutLimit});
  }
- const queue=[...core.keys()],queued=new Set(queue);
- for(let k=0;k<queue.length;k++){
-  const id=queue[k]!,a=core.get(id)!;queued.delete(id);
-  if(a.lo>a.hi+1e-7)return {ok:false as const,reason:'incompatible actual grade and cut/fill',east:a.e,north:a.n,lower:a.lo,upper:a.hi,route};
-  for(const next of [id-1,id+1,id-field.width,id+field.width]){
-   const b=core.get(next);if(!b)continue;
-   const lo=Math.max(b.lo,a.lo-axisSlope),hi=Math.min(b.hi,a.hi+axisSlope);
-   if(lo>b.lo+1e-8||hi<b.hi-1e-8){b.lo=lo;b.hi=hi;if(!queued.has(next)){queue.push(next);queued.add(next)}}
-  }
- }
+ const solved=solveRidgeGradeCore(core,field.width);
+ if(!solved.ok){const p=core.get(solved.failure.id)!;return {ok:false as const,reason:solved.reason,east:p.e,north:p.n,lower:solved.failure.lo,upper:solved.failure.hi,route}}
  const elevation=field.elevation.slice(),weights=field.weights.slice();
- for(const [id,p]of core)elevation[id]=(p.lo+p.hi)/2;
+ for(const [id,h]of solved.heights)elevation[id]=h;
  // Extend from the nearest solved core, then blend to natural ground.
  // Protected ground and station pad remain byte-identical.
  for(const [id,p]of near){
@@ -106,10 +147,11 @@ export function buildMiddleEastRoadbed(field:FrontRidgeR30Field,allowed:Allowed,
  // the two-dimensional grade bound, including transverse slope.
  let maxCoreGrade=0;
  for(const id of core.keys()){
-  const e=id+1,n=id+field.width,en=n+1;
+  const e=id+1,n=id+field.width,w=id-1,s=id-field.width;
   if(core.has(e)&&core.has(n))maxCoreGrade=Math.max(maxCoreGrade,Math.hypot(elevation[e]!-elevation[id]!,elevation[n]!-elevation[id]!));
-  if(core.has(e)&&core.has(n)&&core.has(en))maxCoreGrade=Math.max(maxCoreGrade,Math.hypot(elevation[en]!-elevation[n]!,elevation[en]!-elevation[e]!));
+  if(core.has(w)&&core.has(s))maxCoreGrade=Math.max(maxCoreGrade,Math.hypot(elevation[w]!-elevation[id]!,elevation[s]!-elevation[id]!));
  }
+ const roadProximity=createRidgeRoadProximity(finalRoute);
  const ok=audit.maxGrade<=.12+1e-6&&maxCoreGrade<=.12+1e-5&&protectedChanges===0&&cut<=cutLimit+1e-5&&fill<=cutLimit+1e-5;
- return {ok,reason:ok?'certified section candidate':'actual surface grade or protection failed',route:finalRoute,field:graded,audit,maxCoreGrade,cut,fill,changed,protectedChanges,roadAt(e:number,n:number){if(e<minE||e>maxE||n<minN||n>maxN)return false;return (ridgeRoadProject(finalRoute,e,n)?.distance??Infinity)<=1.75}};
+ return {ok,reason:ok?'certified section candidate':'actual surface grade or protection failed',route:finalRoute,field:graded,audit,gradeMode:solved.mode,gradeSweeps:solved.sweeps,maxCoreGrade,cut,fill,changed,protectedChanges,roadAt(e:number,n:number){if(e<minE||e>maxE||n<minN||n>maxN)return false;return roadProximity(e,n,1.75)}};
 }

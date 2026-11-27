@@ -1,6 +1,7 @@
 import {BoxGeometry,Color,Group,InstancedMesh,Matrix4,MeshLambertMaterial,Object3D} from 'three';
 import {ridgeR30GullyAxis,type FrontRidgeR30Field} from './town-d-r30-front-ridge';
 import {northRidgeCableAnchors,northRidgeNorthWall} from './north-ridge-350-terrain';
+import {createRidgeSpatialIndex} from './town-d-r30-spatial';
 
 type P={east:number;north:number};
 type Kind='pine'|'flagpine'|'shrub'|'rock';
@@ -13,7 +14,22 @@ function distanceToSegment(e:number,n:number,a:P,b:P){
  return Math.hypot(e-a.east-t*dx,n-a.north-t*dn);
 }
 export function ridgeForestRouteClearance(routes:readonly (readonly P[])[]):Clearance{
- return (e,n,r)=>routes.every(points=>points.every((a,i)=>i===0||distanceToSegment(e,n,points[i-1]!,a)>=8+r));
+ // Bound candidate checks to road segments in nearby spatial bins.
+ const size=16,bins=new Map<string,{a:P;b:P}[]>();
+ for(const points of routes)for(let i=1;i<points.length;i++){
+  const a=points[i-1]!,b=points[i]!;
+  for(let x=Math.floor(Math.min(a.east,b.east)/size);x<=Math.floor(Math.max(a.east,b.east)/size);x++)
+   for(let z=Math.floor(Math.min(a.north,b.north)/size);z<=Math.floor(Math.max(a.north,b.north)/size);z++){
+    const k=x+','+z,list=bins.get(k)??[];list.push({a,b});bins.set(k,list);
+   }
+ }
+ return (e,n,r)=>{
+  const d=8+r;
+  for(let x=Math.floor((e-d)/size);x<=Math.floor((e+d)/size);x++)
+   for(let z=Math.floor((n-d)/size);z<=Math.floor((n+d)/size);z++)
+    for(const s of bins.get(x+','+z)??[])if(distanceToSegment(e,n,s.a,s.b)<d)return false;
+  return true;
+ };
 }
 const pads=[{east:526,north:329,w:19,d:16},{east:440,north:520,w:20,d:17},{east:336,north:640,w:36,d:34}];
 /** Same support field as the R01 mesh. Caller supplies a certified route/
@@ -153,11 +169,10 @@ export function mountRidgeForest(field:FrontRidgeR30Field,clear:Clearance){
  }
  // Only trunk/rock cores obstruct; lower shrub and overhanging high canopy
  // are decorative. Certified paths are excluded by their full envelope.
+ const colliders=placements.filter(p=>p.kind!=='shrub').map(p=>({...p,core:(p.kind==='rock'?.92:.30)*p.scale}));
+ const collision=createRidgeSpatialIndex(colliders,p=>({west:p.east-p.core,east:p.east+p.core,south:p.north-p.core,north:p.north+p.core}));
  function blocked(e:number,n:number,feet:number,r=.27){
-   const cx=Math.floor(e/64),cn=Math.floor(n/64),near:RidgeForestPlacement[]=[];
-   for(let dx=-1;dx<=1;dx++)for(let dn=-1;dn<=1;dn++)near.push(...(chunks.get((cx+dx)+','+(cn+dn))??[]));
-   return near.some(p=>{const core=(p.kind==='pine'||p.kind==='flagpine'?.30:p.kind==='rock'?.92:0)*p.scale;
-     return core>0&&feet>=p.height-.6&&feet<p.height+(p.kind==='rock'?1.4:3.2)*p.scale&&Math.hypot(e-p.east,n-p.north)<core+r});
+   return collision.some(e,n,r,p=>feet>=p.height-.6&&feet<p.height+(p.kind==='rock'?1.4:3.2)*p.scale&&Math.hypot(e-p.east,n-p.north)<p.core+r);
  }
  let disposed=false;return {group,placements,blocked,updateView,detailCounts:()=>({near:tiers.filter(t=>t.near.visible).length,far:tiers.filter(t=>t.far.visible).length}),dispose(){if(disposed)return;disposed=true;group.removeFromParent();batches.forEach(b=>b.dispose());group.clear();geo.dispose();material.dispose()}};
 }

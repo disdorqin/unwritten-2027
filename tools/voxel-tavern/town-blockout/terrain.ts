@@ -210,7 +210,32 @@ export function createTerrainGrid(options: { relief?: boolean } = {}) {
     if(points.some(([e,n])=>!terrainReadyAt(e,n)))throw new RangeError('Boundary outside town H0 grid');
     return sampleTerrainEdge(groundHeightAt,points);
   };
-  return { elevation, surfaces, gridWidth, gridDepth, heightAt, groundHeightAt,terrainReadyAt,boundarySamples };
+  // Install a reviewed patch before any terrain mesh is built. All ground
+  // consumers retain the original grid closures, not a parallel surface.
+  let patchInstalled=false;
+  function installGroundPatch(bounds:{west:number;east:number;south:number;north:number},
+    vertexAt:(e:number,n:number)=>number,allowed:(e:number,n:number)=>boolean){
+    if(patchInstalled)throw Error('Ground patch already installed');
+    const {west,east,south,north}=bounds;
+    if(![west,east,south,north].every(Number.isInteger)||!terrainReadyAt(west,south)||!terrainReadyAt(east,north)||east<=west||north<=south)throw RangeError('Ground patch bounds');
+    const changed=new Uint8Array(elevation.length),writes:[number,number][]=[];
+    for(let n=south;n<=north;n++)for(let e=west;e<=east;e++){
+      const id=n*gridWidth+e,h=Math.fround(vertexAt(e,n));
+      if(!Number.isFinite(h))throw RangeError('Nonfinite ground patch');
+      if(h===elevation[id])continue;
+      if(e===west||e===east||n===south||n===north||!allowed(e,n))throw Error('Ground patch changed frozen vertex '+e+','+n);
+      writes.push([id,h]);changed[id]=1;
+    }
+    for(const [id,h] of writes)elevation[id]=h;
+    patchInstalled=true;
+    function ownsCell(e:number,n:number){
+      if(!Number.isInteger(e)||!Number.isInteger(n)||e<west||e>=east||n<south||n>=north)return false;
+      const i=n*gridWidth+e;
+      return !!(changed[i]||changed[i+1]||changed[i+gridWidth]||changed[i+gridWidth+1]);
+    }
+    return {ownsCell,changedVertices:writes.length};
+  }
+  return { elevation, surfaces, gridWidth, gridDepth, heightAt, groundHeightAt,terrainReadyAt,boundarySamples,installGroundPatch };
 }
 
 export function canEnter(x: number, n: number) {
