@@ -79,7 +79,7 @@ import { createTownFireworksActivity } from './town-fireworks-activity';
 import { createTownPersonalFireworks, firecrackerStand } from './personal-firework-activity';
 import { personalFireworkRestricted } from '../../../src/presence/personal-fireworks';
 import {
-  ceremonyEveYear, ceremonyMidnight, createCeremonyDirector, createCeremonyOverlay, type CeremonyCue,
+  ceremonyEveYear, ceremonyMidnight, ceremonyStateAt, createCeremonyDirector, createCeremonyOverlay, type CeremonyCue,
 } from './town-ceremony';
 import { loadRehearsalClock } from './town-rehearsal-clock';
 import { ceremonyArrivalAt, ceremonyLateWindowMs, townCeremonyMidnight, type CeremonyArrival } from '../../../src/presence/ceremony-arrival';
@@ -183,7 +183,8 @@ import { approachTownSnowScale } from './town-snow-cover';
 import { createTownSnowField } from './town-snow-field';
 import { createPlazaInformationActivity } from './plaza-information-activity';
 import { createPlazaSnowSupply, type PlazaSnowSupplySite } from './plaza-snow-supply';
-import { advanceWeatherCover, townSnowWeatherForFrame } from './town-weather';
+import { advanceWeatherCover, townSnowWeatherAt, townSnowWeatherForFrame } from './town-weather';
+import { sampleSouthRegionalWeather } from './town-night-a-summit-weather-field';
 import { createTownNightWeatherSky, type TownNightWeatherSkyFrame } from './town-night-weather-sky';
 import { createSouthSummitWeatherHost } from './town-night-a-summit-weather-host';
 import { townNightWeatherDayMs, townNightWeatherDefaultDawnEpoch } from '../../../src/shared/town-night-weather-cycle';
@@ -907,9 +908,11 @@ const forest = addForestDensity(landscape, grid,
     streetscape.occupied(east, north, radius) || pineCamp.keepClear(east, north, radius),
   (east, north, radius) => extensionRoadClearance(east, north, radius) || railway.keepClear(east, north, radius) || extensionStreetClearance(east, north, radius));
 const snowfall = createSnowfall(scene);
+const summitSnowfall = createSnowfall(cloudRoute.scene);
 const snowButton = element<HTMLButtonElement>('snow');
 snowButton.onclick = () => {
   snowfall.setEnabled(!snowfall.enabled());
+  summitSnowfall.setEnabled(snowfall.enabled());
   snowButton.setAttribute('aria-pressed', String(snowfall.enabled()));
 };
 const timeOfDay = element<HTMLButtonElement>('lighting');
@@ -1342,6 +1345,7 @@ const landingSnow = createLandingSnow(scene);
 function applyQualityTier() {
   renderer.setPixelRatio(Math.min(devicePixelRatio, qualityPixelRatioCap()));
   snowfall.setDensityScale(particleDensityScale());
+  summitSnowfall.setDensityScale(particleDensityScale());
   landingSnow.setDensityScale(particleDensityScale());
 }
 applyQualityTier();
@@ -3810,7 +3814,7 @@ function updateSledPresentation(visuals: SledRackVisuals, dt: number) {
     : sledRide.recovering() ? '翻橇了，缓一缓' : '';
 }
 
-function renderCloudRoute(frameSeconds: number) {
+function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame) {
   const cabin = cloudRoute.ridePoint();
   if (cabin) {
     cloudRoute.updateView(cabin);
@@ -3850,6 +3854,16 @@ function renderCloudRoute(frameSeconds: number) {
   touchJump.disabled = !canJump();
   museumMapButton.hidden = true;
   refreshPlayerControls();
+  const weatherState=presence.getTownOutdoorWeather();
+  const ceremonyState=ceremonyStateAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes);
+  const local=weatherState&&ceremonyState.phase==='ordinary'
+    ?sampleSouthRegionalWeather(weatherState,camera.position.x,-camera.position.z,camera.position.y-eye,true):undefined;
+  const weather=local?.weather??(ceremonyState.phase==='ordinary'?townSnowWeatherAt(ceremonyState.now,'light'):townSnowWeatherForFrame(ceremonyState));
+  summitSnowfall.setIntensity(weather.intensity);
+  summitSnowfall.setOutdoorWind(local?.weather.windEast??0,local?.weather.windNorth??0,local?.weather.windStrength??0,local?.exposure??1);
+  summitSnowfall.update(camera,Math.min(.25,frameSeconds),!cabin&&walking,false);
+  const fog=cloudRoute.scene.fog as Fog;
+  fog.near=weather.fogNear*skyFrame.fogNearScale;fog.far=weather.fogFar*skyFrame.fogFarScale;
   renderer.render(cloudRoute.scene, camera);
   if (profileTown) {
     renderer.domElement.dispatchEvent(new CustomEvent('town-frame-profile', { detail: {
@@ -3866,11 +3880,12 @@ renderer.setAnimationLoop(now => {
   cloudRoute.update({ east: x, north: n, height: ground }, !!productionRidge?.transportReady && !sledRide.active());
   // The mountain branch returns before the ordinary town weather block.
   // Apply the same authoritative cycle here, before its scene is rendered.
-  if(cloudRoute.active())applyNightSide(updateNightSky());
+  const summitSkyFrame=cloudRoute.active()?updateNightSky():undefined;
+  if(summitSkyFrame)applyNightSide(summitSkyFrame);
   southEntryHost.sync(cloudRoute.assembly(),nightMode);
   updateGuardPosts();
-  if (cloudRoute.active()) {
-    renderCloudRoute(frameSeconds);
+  if (summitSkyFrame) {
+    renderCloudRoute(frameSeconds,summitSkyFrame);
     return;
   }
   practiceTarget.updateRound();
@@ -4235,11 +4250,16 @@ renderer.setAnimationLoop(now => {
   // Do not attenuate scripted ceremony lamp bands by the ordinary day cycle.
   townLights.setDusk(ordinaryBellHours && skyFrame.lampLevel>0);
   townLights.setNightLevel(ordinaryBellHours ? Math.round(skyFrame.lampLevel*255)/255 : 1);
-  const weather = townSnowWeatherForFrame(ceremonyState);
+  const outdoorWeather = presence.getTownOutdoorWeather();
+  const local=outdoorWeather&&ordinaryBellHours?sampleSouthRegionalWeather(outdoorWeather,shedEast,shedNorth,shedFeet,false):undefined;
+  // Before the authoritative snapshot arrives use a fixed clear-snow baseline,
+  // not the old independent 64-slot client schedule.
+  const weather = local?.weather ?? (ordinaryBellHours?townSnowWeatherAt(ceremonyState.now,'light'):townSnowWeatherForFrame(ceremonyState));
   const effectiveSnowIntensity = weather.intensity;
   const roofSheltered = walking && !boardingGround && !homeReturn && !sheltered && !shedSheltered &&
     roofed(shedEast, shedNorth, shedFeet);
   snowfall.setIntensity(effectiveSnowIntensity);
+  snowfall.setOutdoorWind(local?.weather.windEast??0,local?.weather.windNorth??0,local?.weather.windStrength??0,local?.exposure??1);
   snowfall.update(camera, dt, walking, sheltered || shedSheltered || roofSheltered || Boolean(homeReturn));
   weatherFog.near = weather.fogNear * skyFrame.fogNearScale;
   weatherFog.far = weather.fogFar * skyFrame.fogFarScale;
@@ -4257,7 +4277,6 @@ renderer.setAnimationLoop(now => {
   // weather state (no second weather source); forward every frame once
   // the presence weather has joined (until then the band keeps its
   // shipped defaults, same as the pre-wiring behaviour).
-  const outdoorWeather = presence.getTownOutdoorWeather();
   if (outdoorWeather) frontRidgeCloudBand.applyOutdoorWeather(outdoorWeather);
   frontRidgeCloudBand.update(dt);
   const weatherMs = profileTown ? performance.now() - weatherStartedAt : 0;
