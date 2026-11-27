@@ -113,6 +113,7 @@ type Options = {
   /** Production forbids line-2 impact wake. Only the summit host may authorize release from its accepted wire pose. */
   requireSummitCableRelease?: boolean;
   authorizeSummitCableRelease?: (record: Readonly<PresenceRecord>) => boolean;
+  authorizeCableRepair?: (line:Za36CableRepairLine,event:Za36CableRepairEvent,record?:Readonly<PresenceRecord>)=>boolean;
   summitRoom?: boolean;
   /** Author weather only in the primary room, using the same wall clock and dawn anchor as ZB-17. */
   townOutdoorWeather?: TownWeatherOptions;
@@ -1266,6 +1267,7 @@ export async function createPresenceServer(options: Options = {}) {
           // The production summit route must first be released by the verified summit host.
           if (line===2 && event.kind==='wake' && options.requireSummitCableRelease) return;
           if(options.summitRoom&&line!==2)return;
+          if(options.authorizeCableRepair&&!options.authorizeCableRepair(line,event,peer.record))return;
           // The shared authority publishes once to every attached room, including this one.
           cableLine.applyEvent(line, event);
         }

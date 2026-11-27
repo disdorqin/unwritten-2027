@@ -6,6 +6,7 @@ import {createPresenceServer} from '../../src/presence/server';
 import {createCableLineAuthority} from '../../src/presence/cable-line-authority';
 import {summitPresenceBounds,summitPresenceFrame,summitReleaseApproaches,toSummitPresencePose,fromSummitPresencePose,isSummitCableReleaseRecord} from '../../src/shared/za22-summit-presence-domain';
 import {writePresencePose,visitPresenceSnapshot} from '../../tools/voxel-tavern/town-blockout/town-presence-motion';
+import {authorizeOutdoorCableRepair,authorizeRearCableRepair,r30WorkshopRepairAnchors} from '../../src/shared/za22-summit-repair-position';
 import {createMainSummitCable} from '../../tools/voxel-tavern/town-blockout/main-summit-cable';
 const sleep=(ms:number)=>new Promise(r=>setTimeout(r,ms));
 type Point={east:number;north:number;height:number};
@@ -32,9 +33,9 @@ async function connect(t:TestContext,server:Awaited<ReturnType<typeof createPres
  return {socket,frames,snapshots,join,until,pose:(p:Point,seq:number)=>socket.send(encode(p,seq)),event:(kind:string,extra:object={})=>socket.send(JSON.stringify({type:'event',kind,...extra}))};
 }
 test('real summit room wire preserves interest distances and authorizes release only at accepted summit dock',{timeout:15000},async t=>{
- const authority=createCableLineAuthority(),summit=await createPresenceServer({...summitPresenceBounds,summitRoom:true,cableLineAuthority:authority,requireSummitCableRelease:true,authorizeSummitCableRelease:isSummitCableReleaseRecord,connectionLog(){}});
+ const authority=createCableLineAuthority(),summit=await createPresenceServer({...summitPresenceBounds,summitRoom:true,cableLineAuthority:authority,requireSummitCableRelease:true,authorizeSummitCableRelease:isSummitCableReleaseRecord,authorizeCableRepair:authorizeRearCableRepair,connectionLog(){}});
  t.after(()=>summit.close());
- const town=await createPresenceServer({cableLineAuthority:authority,requireSummitCableRelease:true,connectionLog(){}});t.after(()=>town.close());
+ const town=await createPresenceServer({cableLineAuthority:authority,requireSummitCableRelease:true,authorizeCableRepair:authorizeOutdoorCableRepair,connectionLog(){}});t.after(()=>town.close());
  const a=await connect(t,summit,'西峰甲',summitPresenceFrame),b=await connect(t,summit,'西峰乙',summitPresenceFrame),c=await connect(t,town,'镇上丙');
  const joinUrl='http://127.0.0.1:'+summit.address().port+'/presence/poll/join';
  const post=(url:string,body:unknown,session?:string)=>fetch(url,{method:'POST',headers:{'content-type':'application/json',...(session?{'x-presence-session':session}:{})},body:JSON.stringify(body)});
@@ -59,4 +60,12 @@ test('real summit room wire preserves interest distances and authorizes release 
  a.socket.send(JSON.stringify({type:'clock',sentAt:123}));await a.until(()=>a.frames.find(f=>f.type==='clock'&&f.sentAt===123));
  a.socket.terminate();const rejoin=await connect(t,summit,'西峰甲',summitPresenceFrame);const hello=await rejoin.until(()=>rejoin.frames.find(f=>f.type==='cable-line'&&f.line===2));
  assert.equal(hello.wokeAt,accepted.wokeAt);assert.equal(hello.stage,'one-station');
+ const strike={line:2,event:{kind:'strike-rust'}};
+ c.event('cable-repair',strike);rejoin.event('cable-repair',strike);b.event('cable-repair',strike);
+ await sleep(150);assert.equal(authority.snapshot(2).impacts,0);
+ const brake=r30WorkshopRepairAnchors.brake,atBrake={east:brake.east+300,north:brake.north+676,height:347};
+ rejoin.pose({...atBrake,height:800},1);rejoin.event('cable-repair',strike);await sleep(150);assert.equal(authority.snapshot(2).impacts,0);
+ rejoin.pose(atBrake,2);rejoin.event('cable-repair',strike);
+ await rejoin.until(()=>authority.snapshot(2).impacts===1?true:undefined);
+ assert.equal(authority.snapshot(2).impacts,1);
 });

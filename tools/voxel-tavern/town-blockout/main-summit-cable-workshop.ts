@@ -3,6 +3,7 @@ import {
 } from 'three';
 
 import {createCableRepairHost, type RepairAnchors} from './town-cable-repair-host';
+import {r30WorkshopAnchor,r30WorkshopRepairAnchors} from '../../../src/shared/za22-summit-repair-position';
 import type {Za36CableRepairState} from './town-za36-cable-repair';
 
 type GroundAt = (east: number, north: number) => number | undefined;
@@ -12,7 +13,7 @@ type Solid = { x: number; z: number; w: number; d: number; low: number; high: nu
 export const mainSummitCableWorkshopAnchor = Object.freeze({east:-21,north:7,floor:347});
 /** The old expedition hall overlaps the R30 rope sweep. The new hall is
  * north of the lower dock, on the same surveyed terrace. */
-export const mainSummitR30CableWorkshopAnchor=Object.freeze({east:-21,north:22,floor:347});
+export const mainSummitR30CableWorkshopAnchor=r30WorkshopAnchor;
 type WorkshopAnchor=Readonly<{east:number;north:number;floor:number}>;
 
 /**
@@ -192,7 +193,7 @@ export function mountMainSummitCableWorkshop(owner: Group, groundAt: GroundAt, a
   const pulley=new Mesh(wheelGeometry,faultMaterial);pulley.name='night-b-line2-slack-pulley';pulley.position.set(-1.92,1.65,1.25);group.add(pulley);
   const weightMesh=new InstancedMesh(cube,weightMaterial,4);weightMesh.name='night-b-line2-repair-weights';weightMesh.frustumCulled=false;group.add(weightMesh);
   const global=(x:number,z:number)=>({east:anchor.east+z,north:anchor.north+x});
-  const repairAnchors:RepairAnchors=Object.freeze({brake:global(-1.25,-2.28),cableWheel:global(-1.25,1.25),weightTower:global(1.25,2.2),weightFrame:global(.8,-2.8)});
+  const repairAnchors:RepairAnchors=anchor===mainSummitR30CableWorkshopAnchor?r30WorkshopRepairAnchors:Object.freeze({brake:global(-1.25,-2.28),cableWheel:global(-1.25,1.25),weightTower:global(1.25,2.2),weightFrame:global(.8,-2.8)});
   const repair=createCableRepairHost(2,repairAnchors);
   let state:Za36CableRepairState|undefined;
   function sync(next:Za36CableRepairState|undefined){

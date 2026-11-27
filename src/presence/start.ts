@@ -3,6 +3,7 @@ import { createCableLineAuthority } from './cable-line-authority.js';
 import type { RequestListener } from 'node:http';
 import { mountainPresenceBounds } from '../shared/za22-mountain-domain.js';
 import { summitPresenceBounds,isSummitCableReleaseRecord } from '../shared/za22-summit-presence-domain.js';
+import {authorizeOutdoorCableRepair,authorizeRearCableRepair} from '../shared/za22-summit-repair-position.js';
 import { westPresenceBounds } from '../shared/za22-west-domain.js';
 import { skyCityPresenceBounds } from '../shared/sky-city-presence-domain.js';
 import { minePresenceBounds } from '../shared/underground-mine-presence-domain.js';
@@ -40,6 +41,7 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
   const server = await createPresenceServer({
     cableLineAuthority,
     requireSummitCableRelease:true,
+    authorizeCableRepair:authorizeOutdoorCableRepair,
     host,
     port: Number(process.env.PRESENCE_PORT ?? 8090),
     tiers: process.env.PRESENCE_TIERS ? JSON.parse(process.env.PRESENCE_TIERS) : undefined,
@@ -68,8 +70,8 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
         townOutdoorWeatherFeed: server.townOutdoorWeatherFeed,
         // The mountain has the same repair state as the outdoor town. Other
         // isolated gameplay rooms retain their previous independent behavior.
-        ...(bounds === mountainPresenceBounds || bounds === westPresenceBounds ? { cableLineAuthority, requireSummitCableRelease:true } : {}),
-        ...(bounds===summitPresenceBounds?{summitRoom:true,cableLineAuthority,requireSummitCableRelease:true,
+        ...(bounds === mountainPresenceBounds || bounds === westPresenceBounds ? { cableLineAuthority, requireSummitCableRelease:true,authorizeCableRepair:authorizeOutdoorCableRepair } : {}),
+        ...(bounds===summitPresenceBounds?{summitRoom:true,cableLineAuthority,requireSummitCableRelease:true,authorizeCableRepair:authorizeRearCableRepair,
           // Release remains off until total-control certifies the walking route and full sweep.
           ...(process.env.PRESENCE_SUMMIT_RELEASE==='on'?{authorizeSummitCableRelease:isSummitCableReleaseRecord}:{})}:{}),
         // Only the mine room follows the river state; the other rooms
