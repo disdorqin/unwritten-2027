@@ -715,6 +715,12 @@ try{
    await page.keyboard.press('e');
  }
  for(const [i,point] of path.slice().reverse().slice(1).entries())await step(point,segment+'-down-'+i);
+ if(segment==='west-mountain'){
+   // Close the actual pit-to-new-ground loop, not only the final seam.
+   for(const [i,target] of approach[segment].slice(0,-1).reverse().entries())await walkTo(page,evidence,target,'west-mountain-return-'+i,.46);
+   await walkTo(page,evidence,[2,159],'west-mountain-town-return',.46);
+   await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-2,p.north-159)<.8);
+ }
  if(joint){
    await walkTo(page,evidence,[-67,159],'joint-return-outside',.35);
    await waitForWire(page,evidence,p=>p?.area==='west'&&Math.hypot(p.east+67,p.north-159)<.7);
@@ -735,7 +741,7 @@ try{
  }
  if(segment==='gatehouse')assert.ok(Math.abs(returned.height-path[0].height)<.08,JSON.stringify({returned,ground:path[0]}));
  await picture(page,evidence,segment+'-return');
- report.traversal={top,returned,expectedTop:path.at(-1),expectedReturn:path[0]};
+ report.traversal={top,returned,expectedTop:path.at(-1),expectedReturn:segment==='west-mountain'?{east:2,north:159,height:grid.heightAt(2,159)}:path[0]};
  }
 }catch(e){report.failure=String(e.stack||e);process.exitCode=1;try{await picture(lastPage,lastEvidence,'failed-position');}catch{}}
 finally{
