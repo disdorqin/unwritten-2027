@@ -1,6 +1,15 @@
 # 3.0-R 窗 A 现役交接卡
 唯一续建记录，后续更新本卡；公共看板由总控登记。本卡不复活旧任务。
 
+## 2026-11-28 A32 定向返工【3.1联合交付候选】（有限范围，P0未闭环）
+- 依据总控7bdc3aed的定向返工令、收尾审查、看板、原山域设计。原A树原分支，不写他线、不整枝倒灌。c03a0f43消费C2 a9f986d8/D2 11d7187c/B 868970d1精确源码，收尾fetch未变；总控相同依赖blob只收一次。
+- b6060698、001a47d2、39b48143：普通入口不再await完整后山。出生/坑口后山工厂不下载；按位置及12秒预测接近触发，分阶段生成；同步重阶段须脚点连续静止250ms才启动，活动域外停view/snow，粗模常驻至精细候选ready。846个实际mesh离屏预热221批，每批最多4mesh/60000vertices/2MiB、3ms软预算，实测最大23.3ms/1165860bytes，无超尺寸mesh。未降低游戏画质。最后真实canonical3324.4ms/A1475.8/B299.8/C2 178.6/cable2438.9/audit99.1/ownership6/GPU预热3675.8ms（含让出）；准备总11959.7ms，前山安装2196.2ms。静止门不能消除同步阻塞，D2/B仍须拆分实际地形/碰撞工厂与扫掠，逐tile/worker预算未达。
+- 实际viewer调用C2 preparePublicFrontCable(authority)，D2 preparePublicCable(authority)，消费真实frontOperation/frontRepair/cableOperation，重建碰撞索引，同一B controller；修构造小数epoch错误，仅构造Math.floor，实时同钟不变。B四幕雾效、共享音频、E/触控/长按/乘车锁、合法下车脚点接入；D2 enterRear/exitRear与N668同脚点双向域接入，保留C2认证门。真实snowAt/windAt及入口附近±.2过渡接入，D2内部过渡位置待核。未声称双线实乘。
+- b6250403：A南区旧1765..2262原497m重新展线528.849m，端点E299.268420/N363.364274/H491.652989及E-179.961955/N447.837050/H532.408285（后山局部）。正典8m面551点0缺支撑/0阻挡、误差<1e-12、最大纵坡11.99%、净宽3m；旧±5m失败，显式采用5.35m局部挖填上限。实际路面/挡墙/护栏同一A槽并入原833m，合并切坡与植被预约，卸载恢复原瓦片。四区9切坡块、0重复。connected=false，剩1539..1765原226m和双向接头待C2，非完整723m。
+- 实测证据 .evidence/A32-stream-2018fad4/（首次epoch失败保留）及 .evidence/A32-stream-39b48143/（修复后，9ea4d803归档）：真实Vite/Presence/Chromium Intel UHD D3D11 960x540 DPR.5 smooth。前山4道路transportReady=true、后山installed/certified/boardable=true、tickOwner=b-controller、publicTransportBound=true，238/220/240/160采样，9切坡块/0重复。两个独立浏览器同房间各2人、同dawnEpoch1795845843712，0运行错误。菜单分段到坑口/山口站后真实步行，非出生至绝顶连续闭环。7组实际帧样本：冷广场60.01fps/p95 16.8/p99 16.8ms/490draws/1425354tris；坑口60.01/16.8/16.8/439/783524；山脚ready60.01/16.8/16.8/146/215702；预取25.53fps/p95 16.8/p99 33.1/2次>100ms，完整loading最长3349.6ms，次2466.4/1516.5ms；整次混合会话11.665s长间隔含截图/切页，非纯GPU帧成本。所有原始JSON保留，不把稳态FPS宣称为达标。
+- .evidence/A32-bare-touch-9ea4d803/：最新无profile裸入口真实Vite6.4.1（723模块）/Presence/触控浏览器，菜单、天气、音量、聊天、未读、戳册正常，摇杆E223 N180到E223.4 N185.2 H12，3检查点10位姿0错误。后山raw协议仍dormant且拒绝释放，非后山实游。专项client/server tsc、18/18定向测试（含西区补地/铁路保护、南路、输入和门槛）通过。非手机真机。
+- **仍未完成P0，不得切版**：C2最新cloudSeam.physicalReady=true但domainReady=false，N663.25实体栏仍封闭；C2须补69.79m前山断链认证、可开门及南区226m接头。D2/B须配对最新全体外障/维修实物和正式权威认证；本地PRESENCE_SUMMIT_RELEASE=off不改。未完成真实26↔347和347↔800双线玩家往返、双浏览器跨后山房间、自然昼夜全周期、后山四向视觉、裸入口连续坑沿→绝顶→返回，CPU同步工厂仍是性能P0。总控可先接纳实改及证据，不能把此候选当全线收工或发布。
+
 ## 2026-11-28 A31 收敛：前山真实跨房间、双向山门与最终交通消费端（15184b0d）
 - aab611cb 公共viewer按实际脚点在N650切换既有town/mountain Presence房间，返回镇域按同一边界，保留west/mine等独立入口；不再将N>655.35的前山位置压缩成错误坐标。b8c98315 将B原一线扫掠复跑实际默认四道路与旧三道路两种组合，每种29068地面采样、176148探针、6站脚及局部接近段均过，未改变认证门。
 - 89aef45e 实测 `node --import tsx tools/verify-a31-seam.mjs`：真实前后山组合E298..302/N666.5..669的中心脚点双方347m且净空可用；前山N663.25仍有真实封闭栏。A在N668双向实际物理步提交边界，净宽按4m门扣除身体半径0.27m；核双方端点和中点真实支撑、净空、高程差≤0.08m、单步≤0.45m，提交下一帧统一重挂实际四区根/切换Presence/设置同一脚点。无C2 domainReady及D2真实ready则不进入，未解除实体栏。修正退出时dryTownLandingHeight真实outdoor障碍查询（之前会错误查rear）；近景保留至实际重叠N669。此为生产移动调用点，不等同山门已通行。
