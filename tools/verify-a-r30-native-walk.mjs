@@ -601,6 +601,8 @@ try{
   assert.equal(assembled.ridge.cloudSeam.domainReady,true,JSON.stringify(assembled.ridge.cloudSeam));
   assert.equal(assembled.summitProduction.cable.boardable,true,JSON.stringify(assembled.summitProduction.cable));
   assert.ok(assembled.summitProduction.frontAuditSlices?.count>1&&assembled.summitProduction.cable.slices?.count>1);
+  assert.ok(assembled.summitProduction.hiking?.ready,JSON.stringify(assembled.summitProduction.hiking));
+  assert.ok(assembled.summitProduction.hiking.markers>240&&assembled.summitProduction.hiking.maxGrade<=.70);
   assert.equal(assembled.summitProduction.southRoad.intervalComplete,true);
   assert.deepEqual(assembled.summitProduction.southRoad.boundaryExits.map(r=>Math.round(r.length)),[36,55]);
   assert.ok(assembled.ridge.frontRoadHandoffs.length===4&&assembled.ridge.frontRoadHandoffs.every(r=>r.domain==='front'&&r.installed&&r.surface.maxGrade<=.120001));

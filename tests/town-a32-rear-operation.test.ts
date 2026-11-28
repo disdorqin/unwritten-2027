@@ -3,6 +3,7 @@ import {test} from 'node:test';
 import {createTownD2R30ProductionHost} from '../tools/voxel-tavern/town-blockout/town-d2-r30-production-host';
 import {createA32SouthSectorInstaller} from '../tools/voxel-tavern/town-blockout/town-a32-south-installer';
 import {createWestSectorInstaller,createEastSectorInstaller} from '../tools/voxel-tavern/town-blockout/town-d2-r30-sector-installers';
+import {certifyHiking,hikingWaypoints} from '../tools/voxel-tavern/town-blockout/town-a32-summit-hiking';
 import {retireA31LegacySectorOverlays} from '../tools/voxel-tavern/town-blockout/town-a31-summit-visual-ownership';
 test('rear actual four-sector host consumes full B async operation and restores paint on uninstall',async()=>{
  const h=createTownD2R30ProductionHost({includeRopeway:false,deferDetails:true});
@@ -17,6 +18,9 @@ test('rear actual four-sector host consumes full B async operation and restores 
   assert.ok(result.boardable,JSON.stringify(result));assert.ok(slices>1);
   assert.equal(h.group.getObjectByName('night-b-public-rear-cable')?.parent,h.group);
   assert.ok(h.cableOperation?.ready);
+  const hike=certifyHiking(h,hikingWaypoints);assert.ok(hike.ready,JSON.stringify(hike));
+  assert.ok(hike.metres>1100&&hike.samples>4400&&hike.maxGrade<=.70);assert.equal(hike.path.at(-1)?.height,800);
+  assert.ok(certifyHiking(h,[...hikingWaypoints].reverse()).ready);
   h.uninstallCable();assert.equal(paint?.geometry,original);
   assert.equal(h.group.getObjectByName('night-b-public-rear-cable'),undefined);
  }finally{h.dispose();}

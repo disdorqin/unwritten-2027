@@ -1623,7 +1623,8 @@ function showSummitStatus(now:number){
  summitStatus.hidden=!!cableFrame?.whiteout;
  summitStatus.style.display=cableFrame?.whiteout?'none':'block';
  const message=s.status==='ready'?(s.cable.boardable?'后山 · 地形与索道已就绪 · 依现场权限通行':'后山 · 四区地形已就绪 · 交通检修中'):s.status==='failed'?'后山 · 加载未完成 · 暂未开放':s.status==='idle'?'后山 · 远景常驻 · 接近后加载':'后山 · 分区预加载中 · 暂未开放';
- if(summitStatus.textContent!==message)summitStatus.textContent=message;
+ const routeNote=s.hiking?.ready?' · 金色标记为陡坡徒步线（非缓坡盘山公路）':'';
+ if(summitStatus.textContent!==message+routeNote)summitStatus.textContent=message+routeNote;
  summitStatus.dataset.status=s.status;
 }
 function showRegionalWeather(text:string){

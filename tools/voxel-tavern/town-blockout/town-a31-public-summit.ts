@@ -8,6 +8,9 @@ import {readA31UpperCable,type A31CableAuthority} from './town-a31-cable-binding
 import {a32SummitPrefetch,createA32StageMeter,createA32QuietGate,a32YieldFrame} from './town-a32-stream-policy';
 import type {A32WarmupStats} from './town-a32-gpu-warmup';
 import {prepareA32Canonical} from './town-a32-canonical-preload';
+import {certifyHikingSteps,hikingWaypoints} from './town-a32-summit-hiking';
+import {mountHikingGuides} from './town-a32-summit-hiking-guides';
+import {finishNightBAuditAsync} from './town-night-b-audit-slices';
 
 type Foot=Readonly<{east:number;north:number;height:number}>;
 type Production=ReturnType<typeof createTownD2R30ProductionHost>;
@@ -36,6 +39,7 @@ export function createA31PublicSummitRoute(input:Input){
  const yieldFrame=input.yieldFrame??a32YieldFrame,meter=createA32StageMeter(),quiet=createA32QuietGate();
  let canonicalPreparation: {mode:string;ms?:number;elapsedMs?:number;error?:string}|undefined;
  const southSlices:number[]=[];
+ let hiking:ReturnType<typeof import('./town-a32-summit-hiking').certifyHiking>|undefined,hikingGuide:ReturnType<typeof mountHikingGuides>|undefined;
  let warmup:A32WarmupStats|undefined,cableFailure:string|undefined,previousFoot:Foot|undefined,previousAt=0,detailEast=Infinity,detailNorth=Infinity,lastViewAt=0,lastViewEast=Infinity,lastViewNorth=Infinity;
  const waitForQuiet=()=>quiet.wait(yieldFrame,()=>status==='disposed');
  const stageRun=async<T,>(name:string,task:()=>T|Promise<T>)=>{stage='queued-'+name;await waitForQuiet();stage=name;return meter.run(name,task);};
@@ -71,6 +75,8 @@ export function createA31PublicSummitRoute(input:Input){
     if(input.cableAuthority){
      try{await stageRun('cable',()=>host.preparePublicCable(input.cableAuthority!,{budgetMs:6,signal:stagingAbort.signal,yieldTask:yieldFrame}));}catch(error){cableFailure=error instanceof Error?error.message:String(error);}
     }
+    hiking=await stageRun('hiking',()=>finishNightBAuditAsync(certifyHikingSteps(host,hikingWaypoints),{budgetMs:6,signal:stagingAbort.signal,yieldTask:yieldFrame}));
+    if(hiking.ready){hikingGuide=mountHikingGuides(host,hiking.path);host.group.add(hikingGuide.group);}
     audit=await stageRun('audit',()=>host.sectorLiveCheck());
     const mountStats=candidate.stats();cutTiles=mountStats.tiles.cut;duplicates=mountStats.duplicates;
     if(!audit.ready||duplicates.length||candidate.cableState().boardable&&!readA31UpperCable(candidate))throw Error('Four-sector public mount refused');
@@ -86,7 +92,7 @@ export function createA31PublicSummitRoute(input:Input){
      summitSnowAt:(e,n)=>{const depth=host.snowAt(e,n);if(depth===undefined)return;const front=input.frontSnow?.(e+summitAssemblyAnchor.east,n+summitAssemblyAnchor.north);return front!==undefined&&Number.isFinite(front)&&n<=86?Math.max(0,Math.min(1,Math.max(front-.2,Math.min(front+.2,depth)))):depth;}};
     status='ready';stage='mounted';elapsedMs=performance.now()-started;return true;
    }catch(error){
-    preparedSouth?.dispose();candidate?.dispose();production=undefined;assembly=undefined;
+    preparedSouth?.dispose();hikingGuide?.dispose();hikingGuide=undefined;candidate?.dispose();production=undefined;assembly=undefined;
     if((status as Status)!=='disposed'){status='failed';failure=error instanceof Error?error.message:String(error);}
     input.skyline.visible=true;return false;
    }
@@ -170,6 +176,7 @@ export function createA31PublicSummitRoute(input:Input){
    duplicates:production?duplicates:[],sectorSamples:audit?.sectors.map(s=>s.samples)??[],
    legacyPruned:visual?{roadTriangles:visual.removedTrailTriangles,forestInstances:visual.removedForestInstances}:undefined,
    southRoad:production?.group.getObjectByName('night-a-south-sector')?.userData.a32Road,
+   hiking:hiking?{ready:!!production&&hiking.ready,metres:hiking.metres,maxGrade:hiking.maxGrade,samples:hiking.samples,markers:hikingGuide?.markers??0,skipped:hikingGuide?.skipped??0,...(input.profile&&hiking.ready?{waypoints:hiking.path}: {})}:undefined,
    cable:production?.cableState()??{installed:false,boardable:false,certified:false},
    sceneOwner:production?.group.parent===input.town?'town':production?.group.parent===scene?'summit':undefined};
  }
@@ -183,6 +190,6 @@ export function createA31PublicSummitRoute(input:Input){
   seamCertificate:()=>production?.certifySeamCrossing(),
   windAt:(e:number,n:number)=>{const [le,ln]=local(e,n),wind=production?.windAt(le,ln),front=input.frontWind?.(e,n);return wind!==undefined&&front!==undefined&&Number.isFinite(front)&&ln<=86?Math.max(0,Math.min(1,Math.max(front-.2,Math.min(front+.2,wind)))):wind;},
   assembly:()=>active?assembly:undefined,
-  dispose(){if(status==='disposed')return;status='disposed';stagingAbort.abort();active=false;near=false;production?.dispose();production=undefined;assembly=undefined;input.skyline.visible=true;}
+  dispose(){if(status==='disposed')return;status='disposed';stagingAbort.abort();active=false;near=false;hikingGuide?.dispose();hikingGuide=undefined;production?.dispose();production=undefined;assembly=undefined;input.skyline.visible=true;}
  };
 }

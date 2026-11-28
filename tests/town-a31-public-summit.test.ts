@@ -10,9 +10,11 @@ test('public route owns the actual four sector mount and exclusive far/near disp
   const state=route.state();assert.equal(state.ready,true);assert.equal(state.sceneOwner,'town');
   assert.deepEqual(state.installed,['A','B','C2']);assert.deepEqual(state.sectorSamples,[238,220,240,160]);assert.equal(state.cutTiles,9);assert.equal(state.southRoad.connected,false);assert.ok(state.southRoad.length>528);
   assert.deepEqual(state.duplicates,[]);assert.equal(state.cable.boardable,false);
+  assert.ok(state.hiking?.ready);assert.ok(state.hiking.metres>1100&&state.hiking.maxGrade<=.70&&state.hiking.markers>240);
   const root=town.getObjectByName('town-d2-r30-production') as Group;assert.ok(root);
   assert.deepEqual(root.position.toArray(),[300,0,-676]);assert.equal(root.visible,false);
   assert.ok(state.legacyPruned!.roadTriangles>0);assert.ok(state.legacyPruned!.forestInstances>0);
+  const guide=root.getObjectByName('a32-certified-hiking-guides');assert.ok(guide&&guide.userData.visualOnly&&guide.userData.includesWorldCollision===false);
   assert.ok(root.getObjectByName('night-a-south-sector'));assert.ok(root.getObjectByName('night-b-west-sector'));assert.ok(root.getObjectByName('town-night-c2-summit-east-production'));
   assert.equal(root.getObjectByName('main-summit-assembly'),undefined);assert.equal(root.getObjectByName('town-d2-r30-ropeway'),undefined);
   const far={east:223,north:180,height:12},station={east:296,north:520,height:8.13},near={east:336,north:640,height:347};
