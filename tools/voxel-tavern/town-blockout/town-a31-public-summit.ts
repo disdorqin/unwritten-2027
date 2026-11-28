@@ -8,7 +8,7 @@ import {readA31UpperCable,type A31CableAuthority} from './town-a31-cable-binding
 import {a32SummitPrefetch,createA32StageMeter,createA32QuietGate,a32YieldFrame} from './town-a32-stream-policy';
 import type {A32WarmupStats} from './town-a32-gpu-warmup';
 import {prepareA32Canonical} from './town-a32-canonical-preload';
-import {certifyHikingSteps,hikingWaypoints} from './town-a32-summit-hiking';
+import {certifyHikingSteps,hikingWaypoints,hikingProgress} from './town-a32-summit-hiking';
 import {mountHikingGuides} from './town-a32-summit-hiking-guides';
 import {finishNightBAuditAsync} from './town-night-b-audit-slices';
 
@@ -180,7 +180,7 @@ export function createA31PublicSummitRoute(input:Input){
    cable:production?.cableState()??{installed:false,boardable:false,certified:false},
    sceneOwner:production?.group.parent===input.town?'town':production?.group.parent===scene?'summit':undefined};
  }
- return {scene,prepare,waitForQuiet,update,updateView(p:Foot){update(p);return '后山';},active:()=>active,
+ return {scene,prepare,waitForQuiet,update,updateView(p:Foot){update(p);if(!active||!hiking?.ready)return '后山';const [east,north]=local(p.east,p.north),progress=hikingProgress(hiking.path,{east,north});return progress.distance<=8?'后山 · 金色徒步线 · 山顶约'+Math.round(progress.toSummit)+'m / 山门约'+Math.round(progress.fromGate)+'m':'后山 · 距金色徒步线约'+Math.round(progress.distance)+'m';},active:()=>active,
   riding:()=>false,ridePoint:():Foot|undefined=>undefined,
   action(_p:Foot):Action|undefined{return;},surfaceAt,walkingSurfaceAt:surfaceAt,acceptsStep,
   blocked(e:number,n:number,h:number,r=.27,b=1.8){return active&&surveyedBlocked(e,n,h,r,b);},

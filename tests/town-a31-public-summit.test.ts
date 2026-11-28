@@ -41,6 +41,7 @@ test('public route owns the actual four sector mount and exclusive far/near disp
   // An affirmative test certificate exercises reparenting, not public access.
   assert.equal(route.enterAt(gate,()=>true),true);
   assert.equal(route.state().sceneOwner,'summit');assert.equal(root.parent,route.scene);assert.equal(route.surfaceAt(gate.east,gate.north),347);
+  assert.match(route.updateView(gate),/金色徒步线.*山顶约.*山门约/);
   assert.equal(route.leaveAt({...gate,height:340},()=>{throw Error('unsupported exit must not reach authority');}),false);
   assert.equal(route.leaveAt(gate,()=>false),false);assert.equal(route.active(),true);
   assert.equal(route.leaveAt(gate,()=>true),true);assert.equal(root.parent,town);assert.equal(route.surfaceAt(gate.east,gate.north),undefined);

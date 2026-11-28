@@ -56,6 +56,20 @@ export function* certifyHikingSteps(host:HikingSurface,points:readonly HikingPoi
  }
  return {ready:path.length>=2,path,metres,maxGrade:probe.maxGrade(),samples:probe.samples()};
 }
+/** Nearest projection onto the certified polyline, never a teleport target.
+ * Remaining distances are measured along the route, not as the crow flies. */
+export function hikingProgress(path:readonly HikingPoint[],point:HikingPoint){
+ let length=0,along=0,distance=Infinity;
+ for(let i=1;i<path.length;i++){
+  const a=path[i-1]!,b=path[i]!,de=b.east-a.east,dn=b.north-a.north,d=Math.hypot(de,dn);
+  if(d<1e-8)continue;
+  const t=Math.max(0,Math.min(1,((point.east-a.east)*de+(point.north-a.north)*dn)/(d*d)));
+  const off=Math.hypot(point.east-a.east-t*de,point.north-a.north-t*dn);
+  if(off<distance){distance=off;along=length+t*d;}
+  length+=d;
+ }
+ return {distance,fromGate:along,toSummit:Math.max(0,length-along)};
+}
 export function certifyHiking(host:HikingSurface,points:readonly HikingPoint[],maxGrade=.70){return finishNightBAudit(certifyHikingSteps(host,points,maxGrade));}
 /** Offline deterministic survey. This is not invoked during the game.
  * Use a coarse A* grid only to propose waypoints, then certify the actual
