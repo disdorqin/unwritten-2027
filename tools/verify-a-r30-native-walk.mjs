@@ -201,6 +201,8 @@ async function readPose(page) {
     cameraY: window.__za22Frame?.cameraY,
     action: document.querySelector('#world-action')?.textContent ?? '',
     status: document.querySelector('#town-presence-status')?.textContent ?? '',
+    ...(window.__za22Frame?.ridge?.moveReject ? {moveReject:window.__za22Frame.ridge.moveReject} : {}),
+    ...(window.__za22Frame?.moveReject ? {moveReject:window.__za22Frame.moveReject} : {}),
   }));
   const point = positionPattern.exec(frame.hud);
   return { ...frame, east: point ? Number(point[1]) : undefined, north: point ? Number(point[2]) : undefined,
@@ -529,6 +531,12 @@ try{
   await page.waitForFunction(()=>window.__za22Frame?.summitProduction?.publicTransportBound===true,null,{timeout:150000});
   await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-526,p.north-305)<1.2);
   await face(page,evidence,0);
+  // The operational brake fixture is selected east of E524.6/N326.6.
+  // Walk around its solid body in the open station aisle, not through it.
+  await walkTo(page,evidence,[526,324.6],'station-aisle',.25);
+  await walkTo(page,evidence,[528,324.6],'station-brake-bypass-in',.25);
+  await walkTo(page,evidence,[528,330],'station-brake-bypass-out',.25);
+  await walkTo(page,evidence,[526,331],'station-aisle-return',.25);
   await walkTo(page,evidence,[526,349.5],'base-dock',.35);
   await walkTo(page,evidence,[526,354.8],'base-exit',.35);
   await walkTo(page,evidence,[516.5,355],'base-road',.35);
