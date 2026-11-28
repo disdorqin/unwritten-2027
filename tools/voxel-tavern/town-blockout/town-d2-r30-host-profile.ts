@@ -26,8 +26,19 @@ export type RegionCost = Readonly<{
   triangles: number;
 }>;
 
+export type DeferredProfile = Readonly<{
+  /** Time to a walkable mountain: coarse ground + collision, no dressing. */
+  coarseMs: number;
+  /** Per-package cost of the dressing, in the order it is mounted. */
+  details: readonly StageTiming[];
+  detailMs: number;
+  /** Ground and collision are complete in the coarse pass; this proves it. */
+  liveReadyAfterDetails: boolean;
+}>;
+
 export type HostProfile = Readonly<{
   version: string;
+  deferred: DeferredProfile;
   stages: readonly StageTiming[];
   mountMs: number;
   regions: readonly RegionCost[];
@@ -109,10 +120,32 @@ export function profileTownD2Host(): HostProfile {
     host.terrainIntegrity();
     const terrainIntegrityMs = performance.now() - integrityStarted;
 
+    // Deferred path: how fast can the player actually walk the mountain?
+    const deferredStarted = performance.now();
+    const deferredHost = createTownD2R30ProductionHost({ deferDetails: true });
+    let deferred: DeferredProfile;
+    try {
+      const coarseMs = performance.now() - deferredStarted;
+      deferredHost.install('A', createA32SouthSectorInstaller());
+      deferredHost.install('B', createWestSectorInstaller());
+      deferredHost.install('C2', createEastSectorInstaller());
+      const details = deferredHost.mountDetails().map(entry =>
+        Object.freeze({ stage: entry.name, ms: entry.ms }));
+      deferred = Object.freeze({
+        coarseMs,
+        details: Object.freeze(details),
+        detailMs: details.reduce((sum, entry) => sum + entry.ms, 0),
+        liveReadyAfterDetails: deferredHost.sectorLiveCheck().ready,
+      });
+    } finally {
+      deferredHost.dispose();
+    }
+
     const stats = host.stats();
     const budget = measure(host.group as unknown as { traverse(cb: (o: unknown) => void): void });
     return Object.freeze({
-      version: 'd2-host-profile-1.0',
+      version: 'd2-host-profile-1.1',
+      deferred,
       stages: Object.freeze(stages),
       mountMs,
       regions: Object.freeze(regions),

@@ -654,7 +654,7 @@ test('D32-P1 connector survey turns a gap into a design number for the owner', (
 test('D32 performance: the host measures its own mount and per-region cost', async () => {
   const { profileTownD2Host } = await import('../tools/voxel-tavern/town-blockout/town-d2-r30-host-profile');
   const profile = profileTownD2Host();
-  assert.equal(profile.version, 'd2-host-profile-1.0');
+  assert.equal(profile.version, 'd2-host-profile-1.1');
   // Every stage of the real mount is timed, and the parts add up.
   assert.ok(profile.stages.length >= 4, `stages ${profile.stages.length}`);
   for (const stage of profile.stages) {
@@ -682,6 +682,62 @@ test('D32 performance: the host measures its own mount and per-region cost', asy
     `sleeping must reduce the submitted cost: east ${east.draws} vs summit ${summit.draws}`);
   assert.ok(profile.draws > 0, 'the whole host must report a mounted cost');
   assert.ok(profile.liveCheckMs > 0 && profile.terrainIntegrityMs > 0);
+  // The deferred path must be cheaper to first-walk than the full mount, and it
+  // must still end live once the dressing is in.
+  assert.ok(profile.deferred.coarseMs > 0);
+  assert.ok(profile.deferred.details.length >= 8, `detail stages ${profile.deferred.details.length}`);
+  assert.ok(profile.deferred.detailMs > 0);
+  assert.ok(profile.deferred.coarseMs < profile.mountMs,
+    `coarse ${profile.deferred.coarseMs} must beat the full mount ${profile.mountMs}`);
+  assert.equal(profile.deferred.liveReadyAfterDetails, true);
+});
+
+test('D32 streaming: the coarse mountain is walkable before the dressing arrives', () => {
+  const immediate = createTownD2R30ProductionHost();
+  const deferred = createTownD2R30ProductionHost({ deferDetails: true });
+  try {
+    // Nothing is dressed yet, but the ground that the player walks is complete.
+    const pending = deferred.pendingDetails();
+    assert.ok(pending.length >= 8, `expected pending detail, got ${pending.length}`);
+    assert.equal(pending.includes('summit-facilities'), true);
+    for (const [east, north] of [[0, 100], [50, 1000], [-600, 900], [700, 1200]] as const) {
+      assert.equal(deferred.heightAt(east, north), immediate.heightAt(east, north),
+        `canonical height differs at E${east}/N${north}`);
+      assert.equal(deferred.surfaceAt(east, north), immediate.surfaceAt(east, north),
+        `walking surface differs at E${east}/N${north}`);
+      assert.equal(deferred.blocked(east, north, deferred.supportAt(east, north)!),
+        immediate.blocked(east, north, immediate.supportAt(east, north)!),
+        `collision differs at E${east}/N${north}`);
+    }
+    assert.ok(deferred.tiles.length > 0, 'the coarse pass must own the canonical tiles');
+    assert.equal(deferred.terrainIntegrity().intact, true);
+
+    // Mount one stage at a time, as a streaming caller would, and prove each
+    // call really mounted only what it was asked for.
+    const one = deferred.mountDetails('strata');
+    assert.equal(one.length, 1);
+    assert.equal(one[0]!.name, 'strata');
+    assert.ok(one[0]!.ms >= 0);
+    assert.equal(deferred.pendingDetails().includes('strata'), false);
+    assert.ok(deferred.pendingDetails().length < pending.length);
+
+    // Night before the rest arrives must not leave late packages in daylight.
+    deferred.install('A', createSouthSectorInstaller());
+    deferred.install('B', createWestSectorInstaller());
+    deferred.install('C2', createEastSectorInstaller());
+    deferred.setNight(true);
+    const rest = deferred.mountDetails();
+    assert.deepEqual(deferred.pendingDetails(), []);
+    assert.ok(rest.length >= 7);
+    for (const stage of rest) assert.equal(Number.isFinite(stage.ms), true);
+    assert.equal(deferred.sectorLiveCheck().ready, true, 'the fully dressed host must be live');
+    assert.equal(deferred.stats().night, true);
+    assert.equal(deferred.terrainIntegrity().intact, true);
+  } finally {
+    immediate.dispose();
+    deferred.dispose();
+    assert.throws(() => deferred.mountDetails(), /disposed/);
+  }
 });
 
 test('D31-1 the host publishes the four sector bounds it enforces', () => {

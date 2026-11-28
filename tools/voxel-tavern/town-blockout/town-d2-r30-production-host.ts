@@ -122,6 +122,10 @@ export type TownD2ProductionHostOptions = Readonly<{
   /** D2's own ropeway. Off in production: B is the single cable authority, and
    * a second line or a second clock is explicitly forbidden by the 3.1 order. */
   includeRopeway?: boolean;
+  /** Mount the coarse ground now and the heavy dressing later through
+   * mountDetails(). Ground, collision and the walking surface are complete
+   * immediately either way — only the detail packages wait. */
+  deferDetails?: boolean;
 }>;
 
 const world = townD2SectorContract.world;
@@ -139,6 +143,7 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
   const arrivalHeight = options.arrivalHeight ?? 347;
   const epochMs = options.epochMs ?? 0;
   const includeRopeway = options.includeRopeway ?? false;
+  const deferDetails = options.deferDetails === true;
   if (!Number.isFinite(arrivalHeight)) throw new RangeError('Invalid production host arrival height.');
   if (typeof includeRopeway !== 'boolean') throw new TypeError('includeRopeway must be a boolean.');
 
@@ -171,6 +176,7 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     includeNorthWall: true,
     ropewayEpochMs: epochMs,
     trail: { points: trail, metrics: surveyMetrics },
+    deferDetails,
   });
   group.add(assembly.group);
 
@@ -1018,6 +1024,16 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     setFrontSnow,
     certifySeamCrossing,
     summitPlay,
+    /** D32 streaming: mount the pending detail packages and report each cost, so
+     * a caller can hand out one stage per frame instead of one 1.5 s hitch. */
+    mountDetails: (only?: string) => {
+      if (disposed) throw new Error('The production host is disposed.');
+      const timings = assembly.mountDetails(only);
+      collectSleepers();
+      if (detailFocus) setDetailFocus(detailFocus.east, detailFocus.north);
+      return timings;
+    },
+    pendingDetails: () => assembly.pendingDetails(),
     setDetailFocus,
     windAt,
     setFrontWind,
