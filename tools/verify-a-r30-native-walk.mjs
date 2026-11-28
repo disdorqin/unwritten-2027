@@ -7,10 +7,10 @@ import { WebSocket } from 'ws';
 const [origin, output, segment = 'all'] = process.argv.slice(2);
 assert.ok(origin && output, 'Use the production-preview loopback URL and an evidence directory');
 const bare = process.env.ZA22_BARE === '1';
-const url = new URL(bare ? '/' : '/?profile', origin);
+const url = new URL(bare ? '/' : segment==='a31-front-north'?'/?profile&mRoadSurvey':'/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','west-mountain','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review','night-r3-entry','night-r3-bare-weather','night-r3-bare-west','a31-bare-crater-return'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','west-mountain','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review','night-r3-entry','night-r3-bare-weather','night-r3-bare-west','a31-bare-crater-return','a31-front-north'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -252,7 +252,7 @@ async function walkTo(page, evidence, target, label, precision=.46) {
     if (distance <= precision) {
       const checkpoint={ label, target, ...from, wire: evidence.poses.at(-1) };
       evidence.checkpoints.push(checkpoint);
-      if(['joint-historic','west-mountain','night-r3-bare-west','a31-bare-crater-return'].includes(segment))await appendFile(join(output,'native-checkpoints.ndjson'),JSON.stringify(checkpoint)+'\n');
+      if(['joint-historic','west-mountain','night-r3-bare-west','a31-bare-crater-return','a31-front-north'].includes(segment))await appendFile(join(output,'native-checkpoints.ndjson'),JSON.stringify(checkpoint)+'\n');
       console.log(JSON.stringify({ phase: label, east: from.east, north: from.north, y: from.height }));
       return;
     }
@@ -516,6 +516,60 @@ try{
   await picture(page,evidence,'bare-weather-walk');
   report.entry={scope:'ordinary bare root, single corner menu, nested settings, chat send, close and native movement',weather,lightingDisabled:true,snowToggleRestored:true,menuTouch,drawer:bounds,hiddenIds,chatSent:true,remoteUnread:true,start,moved};
   report.traversal={top:moved,returned:moved};
+ }else if(segment==='a31-front-north'){
+  // Normal root, read-only profiling, ordinary station menu as segmented start.
+  const state=()=>page.evaluate(()=>window.__za22Frame);
+  await page.waitForFunction(()=>window.__za22Frame?.ridge?.roads===4&&window.__za22Frame?.summitProduction?.ready,null,{timeout:45000});
+  await page.locator('#town-panel-toggle').click();await page.locator('#jump').selectOption({label:'火车站'});
+  if(await page.locator('#town-settings').evaluate(d=>d.open))await page.locator('#town-settings-close').click();
+  await page.waitForFunction(()=>{const f=window.__za22Frame?.ridge?.foot;return f&&Math.hypot(f[0]-526,f[1]-305)<1.2;},null,{timeout:20000});
+  await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-526,p.north-305)<1.2);
+  await face(page,evidence,0);
+  await walkTo(page,evidence,[526,349.5],'base-dock',.35);
+  await walkTo(page,evidence,[526,354.8],'base-exit',.35);
+  await walkTo(page,evidence,[516.5,355],'base-road',.35);
+  const guide=(await state()).ridge.roadGuide;assert.ok(guide.length>100&&guide.at(-1).cum>1268);
+  const begin=guide.reduce((best,p,i)=>Math.hypot(p.east-516.5,p.north-355)<Math.hypot(guide[best].east-516.5,guide[best].north-355)?i:best,0);
+  const end=guide.findIndex((p,i)=>i>begin&&p.north>=654);
+  assert.ok(end>begin);
+  function chordError(a,b,p){
+   const de=b.east-a.east,dn=b.north-a.north,l2=de*de+dn*dn;
+   const t=l2?Math.max(0,Math.min(1,((p.east-a.east)*de+(p.north-a.north)*dn)/l2)):0;
+   return Math.hypot(p.east-a.east-t*de,p.north-a.north-t*dn);
+  }
+  const targets=[guide[begin]];
+  for(let i=begin;i<end;){
+   let j=i+1;
+   while(j<end&&guide[j+1].cum-guide[i].cum<=16&&guide.slice(i+1,j+1).every(p=>chordError(guide[i],guide[j+1],p)<=.32))j++;
+   targets.push(guide[j]);i=j;
+  }
+  for(const [i,p] of targets.entries())await walkTo(page,evidence,[p.east,p.north],'north-road-'+i,.35);
+  const top=await readPose(page);
+  const highWire=await waitForWire(page,evidence,p=>p?.area==='mountain'&&p.north>=650&&Math.hypot(p.east-top.east,p.north-top.north)<.8);
+  await picture(page,evidence,'front-north-mountain-room');
+  const peerUrl=new URL('/presence-mountain',origin);peerUrl.protocol='ws:';
+  const peer=new WebSocket(peerUrl);let peerId,seen=false;
+  try{
+   await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(Error('Mountain peer join timeout')),8000);
+    peer.once('error',e=>{clearTimeout(timer);reject(e);});
+    peer.once('open',()=>peer.send(JSON.stringify({type:'join',name:'前山联机验收伙伴'})));
+    peer.on('message',(raw,binary)=>{if(binary){if(raw[0]>0)seen=true;return;}const f=JSON.parse(raw.toString());if(f.type==='join'&&f.self===true){peerId=f.id;clearTimeout(timer);resolve();}});
+   });
+   const b=Buffer.alloc(12);b.writeUInt16LE(Math.round((highWire.east+1)*100),2);b.writeUInt16LE(Math.round((highWire.north-540)*100),4);b.writeUInt16LE(Math.round(highWire.height*100),6);b.writeUInt16LE(1,10);peer.send(b);
+   const deadline=Date.now()+5000;while(!seen&&Date.now()<deadline)await page.waitForTimeout(50);
+   assert.ok(peerId&&seen,'Actual mountain peer must receive nearby snapshot');
+  }finally{peer.terminate();}
+  let returned;
+  for(const [i,p] of targets.slice(0,-1).reverse().entries()){
+   await walkTo(page,evidence,[p.east,p.north],'north-return-'+i,.35);
+   if(p.north<648){returned=await readPose(page);break;}
+  }
+  assert.ok(returned&&returned.north<650);
+  await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-returned.east,p.north-returned.north)<.8);
+  await picture(page,evidence,'front-north-town-room-return');
+  report.entry={scope:'public station UI segmented arrival, native road walking across town/mountain room boundary and back; raw second peer, no summit release or public transport',targets:targets.length,highWire,secondRawPeer:seen};
+  report.traversal={top,returned};
  }else if(segment==='night-r3-entry'){
   const state=()=>page.evaluate(()=>window.__za22Frame);
   await page.waitForFunction(()=>window.__za22Frame?.ridge?.roads===4&&window.__za22Frame?.summitProduction?.ready,null,{timeout:45000});
