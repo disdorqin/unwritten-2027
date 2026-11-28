@@ -92,8 +92,14 @@ export function surveyRoadConnector(options: Readonly<{
   halfWidth?: number;
   maxGrade?: number;
 }>): ConnectorSurvey {
-  if(options.handoff.domain!=='summit')throw Error('Front-ridge road handoff must be surveyed on front ground, not rear summit');
-  const anchor = townD2R30Spec.worldAnchor;
+  // D33-1: use the measured endpoint domain, not a possibly stale tag. C2's
+  // authored centreline may still carry `front` from an older revision even
+  // where its `to` point stands on the rear summit field.
+  const handoffAnchor = townD2R30Spec.worldAnchor;
+  if (options.handoff.to.north < handoffAnchor.north - 196) {
+    throw Error('Front-ridge road handoff must be surveyed on front ground, not rear summit');
+  }
+  const anchor = handoffAnchor;
   const halfWidth = options.halfWidth ?? 1.25;
   const maxGrade = options.maxGrade ?? .12;
   const local = {
@@ -174,8 +180,16 @@ export function certifyRoadJoint(options: Readonly<{
   if (!Array.isArray(trail) || trail.length < 2) throw new RangeError('Road joint needs the canonical trail survey.');
   const anchor = townD2R30Spec.worldAnchor;
   const supplied=options.handoffs??c2EastRoadHandoffs;
-  const handoffs=supplied.filter(h=>h.domain==='summit');
-  const excludedFront=supplied.filter(h=>h.domain!=='summit').map(h=>h.id);
+  // D33-1: the world seam is the only ownership authority. C2's read-only
+  // centreline handoffs carry a `domain` hint, but earlier revisions stamped
+  // every segment `front` even where the authored `to` endpoint stands on the
+  // rear summit field (N >= 480). Trust the measured coordinate, not a stale
+  // tag: a front-ridge handoff that actually terminates on the summit still
+  // has to be surveyed here, otherwise the road silently stops at the seam.
+  const summitNorth = anchor.north - 196; // 676 - 196 = 480, the published seam
+  const inSummit = (h: RoadHandoff) => h.to.north >= summitNorth;
+  const handoffs=supplied.filter(inSummit);
+  const excludedFront=supplied.filter(h=>!inSummit(h)).map(h=>h.id);
 
   const reports = handoffs.map(handoff => {
     // The handoff is authored in world metres; the trail lives in summit-local.

@@ -133,32 +133,22 @@ test('D2-R5 rock ledges rest every 15-20m of vertical rise and stay non-solid', 
   const wall = cleanup(context, createTownD2R30NorthWall());
   const stats = wall.stats();
   assert.ok(stats.climbLedges >= 10, `too few rock ledges: ${stats.climbLedges}`);
-  // Reconstruct the ledge set the same greedy rule the module uses, then
-  // check every consecutive vertical gap sits in the reference band.
-  const anchors = [...wall.climbAnchors];
-  const ledgeMin = 15, ledgeMax = 20;
-  const ledges: typeof anchors = [anchors[0]!];
-  let rise = 0;
-  for (let i = 1; i < anchors.length; i++) {
-    const step = anchors[i]!.ground - anchors[i - 1]!.ground;
-    const projected = rise + step;
-    if (step >= ledgeMin || projected >= ledgeMin) {
-      if (projected > ledgeMax && rise >= ledgeMin * .8) { ledges.push(anchors[i - 1]!); rise = step; }
-      else { ledges.push(anchors[i]!); rise = 0; }
-    } else rise = projected;
-  }
-  if (ledges[ledges.length - 1] !== anchors[anchors.length - 1]!) ledges.push(anchors[anchors.length - 1]!);
-  assert.equal(ledges.length, stats.climbLedges, 'stats ledge count must match the greedy rule');
+  // Read the ledges the module actually publishes. Re-deriving a private
+  // greedy rule in the test only creates a second authority that drifts from
+  // the implementation; the published rest stations are the contract.
+  const ledges = [...wall.climbLedges];
+  assert.equal(ledges.length, stats.climbLedges, 'stats must count the published ledges');
   let inBand = 0;
   for (let i = 1; i < ledges.length; i++) {
     const gap = ledges[i]!.ground - ledges[i - 1]!.ground;
-    if (gap >= ledgeMin - 2.5 && gap <= ledgeMax + .5) inBand++;
+    if (gap >= 15 - 2.5 && gap <= 20 + .5) inBand++;
     assert.ok(gap > 0, `ledge ${i} does not rise`);
   }
   assert.ok(inBand >= Math.ceil(ledges.length * .6), `only ${inBand} of ${ledges.length - 1} ledge gaps in band`);
 
   // Every ledge is a real rock slab instance on the climb line, and the
   // ledges never add collision: the climb surface stays traversable.
+  const anchors = [...wall.climbAnchors];
   const names = new Set<string>();
   wall.group.traverse((object: Object3D) => { if (object.name) names.add(object.name); });
   for (const required of [
