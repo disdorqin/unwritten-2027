@@ -37,7 +37,7 @@ export function createA31PublicSummitRoute(input:Input){
  let visual:ReturnType<typeof retireA31LegacySectorOverlays>|undefined;
  let assembly:Readonly<{group:Group;r30:Production['assembly'];summitSnowAt(e:number,n:number):number|undefined}>|undefined;
  let near=false,elapsedMs=0,cutTiles=0,draws=0,snowPending=0,duplicates:readonly string[]=[];
- const yieldFrame=input.yieldFrame??a32YieldFrame,meter=createA32StageMeter(),quiet=createA32QuietGate();
+ const yieldFrame=input.yieldFrame??a32YieldFrame,meter=createA32StageMeter(),quiet=createA32QuietGate(()=>performance.now(),250,2000);
  let canonicalPreparation: {mode:string;ms?:number;elapsedMs?:number;error?:string}|undefined;
  const southSlices:number[]=[],westSlices:number[]=[];
  let hiking:ReturnType<typeof import('./town-a32-summit-hiking').certifyHiking>|undefined,hikingGuide:ReturnType<typeof mountHikingGuides>|undefined;
@@ -126,9 +126,16 @@ export function createA31PublicSummitRoute(input:Input){
   // The accepted distant skyline starts well behind this closure.
   // Only the surveyed high cloud apron, or a certified rear domain,
   // sees the complete production body. No overlapping town collisions.
-  near=active||position.east>=286.5&&position.east<=352&&
-   position.north>=(near?631:635)&&position.north<=669&&position.height>=(near?345:346);
+  // Hysteresis covers the actual high terrace and the crossing, not just
+  // the old 4m strip. Never turn off both near and far representations.
+  near=active||position.east>=(near?275:286.5)&&position.east<=(near?365:352)&&
+   position.north>=(near?620:635)&&position.north<=(near?690:680)&&position.height>=(near?340:346);
   production.group.visible=near;input.skyline.visible=!near&&!active;
+  // The isolated domain's artificial closure is not exterior scenery.
+  // Its colliders and real top tiles are unchanged.
+  const skirt=production.group.getObjectByName('town-d2-r30-closed-perimeter');
+  const floor=production.group.getObjectByName('town-d2-r30-floor');
+  if(skirt)skirt.visible=active;if(floor)floor.visible=active;
   if(near){
    const [e,n]=local(position.east,position.north);
    if(Math.hypot(e-detailEast,n-detailNorth)>32){production.setDetailFocus(e,n,1550);detailEast=e;detailNorth=n;}

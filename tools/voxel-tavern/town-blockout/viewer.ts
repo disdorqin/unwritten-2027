@@ -38,7 +38,11 @@ import { buildR31PublicSkyline } from './town-r31-public-skyline';
 import {createA31PublicSummitRoute} from './town-a31-public-summit';
 import {createNightBProductionController,nightBProductionAuthority} from './town-night-b-production-controller';
 import {readA31FrontCable,type A31CableBindings} from './town-a31-cable-binding';
-import {a32SummitPrefetch} from './town-a32-stream-policy';
+import {a32SummitPrefetch,a32YieldFrame} from './town-a32-stream-policy';
+import {certifyR31FrontTrail} from './town-r31-front-trail';
+import {finishNightBAuditAsync} from './town-night-b-audit-slices';
+import {mountHikingGuides} from './town-a32-summit-hiking-guides';
+import {hikingProgress,type HikingSurface} from './town-a32-summit-hiking';
 import {createA32PassportInput} from './town-a32-passport-input';
 import {takeTownTerrain,townTerrainPreloadStats} from './town-a32-terrain-preload';
 import {warmA32SummitMeshes} from './town-a32-gpu-warmup';
@@ -579,6 +583,11 @@ const cloudRoute = createA31PublicSummitRoute({town:scene,skyline:summitSkyline,
 window.addEventListener('pagehide',event=>{if(!event.persisted)cloudRoute.dispose();});
 let publicTransportBound=false,publicTransportPreparing=false,frontPreparationMs=0,frontPreparationError:string|undefined;
 let rearSeamCertificate:ReturnType<typeof cloudRoute.seamCertificate>;
+type FrontTrailResult=ReturnType<typeof certifyR31FrontTrail> extends Generator<void,infer R,unknown>?R:never;
+let frontTrail:FrontTrailResult|undefined;
+let frontTrailGuides:ReturnType<typeof mountHikingGuides>|undefined;
+let frontTrailFailure:string|undefined;
+let frontTrailStatusAt=0;
 export const preparePublicSummit=()=>{/* Town entry is independent of the rear massif. */};
 function preparePublicTransport(foot:{east:number;north:number;height:number}){
  if(publicTransportBound||publicTransportPreparing||!a32SummitPrefetch(foot))return;
@@ -604,6 +613,15 @@ function preparePublicTransport(foot:{east:number;north:number;height:number}){
   rearSeamCertificate=ready?cloudRoute.seamCertificate():undefined;
   if(ready&&rearSeamCertificate?.open)productionRidge?.certifyPublicSeam((e,n)=>{const h=cloudRoute.surveyedSupport(e,n);return h!==undefined&&!cloudRoute.surveyedBlocked(e,n,h)?h:undefined;});
   publicTransportBound=true;publicTransportPreparing=false;
+  // Recheck the offline surveyed route on the actual mounted public scene
+  // after the replacement of the front ropeway. Never draw a failed route.
+  try{
+   const host:HikingSurface={surfaceAt:(e,n)=>outdoorWalkable(e,n)?outdoorSurfaceAt(e,n):undefined,
+    supportAt:(e,n)=>dryTownLandingHeight(e,n,outdoorSurfaceAt(e,n),true),
+    blocked:(e,n,h)=>obstructed(e,n,h,outdoorGeometryAt(e,n),true)};
+   frontTrail=await finishNightBAuditAsync(certifyR31FrontTrail(host),{budgetMs:6,yieldTask:a32YieldFrame});
+   if(frontTrail.ready){frontTrailGuides=mountHikingGuides(host,frontTrail.path);scene.add(frontTrailGuides.group);}
+  }catch(error){frontTrailFailure=error instanceof Error?error.message:String(error);}
  })();
 }
 const southEntryHost=createSouthEntryHost();
@@ -1609,7 +1627,14 @@ function showSummitStatus(now:number){
  summitStatus.style.display=cableFrame?.whiteout?'none':'block';
  const message=s.status==='ready'?(s.cable.boardable?'后山 · 地形与索道已就绪 · 依现场权限通行':'后山 · 四区地形已就绪 · 交通检修中'):s.status==='failed'?'后山 · 加载未完成 · 暂未开放':s.status==='idle'?'后山 · 远景常驻 · 接近后加载':'后山 · 分区预加载中 · 暂未开放';
  const routeNote=s.hiking?.ready?' · 金色标记为陡坡徒步线（非缓坡盘山公路）'+(s.registrationRoutes.every(r=>r.ready)&&s.registrationRoutes.length===2?'，峰顶接纪念碑及登记小屋':''):'';
- if(summitStatus.textContent!==message+routeNote)summitStatus.textContent=message+routeNote;
+ const frontNote=frontTrail?.ready?' · 前山中站至云海台金色陡坡徒步线 '+Math.round(frontTrail.metres)+'m（步行）':frontTrailFailure||frontTrail&&!frontTrail.ready?' · 前山徒步连接未通过最终认证':' · 前山徒步连接检查中';
+ if(summitStatus.textContent!==message+routeNote+frontNote)summitStatus.textContent=message+routeNote+frontNote;
+ if(walking&&!homeReturn&&!cloudRoute.active()&&!sledRide.active()&&!cableController.riding()&&now>=frontTrailStatusAt){
+  if(ground>=340&&Math.hypot(x-300,n-668)<25){
+   announceActivity(gateRouteCertified()?'后山入口：东300 · 北668，沿山门中央步行进入':'后山连接尚未就绪，请在云海台稍候；详情见设置');frontTrailStatusAt=now+10000;
+  }else if(frontTrail?.ready&&Math.hypot(x-440,n-512)<12){announceActivity('前往后山：沿金色标记步行至347米云海台，再过山门。');frontTrailStatusAt=now+15000;}
+  else if(frontTrail?.ready&&ground>=135&&n>=500){const progress=hikingProgress(frontTrail.path,{east:x,north:n});if(progress.distance<4){announceActivity('前山登山线 · 距云海台 '+Math.round(progress.toSummit)+'m');frontTrailStatusAt=now+12000;}}
+ }
  summitStatus.dataset.status=s.status;
 }
 function showRegionalWeather(text:string){
@@ -3566,6 +3591,13 @@ let ridgeMoveReject:unknown;
 function tryMove(nextX: number, nextN: number) {
   if(pendingGateStep)return false;
   if (dreamInMine()) return tryMoveInMine(nextX, nextN);
+  // At the surveyed same-height seam, both actual support authorities
+  // must agree before the outgoing scene's ordinary filters veto entry.
+  const seamFrom={east:x,north:n,height:ground},seamTo={east:nextX,north:nextN,height:ground};
+  if(a31GateCrossing(cloudRoute.active(),seamFrom,seamTo)){
+   if(airHeight!==undefined||sledRide.active()||sledRide.recovering()||!gateStepEligible(seamFrom,seamTo))return false;
+   pendingGateStep={from:seamFrom,to:seamTo,entering:!cloudRoute.active()};return true;
+  }
   if (cloudRoute.active() && !cloudRoute.acceptsStep(x, n, nextX, nextN, bodyRadius)) return false;
   if (!walkable(nextX, nextN)) {
     if(profileTown&&previewOptions.has('mRoadSurvey'))ridgeMoveReject={reason:'walkable',next:[nextX,nextN],terrain:canEnter(nextX,nextN),scenery:scenery.blocked(nextX,nextN),district:districts.blocked(nextX,nextN),forest:forest.blocked(nextX,nextN),street:streetscape.blocked(nextX,nextN)};
@@ -4633,7 +4665,7 @@ renderer.setAnimationLoop(now => {
         weatherCycle:southWeatherProfile(skyFrame,outdoorWeather,weather,regionalWeather?.weather),
         fogNear: weatherFog.near, fogFar: weatherFog.far, points: renderer.info.render.points,
         craterPerf:{exteriorCertified:craterExteriorCertified,undergroundVisible:undergroundRenderParent?.visible},
-        summitProduction:{...cloudRoute.state(),farDraws:summitSkylineDraws,frontPreparationMs,frontPreparationError,frontAuditSlices:productionRidge?.frontAuditSlices,frontRouteAudit:productionRidge?.frontRouteAudit,rearSeam:rearSeamCertificate,publicTransportBound},
+        summitProduction:{...cloudRoute.state(),farDraws:summitSkylineDraws,frontPreparationMs,frontPreparationError,frontAuditSlices:productionRidge?.frontAuditSlices,frontRouteAudit:productionRidge?.frontRouteAudit,rearSeam:rearSeamCertificate,publicTransportBound,frontTrail:frontTrail?{ready:frontTrail.ready,metres:frontTrail.metres,maxGrade:frontTrail.maxGrade,samples:frontTrail.samples,markers:frontTrailGuides?.markers,...(!frontTrail.ready?{failed:frontTrail.failed}:{})}:undefined,frontTrailFailure},
       terrainPreload:townTerrainPreloadStats(),
         ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,frontRoadHandoffs:productionRidge.frontRoadHandoffs,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],heading:yaw,...(previewOptions.has('mRoadSurvey')?{roadGuide:productionRidge.baseToMiddleGuide,rearConnected:productionRidge.rearConnected,moveReject:ridgeMoveReject}:{}),surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities,cableInstances:productionRidge.facilities?.visibleInstances(),terraceMounted:!!productionRidge.terrace,cloudSeam:productionRidge.cloudSeam},
         ...(skylinePeak ? { summitSkyline: { draws: summitSkylineDraws, peakNdc: skylinePeak.toArray(),

@@ -657,6 +657,10 @@ try{
   await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-296,p.north-520)<1.2);
   await face(page,evidence,0);
   await page.waitForFunction(()=>{const s=window.__za22Frame?.summitProduction;return s?.ready&&!s.near&&s.draws===0&&s.farVisible&&s.farDraws>0&&s.sceneOwner==='town'&&s.publicTransportBound;},null,{timeout:150000});
+  await page.waitForFunction(()=>{const s=window.__za22Frame?.summitProduction;return s?.frontTrail||s?.frontTrailFailure;},null,{timeout:30000});
+  const frontTrail=(await state()).summitProduction.frontTrail;
+  console.log('R31 public front trail',JSON.stringify({frontTrail,error:(await state()).summitProduction.frontTrailFailure}));
+  assert.ok(frontTrail?.ready&&frontTrail.markers>0,JSON.stringify(frontTrail));
   await take('mountain-foot-north');
   await page.locator('#town-panel-toggle').click();await page.locator('#lighting').click();await page.locator('#town-settings-close').click();
   const prior=snapshots.at(-1).weatherCycle;
