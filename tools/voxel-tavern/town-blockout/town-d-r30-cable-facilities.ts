@@ -204,12 +204,14 @@ export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Fiel
     box(stone,e,n,h+.14,.88,.88,.6,true);
     box(iron,e,n,(h+top)/2,.32,.32,top-h,true);
     box(iron,e,n,top-.12,.62,.62,.24);
-    if(!(closed&&serviceExit&&sign===-1&&n===356)){
+    // Both the closed waiting deck and the certified moving variant
+    // share the same west pedestrian seam. Never put a post in the swept exit.
+    if(!(serviceExit&&sign===-1&&n===356)){
      box(wood,e,n,p.height+.50,.15,.15,1.0,true);
      box(brass,e,n,p.height+1.03,.23,.23,.12);
     }
    }
-   for(const n of [351.5,354.5])if(!(closed&&serviceExit&&sign===-1&&n===354.5))for(const dh of [.45,.96])box(wood,e,n,p.height+dh,.13,3,.13,true);
+   for(const n of [351.5,354.5])if(!(serviceExit&&sign===-1&&n===354.5))for(const dh of [.45,.96])box(wood,e,n,p.height+dh,.13,3,.13,true);
   }
   for(const n of [350,353,356])box(iron,p.east,n,p.height-.24,7.1,.28,.24);
   // Actual platform slab is registered in the host's existing floor
@@ -262,11 +264,7 @@ export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Fiel
    const car=new Group();car.name='d-r30-cable-cabin-'+side;group.add(car);
    const localParts:Part[]=[];
    function local(m:MeshLambertMaterial,x:number,y:number,z:number,w:number,h:number,d:number){
-    if(closed){
-     tmp.position.set(x,y,z);tmp.rotation.set(0,0,0);tmp.scale.set(w,h,d);tmp.updateMatrix();localParts.push({m,matrix:tmp.matrix.clone()});
-    }else{
-     const mesh=new Mesh(geometry,m);mesh.position.set(x,y,z);mesh.scale.set(w,h,d);car.add(mesh);
-    }
+    tmp.position.set(x,y,z);tmp.rotation.set(0,0,0);tmp.scale.set(w,h,d);tmp.updateMatrix();localParts.push({m,matrix:tmp.matrix.clone()});
    }
    // The station datum is the actual bottom support, not the centre of
    // the floor board. Never sink the moving floor below that datum.
@@ -282,13 +280,15 @@ export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Fiel
    }
    local(brass,0,2.55,0,.18,.39,.18);
    local(iron,0,2.70,0,.31,.16,.42);
-   if(closed){
-    const batch=new InstancedMesh(geometry,staticMaterial,localParts.length);batch.name='ridge-cable-parked-car-batch';
-    localParts.forEach((p,i)=>{batch.setMatrixAt(i,p.matrix);batch.setColorAt(i,p.m.color)});batch.computeBoundingSphere();car.add(batch);batches.push(batch);
-   }
+   const batch=new InstancedMesh(geometry,staticMaterial,localParts.length);batch.name=closed?'ridge-cable-parked-car-batch':'ridge-cable-moving-car-batch';
+   localParts.forEach((p,i)=>{batch.setMatrixAt(i,p.matrix);batch.setColorAt(i,p.m.color)});batch.instanceMatrix.needsUpdate=true;batch.computeBoundingSphere();car.add(batch);batches.push(batch);
    return {car,side};
  });
+ type CabinState=ReturnType<typeof clock.cabinsAt>[number];
+ type Positioned=CabinState&P;
+ let operational=false,lastOperational:Positioned[]=[];
  function update(nowMs:number){
+  if(operational)return lastOperational;
   const states=clock.cabinsAt(closed?0:nowMs);
   return cabinGroups.map(({car,side},i)=>{
    const state=states[i]!,along=state.distanceMetres;
@@ -300,6 +300,14 @@ export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Fiel
   });
  }
  const parked=update(0);
+ /** Only the accepted production service may supply actual surveyed feet.
+  * Once bound, legacy update(now) cannot move the same visual car. */
+ function presentOperational(states:readonly (CabinState&{feet:P})[]){
+  if(closed||states.length!==2||states.some(s=>![s.feet.east,s.feet.north,s.feet.height,s.distanceMetres].every(Number.isFinite)))return false;
+  operational=true;
+  lastOperational=states.map((s,i)=>{const {feet,...state}=s;const car=cabinGroups[i]!.car;car.position.set(feet.east,feet.height,-feet.north);return {...state,...feet};});
+  return true;
+ }
  if(closed){
   // No unsupported moving cabin is exposed to players. Park at both
   // physical terminals and include the car bodies in static collision.
@@ -340,9 +348,9 @@ export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Fiel
  function updateView(e:number,n:number){
   for(const c of tiers){const d=Math.hypot(e-c.east,n-c.north);c.near.visible=c.near.visible?d<150:d<120;if(c.far)c.far.visible=!c.near.visible}
  }
- return {group,survey,clock,update,updateView,visibleInstances:()=>batches.reduce((n,b)=>n+(b.visible?b.count:0),0),blocked(e:number,n:number,y:number,r=.27){
+ return {group,survey,clock,update,presentOperational,updateView,visibleInstances:()=>batches.reduce((n,b)=>n+(b.visible?b.count:0),0),blocked(e:number,n:number,y:number,r=.27){
   return solids.some(s=>{const dx=e-s.e,dn=n-s.n,c=Math.cos(s.yaw),a=Math.sin(s.yaw),x=dx*c+dn*a,z=-dx*a+dn*c;
    return y+1.8>s.bottom&&y<s.top&&Math.hypot(Math.max(0,Math.abs(x)-s.w/2),Math.max(0,Math.abs(z)-s.d/2))<r})
- },setNight(night:boolean){lamp.emissive.set(night?'#e9c58e':'#000000');lamp.emissiveIntensity=night?.65:0;lights.forEach(l=>l.intensity=night?8:0)},
+ },setNight(night:boolean){const lit=night&&!operational;lamp.emissive.set(lit?'#e9c58e':'#000000');lamp.emissiveIntensity=lit?.65:0;lights.forEach(l=>l.intensity=lit?8:0)},
  dispose(){group.removeFromParent();batches.forEach(b=>b.dispose());geometry.dispose();materials.forEach(m=>m.dispose());lines.forEach(l=>{l.geometry.dispose();(l.material as LineBasicMaterial).dispose()});boards.forEach(b=>{b.geometry.dispose();b.material.map?.dispose();b.material.dispose()})}};
 }

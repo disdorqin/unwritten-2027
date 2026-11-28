@@ -15,6 +15,8 @@ export type Za36CableRepairState = Readonly<{
   cableTurns: number;
   weightMounted: readonly boolean[];
   carriedWeight: number | null;
+  /** Recipient-specific transport field; absent in local reducer fixtures. */
+  carriedBySelf?: boolean;
   repaired: readonly ['rust-brake' | 'pending', 'cable-wheel' | 'pending', 'counterweight' | 'pending'];
   version: number;
 }>;
@@ -106,5 +108,9 @@ export function createZa36CableRepair(line: Za36CableRepairLine) {
     if (accepted) version++;
     return { accepted, state: snapshot(), opened };
   }
-  return { apply, snapshot };
+  function returnCarriedWeight(){
+    if(carriedWeight===null)return false;
+    carriedWeight=null;version++;return true;
+  }
+  return { apply, snapshot, returnCarriedWeight };
 }
