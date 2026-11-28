@@ -46,7 +46,7 @@ import {createNightBCablePresentation,createNightBCableAudio} from './town-night
 import {createFriend3TravelAudio} from './town-friend3-travel-audio';
 import {createA31CableInput} from './town-a31-cable-input';
 import {syncA31OutdoorRoom} from './town-a31-outdoor-presence';
-import {a31GateCrossing,a31GateEligible} from './town-a31-gate-handoff';
+import {a31GateCrossing,a31GateEligible,a31GateNorth} from './town-a31-gate-handoff';
 import type {CableRideFrame} from './town-night-b-summit-ride-host';
 import { mountZa29GuardPost, type Za29GuardPostKind } from './town-za29-guard-scenes';
 import { createZa29GuardDuty, za29GuardDutyForPhase } from './town-za29-guard-duty';
@@ -745,7 +745,10 @@ const sledWallCollider = createSledWallCollider(
 const sledWorld: Parameters<typeof createSledRide>[0] = {
   height: sledGroundAt,
   surface(sx, nn, y) {
-    if (cloudRoute.active()) return { surface: 0, deepSnow: false };
+    if (cloudRoute.active()) {
+      const assembly=cloudRoute.assembly();const depth=assembly?.summitSnowAt(sx-(assembly?.group.position.x??0),nn+(assembly?.group.position.z??0));
+      return {surface:0,deepSnow:depth!==undefined&&depth>=.6};
+    }
     const col = Math.round(sx), row = Math.round(nn);
     const surface = col >= 0 && row >= 0 && col < grid.gridWidth && row < grid.gridDepth
       ? grid.surfaces[row * grid.gridWidth + col] : 0;
@@ -753,6 +756,9 @@ const sledWorld: Parameters<typeof createSledRide>[0] = {
   },
   blocked: obstructed,
   canTraverse(from, to) {
+    // Sleds cannot cross rooms: the certified gate transfers supported walking feet only.
+    if(cloudRoute.active()&&to.n<a31GateNorth+sledFootRadius)return false;
+    if(a31GateCrossing(cloudRoute.active(),{east:from.x,north:from.n,height:from.y},{east:to.x,north:to.n,height:to.y}))return false;
     if (cloudRoute.active() && !cloudRoute.acceptsStep(from.x, from.n, to.x, to.n, sledFootRadius)) return false;
     if(!homeReturn&&!cloudRoute.active()&&productionRidge&&
       !productionRidge.allowsUphill({east:from.x,north:from.n,height:from.y},{east:to.x,north:to.n,height:to.y}))return false;
@@ -822,7 +828,7 @@ function createSledRacks(domain: 'town' | 'summit'): SledRackState {
     }
     return dryTownLandingHeight(east, north, undefined, true);
   };
-  const racks = resolveTownSledRacks(domain, sampleFooting, domain === 'town' ? ensureWestCraterRoad().lip : undefined);
+  const racks = resolveTownSledRacks(domain, sampleFooting, domain === 'town' ? ensureWestCraterRoad().lip : undefined,domain==='summit');
   const visuals = createTownSledVisuals(domain === 'summit' ? cloudRoute.scene : scene, racks);
   const actions = racks.map(rack => {
     let ride: ReturnType<typeof createSledRide> | undefined;
