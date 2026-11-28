@@ -10,7 +10,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : segment==='a31-front-north'?'/?profile&mRoadSurvey':'/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','west-mountain','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review','night-r3-entry','night-r3-bare-weather','night-r3-bare-west','a31-bare-crater-return','a31-front-north'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','west-mountain','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review','night-r3-entry','night-r3-bare-weather','night-r3-bare-west','a31-bare-crater-return','a31-front-north','a32-stream'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -40,7 +40,7 @@ const graphicsArgs = hardware ? (process.platform === 'win32' ? ['--use-gl=angle
   : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
 const mobileReview=segment==='mobile-review';
 const menuTouch=segment==='night-r3-bare-weather'&&process.env.ZA22_MENU_TOUCH==='1';
-const sampleFrames=process.env.ZA22_PROFILE_SAMPLE==='1'||mobileReview;
+const sampleFrames=process.env.ZA22_PROFILE_SAMPLE==='1'||mobileReview||segment==='a32-stream';
 const report = { url: url.href, segment, viewport, deviceScaleFactor, quality: 'smooth', gpu: null, paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [], performanceSamples:[] };
 
 await mkdir(output, { recursive: true });
@@ -303,8 +303,8 @@ async function picture(page,evidence,label){
       }};
       const timer=setTimeout(finish,2000);document.addEventListener('town-frame-profile',listener,true);
     }));
-    const stats=k=>{const values=sample.frames.map(f=>f[k]).filter(Number.isFinite).sort((a,b)=>a-b);return values.length?{median:values[Math.floor((values.length-1)/2)],p95:values[Math.floor((values.length-1)*.95)],max:values.at(-1)}:undefined;};
-    report.performanceSamples.push({label,elapsedMs:sample.elapsedMs,frames:sample.frames.length,frameMs:stats('frameMs'),calls:stats('calls'),triangles:stats('triangles'),movementMs:stats('movementMs'),detailMs:stats('detailMs'),scope:'headless browser, actual renderer event, not physical phone'});
+    const stats=k=>{const values=sample.frames.map(f=>f[k]).filter(Number.isFinite).sort((a,b)=>a-b);return values.length?{median:values[Math.floor((values.length-1)/2)],p95:values[Math.floor((values.length-1)*.95)],p99:values[Math.floor((values.length-1)*.99)],max:values.at(-1),mean:values.reduce((a,b)=>a+b,0)/values.length}:undefined;};
+    const timing=stats('frameMs');report.performanceSamples.push({label,elapsedMs:sample.elapsedMs,frames:sample.frames.length,frameMs:timing,fps:timing?1000/timing.mean:undefined,longFrames:{over50:sample.frames.filter(f=>f.frameMs>50).length,over100:sample.frames.filter(f=>f.frameMs>100).length},calls:stats('calls'),triangles:stats('triangles'),movementMs:stats('movementMs'),detailMs:stats('detailMs'),scope:'headless browser, actual renderer event, not physical phone'});
   }
   await page.screenshot({path:join(output,label+'.png'),timeout:45000});
   evidence.checkpoints.push({label,lighting:await page.locator('#lighting').textContent(),...await readPose(page),wire:evidence.poses.at(-1)});
@@ -387,8 +387,8 @@ try{
   assert.ok(bare,'The ordinary settings verification must use the bare root');
   assert.equal(new URL(page.url()).search,'');
   const menu=page.locator('#town-settings'),toggle=page.locator('#town-panel-toggle');
-  await page.waitForFunction(()=>document.querySelector('#town-summit-status')?.dataset.status==='ready',null,{timeout:45000});
-  assert.match(await page.locator('#town-summit-status').textContent(),/四区地形已就绪.*交通检修中/);
+  await page.waitForFunction(()=>document.querySelector('#town-summit-status')?.dataset.status==='idle',null,{timeout:15000});
+  assert.match(await page.locator('#town-summit-status').textContent(),/远景常驻.*接近后加载/);
   const activate=locator=>menuTouch?locator.tap():locator.click();
   const hiddenIds=['#town-settings','#town-music-toggle','#town-chat','#fullscreen-toggle','#museum-map-button','#snowball-board'];
   for(const id of hiddenIds)assert.equal(await page.locator(id).isVisible(),false,id+' must not obscure ordinary exploration');
@@ -570,6 +570,51 @@ try{
   await picture(page,evidence,'front-north-town-room-return');
   report.entry={scope:'public station UI segmented arrival, native road walking across town/mountain room boundary and back; raw second peer, no summit release or public transport',targets:targets.length,highWire,secondRawPeer:seen};
   report.traversal={top,returned};
+ }else if(segment==='a32-stream'){
+  assert.ok(!bare);
+  const state=()=>page.evaluate(()=>window.__za22Frame);
+  const first=await state();assert.equal(first.summitProduction.status,'idle');assert.equal(first.summitProduction.installed.length,0);assert.equal(first.summitProduction.farVisible,true);
+  await picture(page,evidence,'a32-cold-plaza');
+  const startup=await page.evaluate(()=>({navigationMs:performance.now(),resources:performance.getEntriesByType('resource').filter(x=>/town-d2-r30-production-host|town-d2-r30-sector-installers/.test(x.name)).map(x=>x.name)}));
+  assert.equal(startup.resources.length,0,'cold town must not download rear production chunks');
+  const visit=async(label)=>{await page.locator('#town-panel-toggle').click();await page.locator('#jump').selectOption({label});if(await page.locator('#town-settings').evaluate(d=>d.open))await page.locator('#town-settings-close').click();};
+  await visit('陨石坑口');await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-2,p.north-159)<1.2);
+  for(const p of [[-12,159],[-40,159]])await walkTo(page,evidence,p,'cold-crater',.55);
+  await face(page,evidence,0);await picture(page,evidence,'a32-crater-north');
+  assert.equal((await state()).summitProduction.status,'idle');
+  await visit('山口站');
+  await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-296,p.north-520)<1.2,20000);
+  await page.waitForFunction(()=>window.__za22Frame?.summitProduction?.status!=='idle',null,{timeout:20000});
+  await picture(page,evidence,'a32-prefetch-start');
+  await page.waitForFunction(()=>window.__za22Frame?.summitProduction?.publicTransportBound===true,null,{timeout:150000});
+  const assembled=await state();
+  report.streaming={startup,cold:first.summitProduction,assembled:assembled.summitProduction,ridge:{roads:assembled.ridge.roads,transportReady:assembled.ridge.transportReady,cloudSeam:assembled.ridge.cloudSeam}};
+  assert.equal(assembled.summitProduction.status,'ready',JSON.stringify(report.streaming));
+  assert.equal(assembled.summitProduction.ready,true);
+  assert.ok(assembled.summitProduction.warmup?.meshes>0&&assembled.summitProduction.warmup?.batches>0);
+  assert.equal(assembled.summitProduction.farVisible,true);
+  await face(page,evidence,0);await picture(page,evidence,'a32-foothill-ready');
+  await walkTo(page,evidence,[296,516],'station-out',.35);await walkTo(page,evidence,[296,520],'station-return',.35);
+  await picture(page,evidence,'a32-foothill-walked');
+  const loaded=await page.evaluate(()=>window.__a31LoadFrames);
+  report.streaming.frames=loaded;
+  report.streaming.longFrames=loaded.filter(f=>f.ms>50).map(f=>({ms:f.ms,status:f.status,stage:f.stage}));
+  await visit('广场南侧');await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-223,p.north-180)<1);
+  await face(page,evidence,0);await picture(page,evidence,'a32-loaded-plaza');
+  // Two independent Chromium processes, same actual Presence room.
+  const firstBrowser=browser,firstEvidence=evidence;
+  const peerBrowser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:graphicsArgs});
+  try{
+   browser=peerBrowser;const peer=await openTown('a32-second-browser');
+   await page.waitForFunction(()=>document.querySelector('#town-presence-status')?.textContent.includes('2 人'),null,{timeout:15000});
+   await peer.page.waitForFunction(()=>document.querySelector('#town-presence-status')?.textContent.includes('2 人'),null,{timeout:15000});
+   const a=(await state()).weatherCycle,b=await peer.page.evaluate(()=>window.__za22Frame.weatherCycle);
+   assert.equal(a.dawnEpoch,b.dawnEpoch);
+   await picture(peer.page,peer.evidence,'a32-second-browser-plaza');
+   report.streaming.twoBrowsers={sameDawnEpoch:a.dawnEpoch,firstStatus:await page.locator('#town-presence-status').innerText(),secondStatus:await peer.page.locator('#town-presence-status').innerText()};
+  }finally{await peerBrowser.close();browser=firstBrowser;lastPage=page;lastEvidence=firstEvidence;}
+  report.traversal={top:await readPose(page),returned:await readPose(page)};
+  assert.ok(report.performanceSamples.every(x=>x.frames>0&&Number.isFinite(x.fps)&&Number.isFinite(x.frameMs.p99)));
  }else if(segment==='night-r3-entry'){
   const state=()=>page.evaluate(()=>window.__za22Frame);
   await page.waitForFunction(()=>window.__za22Frame?.ridge?.roads===4&&window.__za22Frame?.summitProduction?.ready,null,{timeout:45000});
