@@ -7,6 +7,7 @@ import {
 import {
   createEastSectorInstaller, createSouthSectorInstaller, createWestSectorInstaller,
 } from '../tools/voxel-tavern/town-blockout/town-d2-r30-sector-installers';
+import { createA32SouthSectorInstaller } from '../tools/voxel-tavern/town-blockout/town-a32-south-installer';
 
 /** A stand-in for A's presence authority: a settled full-line service state at
  * a fixed server clock. The host tests never invent a second clock — this only
@@ -614,6 +615,37 @@ test('D32-2 the canonical field has no holes anywhere in the domain', () => {
     assert.ok(integrity.worstCollisionDrift < 1e-4, `drift ${integrity.worstCollisionDrift}`);
     assert.equal(integrity.intact, true);
     assert.throws(() => host.terrainIntegrity(1), /spacing/);
+  } finally {
+    host.dispose();
+  }
+});
+
+test('D32-P1 connector survey turns a gap into a design number for the owner', () => {
+  const host = createTownD2R30ProductionHost();
+  try {
+    host.install('A', createA32SouthSectorInstaller());
+    host.install('B', createWestSectorInstaller());
+    host.install('C2', createEastSectorInstaller());
+    // The 36 m gap is not a short link: 25 m of height has to be absorbed, so a
+    // straight line is a 130 % staircase and the real answer is a ~211 m ramp.
+    const short = host.surveyRoadConnector('lower-east-service');
+    assert.equal(short.ok, false);
+    assert.equal(short.reason, 'grade');
+    assert.ok(short.lengthMetres > 30 && short.lengthMetres < 45, `gap ${short.lengthMetres}`);
+    assert.ok(short.heightDelta > 20, `height delta ${short.heightDelta}`);
+    assert.ok(short.maxGrade > .12, `straight grade ${short.maxGrade}`);
+    assert.ok(Math.abs(short.requiredRampMetres - short.heightDelta / .12) < 1);
+    assert.ok(short.requiredRampMetres > short.lengthMetres * 3,
+      'the legal ramp must be far longer than the straight gap');
+    // The other two cannot even be surveyed straight: the line leaves the
+    // canonical domain (that is why 372 / 307 samples had no ground).
+    for (const id of ['middle-south-exit', 'rear-connector'] as const) {
+      const survey = host.surveyRoadConnector(id);
+      assert.equal(survey.ok, false);
+      assert.equal(survey.reason, 'no-ground', `${id}: ${survey.reason}`);
+      assert.ok(survey.unsupported > 100, `${id} unsupported ${survey.unsupported}`);
+    }
+    assert.throws(() => host.surveyRoadConnector('nope'), /Unknown C2 road handoff/);
   } finally {
     host.dispose();
   }

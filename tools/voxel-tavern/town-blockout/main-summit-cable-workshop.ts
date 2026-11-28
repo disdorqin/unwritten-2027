@@ -216,13 +216,16 @@ export function mountMainSummitCableWorkshop(owner: Group, groundAt: GroundAt, a
     // Workshop yaw=PI/2, so +local Z is east and +local X is north.
     return { x: north - anchor.north, z: east - anchor.east };
   }
+  function repairFootClear(feet:{east:number;north:number;height:number}){
+    if(![feet.east,feet.north,feet.height].every(Number.isFinite)||Math.abs(feet.height-anchor.floor)>.43)return false;
+    const {x,z}=coordinates(feet.east,feet.north);
+    return Math.abs(x)<=4.85&&Math.abs(z)<=4.1&&!solids.some(w=>Math.abs(x-w.x)<w.w/2+.27&&Math.abs(z-w.z)<w.d/2+.27&&w.low<1.8&&w.high>.065);
+  }
   let disposed = false;
   return {
-    group, lights, repairAnchors, sync, anchor,
+    group, lights, repairAnchors, repairFootClear, sync, anchor,
     repairActions(feet:{east:number;north:number;height:number}){
-      if(!state||!Number.isFinite(feet.height)||Math.abs(feet.height-anchor.floor)>.43)return [];
-      const {x,z}=coordinates(feet.east,feet.north);
-      if(Math.abs(x)>4.85||Math.abs(z)>4.1||solids.some(w=>Math.abs(x-w.x)<w.w/2+.27&&Math.abs(z-w.z)<w.d/2+.27&&w.low<1.8&&w.high>.065))return [];
+      if(!state||!repairFootClear(feet))return [];
       return repair.actions(state,feet);
     },
     pieceCount: Object.values(buckets).reduce((sum, v) => sum + v.length, 0),

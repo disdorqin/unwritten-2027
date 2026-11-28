@@ -5,7 +5,7 @@ import {
   inC2EastSector, type C2EastGround, type C2EastGroundStats,
 } from './town-night-c2-summit-canonical';
 import { mountC2EastLandform } from './town-night-c2-summit-east-landform';
-import { mountC2EastCamp } from './town-night-c2-summit-east-camp';
+import { mountC2EastCamp, planC2EastCamp } from './town-night-c2-summit-east-camp';
 import { mountC2EastVegetation } from './town-night-c2-summit-east-vegetation';
 import { mountC2EastSled } from './town-night-c2-summit-east-sled';
 import { mountC2EastBench } from './town-night-c2-summit-east-bench';
@@ -16,7 +16,7 @@ import { mountC2EastShelter } from './town-night-c2-summit-east-shelter';
 import { mountC2EastSummitRock } from './town-night-c2-summit-east-summit-rock';
 import { mountC2EastRoadMarkers } from './town-night-c2-summit-east-road-markers';
 import { mountC2EastGullyDrop } from './town-night-c2-summit-east-gully-drop';
-import { mountC2SummitEastPavilionApproach } from './town-night-c2-summit-east-pavilion-approach';
+import { mountC2SummitEastPavilionApproach, planC2SummitEastPavilionApproach } from './town-night-c2-summit-east-pavilion-approach';
 import { mountC2EastSnowRock } from './town-night-c2-summit-east-snow-rock';
 import { mountC2EastSummitEastRockWall } from './town-night-c2-summit-east-rock-wall';
 
@@ -258,4 +258,56 @@ export function createC2EastProduction(options: Readonly<{
     supportAt, topAt, blocked, updateView, setNight,
     stats, dispose,
   };
+}
+
+/**
+ * NPC posts for the east sector, derived from the assets we actually built -
+ * the wind-sheltered camp (E02) and the cloud-pavilion approach (E14).
+ *
+ * The order says the camp and the pavilion keeper reuse the existing posts and
+ * interactions, and that NPC authority stays with A. So this exports *where* a
+ * keeper stands and which way they face, measured from the real pieces, and
+ * builds no NPC, no dialogue and no second authority. A binds them.
+ */
+export type C2EastNpcPost = Readonly<{
+  id: 'camp-keeper' | 'pavilion-keeper';
+  source: 'E02-camp' | 'E14-pavilion-approach';
+  east: number;
+  north: number;
+  height: number;
+  facing: number;
+}>;
+
+export function c2EastNpcPosts(heightAt: EastHeightAt): readonly C2EastNpcPost[] {
+  const posts: C2EastNpcPost[] = [];
+  const camp = planC2EastCamp(heightAt).filter(piece => piece.family === 'hut');
+  if (camp.length > 0) {
+    // The tallest hut piece is the sheltered cabin: the keeper stands on its
+    // downhill side, facing back into the camp fire.
+    const hut = camp.reduce((tallest, piece) => piece.h > tallest.h ? piece : tallest);
+    const fire = planC2EastCamp(heightAt).find(piece => piece.family === 'fire');
+    const east = hut.east, north = hut.north - Math.max(hut.d, hut.w) / 2 - .9;
+    const ground = heightAt(east, north);
+    if (ground !== undefined) {
+      posts.push({
+        id: 'camp-keeper', source: 'E02-camp', east, north, height: ground,
+        facing: fire ? Math.atan2(fire.east - east, fire.north - north) : 0,
+      });
+    }
+  }
+  const approach = planC2SummitEastPavilionApproach(heightAt)
+    .filter(piece => piece.family === 'platform')
+    .sort((a, b) => b.w * b.d - a.w * a.d)[0];
+  if (approach) {
+    const east = approach.east, north = approach.north + approach.d / 2 + .9;
+    const ground = heightAt(east, north);
+    if (ground !== undefined) {
+      posts.push({
+        id: 'pavilion-keeper', source: 'E14-pavilion-approach', east, north, height: ground,
+        // Facing the pavilion the approach leads to, i.e. back along +east.
+        facing: Math.atan2(-approach.east + east, 1),
+      });
+    }
+  }
+  return posts;
 }
