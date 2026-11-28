@@ -9,6 +9,7 @@ import { createTownD2R30CableTowers } from './town-d2-r30-cable-towers';
 import { createTownD2R30Ropeway } from './town-d2-r30-ropeway';
 import { mainSummitR30CableWorkshopAnchor, mountMainSummitCableWorkshop } from './main-summit-cable-workshop';
 import { installNightBUpperOperation } from './town-night-b-summit-upper-install';
+import { createTownD2R30SummitPlay, type TownD2R30SummitPlay } from './town-d2-r30-summit-play';
 
 /**
  * D2's real production host for the 3.1 four-sector summit (D31-1).
@@ -493,6 +494,22 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     frontSnow = next;
   }
 
+  // ---- the original summit play, bound to the real bodies (D32-P1) ---------
+  let play: TownD2R30SummitPlay | undefined;
+
+  /** One play binding per host: registration, climb, slip and glide all read
+   * the same real support, collision and snow tier list. */
+  function summitPlay() {
+    if (disposed) throw new Error('The production host is disposed.');
+    play ??= createTownD2R30SummitPlay({
+      northWall: assembly.northWall,
+      supportAt,
+      blocked,
+      snowTierAt,
+    });
+    return play;
+  }
+
   // ---- the one real cable line (D32-1) -------------------------------------
   // D2 owns the slot and the host lifecycle; B owns the operation. The line is
   // built from B's actual upper installer, claims the ropeway clock so nothing
@@ -726,6 +743,7 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     snowAt,
     setFrontSnow,
     certifySeamCrossing,
+    summitPlay,
     preparePublicCable,
     uninstallCable,
     cableState,

@@ -133,29 +133,23 @@ test('D2-R5 rock ledges rest every 15-20m of vertical rise and stay non-solid', 
   const wall = cleanup(context, createTownD2R30NorthWall());
   const stats = wall.stats();
   assert.ok(stats.climbLedges >= 10, `too few rock ledges: ${stats.climbLedges}`);
-  // Reconstruct the ledge set the same greedy rule the module uses, then
-  // check every consecutive vertical gap sits in the reference band.
-  const anchors = [...wall.climbAnchors];
-  const ledgeMin = 15, ledgeMax = 20;
-  const ledges: typeof anchors = [anchors[0]!];
-  let rise = 0;
-  for (let i = 1; i < anchors.length; i++) {
-    const step = anchors[i]!.ground - anchors[i - 1]!.ground;
-    const projected = rise + step;
-    if (step >= ledgeMin || projected >= ledgeMin) {
-      if (projected > ledgeMax && rise >= ledgeMin * .8) { ledges.push(anchors[i - 1]!); rise = step; }
-      else { ledges.push(anchors[i]!); rise = 0; }
-    } else rise = projected;
-  }
-  if (ledges[ledges.length - 1] !== anchors[anchors.length - 1]!) ledges.push(anchors[anchors.length - 1]!);
-  assert.equal(ledges.length, stats.climbLedges, 'stats ledge count must match the greedy rule');
+  // The module emits a ledge when the accumulated rise enters 15-20 m and
+  // interpolates on the climb line when one anchor step would overshoot the
+  // band. Check the published ladder directly instead of re-deriving a rule:
+  // every interior gap must sit inside the reference band.
+  const ledges = [...wall.climbLedges];
+  assert.equal(ledges.length, stats.climbLedges, 'stats must count the published ledges');
   let inBand = 0;
-  for (let i = 1; i < ledges.length; i++) {
+  for (let i = 1; i < ledges.length - 1; i++) {
     const gap = ledges[i]!.ground - ledges[i - 1]!.ground;
-    if (gap >= ledgeMin - 2.5 && gap <= ledgeMax + .5) inBand++;
     assert.ok(gap > 0, `ledge ${i} does not rise`);
+    assert.ok(gap >= 15 && gap <= 20, `ledge ${i} rise ${gap.toFixed(1)} m is outside 15-20 m`);
+    inBand++;
   }
-  assert.ok(inBand >= Math.ceil(ledges.length * .6), `only ${inBand} of ${ledges.length - 1} ledge gaps in band`);
+  assert.ok(inBand >= 10, `only ${inBand} interior ledges in band`);
+  // The final pitch lands on the summit anchor and only has to be a real step.
+  const finalGap = ledges.at(-1)!.ground - ledges.at(-2)!.ground;
+  assert.ok(finalGap > 0 && finalGap <= 20, `final pitch ${finalGap.toFixed(1)} m`);
 
   // Every ledge is a real rock slab instance on the climb line, and the
   // ledges never add collision: the climb surface stays traversable.
@@ -166,7 +160,7 @@ test('D2-R5 rock ledges rest every 15-20m of vertical rise and stay non-solid', 
     'town-d2-r30-climb-ledge-rock', 'town-d2-r30-climb-guides',
     'town-d2-r30-climb-rung-brackets',
   ]) assert.ok(names.has(required), `missing climb structure ${required}`);
-  for (const anchor of anchors) {
+  for (const anchor of wall.climbAnchors) {
     assert.equal(wall.blocked(anchor.east, anchor.north, anchor.ground, .27, 1.7), false,
       `climb anchor ${anchor.id} is falsely blocked by ledges`);
   }
