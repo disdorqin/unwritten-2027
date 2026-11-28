@@ -41,6 +41,10 @@ test('west sector combines final raster support, road and pavilion with no entra
  const args={owner,groundAt:collision.surfaceAt,trail:trail.points,nearTiles,legacyWestExcluded:true};
  assert.throws(()=>mountNightBWestProduction({...args,legacyWestExcluded:false}),/exclusive/);
  assert.throws(()=>mountNightBWestProduction({...args,nearTiles:[]}),/near tiles/);
+ // A locally identity tile under a translated parent is not canonical.
+ const shifted=new Group();shifted.position.x=.5;owner.add(shifted);shifted.add(nearTiles[0]!);
+ assert.throws(()=>mountNightBWestProduction(args),/Unexpected near tile transform/);
+ owner.add(nearTiles[0]!);shifted.removeFromParent();
  const production=mountNightBWestProduction(args);
  t.after(()=>{production.dispose();for(const g of originals)g.dispose();for(const m of nearTiles){if(!Array.isArray(m.material))m.material.dispose();}});
  assert.ok(production.cutChunks>0);assert.equal(production.group.parent,owner);assert.throws(()=>mountNightBWestProduction(args),/already mounted/);

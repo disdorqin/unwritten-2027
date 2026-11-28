@@ -1,4 +1,5 @@
-import {type BufferGeometry,Group,type Mesh} from 'three';
+import {type BufferGeometry,Group,Matrix4,type Mesh} from 'three';
+import {intersectingCutTiles} from './town-a32-cut-wire';
 import {finishNightBAudit,finishNightBAuditAsync,type NightBAuditSliceOptions} from './town-night-b-audit-slices';
 import {prepareA32CutCache} from './town-a32-cut-preload';
 import {createNightBWestSector,nightBWestSectorSteps} from './town-night-b-summit-west-sector';
@@ -27,14 +28,19 @@ function* westProductionSteps(input:Input,prepared?:ReturnType<typeof createNigh
  if(!input.nearTiles.length||new Set(input.nearTiles).size!==input.nearTiles.length)throw Error('Missing or duplicate canonical near tiles');
  const sector=prepared??(yield* nightBWestSectorSteps(input.groundAt,input.trail,input.reserve)),cuts:Cut[]=[];
  try{
-  for(const mesh of input.nearTiles){
+  // A road can be entirely below a tall tile's Y bounds. Selection must
+  // use X/Z, like the existing worker wire contract, not Box3 overlap.
+  // Validate relative transforms through the complete parent chain.
+  input.owner.updateWorldMatrix(true,false);
+  const inverse=input.owner.matrixWorld.clone().invert(),identity=new Matrix4();
+  for(const mesh of intersectingCutTiles(input.nearTiles,sector.cutTread)){
    yield;
    const original=mesh.geometry as BufferGeometry;
-   if(!original.boundingBox)original.computeBoundingBox();
-   if(!original.boundingBox!.intersectsBox(sector.cutTread.boundingBox!))continue;
-   // Positions are already expressed in canonical local metres. Refuse a
-   // shifted, scaled, uncomposed or lower-resolution surrogate.
-   if(mesh.position.lengthSq()!==0||mesh.rotation.x!==0||mesh.rotation.y!==0||mesh.rotation.z!==0||mesh.scale.x!==1||mesh.scale.y!==1||mesh.scale.z!==1)throw Error('Unexpected near tile transform');
+   mesh.updateWorldMatrix(true,false);
+   const relative=inverse.clone().multiply(mesh.matrixWorld);
+   if(relative.elements.some((v,i)=>!Number.isFinite(v)||Math.abs(v-identity.elements[i]!)>1e-6))throw Error('Unexpected near tile transform');
+   let ancestor=mesh.parent;while(ancestor&&ancestor!==input.owner)ancestor=ancestor.parent;
+   if(ancestor!==input.owner)throw Error('Near tile not owned by canonical summit');
    const pos=original.getAttribute('position');
    for(let i=0;i<pos.count;i++){
     if(i%128===0)yield;
