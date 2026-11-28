@@ -12,16 +12,16 @@ test('real C2 gate at E300 only opens after same-foot rear and continuous front 
  const grid=createTerrainGrid(),town=new Scene(),rail=createTownRailway(grid,()=>0),west=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n)),branch=buildCraterRailExtension(grid,west,rail.route.points);
  const hall=buildRailwayStation();hall.position.set(526,26,-329);town.add(rail.group,branch.group,hall);
  const ridge=mountProductionRidge(town,grid,{loop:rail.route.points,branch:branch.samples,rearConnectorCandidate:true});
- const rear=createA31PublicSummitRoute({town,skyline:new Group(),now:()=>0,yieldFrame:async()=>{}});
+ const rear=createA31PublicSummitRoute({town,skyline:new Group(),now:()=>0,yieldFrame:async()=>{},cableAuthority:{state:()=>undefined,now:()=>undefined,daylight:()=>undefined,firstRun:{wokeAt:()=>undefined,openedAt:()=>undefined,dawnEpoch:()=>undefined}}});
  try{
   assert.equal(ridge.cloudSeam.domainReady,false);
   assert.equal(ridge.blocked(300,663.25,347),true);
   assert.equal(ridge.certifyPublicSeam(()=>undefined),false);
   assert.equal(ridge.blocked(300,663.25,347),true);
-  assert.ok(await rear.prepare());assert.ok(rear.seamReady());
+  assert.ok(await rear.prepare());assert.ok(rear.seamReady(),JSON.stringify(rear.seamCertificate()));
   const h=(e:number,n:number)=>{const y=rear.surveyedSupport(e,n);return y!==undefined&&!rear.surveyedBlocked(e,n,y)?y:undefined;};
   assert.equal(await ridge.preparePublicFrontCable({state:()=>undefined,now:()=>undefined,daylight:()=>undefined,firstRun:{wokeAt:()=>undefined,openedAt:()=>undefined,dawnEpoch:()=>undefined}},[rail.group,branch.group,hall],{yieldTask:async()=>{}}),true);
-  assert.equal(ridge.certifyPublicSeam(h),true);assert.equal(ridge.cloudSeam.domainReady,true);
+  assert.equal(ridge.certifyPublicSeam(h),true,JSON.stringify(ridge.cloudSeam));assert.equal(ridge.cloudSeam.domainReady,true);
   assert.equal(ridge.blocked(300,663.25,347),false);
   assert.equal(ridge.blocked(296.2,663.25,347),true);
   assert.ok(town.getObjectByName('cloud-deck-registration-monument'));

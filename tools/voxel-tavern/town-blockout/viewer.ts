@@ -601,6 +601,7 @@ const cloudRoute = createA31PublicSummitRoute({town:scene,skyline:summitSkyline,
  warm:(root,yieldFrame,cancelled)=>warmA32SummitMeshes(renderer,root,yieldFrame,cancelled)});
 window.addEventListener('pagehide',event=>{if(!event.persisted)cloudRoute.dispose();});
 let publicTransportBound=false,publicTransportPreparing=false,frontPreparationMs=0,frontPreparationError:string|undefined;
+let rearSeamCertificate:ReturnType<typeof cloudRoute.seamCertificate>;
 export const preparePublicSummit=()=>{/* Town entry is independent of the rear massif. */};
 function preparePublicTransport(foot:{east:number;north:number;height:number}){
  if(publicTransportBound||publicTransportPreparing||!a32SummitPrefetch(foot))return;
@@ -623,7 +624,8 @@ function preparePublicTransport(foot:{east:number;north:number;height:number}){
   const front=readA31FrontCable(productionRidge),upper=ready?cloudRoute.upperOperation():undefined;
   if(front.front)walkGeometry=geometry();
   if(front.front||upper)cableController=makePublicCableController({...front,upper});
-  if(ready&&cloudRoute.seamReady())productionRidge?.certifyPublicSeam((e,n)=>{const h=cloudRoute.surveyedSupport(e,n);return h!==undefined&&!cloudRoute.surveyedBlocked(e,n,h)?h:undefined;});
+  rearSeamCertificate=ready?cloudRoute.seamCertificate():undefined;
+  if(ready&&rearSeamCertificate?.open)productionRidge?.certifyPublicSeam((e,n)=>{const h=cloudRoute.surveyedSupport(e,n);return h!==undefined&&!cloudRoute.surveyedBlocked(e,n,h)?h:undefined;});
   publicTransportBound=true;publicTransportPreparing=false;
  })();
 }
@@ -4636,7 +4638,7 @@ renderer.setAnimationLoop(now => {
         weatherCycle:southWeatherProfile(skyFrame,outdoorWeather,weather,regionalWeather?.weather),
         fogNear: weatherFog.near, fogFar: weatherFog.far, points: renderer.info.render.points,
         craterPerf:{exteriorCertified:craterExteriorCertified,undergroundVisible:undergroundRenderParent?.visible},
-        summitProduction:{...cloudRoute.state(),farDraws:summitSkylineDraws,frontPreparationMs,frontPreparationError,frontAuditSlices:productionRidge?.frontAuditSlices,frontRouteAudit:productionRidge?.frontRouteAudit,publicTransportBound},
+        summitProduction:{...cloudRoute.state(),farDraws:summitSkylineDraws,frontPreparationMs,frontPreparationError,frontAuditSlices:productionRidge?.frontAuditSlices,frontRouteAudit:productionRidge?.frontRouteAudit,rearSeam:rearSeamCertificate,publicTransportBound},
       terrainPreload:townTerrainPreloadStats(),
         ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],heading:yaw,...(previewOptions.has('mRoadSurvey')?{roadGuide:productionRidge.baseToMiddleGuide,rearConnected:productionRidge.rearConnected,moveReject:ridgeMoveReject}:{}),surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities,cableInstances:productionRidge.facilities?.visibleInstances(),terraceMounted:!!productionRidge.terrace,cloudSeam:productionRidge.cloudSeam},
         ...(skylinePeak ? { summitSkyline: { draws: summitSkylineDraws, peakNdc: skylinePeak.toArray(),

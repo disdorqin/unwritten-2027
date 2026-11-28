@@ -182,7 +182,9 @@ export function mountRidgeCloudTerrace(owner:Object3D,field:FrontRidgeR30Field,e
   if(q)return {title:q.title,message:q.message};
  }
  let disposed=false;
+ let seamFailure:string|undefined;
  function certifySeam(rear:(e:number,n:number)=>number|undefined){
+  seamFailure=undefined;
   if(!seam||!seam.plan.supported)return false;
   // The actual replacement is tested in its open pose in one synchronous
   // transaction; refusal restores both the rendered and collision bar.
@@ -190,16 +192,17 @@ export function mountRidgeCloudTerrace(owner:Object3D,field:FrontRidgeR30Field,e
   try{
    for(let n=662.5;n<=669;n+=.25)for(let e=298.75;e<=301.25;e+=.25){
     const h=field.heightAt(e,n);
-    if(h===undefined||Math.abs(h-347)>.08||blocked(e,n,h,.27))return false;
-    if(n>=666.5){const rh=rear(e,n);if(rh===undefined||Math.abs(rh-h)>.08)return false;}
+    if(h===undefined||Math.abs(h-347)>.08||blocked(e,n,h,.27)){seamFailure=`front ${e},${n},${h}`;return false;}
+    if(n>=666.5){const rh=rear(e,n);if(rh===undefined||Math.abs(rh-h)>.08){seamFailure=`rear ${e},${n},${rh}`;return false;}}
    }
    // A real terrace foot must reach the open corridor. No standalone gate.
-   const path=surveyCloudFootpath(field,{east:336,north:640,height:347},{east:300,north:662.5,height:347},blocked,.4);
-   if(!path.length)return false;
+   // Use the certified terminal apron, not the moving cabin's centre.
+   const path=surveyCloudFootpath(field,{east:324,north:655,height:347},{east:300,north:662.5,height:347},blocked,.4);
+   if(!path.length){seamFailure='terminal apron disconnected';return false;}
    accepted=true;return true;
   }finally{if(!accepted)seam.close();if(closedSign)closedSign.visible=!accepted;}
  }
- return {group,art,starport,paving,blocked,physicalBlocked,action,seam,certifySeam,
+ return {group,art,starport,paving,blocked,physicalBlocked,action,seam,certifySeam,get seamFailure(){return seamFailure;},
   footAt:(e:number,n:number,r=.27)=>ridgeCloudFootAt(field,e,n,r),
   survey:(a:TerraceFoot,b:TerraceFoot,reach=.65)=>surveyCloudFootpath(field,a,b,blocked,reach),
   setNight(night:boolean){art.setNight(night);glow.emissive.set(night?'#f6cb8a':'#000000');glow.emissiveIntensity=night?.7:0;lights.forEach(l=>l.intensity=night?5:0)},

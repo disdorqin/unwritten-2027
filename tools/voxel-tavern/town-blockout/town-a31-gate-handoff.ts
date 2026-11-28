@@ -1,9 +1,9 @@
 type Foot=Readonly<{east:number;north:number;height:number}>;
 type Support=(east:number,north:number,height:number)=>number|undefined;
-// Actual surveyed overlap E298..302 / N666.5..669.  The 4m gate's
-// body clearance leaves 1.73m either side of its centre.
+// Common certified player-centre corridor E298.75..301.25 / N666.5..669.
+// The wider structural gate contains real side bodies; they remain collidable.
 export const a31GateNorth=668;
-export const a31GateHalfWidth=1.73;
+export const a31GateHalfWidth=1.25;
 export function a31GateFoot(p:Foot){
  return [p.east,p.north,p.height].every(Number.isFinite)&&Math.abs(p.east-300)<=a31GateHalfWidth&&p.north>=667&&p.north<=669&&Math.abs(p.height-347)<=.08;
 }

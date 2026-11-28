@@ -175,6 +175,7 @@ export function createA31PublicSummitRoute(input:Input){
   surveyedSupport,surveyedBlocked,enterAt,leaveAt,setNight,state,updateSnow,
   upperOperation:()=>status==='ready'?readA31UpperCable(production):undefined,
   seamReady:()=>status==='ready'&&production?.certifySeamCrossing().open===true,
+  seamCertificate:()=>production?.certifySeamCrossing(),
   windAt:(e:number,n:number)=>{const [le,ln]=local(e,n),wind=production?.windAt(le,ln),front=input.frontWind?.(e,n);return wind!==undefined&&front!==undefined&&Number.isFinite(front)&&ln<=86?Math.max(0,Math.min(1,Math.max(front-.2,Math.min(front+.2,wind)))):wind;},
   assembly:()=>active?assembly:undefined,
   dispose(){if(status==='disposed')return;status='disposed';stagingAbort.abort();active=false;near=false;production?.dispose();production=undefined;assembly=undefined;input.skyline.visible=true;}

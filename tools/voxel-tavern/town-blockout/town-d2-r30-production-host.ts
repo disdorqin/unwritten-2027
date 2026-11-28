@@ -424,7 +424,7 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     // whole passage, not just the contract band, so the report can say where a
     // body actually closes it. The railing itself is a real physical object and
     // is never deleted to "open" the way.
-    west: 298, east: 302, railingNorth: 663.25, south: 662.5, frontNorth: 666.5, north: 669,
+    west: 298.75, east: 301.25, railingNorth: 663.25, south: 662.5, frontNorth: 666.5, north: 669,
     floor: 347, tolerance: .45,
   });
   const anchor = townD2SectorContract.worldAnchor;
@@ -436,7 +436,7 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     const rows: { north: number; unsupported: number; obstructed: number }[] = [];
     for (let north = SEAM_CROSSING_WORLD.south; north <= SEAM_CROSSING_WORLD.north + 1e-9; north += .5) {
       let rowUnsupported = 0, rowObstructed = 0;
-      for (const east of [298, 299, 300, 301, 302]) {
+      for (let east=SEAM_CROSSING_WORLD.west;east<=SEAM_CROSSING_WORLD.east+1e-9;east+=.25) {
         // World -> summit-local (x=east, z=-north, anchor at E300/N676).
         const localEast = east - anchor.east;
         const localNorth = north - anchor.north;
@@ -663,8 +663,8 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     if (!crossing.open) {
       return Object.freeze({ ok: false as const, reason: 'crossing-closed' as const, crossing });
     }
-    const inCorridor = fromFront.east >= SEAM_CROSSING_WORLD.west - 1 &&
-      fromFront.east <= SEAM_CROSSING_WORLD.east + 1 &&
+    const inCorridor = fromFront.east >= SEAM_CROSSING_WORLD.west &&
+      fromFront.east <= SEAM_CROSSING_WORLD.east &&
       fromFront.north >= SEAM_CROSSING_WORLD.railingNorth - 1 &&
       fromFront.north <= SEAM_CROSSING_WORLD.north + 1 &&
       Math.abs(fromFront.height - SEAM_CROSSING_WORLD.floor) <= 1;
