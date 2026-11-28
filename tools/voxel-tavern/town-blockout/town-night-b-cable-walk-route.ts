@@ -4,7 +4,7 @@ type Bounds=Readonly<{west:number;east:number;south:number;north:number}>;
 type Ground=(e:number,n:number)=>number|undefined;
 type Block=(e:number,n:number,h:number,r:number,b:number)=>boolean;
 type Goal=Readonly<{id:string;foot:Foot;reach?:number;accept?:(foot:Foot)=>boolean}>;
-type Input={start:Foot;goals:readonly Goal[];bounds:Bounds;supportAt:Ground;blocked:Block;step?:number;maxGrade?:number;maxHeightDrift?:number};
+type Input={start:Foot;goals:readonly Goal[];bounds:Bounds;supportAt:Ground;blocked:Block;step?:number;maxGrade?:number;maxHeightDrift?:number;allowsSupportedStep?:(from:Foot,to:Foot)=>boolean};
 /** Bounded reachability on the real walking authority. No straight-line
  * assumption, fake height or jump. Every edge samples its midpoint and
  * exact endpoints with the player footprint. The returned paths can be
@@ -35,10 +35,11 @@ export function auditNightBCableWalkRoutes(input:Input){
  const cache=new Map<number,Foot|undefined>(),sample=(i:number)=>{if(!cache.has(i))cache.set(i,feet(point(i)));return cache.get(i);};
  function edge(a:Foot,c:Foot){
   const d=Math.hypot(a.east-c.east,a.north-c.north);
-  if(Math.abs(a.height-c.height)>grade*d+.001){reasons.grade++;return false;}
+  const legal=(x:Foot,y:Foot,dist:number)=>Math.abs(x.height-y.height)<=grade*dist+.001||(Math.abs(x.height-y.height)<=.43&&input.allowsSupportedStep?.(x,y)===true);
+  if(!legal(a,c,d)){reasons.grade++;return false;}
   if(d<1e-8)return true;
   const mid=feet({east:(a.east+c.east)/2,north:(a.north+c.north)/2});
-  if(!mid||Math.abs(mid.height-a.height)>grade*d/2+.001||Math.abs(mid.height-c.height)>grade*d/2+.001){reasons.grade++;return false;}
+  if(!mid||!legal(a,mid,d/2)||!legal(mid,c,d/2)){reasons.grade++;return false;}
   return true;
  }
  function near(p:Point){

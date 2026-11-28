@@ -8,6 +8,13 @@ test('continuous route rejects a disconnected floor and steep step even when bot
  assert.equal(auditNightBCableWalkRoutes({...base,goals,blocked:(e)=>e>1.5&&e<2.5}).ready,false);
  assert.equal(auditNightBCableWalkRoutes({...base,goals,supportAt:e=>e>1.5&&e<2.5?348:347}).ready,false);
 });
+test('only an explicitly supported real floor step may exceed the local grade',()=>{
+ const goals=[{id:'floor',foot:{east:4,north:0,height:347.14}}],supportAt=(e:number)=>e>=2?347.14:347;
+ const opts={...base,goals,supportAt};
+ assert.equal(auditNightBCableWalkRoutes(opts).ready,false);
+ assert.equal(auditNightBCableWalkRoutes({...opts,allowsSupportedStep:(a,b)=>Math.max(a.height,b.height)>347.04}).ready,true);
+ assert.equal(auditNightBCableWalkRoutes({...opts,supportAt:e=>e>=2?347.6:347,maxHeightDrift:1,goals:[{id:'cliff',foot:{east:4,north:0,height:347.6}}],allowsSupportedStep:()=>true}).ready,false);
+});
 test('repair target can be solid; only an eligible connected standable foot within actual reach counts',()=>{
  const foot={east:3,north:0,height:347},blocked=(e:number,n:number)=>Math.hypot(e-3,n)<.5;
  const exact=auditNightBCableWalkRoutes({...base,blocked,goals:[{id:'frame',foot}]});
