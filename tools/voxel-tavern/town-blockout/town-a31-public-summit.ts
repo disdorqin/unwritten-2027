@@ -27,7 +27,11 @@ export function createA31PublicSummitRoute(input:Input){
  let assembly:Readonly<{group:Group;r30:Production['assembly'];summitSnowAt(e:number,n:number):number|undefined}>|undefined;
  let near=false,elapsedMs=0,cutTiles=0,draws=0,duplicates:readonly string[]=[];
  const yieldFrame=input.yieldFrame??(()=>new Promise<void>(resolve=>{
-  if(typeof requestIdleCallback==='function')requestIdleCallback(()=>resolve(),{timeout:1500});
+  // The ordinary entry screen owns the expensive initial mesh build.
+  // Yield between sectors so that the loading UI can repaint, without
+  // relying on idle periods from a busy WebGL animation loop.
+  if(typeof document!=='undefined'&&document.body.classList.contains('town-entry-pending'))setTimeout(resolve,0);
+  else if(typeof requestIdleCallback==='function')requestIdleCallback(()=>resolve(),{timeout:1500});
   else setTimeout(resolve,0);
  }));
  function prepare(){
@@ -77,10 +81,13 @@ export function createA31PublicSummitRoute(input:Input){
   if(!finite(position)||status==='disposed')return;
   if(status==='idle')void prepare();
   if(!production)return;
-  // The pre-existing public ridge and its apron remain the foreground
-  // authority. Use the real rear body from safe station viewpoints, not
-  // inside the unapproved overlap at the gate. Hysteresis avoids flicker.
-  near=active||position.east>=0&&position.east<=640&&position.north>= (near?410:445)&&position.north< (near?630:610);
+  // From the low front ridge the complete massif's vertical south
+  // closure is an inappropriate near view (it would show a cliff wall).
+  // The accepted distant skyline starts well behind this closure.
+  // Only the surveyed high cloud apron, or a certified rear domain,
+  // sees the complete production body. No overlapping town collisions.
+  near=active||position.east>=286.5&&position.east<=352&&
+   position.north>=(near?631:635)&&position.north<666&&position.height>=(near?345:346);
   production.group.visible=near;input.skyline.visible=!near&&!active;
   if(near)production.update(...local(position.east,position.north),input.now());
  }
@@ -122,7 +129,7 @@ export function createA31PublicSummitRoute(input:Input){
   if(night===value)return;night=value;production?.setNight(value);visual?.afterNightChange();
  }
  function state(){
-  return {status,stage,failure,active,near,draws,elapsedMs,ready:audit?.ready===true&&status==='ready',
+  return {status,stage,failure,active,near,farVisible:input.skyline.visible,draws,elapsedMs,ready:audit?.ready===true&&status==='ready',
    installed:production?.installed()??[],cutTiles:production?cutTiles:0,
    duplicates:production?duplicates:[],sectorSamples:audit?.sectors.map(s=>s.samples)??[],
    legacyPruned:visual?{roadTriangles:visual.removedTrailTriangles,forestInstances:visual.removedForestInstances}:undefined,

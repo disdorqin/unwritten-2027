@@ -510,7 +510,7 @@ try{
   await page.waitForFunction(()=>{const f=window.__za22Frame?.ridge?.foot;return f&&Math.hypot(f[0]-296,f[1]-520)<1.2;},null,{timeout:20000});
   await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-296,p.north-520)<1.2);
   await face(page,evidence,0);
-  await page.waitForFunction(()=>{const s=window.__za22Frame?.summitProduction;return s?.ready&&s.near&&s.draws>0&&s.sceneOwner==='town';},null,{timeout:15000});
+  await page.waitForFunction(()=>{const s=window.__za22Frame?.summitProduction;return s?.ready&&!s.near&&s.draws===0&&s.farVisible&&s.farDraws>0&&s.sceneOwner==='town';},null,{timeout:15000});
   await take('mountain-foot-north');
   await page.locator('#town-panel-toggle').click();await page.locator('#lighting').click();await page.locator('#town-settings-close').click();
   const prior=snapshots.at(-1).weatherCycle;
@@ -524,7 +524,7 @@ try{
   const frames=await page.evaluate(()=>window.__a31LoadFrames);
   const loading=frames.filter(f=>f.status==='loading'||f.status==='ready').map(f=>f.ms).sort((a,b)=>a-b);
   const loadFrames={samples:loading.length,p95:loading[Math.floor((loading.length-1)*.95)],p99:loading[Math.floor((loading.length-1)*.99)],max:loading.at(-1),stages:frames.filter(f=>f.ms>100)};
-  report.entry={scope:'public viewer with actual four-sector mount and closed access; menu station arrival then native 4m out/back, not a continuous ascent',snapshots,loadFrames};
+  report.entry={scope:'public viewer with actual resident four-sector mount, safe far LOD and closed access; menu station arrival then native 4m out/back, not a continuous ascent',snapshots,loadFrames};
   report.traversal={top:returned,returned};
  }else if(mobileReview){
   const cdp=await page.context().newCDPSession(page),touch=async(type,points)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:points});

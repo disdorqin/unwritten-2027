@@ -559,7 +559,7 @@ scene.add(skyClouds.group);
 // The new forest is mounted with the same graded ridge field.
 const frontRidgeCloudBand = createFrontRidgeCloudBand();
 scene.add(frontRidgeCloudBand.group);
-if (reportSummitSkyline) {
+if (reportSummitSkyline||previewOptions.has('profile')) {
   summitSkylineMesh.onAfterRender = (_renderer, _scene, renderedCamera) => {
     if (renderedCamera === camera) summitSkylineDraws++;
   };
@@ -586,6 +586,7 @@ void enterSkyCity; void exitSkyCity; void skyCityHost;
 // Old ZA22 moving cabins and their independent mountain are review-only.
 const cloudRoute = createA31PublicSummitRoute({town:scene,skyline:summitSkyline,now:presence.serverNow,profile:previewOptions.has('profile')});
 window.addEventListener('pagehide',event=>{if(!event.persisted)cloudRoute.dispose();});
+export const preparePublicSummit=()=>cloudRoute.prepare();
 const southEntryHost=createSouthEntryHost();
 // 缆车修缮一线宿主 (B2): the host holds no repair state — actions are
 // derived per frame from the server-authored state in town-presence.
@@ -3938,6 +3939,9 @@ renderer.setAnimationLoop(now => {
   const frameSeconds = Math.max(0, now - previous) / 1000;
   const dt = Math.min(.25, frameSeconds);
   previous = now;
+  // The root entry awaits the real D2 staging behind the existing loading
+  // screen. Do not render or accept movement into a half-built world.
+  if(document.body.classList.contains('town-entry-pending'))return;
   cloudRoute.update({east:x,north:n,height:ground});
   showSummitStatus(now);
   // The mountain branch returns before the ordinary town weather block.
@@ -4493,7 +4497,7 @@ renderer.setAnimationLoop(now => {
         weatherCycle:southWeatherProfile(skyFrame,outdoorWeather,weather,regionalWeather?.weather),
         fogNear: weatherFog.near, fogFar: weatherFog.far, points: renderer.info.render.points,
         craterPerf:{exteriorCertified:craterExteriorCertified,undergroundVisible:undergroundRenderParent?.visible},
-        summitProduction:cloudRoute.state(),
+        summitProduction:{...cloudRoute.state(),farDraws:summitSkylineDraws},
         ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],heading:yaw,...(previewOptions.has('mRoadSurvey')?{roadGuide:productionRidge.baseToMiddleGuide,rearConnected:productionRidge.rearConnected,moveReject:ridgeMoveReject}:{}),surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities,cableInstances:productionRidge.facilities?.visibleInstances(),terraceMounted:!!productionRidge.terrace,cloudSeam:productionRidge.cloudSeam},
         ...(skylinePeak ? { summitSkyline: { draws: summitSkylineDraws, peakNdc: skylinePeak.toArray(),
           camera: camera.position.toArray(), far: camera.far } } : {}),

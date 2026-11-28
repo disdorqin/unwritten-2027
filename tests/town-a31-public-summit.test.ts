@@ -15,8 +15,10 @@ test('public route owns the actual four sector mount and exclusive far/near disp
   assert.ok(state.legacyPruned!.roadTriangles>0);assert.ok(state.legacyPruned!.forestInstances>0);
   assert.ok(root.getObjectByName('night-a-south-sector'));assert.ok(root.getObjectByName('night-b-west-sector'));assert.ok(root.getObjectByName('town-night-c2-summit-east-production'));
   assert.equal(root.getObjectByName('main-summit-assembly'),undefined);assert.equal(root.getObjectByName('town-d2-r30-ropeway'),undefined);
-  const far={east:223,north:180,height:12},near={east:440,north:520,height:140};
+  const far={east:223,north:180,height:12},station={east:296,north:520,height:8.13},near={east:336,north:640,height:347};
   route.update(far);assert.equal(skyline.visible,true);assert.equal(root.visible,false);
+  route.update(station);assert.equal(skyline.visible,true);assert.equal(root.visible,false);
+  route.update({...near,height:140});assert.equal(skyline.visible,true);assert.equal(root.visible,false);
   route.update(near);assert.equal(skyline.visible,false);assert.equal(root.visible,true);
   route.setNight(true);route.setNight(false);
   const trail=root.getObjectByName('town-d2-r30-trail-support')!;
