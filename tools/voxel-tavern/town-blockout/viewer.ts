@@ -3589,6 +3589,19 @@ function commitGateStep(){
  storeWalkView(walkCurrent);walkPrevious.copy(walkCurrent);
 }
 let ridgeMoveReject:unknown;
+function a33MovementGround(e:number,n:number,h:number){
+ if(cloudRoute.active()){
+  const support=cloudRoute.surveyedSupport(e,n,bodyRadius);
+  return {owner:'d2-rear',height:support,ready:support!==undefined,blocked:support===undefined||cloudRoute.surveyedBlocked(e,n,support,bodyRadius,bodyHeight)};
+ }
+ outdoorSurfaceAt(e,n,h);const sample=outdoorTerrainContract?.sample({east:e,north:n,hintHeight:h});
+ return {owner:sample?.surfaceId,height:sample?.height,ready:sample?.ready??false,passable:sample?.passable,grade:sample?.grade,
+  cellOwner:e<0?'west':productionRidge?.ownsCell(Math.floor(e),Math.floor(n))?'front-ridge':'town'};
+}
+function a33Reject(reason:string,e:number,nn:number,extra:Record<string,unknown>={}){
+ if(!profileTown||!previewOptions.has('mRoadSurvey'))return;
+ ridgeMoveReject={reason,from:[x,n,ground],target:[e,nn],foot:a33MovementGround(x,n,ground),targetGround:a33MovementGround(e,nn,ground),...extra};
+}
 function tryMove(nextX: number, nextN: number) {
   if(pendingGateStep)return false;
   if (dreamInMine()) return tryMoveInMine(nextX, nextN);
@@ -3597,17 +3610,17 @@ function tryMove(nextX: number, nextN: number) {
   const seamFrom={east:x,north:n,height:ground},seamTo={east:nextX,north:nextN,height:ground};
   if(a31GateCrossing(cloudRoute.active(),seamFrom,seamTo)){
    if(airHeight!==undefined||sledRide.active()||sledRide.recovering()||!gateStepEligible(seamFrom,seamTo)){
-    if(profileTown)ridgeMoveReject={reason:'seam-denied',from:seamFrom,to:seamTo,frontCertified:productionRidge?.cloudSeam.domainReady,rearStatus:cloudRoute.state().status,air:airHeight!==undefined,sled:sledRide.active()};
+    a33Reject('seam-denied',nextX,nextN,{frontCertified:productionRidge?.cloudSeam.domainReady,rearStatus:cloudRoute.state().status,air:airHeight!==undefined,sled:sledRide.active()});
     return false;
    }
    pendingGateStep={from:seamFrom,to:seamTo,entering:!cloudRoute.active()};return true;
   }
   if (cloudRoute.active() && !cloudRoute.acceptsStep(x, n, nextX, nextN, bodyRadius)) {
-    if(profileTown)ridgeMoveReject={reason:'rear-support-or-grade',from:[x,n,ground],next:[nextX,nextN],support:cloudRoute.walkingSurfaceAt(nextX,nextN,bodyRadius)};
+    a33Reject('rear-support-or-grade',nextX,nextN,{support:cloudRoute.walkingSurfaceAt(nextX,nextN,bodyRadius)});
     return false;
   }
   if (!walkable(nextX, nextN)) {
-    if(profileTown&&previewOptions.has('mRoadSurvey'))ridgeMoveReject={reason:'walkable',next:[nextX,nextN],terrain:canEnter(nextX,nextN),scenery:scenery.blocked(nextX,nextN),district:districts.blocked(nextX,nextN),forest:forest.blocked(nextX,nextN),street:streetscape.blocked(nextX,nextN)};
+    a33Reject('walkable',nextX,nextN,{terrain:canEnter(nextX,nextN),scenery:scenery.blocked(nextX,nextN),district:districts.blocked(nextX,nextN),forest:forest.blocked(nextX,nextN),street:streetscape.blocked(nextX,nextN)});
     return false;
   }
   const feet = airHeight ?? ground;
@@ -3621,12 +3634,12 @@ function tryMove(nextX: number, nextN: number) {
     bodyRadius, surfaceAt(nextX, nextN, ground),localGeometry);
   const nextHeight = airHeight === undefined ? floor : feet;
   if (floor > limit || obstructed(nextX, nextN, nextHeight,localGeometry)) {
-    if(profileTown&&previewOptions.has('mRoadSurvey'))ridgeMoveReject={reason:floor>limit?'floor':'obstructed',next:[nextX,nextN,floor],ridge:productionRidge?.blocked(nextX,nextN,nextHeight),rail:railway.vehicleBlocks(nextX,nextN,nextHeight,bodyHeight,bodyRadius),
-     boxes:[...localGeometry.colliders,...localGeometry.floors].filter(box=>nextHeight+surfaceEpsilon<box.max[1]&&nextHeight+bodyHeight-surfaceEpsilon>box.min[1]&&overlapsBody(nextX,nextN,box)).map(box=>({...box,owner:ridgeGeometryOwners.get(box)}))};
+    if(profileTown&&previewOptions.has('mRoadSurvey'))a33Reject(floor>limit?'floor':'obstructed',nextX,nextN,{floor,limit,ridge:productionRidge?.blocked(nextX,nextN,nextHeight),rail:railway.vehicleBlocks(nextX,nextN,nextHeight,bodyHeight,bodyRadius),
+     boxes:[...localGeometry.colliders,...localGeometry.floors].filter(box=>nextHeight+surfaceEpsilon<box.max[1]&&nextHeight+bodyHeight-surfaceEpsilon>box.min[1]&&overlapsBody(nextX,nextN,box)).map(box=>({...box,owner:ridgeGeometryOwners.get(box)}))});
     return false;
   }
   if(!homeReturn&&!cloudRoute.active()&&airHeight===undefined&&productionRidge&&
-    !productionRidge.allowsUphill({east:x,north:n,height:ground},{east:nextX,north:nextN,height:floor})){if(profileTown&&previewOptions.has('mRoadSurvey'))ridgeMoveReject={reason:'grade',next:[nextX,nextN,floor]};return false;}
+    !productionRidge.allowsUphill({east:x,north:n,height:ground},{east:nextX,north:nextN,height:floor})){a33Reject('grade',nextX,nextN,{floor,grade:Math.abs(floor-ground)/Math.max(.00001,Math.hypot(nextX-x,nextN-n))});return false;}
   if (!homeReturn && currentGuardDuty()?.blocksStep(
     { east: x, north: n, height: feet }, { east: nextX, north: nextN, height: nextHeight },
   )) {if(profileTown&&previewOptions.has('mRoadSurvey'))ridgeMoveReject={reason:'guard',next:[nextX,nextN,floor]};return false;}

@@ -8,10 +8,10 @@ import {fromSummitPresencePose} from '../src/shared/za22-summit-presence-domain.
 const [origin, output, segment = 'all'] = process.argv.slice(2);
 assert.ok(origin && output, 'Use the production-preview loopback URL and an evidence directory');
 const bare = process.env.ZA22_BARE === '1';
-const url = new URL(bare ? '/' : segment==='a31-front-north'?'/?profile&mRoadSurvey':'/?profile', origin);
+const url = new URL(bare ? '/' : ['a31-front-north','a33-front-exterior'].includes(segment)?'/?profile&mRoadSurvey':'/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','west-mountain','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review','night-r3-entry','night-r3-bare-weather','night-r3-bare-west','a31-bare-crater-return','a31-front-north','a32-stream'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','west-mountain','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review','night-r3-entry','night-r3-bare-weather','night-r3-bare-west','a31-bare-crater-return','a31-front-north','a32-stream','a33-front-exterior'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -255,7 +255,7 @@ async function walkTo(page, evidence, target, label, precision=.46) {
     if (distance <= precision) {
       const checkpoint={ label, target, ...from, wire: evidence.poses.at(-1) };
       evidence.checkpoints.push(checkpoint);
-      if(['joint-historic','west-mountain','night-r3-bare-west','a31-bare-crater-return','a31-front-north'].includes(segment))await appendFile(join(output,'native-checkpoints.ndjson'),JSON.stringify(checkpoint)+'\n');
+      if(['joint-historic','west-mountain','night-r3-bare-west','a31-bare-crater-return','a31-front-north','a33-front-exterior'].includes(segment))await appendFile(join(output,'native-checkpoints.ndjson'),JSON.stringify(checkpoint)+'\n');
       console.log(JSON.stringify({ phase: label, east: from.east, north: from.north, y: from.height }));
       return;
     }
@@ -519,7 +519,7 @@ try{
   await picture(page,evidence,'bare-weather-walk');
   report.entry={scope:'ordinary bare root, single corner menu, nested settings, chat send, close and native movement',weather,lightingDisabled:true,snowToggleRestored:true,menuTouch,drawer:bounds,hiddenIds,chatSent:true,remoteUnread:true,start,moved};
   report.traversal={top:moved,returned:moved};
- }else if(segment==='a31-front-north'){
+ }else if(segment==='a31-front-north'||segment==='a33-front-exterior'){
   // Normal root, read-only profiling, ordinary station menu as segmented start.
   const state=()=>page.evaluate(()=>window.__za22Frame);
   await page.waitForFunction(()=>window.__za22Frame?.ridge?.roads===4&&window.__za22Frame?.summitProduction?.status==='idle',null,{timeout:45000});
@@ -551,6 +551,20 @@ try{
   const top=await readPose(page);
   const highWire=await waitForWire(page,evidence,p=>p?.area==='mountain'&&p.north>=650&&Math.hypot(p.east-top.east,p.north-top.north)<.8);
   await picture(page,evidence,'front-north-mountain-room');
+  if(segment==='a33-front-exterior'){
+   const s=await state();assert.equal(s.summitProduction.presentation,'exterior',JSON.stringify(s.summitProduction));assert.equal(s.summitProduction.farVisible,false);assert.equal(s.summitProduction.exteriorClipped,true);assert.equal(s.summitProduction.active,false);
+   const views=[];
+   for(const light of ['current','alternate']){
+    if(light==='alternate'){await page.locator('#town-panel-toggle').click();await page.locator('#lighting').click();await page.locator('#town-settings-close').click();}
+    for(const [label,yaw] of [['north',0],['east',Math.PI/2],['south',Math.PI],['west',Math.PI*1.5]]){
+     await face(page,evidence,yaw);await picture(page,evidence,'a33-exterior-'+light+'-'+label);
+     const f=await state();assert.equal(f.summitProduction.presentation,'exterior');assert.equal(f.summitProduction.farVisible,false);assert.equal(f.summitProduction.sceneOwner,'town');
+     views.push({label,light,foot:f.ridge.foot,heading:f.ridge.heading,draws:f.summitProduction.draws,calls:f.calls,triangles:f.triangles,weather:f.weatherCycle,presentation:f.summitProduction.presentation});
+    }
+   }
+   assert.ok(views.some(v=>v.draws>0),'real rear geometry must submit visible draws');
+   report.a33Exterior={views,room:highWire.area,root:s.summitProduction.sceneOwner};
+  }
   const peerUrl=new URL('/presence-mountain',origin);peerUrl.protocol='ws:';
   const peer=new WebSocket(peerUrl);let peerId,seen=false;
   try{
