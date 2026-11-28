@@ -193,7 +193,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
 
   if (includeStrata) {
     addDetail('strata', () => {
-      const strata = createTownD2R30Strata({ heightAt, arrivalHeight });
+      const strata = createTownD2R30Strata({heightAt,arrivalHeight,trailPoints});
       children.push(strata.group);
       disposers.push(() => strata.dispose());
       nightHooks.push(value => strata.setNight(value));
@@ -252,7 +252,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
 
   if (includeSledGateSupport) {
     addDetail('sled-gate-support', () => {
-      const sled = createTownD2R30SledGateSupport({ heightAt, arrivalHeight });
+      const sled = createTownD2R30SledGateSupport({heightAt,arrivalHeight,trailPoints});
       children.push(sled.group);
       disposers.push(() => sled.dispose());
       nightHooks.push(value => sled.setNight(value));

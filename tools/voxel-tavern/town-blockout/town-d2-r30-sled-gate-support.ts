@@ -64,13 +64,13 @@ function applyStoneGradient(geometry: BufferGeometry, topHex: string, bottomHex:
 }
 
 /** Derives the 12 survey gates from the canonical P-1 walkway crosswalk. */
-export function surveyTownD2R30SledGates(arrivalHeight: number) {
-  const block = createMainSummitBlock(mainSummitLayout, arrivalHeight, 100);
-  try {
-    const trail = createMainSummitTrail(block.heightAt, arrivalHeight);
+export function surveyTownD2R30SledGates(arrivalHeight:number,supplied?:ReturnType<typeof createMainSummitTrail>['points']){
+  const block=supplied?undefined:createMainSummitBlock(mainSummitLayout,arrivalHeight,100);
+  try{
+    const points=supplied??createMainSummitTrail(block!.heightAt,arrivalHeight).points;
     const cumulative = [0];
-    for (let index = 1; index < trail.points.length; index++) {
-      const a = trail.points[index - 1]!, b = trail.points[index]!;
+    for (let index = 1; index < points.length; index++) {
+      const a = points[index - 1]!, b = points[index]!;
       cumulative.push(cumulative[index - 1]! + Math.hypot(b.east - a.east, b.north - a.north, b.height - a.height));
     }
     const footpathM = cumulative.at(-1)!;
@@ -84,7 +84,7 @@ export function surveyTownD2R30SledGates(arrivalHeight: number) {
         if (cumulative[middle]! > remaining) hi = middle; else lo = middle;
       }
       const fraction = (remaining - cumulative[lo]!) / (cumulative[hi]! - cumulative[lo]!);
-      const a = trail.points[lo]!, b = trail.points[hi]!;
+      const a = points[lo]!, b = points[hi]!;
       return {
         east: a.east + (b.east - a.east) * fraction,
         north: a.north + (b.north - a.north) * fraction,
@@ -93,7 +93,7 @@ export function surveyTownD2R30SledGates(arrivalHeight: number) {
     };
     return Array.from({ length: summitSledGateCount }, (_, index) => pointAt((index + 1) * segmentM));
   } finally {
-    block.dispose();
+    block?.dispose();
   }
 }
 
@@ -101,6 +101,7 @@ export function createTownD2R30SledGateSupport(options: {
   arrivalHeight?: number;
   heightAt?: (east: number, north: number, arrivalHeight?: number) => number | undefined;
   groundedBand?: number;
+  trailPoints?:ReturnType<typeof createMainSummitTrail>['points'];
 } = {}) {
   const arrivalHeight = options.arrivalHeight ?? 347;
   const groundedBand = options.groundedBand ?? DEFAULTS.groundedBand;
@@ -108,7 +109,7 @@ export function createTownD2R30SledGateSupport(options: {
     throw new RangeError('Invalid D2-R03 sled gate support parameters.');
   }
   const heightAt = options.heightAt ?? ((east, north) => sampleTownD2R30Height(east, north, arrivalHeight));
-  const gates = surveyTownD2R30SledGates(arrivalHeight);
+  const gates = surveyTownD2R30SledGates(arrivalHeight,options.trailPoints);
 
   const group = new Group();
   group.name = 'town-d2-r30-sled-gate-support';
