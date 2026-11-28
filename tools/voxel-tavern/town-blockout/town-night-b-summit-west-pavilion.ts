@@ -47,6 +47,15 @@ export function createNightBWestPavilion(site:WestPavilionSite,heightAt:Height){
   const heights:number[]=[];for(const dx of [-.4,0,.4])for(const dz of [-.4,0,.4]){const p=world(x+dx,z+dz),h=heightAt(p.e,p.n);if(h===undefined||!Number.isFinite(h))throw new RangeError('missing footing');heights.push(h)}
   const bottom=Math.min(...heights)-site.height-.35;if(bottom>=-.18)return;
   box('west-pavilion-footing',x,(bottom-.18)/2,z,.8,-.18-bottom,.8,stone,true);
+  // Broad ashlar toe rests below the lowest actual footprint corner.
+  const baseHeights:number[]=[];
+  for(const dx of [-.61,0,.61])for(const dz of [-.61,0,.61]){const p=world(x+dx,z+dz),h=heightAt(p.e,p.n);if(h===undefined||!Number.isFinite(h))throw new RangeError('missing ashlar footing');baseHeights.push(h)}
+  const toeBottom=Math.min(...baseHeights)-site.height-.28,toeTop=Math.min(-.22,Math.max(bottom+.30,Math.max(...baseHeights)-site.height+.26));
+  if(toeTop>toeBottom)box('b33-ashlar-toe',x,(toeBottom+toeTop)/2,z,1.22,toeTop-toeBottom,1.22,stone,true);
+  if(-.18-bottom>.85){
+   for(let y=bottom+.72;y<-.36;y+=.72)box('b33-ashlar-course',x,y,z,.83,.065,.83,trim,true);
+   box('b33-ashlar-cap',x,-.25,z,.96,.14,.96,stone,true);
+  }
  }
  for(const x of [-3.5,3.5])for(const z of [-2.5,2.5])pier(x,z);
  const zmid=-depth/2-span/2;box('west-pavilion-walkway',0,-.12,zmid,2,.24,span,wood);

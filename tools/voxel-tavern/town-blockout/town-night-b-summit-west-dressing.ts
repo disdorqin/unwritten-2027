@@ -37,6 +37,10 @@ export function* nightBWestDressingSteps(heightAt:Height,reserved:WestReserve){
   const grove=.5+.5*Math.sin(x*.022+z*.013+1.7*Math.sin(z*.015));
   const forest=Math.max(0,Math.min(1,(510-y)/175))*(.20+.70*grove*grove);
   const c=get(x,z);
+  const along=Math.max(0,Math.min(1,(z-520)/770)),channel=-760-95*Math.sin(along*Math.PI)+54*along;
+  const shoulder=Math.exp(-Math.pow((Math.abs(x-channel)-76)/54,2));
+  const bedding=.5+.5*Math.sin((y+.055*x-.032*z)*.22);
+  const scree=(.14+.28*shoulder)*bedding*Math.min(1,slope/.45);
   if(y<510&&slope<.72&&q<forest){
    const h=4.5+hash(e,n,4)*5.8,w=.38+hash(e,n,5)*.34,rot=hash(e,n,6)*Math.PI;
    add(c,x,z,y+h*.5-.18,w,h+.36,w,rot,pick(colors.bark,q));
@@ -48,8 +52,11 @@ export function* nightBWestDressingSteps(heightAt:Height,reserved:WestReserve){
     add(c,x,z,cy+branch/2+.025,r*(.82+.28*hash(e,n,12+tier)),.05,depth*.68,yaw,pick(colors.snow,hash(e,n,22+tier)));
    }
    body(c,{e:x,n:z,y:y-.36,r:w*.71,h:h+.36,kind:'tree'});trees++;
-  }else if(q<.26&&slope<1.2){
-   const w=.9+hash(e,n,18)*2.7,h=.6+hash(e,n,19)*1.6,deep=.18+slope*w*.8,angle=hash(e,n,20)*Math.PI;
+  }else if(q<.26+scree&&slope<1.2){
+   const w=.9+hash(e,n,18)*2.7,h=.6+hash(e,n,19)*1.6,angle=hash(e,n,20)*Math.PI;
+   const support=[-1,0,1].flatMap(i=>[-1,0,1].map(j=>heightAt(x+i*w/2*Math.cos(angle)+j*w*.385*Math.sin(angle),z+i*w/2*Math.sin(angle)-j*w*.385*Math.cos(angle))));
+   if(support.some(v=>v===undefined||!Number.isFinite(v)))continue;
+   const deep=Math.max(.18,y-Math.min(...support as number[])+.18);
    add(c,x,z,y+(h-deep)*.5,w,h+deep,w*.77,angle,pick(colors.rock,hash(e,n,21)));
    add(c,x,z,y+h+h*.07,w*.73,h*.14,w*.59,angle,pick(colors.snow,hash(e,n,22)));
    const side=w*.14;

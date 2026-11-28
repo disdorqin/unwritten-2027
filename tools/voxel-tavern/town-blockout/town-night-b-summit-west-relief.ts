@@ -56,7 +56,7 @@ export function nightBWestHeightDelta(e:number,n:number,base:Height,reserved?:We
 export function composeNightBWestHeight(base:Height,reserved?:WestReserve):Height{
  return (e,n)=>{const h=base(e,n);return h===undefined?undefined:h+westDelta(e,n,h,reserved);};
 }
-const forestTint=new Color('#36564b'),woodlandTint=new Color('#647561'),rockTint=new Color('#78858b'),warmRockTint=new Color('#9a8469'),snowTint=new Color('#dfe8ed');
+const forestTint=new Color('#36564b'),woodlandTint=new Color('#647561'),rockTint=new Color('#8a8378'),warmRockTint=new Color('#a98a56'),bedTint=new Color('#5d4630'),snowTint=new Color('#dfe8ed');
 /** Continuous west-sector biome palette, feathered into the unmodified
  * neighbour's actual vertex color. Use final canonical height and slope. */
 export function tintNightBWestSurface(e:number,n:number,h:number,slope:number,base:Color){
@@ -66,10 +66,12 @@ export function tintNightBWestSurface(e:number,n:number,h:number,slope:number,ba
  const grain=Math.sin(e*.019+n*.011)*Math.cos(n*.013-e*.008),micro=Math.sin(e*.093+n*.071)*Math.cos(n*.047);
  const shifted=h+grain*24;
  const c=forestTint.clone().lerp(woodlandTint,smooth((shifted-220)/100));
- const rockWeight=smooth((shifted-300)/150)*(.35+.65*smooth((slope-.14)/.42));
- const rock=rockTint.clone().lerp(warmRockTint,.28+.23*grain);
+ const bedding=.5+.5*Math.sin((h+.055*e-.032*n)*.22);
+ const exposure=smooth((slope-.09)/.42);
+ const rockWeight=Math.max(smooth((shifted-300)/150)*(.35+.65*exposure),exposure*.79);
+ const rock=rockTint.clone().lerp(warmRockTint,.28+.23*grain).lerp(bedTint,.37*bedding*exposure);
  c.lerp(rock,rockWeight);
- const snowWeight=smooth((shifted-345)/160)*(1-.75*smooth((slope-.3)/.62));
+ const snowWeight=smooth((shifted-380)/180)*(1-.85*smooth((slope-.25)/.62));
  c.lerp(snowTint,snowWeight).multiplyScalar(1+.045*micro);
  return base.lerp(c,seam);
 }
