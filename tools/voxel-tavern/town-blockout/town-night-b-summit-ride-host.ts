@@ -6,7 +6,7 @@ type Foot={east:number;north:number;height:number};
 type Cabin=0|1;
 type Front=ReturnType<typeof createNightBFrontService>;
 type Upper=ReturnType<typeof createNightBLine2Service>;
-export type CableRideFrame=Readonly<{line:1|2;cabin:Cabin;feet:Foot;whiteout:boolean;station:string|null;synchronized:boolean}>;
+export type CableRideFrame=Readonly<{line:1|2;cabin:Cabin;feet:Foot;whiteout:boolean;station:string|null;synchronized:boolean;phase?:'station'|'departure'|'enter-cloud'|'whiteout'|'arrival';elapsedMs?:number;direction?:'up'|'down'}>;
 type Ride={line:1|2;cabin:Cabin};
 type Input={
  front?:Front;frontFacilities?:ReturnType<typeof mountRidgeCableFacilities>;
@@ -40,7 +40,7 @@ export function createNightBCableRideHost(input:Input){
   if(!ride)return;
   if(input.domain()!==(ride.line===1?'town':'summit'))return last&&{...last,feet:{...last.feet},synchronized:false};
   const p=ride.line===1?input.front?.ridePose({cabin:ride.cabin}):input.upper?.ridePose({cabinIndex:ride.cabin});
-  if(p)last={line:ride.line,cabin:ride.cabin,feet:ride.line===1?{...p.feet}:world(p.feet),whiteout:'whiteout'in p&&p.whiteout,station:p.station,synchronized:true};
+  if(p)last={line:ride.line,cabin:ride.cabin,feet:ride.line===1?{...p.feet}:world(p.feet),whiteout:'whiteout'in p&&p.whiteout,station:p.station,synchronized:true,direction:p.direction,...('phase'in p?{phase:p.phase,elapsedMs:p.elapsedMs}:{})};
   // During a network gap, keep the last valid location and lock walking.
   // No local wall-clock extrapolation and no teleport to a station.
   return last&&{...last,feet:{...last.feet},synchronized:!!p};
