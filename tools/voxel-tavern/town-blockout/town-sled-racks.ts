@@ -55,7 +55,9 @@ export const townSledRackSites: readonly Site[] = [
     [palaceEndEast + 1, palaceEndNorth - 4, 0], [palaceEndEast + 3, palaceEndNorth - 3, 0],
   ] },
   { id: 'mountain-gate', domain: 'summit', pads: [
-    [295.5, za22GateSeamNorth - 3.55, east], [304.5, za22GateSeamNorth - 3.55, west],
+    // The original apron pad is now obstructed by the surveyed gate geometry.
+    // Keep the same flank, on the full-footprint certified 347 m plateau.
+    [295.5, za22GateSeamNorth - 2, east], [304.5, za22GateSeamNorth - 3.55, west],
     [305.5, za22GateSeamNorth - 3.55, west],
   ] },
   { id: 'cloud-terrace', domain: 'summit', pads: [[333, 660.6, west], [331, 660.5, west], [329, 660.5, west]] },

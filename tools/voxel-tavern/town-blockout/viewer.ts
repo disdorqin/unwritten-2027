@@ -34,11 +34,14 @@ import {mountWestMountainFootway} from './town-night-a-summit-west-footway';
 import { createTerrainSupportContract } from './town-a-r30-terrain-contract';
 import { supportFootprintOverlaps } from './town-a-r30-oriented-support';
 import { mainSummitLayout, mainSummitSpec } from './main-summit-block';
-import { buildR30TownSkyline } from './town-d2-r30-skyline';
+import { buildR31PublicSkyline } from './town-r31-public-skyline';
 import {createA31PublicSummitRoute} from './town-a31-public-summit';
 import {createNightBProductionController,nightBProductionAuthority} from './town-night-b-production-controller';
 import {readA31FrontCable,type A31CableBindings} from './town-a31-cable-binding';
-import {a32SummitPrefetch} from './town-a32-stream-policy';
+import {a32SummitPrefetch,a32YieldFrame} from './town-a32-stream-policy';
+import {certifyR31FrontTrail,mountR31FrontTrailGuides} from './town-r31-front-trail';
+import {finishNightBAuditAsync} from './town-night-b-audit-slices';
+import {hikingProgress,type HikingSurface} from './town-a32-summit-hiking';
 import {createA32PassportInput} from './town-a32-passport-input';
 import {takeTownTerrain,townTerrainPreloadStats} from './town-a32-terrain-preload';
 import {warmA32SummitMeshes} from './town-a32-gpu-warmup';
@@ -508,7 +511,7 @@ let summitSkylineDraws = 0;
 const summitSkylineDayMaterial = new MeshLambertMaterial({fog:true,vertexColors:true});
 const summitSkylineNightMaterial = new MeshLambertMaterial({fog:true,vertexColors:true});
 const summitSkylineMesh: Mesh<BufferGeometry, MeshLambertMaterial | MeshBasicMaterial> =
-  new Mesh(buildR30TownSkyline(),summitSkylineDayMaterial);
+  new Mesh(buildR31PublicSkyline(worldBounds.depth),summitSkylineDayMaterial);
 const {summitHeight}=mainSummitSpec;
 const summitSkyline = new Group();
 summitSkyline.name = 'main-summit-world-skyline';
@@ -520,7 +523,7 @@ scene.add(summitSkyline);
 {
   const plume = new Group();
   plume.name = 'summit-banner-cloud';
-  const plumeMaterial = new MeshLambertMaterial({ color: '#eef2f5', fog: false });
+  const plumeMaterial = new MeshLambertMaterial({ color: '#eef2f5', fog: true });
   for (let i = 0; i < 11; i++) {
     const t = i / 10;
     const segment = new Mesh(new BoxGeometry(68, 30 * (1 - t * .55), 92 * (1 - t * .4)), plumeMaterial);
@@ -529,32 +532,9 @@ scene.add(summitSkyline);
   }
   summitSkyline.add(plume);
 }
-// Summit hut window light (§3.9 hard metric): the one warm point visible
-// from town on a clear night. Toggled by setNight with the skyline shell.
-const summitHutLight = new Mesh(new PlaneGeometry(7, 9),
-  new MeshBasicMaterial({ color: '#ffb45c', fog: false }));
-summitHutLight.name = 'summit-hut-window-light';
-summitHutLight.position.set(62, mainSummitSpec.summitHeight - 14, -1012);
-summitSkyline.add(summitHutLight);
-
-// Icefall (追令二): chaotic crystal-cyan ice towers at the col foot,
-// where the front wall meets the main peak.
-{
-  const icefall = new Group();
-  icefall.name = 'summit-icefall';
-  const iceMaterials = [new MeshLambertMaterial({ color: '#dff3f0', fog: false }),
-    new MeshLambertMaterial({ color: '#7fd4c8', fog: false })];
-  let seed = 7;
-  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  for (let i = 0; i < 16; i++) {
-    const size = 12 + rand() * 20;
-    const block = new Mesh(new BoxGeometry(size, size * (1.1 + rand()), size), iceMaterials[i % 2]!);
-    block.position.set(-140 + (rand() - .5) * 150, 205 + rand() * 115, -640 + (rand() - .5) * 80);
-    block.rotation.set(rand() * .5 - .25, rand() * Math.PI, rand() * .5 - .25);
-    icefall.add(block);
-  }
-  summitSkyline.add(icefall);
-}
+// Do not attach the former free-floating icefall boxes or ungrounded hut
+// window plane to the distant landscape. The real D2 icefall and summit
+// hut remain owned by the production massif and render on arrival.
 // M1: mount the new ridge after both real rail alignments exist (below).
 // No old proxy or floating switchback geometry/support is constructed.
 // Batch-67 cloud layer (A share): five designed drift clusters plus the
@@ -602,6 +582,11 @@ const cloudRoute = createA31PublicSummitRoute({town:scene,skyline:summitSkyline,
 window.addEventListener('pagehide',event=>{if(!event.persisted)cloudRoute.dispose();});
 let publicTransportBound=false,publicTransportPreparing=false,frontPreparationMs=0,frontPreparationError:string|undefined;
 let rearSeamCertificate:ReturnType<typeof cloudRoute.seamCertificate>;
+type FrontTrailResult=ReturnType<typeof certifyR31FrontTrail> extends Generator<void,infer R,unknown>?R:never;
+let frontTrail:FrontTrailResult|undefined;
+let frontTrailGuides:ReturnType<typeof mountR31FrontTrailGuides>|undefined;
+let frontTrailFailure:string|undefined;
+let frontTrailStatusAt=0;
 export const preparePublicSummit=()=>{/* Town entry is independent of the rear massif. */};
 function preparePublicTransport(foot:{east:number;north:number;height:number}){
  if(publicTransportBound||publicTransportPreparing||!a32SummitPrefetch(foot))return;
@@ -627,6 +612,15 @@ function preparePublicTransport(foot:{east:number;north:number;height:number}){
   rearSeamCertificate=ready?cloudRoute.seamCertificate():undefined;
   if(ready&&rearSeamCertificate?.open)productionRidge?.certifyPublicSeam((e,n)=>{const h=cloudRoute.surveyedSupport(e,n);return h!==undefined&&!cloudRoute.surveyedBlocked(e,n,h)?h:undefined;});
   publicTransportBound=true;publicTransportPreparing=false;
+  // Recheck the offline surveyed route on the actual mounted public scene
+  // after the replacement of the front ropeway. Never draw a failed route.
+  try{
+   const host:HikingSurface={surfaceAt:(e,n)=>outdoorWalkable(e,n)?outdoorSurfaceAt(e,n):undefined,
+    supportAt:(e,n)=>dryTownLandingHeight(e,n,outdoorSurfaceAt(e,n),true),
+    blocked:(e,n,h)=>obstructed(e,n,h,outdoorGeometryAt(e,n),true)};
+   frontTrail=await finishNightBAuditAsync(certifyR31FrontTrail(host),{budgetMs:6,yieldTask:a32YieldFrame});
+   if(frontTrail.ready){frontTrailGuides=mountR31FrontTrailGuides(host,frontTrail.path);scene.add(frontTrailGuides.group);}
+  }catch(error){frontTrailFailure=error instanceof Error?error.message:String(error);}
  })();
 }
 const southEntryHost=createSouthEntryHost();
@@ -634,6 +628,9 @@ const southEntryHost=createSouthEntryHost();
 // certified continuous dock approaches, so neither ready installer is supplied.
 function makePublicCableController(assets:A31CableBindings={}){return createNightBProductionController({
  ...assets,presence,upperOrigin:{east:300,north:676},
+ // A31 shows the complete massif only on the high cloud apron or in the
+ // rear scene. Use a conservative larger band to wake its visuals early.
+ upperVisible:()=>cloudRoute.active()||(x>=280&&x<=360&&n>=625&&n<=680&&ground>=340),
  domain:()=>!walking||homeReturn?undefined:cloudRoute.active()?'summit':x<0?undefined:n>=650?'mountain':'town',
  acceptLanding:(line,foot)=>{
   if(line===2)return cloudRoute.active()&&Math.abs((cloudRoute.surveyedSupport(foot.east,foot.north)??Infinity)-foot.height)<=.08&&!cloudRoute.surveyedBlocked(foot.east,foot.north,foot.height);
@@ -995,7 +992,6 @@ function applyNightSide(skyFrame:TownNightWeatherSkyFrame){
 function setNight(night: boolean) {
   nightMode = night;
   summitSkylineMesh.material = night ? summitSkylineNightMaterial : summitSkylineDayMaterial;
-  summitHutLight.visible = night;
   cloudRoute.setNight(night);
   // Background, light colour/intensity and fog are owned by the continuous sky rig.
   timeOfDay.textContent = night ? '雪夜' : '白昼';
@@ -1011,7 +1007,7 @@ if(!localLightingReview)timeOfDay.setAttribute('aria-label','当前服务器昼�
 timeOfDay.title = localLightingReview ? '本地验收：昼夜机位切换' : '昼夜随服务器时钟连续变化';
 if(localLightingReview)timeOfDay.onclick = () => {reviewNight=!nightMode;setNight(updateNightSky().nightSide);};
 
-const prepareTerrain = addTerrainMeshes(scene, grid, productionRidge.ownsCell);
+const prepareTerrain = addTerrainMeshes(scene, grid, productionRidge.ownsCell,previewOptions.has('profile')&&previewOptions.has('mTurnCacheWide'));
 
 const stone = new MeshLambertMaterial({ color: '#647382' });
 const timber = new MeshLambertMaterial({ color: '#865f46' });
@@ -1630,7 +1626,14 @@ function showSummitStatus(now:number){
  summitStatus.style.display=cableFrame?.whiteout?'none':'block';
  const message=s.status==='ready'?(s.cable.boardable?'后山 · 地形与索道已就绪 · 依现场权限通行':'后山 · 四区地形已就绪 · 交通检修中'):s.status==='failed'?'后山 · 加载未完成 · 暂未开放':s.status==='idle'?'后山 · 远景常驻 · 接近后加载':'后山 · 分区预加载中 · 暂未开放';
  const routeNote=s.hiking?.ready?' · 金色标记为陡坡徒步线（非缓坡盘山公路）'+(s.registrationRoutes.every(r=>r.ready)&&s.registrationRoutes.length===2?'，峰顶接纪念碑及登记小屋':''):'';
- if(summitStatus.textContent!==message+routeNote)summitStatus.textContent=message+routeNote;
+ const frontNote=frontTrail?.ready?' · 前山中站至云海台金色陡坡徒步线 '+Math.round(frontTrail.metres)+'m（步行）':frontTrailFailure||frontTrail&&!frontTrail.ready?' · 前山徒步连接未通过最终认证':' · 前山徒步连接检查中';
+ if(summitStatus.textContent!==message+routeNote+frontNote)summitStatus.textContent=message+routeNote+frontNote;
+ if(walking&&!homeReturn&&!cloudRoute.active()&&!sledRide.active()&&!cableController.riding()&&now>=frontTrailStatusAt){
+  if(ground>=340&&Math.hypot(x-300,n-668)<25){
+   announceActivity(gateRouteCertified()?'后山入口：东300 · 北668，沿山门中央步行进入':'后山连接尚未就绪，请在云海台稍候；详情见设置');frontTrailStatusAt=now+10000;
+  }else if(frontTrail?.ready&&Math.hypot(x-440,n-512)<12){announceActivity('前往后山：沿金色标记步行至347米云海台，再过山门。');frontTrailStatusAt=now+15000;}
+  else if(frontTrail?.ready&&ground>=135&&n>=500){const progress=hikingProgress(frontTrail.path,{east:x,north:n});if(progress.distance<4){announceActivity('前山登山线 · 距云海台 '+Math.round(progress.toSummit)+'m');frontTrailStatusAt=now+12000;}}
+ }
  summitStatus.dataset.status=s.status;
 }
 function showRegionalWeather(text:string){
@@ -3587,7 +3590,20 @@ let ridgeMoveReject:unknown;
 function tryMove(nextX: number, nextN: number) {
   if(pendingGateStep)return false;
   if (dreamInMine()) return tryMoveInMine(nextX, nextN);
-  if (cloudRoute.active() && !cloudRoute.acceptsStep(x, n, nextX, nextN, bodyRadius)) return false;
+  // At the surveyed same-height seam, both actual support authorities
+  // must agree before the outgoing scene's ordinary filters veto entry.
+  const seamFrom={east:x,north:n,height:ground},seamTo={east:nextX,north:nextN,height:ground};
+  if(a31GateCrossing(cloudRoute.active(),seamFrom,seamTo)){
+   if(airHeight!==undefined||sledRide.active()||sledRide.recovering()||!gateStepEligible(seamFrom,seamTo)){
+    if(profileTown)ridgeMoveReject={reason:'seam-denied',from:seamFrom,to:seamTo,frontCertified:productionRidge?.cloudSeam.domainReady,rearStatus:cloudRoute.state().status,air:airHeight!==undefined,sled:sledRide.active()};
+    return false;
+   }
+   pendingGateStep={from:seamFrom,to:seamTo,entering:!cloudRoute.active()};return true;
+  }
+  if (cloudRoute.active() && !cloudRoute.acceptsStep(x, n, nextX, nextN, bodyRadius)) {
+    if(profileTown)ridgeMoveReject={reason:'rear-support-or-grade',from:[x,n,ground],next:[nextX,nextN],support:cloudRoute.walkingSurfaceAt(nextX,nextN,bodyRadius)};
+    return false;
+  }
   if (!walkable(nextX, nextN)) {
     if(profileTown&&previewOptions.has('mRoadSurvey'))ridgeMoveReject={reason:'walkable',next:[nextX,nextN],terrain:canEnter(nextX,nextN),scenery:scenery.blocked(nextX,nextN),district:districts.blocked(nextX,nextN),forest:forest.blocked(nextX,nextN),street:streetscape.blocked(nextX,nextN)};
     return false;
@@ -4083,7 +4099,7 @@ function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame
       triangles: renderer.info.render.triangles, cameraY: camera.position.y,
       weatherCycle:southWeatherProfile(skyFrame,weatherState,weather,local?.weather),
       fogNear:fog.near,fogFar:fog.far,points:renderer.info.render.points,mountainSheltered:roof,mountainSnowDepth:coldDepth,
-      summitProduction:cloudRoute.state(),cableRide:cableFrame,actualFoot:cableFrame?.feet??{east:x,north:n,height:airHeight??ground},
+      summitProduction:cloudRoute.state(),cableRide:cableFrame,actualFoot:cableFrame?.feet??{east:x,north:n,height:airHeight??ground},moveReject:ridgeMoveReject,
     } }));
   }
 }
@@ -4654,7 +4670,7 @@ renderer.setAnimationLoop(now => {
         weatherCycle:southWeatherProfile(skyFrame,outdoorWeather,weather,regionalWeather?.weather),
         fogNear: weatherFog.near, fogFar: weatherFog.far, points: renderer.info.render.points,
         craterPerf:{exteriorCertified:craterExteriorCertified,undergroundVisible:undergroundRenderParent?.visible},
-        summitProduction:{...cloudRoute.state(),farDraws:summitSkylineDraws,frontPreparationMs,frontPreparationError,frontAuditSlices:productionRidge?.frontAuditSlices,frontRouteAudit:productionRidge?.frontRouteAudit,rearSeam:rearSeamCertificate,publicTransportBound},
+        summitProduction:{...cloudRoute.state(),farDraws:summitSkylineDraws,frontPreparationMs,frontPreparationError,frontAuditSlices:productionRidge?.frontAuditSlices,frontRouteAudit:productionRidge?.frontRouteAudit,rearSeam:rearSeamCertificate,publicTransportBound,frontTrail:frontTrail?{ready:frontTrail.ready,metres:frontTrail.metres,maxGrade:frontTrail.maxGrade,samples:frontTrail.samples,markers:frontTrailGuides?.markers,...(!frontTrail.ready?{failed:frontTrail.failed}:{})}:undefined,frontTrailFailure},
       terrainPreload:townTerrainPreloadStats(),
         ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,frontRoadHandoffs:productionRidge.frontRoadHandoffs,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],heading:yaw,...(previewOptions.has('mRoadSurvey')?{roadGuide:productionRidge.baseToMiddleGuide,rearConnected:productionRidge.rearConnected,moveReject:ridgeMoveReject}:{}),surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities,cableInstances:productionRidge.facilities?.visibleInstances(),terraceMounted:!!productionRidge.terrace,cloudSeam:productionRidge.cloudSeam},
         ...(skylinePeak ? { summitSkyline: { draws: summitSkylineDraws, peakNdc: skylinePeak.toArray(),

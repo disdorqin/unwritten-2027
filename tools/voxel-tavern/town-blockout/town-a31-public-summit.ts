@@ -32,12 +32,13 @@ export function createA31PublicSummitRoute(input:Input){
  const sun=new DirectionalLight('#fff4df',1.7);sun.position.set(-80,120,50);scene.add(sun);
  let status:Status='idle',stage='idle',failure:string|undefined,night=false,active=false;
  let production:Production|undefined,load:Promise<boolean>|undefined;
+ let closure:ReturnType<Group['getObjectByName']>[]=[];
  const stagingAbort=new AbortController();
  let audit:ReturnType<Production['sectorLiveCheck']>|undefined;
  let visual:ReturnType<typeof retireA31LegacySectorOverlays>|undefined;
  let assembly:Readonly<{group:Group;r30:Production['assembly'];summitSnowAt(e:number,n:number):number|undefined}>|undefined;
  let near=false,elapsedMs=0,cutTiles=0,draws=0,snowPending=0,duplicates:readonly string[]=[];
- const yieldFrame=input.yieldFrame??a32YieldFrame,meter=createA32StageMeter(),quiet=createA32QuietGate();
+ const yieldFrame=input.yieldFrame??a32YieldFrame,meter=createA32StageMeter(),quiet=createA32QuietGate(()=>performance.now(),250,2000);
  let canonicalPreparation: {mode:string;ms?:number;elapsedMs?:number;error?:string}|undefined;
  const southSlices:number[]=[],westSlices:number[]=[];
  let hiking:ReturnType<typeof import('./town-a32-summit-hiking').certifyHiking>|undefined,hikingGuide:ReturnType<typeof mountHikingGuides>|undefined;
@@ -101,6 +102,7 @@ export function createA31PublicSummitRoute(input:Input){
     });
     // Retain one group identity for the future certified domain handoff.
     input.town.add(candidate.group);candidate.setNight(night);if(night)visual.afterNightChange();
+    closure=['town-d2-r30-closed-perimeter','town-d2-r30-floor'].map(name=>candidate!.group.getObjectByName(name));
     production=candidate;assembly={group:candidate.group,r30:candidate.assembly,
      summitSnowAt:(e,n)=>{const depth=host.snowAt(e,n);if(depth===undefined)return;const front=input.frontSnow?.(e+summitAssemblyAnchor.east,n+summitAssemblyAnchor.north);return front!==undefined&&Number.isFinite(front)&&n<=86?Math.max(0,Math.min(1,Math.max(front-.2,Math.min(front+.2,depth)))):depth;}};
     status='ready';stage='mounted';elapsedMs=performance.now()-started;return true;
@@ -126,9 +128,14 @@ export function createA31PublicSummitRoute(input:Input){
   // The accepted distant skyline starts well behind this closure.
   // Only the surveyed high cloud apron, or a certified rear domain,
   // sees the complete production body. No overlapping town collisions.
-  near=active||position.east>=286.5&&position.east<=352&&
-   position.north>=(near?631:635)&&position.north<=669&&position.height>=(near?345:346);
+  // Hysteresis covers the actual high terrace and the crossing, not just
+  // the old 4m strip. Never turn off both near and far representations.
+  near=active||position.east>=(near?275:286.5)&&position.east<=(near?365:352)&&
+   position.north>=(near?620:635)&&position.north<=(near?690:680)&&position.height>=(near?340:346);
   production.group.visible=near;input.skyline.visible=!near&&!active;
+  // The isolated domain's artificial closure is not exterior scenery.
+  // Its colliders and real top tiles are unchanged.
+  for(const object of closure)if(object)object.visible=active;
   if(near){
    const [e,n]=local(position.east,position.north);
    if(Math.hypot(e-detailEast,n-detailNorth)>32){production.setDetailFocus(e,n,1550);detailEast=e;detailNorth=n;}
