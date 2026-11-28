@@ -59,8 +59,11 @@ if (typeof document !== 'undefined') {
   const dismissBanner = document.getElementById('env-banner-dismiss')!;
 
   const enter = createTownEntry(embedded, async () => {
-    await import('./town-panel');
-    await import('./viewer');
+    const [{preloadTownTerrain}]=await Promise.all([import('./town-a32-terrain-preload'),import('./town-panel')]);
+    await preloadTownTerrain();
+    const viewer=await import('./viewer');
+    // Rear construction is triggered by the viewer's real approach.
+    viewer.preparePublicSummit();
   }, state => {
     guide.hidden = state !== 'guide';
     loading.hidden = state !== 'loading';

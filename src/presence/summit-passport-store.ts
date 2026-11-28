@@ -40,7 +40,13 @@ export function createSummitPassportFileStore(directory: string): SummitPassport
         }
         await rename(temporary, destination);
         temporaryCreated = false;
-        await directoryHandle.sync();
+        try { await directoryHandle.sync(); }
+        catch (error) {
+          // Node cannot fsync a directory handle on Windows. The file itself
+          // was flushed before atomic replacement. This permits local Windows
+          // restart testing; production POSIX still requires directory fsync.
+          if (process.platform !== 'win32' || (error as NodeJS.ErrnoException).code !== 'EPERM') throw error;
+        }
       } finally {
         if (temporaryCreated) await unlink(temporary).catch(() => {});
         await directoryHandle.close();

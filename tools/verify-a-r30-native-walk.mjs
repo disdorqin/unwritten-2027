@@ -2,14 +2,16 @@ import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from '@playwright/test';
+import { WebSocket } from 'ws';
+import {fromSummitPresencePose} from '../src/shared/za22-summit-presence-domain.ts';
 
 const [origin, output, segment = 'all'] = process.argv.slice(2);
 assert.ok(origin && output, 'Use the production-preview loopback URL and an evidence directory');
 const bare = process.env.ZA22_BARE === '1';
-const url = new URL(bare ? '/' : '/?profile', origin);
+const url = new URL(bare ? '/' : segment==='a31-front-north'?'/?profile&mRoadSurvey':segment==='r31-turn-audit'?'/?profile&mTurnCacheWide':'/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','west-mountain','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review','night-r3-entry','night-r3-bare-weather','night-r3-bare-west','a31-bare-crater-return','a31-front-north','a32-stream','r31-turn-audit'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -38,7 +40,8 @@ const hardware = process.env.ZA22_HARDWARE === '1';
 const graphicsArgs = hardware ? (process.platform === 'win32' ? ['--use-gl=angle', '--use-angle=d3d11'] : [])
   : ['--use-gl=angle', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'];
 const mobileReview=segment==='mobile-review';
-const sampleFrames=process.env.ZA22_PROFILE_SAMPLE==='1'||mobileReview;
+const menuTouch=segment==='night-r3-bare-weather'&&process.env.ZA22_MENU_TOUCH==='1';
+const sampleFrames=process.env.ZA22_PROFILE_SAMPLE==='1'||mobileReview||segment==='a32-stream';
 const report = { url: url.href, segment, viewport, deviceScaleFactor, quality: 'smooth', gpu: null, paths: [], pageErrors: [], consoleErrors: [], requestFailures: [], httpErrors: [], performanceSamples:[] };
 
 await mkdir(output, { recursive: true });
@@ -48,7 +51,7 @@ let lastEvidence;
 let measuring = true;
 
 async function openTown(name) {
-  const context = await browser.newContext({ viewport, deviceScaleFactor, locale: 'zh-CN',...(mobileReview?{isMobile:true,hasTouch:true}: {}) });
+  const context = await browser.newContext({ viewport, deviceScaleFactor, locale: 'zh-CN',...((mobileReview||menuTouch)?{isMobile:true,hasTouch:true}: {}) });
   const page = await context.newPage();
   lastPage = page;
   const evidence = { name, checkpoints: [], sockets: [], poses: [] };
@@ -68,6 +71,7 @@ async function openTown(name) {
   page.on('websocket', socket => {
     const socketPath = new URL(socket.url()).pathname;
     if (!socketPath.startsWith('/presence')) return;
+    const summit = socketPath.startsWith('/presence-summit');
     const mountain = socketPath.startsWith('/presence-mountain');
     const west = socketPath.startsWith('/presence-west');
     evidence.sockets.push(socket.url());
@@ -89,12 +93,13 @@ async function openTown(name) {
     }
     socket.on('framesent', ({ payload }) => {
       if (!Buffer.isBuffer(payload) || payload.byteLength !== 12 || payload.readUInt16LE(0) !== 0) return;
+      const raw={east:payload.readUInt16LE(2)/100,north:payload.readUInt16LE(4)/100,height:payload.readUInt16LE(6)/100};
+      const world=summit?fromSummitPresencePose(raw):{east:raw.east-(west?240:0),north:raw.north+(mountain?540:0),height:raw.height-(west?64:0)};
+      assert.ok(world,'rear pose outside its actual wire frame');
       evidence.poses.push({
         ms: Date.now(),
-        east: payload.readUInt16LE(2) / 100 - (west ? 240 : 0),
-        north: payload.readUInt16LE(4) / 100 + (mountain ? 540 : 0),
-        area: mountain ? 'mountain' : west ? 'west' : 'town',
-        height: payload.readUInt16LE(6) / 100 - (west ? 64 : 0),
+        ...world,
+        area: summit?'summit':mountain ? 'mountain' : west ? 'west' : 'town',
         yaw: payload.readUInt16LE(8) * tau / 65536,
         seq: payload.readUInt16LE(10),
       });
@@ -106,7 +111,12 @@ async function openTown(name) {
     Object.defineProperty(Element.prototype, 'requestPointerLock', { value: undefined });
     // This is the viewer's ordinary saved graphics setting. It does not change the world or movement.
     localStorage.setItem('unwritten.quality.tier.v1', 'smooth');
-    document.addEventListener('town-frame-profile', event => { window.__za22Frame = event.detail; }, true);
+    window.__a31LoadFrames=[];
+    document.addEventListener('town-frame-profile', event => {
+      window.__za22Frame = event.detail;
+      const s=event.detail.summitProduction;
+      if(s&&window.__a31LoadFrames.length<4000)window.__a31LoadFrames.push({ms:event.detail.frameMs,status:s.status,stage:s.stage,near:s.near,draws:s.draws});
+    }, true);
   });
   const response = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 90_000 });
   assert.equal(response?.status(), 200);
@@ -245,7 +255,7 @@ async function walkTo(page, evidence, target, label, precision=.46) {
     if (distance <= precision) {
       const checkpoint={ label, target, ...from, wire: evidence.poses.at(-1) };
       evidence.checkpoints.push(checkpoint);
-      if(segment==='joint-historic')await appendFile(join(output,'native-checkpoints.ndjson'),JSON.stringify(checkpoint)+'\n');
+      if(['joint-historic','west-mountain','night-r3-bare-west','a31-bare-crater-return','a31-front-north'].includes(segment))await appendFile(join(output,'native-checkpoints.ndjson'),JSON.stringify(checkpoint)+'\n');
       console.log(JSON.stringify({ phase: label, east: from.east, north: from.north, y: from.height }));
       return;
     }
@@ -296,16 +306,19 @@ async function picture(page,evidence,label){
       }};
       const timer=setTimeout(finish,2000);document.addEventListener('town-frame-profile',listener,true);
     }));
-    const stats=k=>{const values=sample.frames.map(f=>f[k]).filter(Number.isFinite).sort((a,b)=>a-b);return values.length?{median:values[Math.floor((values.length-1)/2)],p95:values[Math.floor((values.length-1)*.95)],max:values.at(-1)}:undefined;};
-    report.performanceSamples.push({label,elapsedMs:sample.elapsedMs,frames:sample.frames.length,frameMs:stats('frameMs'),calls:stats('calls'),triangles:stats('triangles'),movementMs:stats('movementMs'),detailMs:stats('detailMs'),scope:'headless browser, actual renderer event, not physical phone'});
+    const stats=k=>{const values=sample.frames.map(f=>f[k]).filter(Number.isFinite).sort((a,b)=>a-b);return values.length?{median:values[Math.floor((values.length-1)/2)],p95:values[Math.floor((values.length-1)*.95)],p99:values[Math.floor((values.length-1)*.99)],max:values.at(-1),mean:values.reduce((a,b)=>a+b,0)/values.length}:undefined;};
+    const timing=stats('frameMs');report.performanceSamples.push({label,elapsedMs:sample.elapsedMs,frames:sample.frames.length,frameMs:timing,fps:timing?1000/timing.mean:undefined,longFrames:{over50:sample.frames.filter(f=>f.frameMs>50).length,over100:sample.frames.filter(f=>f.frameMs>100).length},calls:stats('calls'),triangles:stats('triangles'),movementMs:stats('movementMs'),detailMs:stats('detailMs'),scope:'headless browser, actual renderer event, not physical phone'});
   }
   await page.screenshot({path:join(output,label+'.png'),timeout:45000});
   evidence.checkpoints.push({label,lighting:await page.locator('#lighting').textContent(),...await readPose(page),wire:evidence.poses.at(-1)});
 }
 import {buildCraterRailExtension} from './voxel-tavern/town-blockout/town-crater-rail-extension.ts';
 import {buildTownRailRoute} from './voxel-tavern/town-blockout/town-railway.ts';
+import {mountWestMountainGround,westMountainTrackProtection} from './voxel-tavern/town-blockout/town-night-a-summit-west-ground.ts';
+import {westMountainFootway} from './voxel-tavern/town-blockout/town-night-a-summit-west-footway.ts';
 const grid=createTerrainGrid(), road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
-const rail=['kengkou','freight','shankou','transfer-dock','ore-yard-dock','rail-valley','rail-buffer','inscription-access'].includes(segment)?buildCraterRailExtension(grid,road,segment==='rail-buffer'?buildTownRailRoute(grid).points:undefined):undefined;
+const rail=['kengkou','freight','shankou','transfer-dock','ore-yard-dock','rail-valley','rail-buffer','inscription-access','west-mountain'].includes(segment)?buildCraterRailExtension(grid,road,['rail-buffer','west-mountain'].includes(segment)?buildTownRailRoute(grid).points:undefined):undefined;
+const westMountain=segment==='west-mountain'?mountWestMountainGround(road.heightAt,{west:-240,east:0,south:336,north:worldBounds.depth},westMountainTrackProtection([rail.samples,rail.narrowSamples,rail.sidingSamples])):undefined;
 const jointManifest=process.env.AR30_JOINT_ROUTE?JSON.parse(await readFile(process.env.AR30_JOINT_ROUTE,'utf8')):undefined;
 const joint=segment==='joint-historic'?jointManifest:undefined;
 const jointInscription=segment==='inscription-access'?jointManifest?.inscriptionPath:undefined;
@@ -320,6 +333,7 @@ const approach={
  'rail-valley':[],
  'rail-buffer':[],
  northwalk:[[-12,159],[-12,240],[-12,320]],
+ 'west-mountain':[[-12,159],[-40,159],[-37,168],[-39,175],[-62,201],[-68,220],[-68,232],[-83,235],[-98,243],[-95,261],[-90,265]],
  wall:[[-9,159]],
  gatehouse:[[-3,159],[-6,154],[-7,150.2]],
  kengkou:[[-12,159],[-29,159],[-35,164],[-36,167]],
@@ -345,7 +359,350 @@ const approach={
 try{
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:graphicsArgs});
  const {page,evidence,westWindow}=await openTown(segment);
- if(mobileReview){
+ if(segment==='a31-bare-crater-return'){
+  assert.ok(bare);const start=await readPose(page);
+  // The reverse straight chord near E67/N164 intersects an actual tree.
+  // Walk around the existing trunk on its south side, both directions.
+  const path=[...westShore.slice(0,-1),[71,161.8],[63,161],[2,159],[-12,159],[-40,159]];
+  for(const [i,p] of path.entries())await walkTo(page,evidence,p,'crater-out-'+i,.65);
+  const mouth=await readPose(page);await waitForWire(page,evidence,p=>p?.area==='west'&&Math.hypot(p.east+40,p.north-159)<1);
+  await picture(page,evidence,'crater-mouth');
+  for(const [i,p] of [...path.slice(0,-1).reverse(),spawn].entries())await walkTo(page,evidence,p,'crater-return-'+i,.65);
+  const returned=await readPose(page);await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-223,p.north-180)<1);
+  await picture(page,evidence,'town-returned');report.traversal={start,mouth,top:mouth,returned};
+ }else if(segment==='night-r3-bare-west'){
+  assert.ok(bare);
+  const start=await readPose(page);
+  const path=[...westShore,[2,159]];
+  // The public town route must start at birth, not the jump menu.
+  for(const [i,p] of path.entries())await walkTo(page,evidence,p,'birth-west-'+i,.65);
+  const mouth=await readPose(page);await picture(page,evidence,'birth-crater-mouth');
+  for(const [i,p] of approach['west-mountain'].entries())await walkTo(page,evidence,p,'birth-mountain-approach-'+i,.46);
+  for(const [i,p] of westMountainFootway.slice(1).entries())await walkTo(page,evidence,p,'birth-mountain-foot-'+i,.46);
+  const top=await readPose(page);const wire=await waitForWire(page,evidence,p=>p?.area==='west'&&Math.hypot(p.east+90,p.north-350)<.8);
+  await appendFile(join(output,'native-checkpoints.ndjson'),JSON.stringify({label:'birth-west-outbound-complete',start,mouth,top,wire})+'\n');
+  await picture(page,evidence,'birth-mountain-foot');
+  for(const [i,p] of [...westMountainFootway.slice(0,-1).reverse(),...approach['west-mountain'].slice(0,-1).reverse(),[2,159],...path.slice(0,-1).reverse(),spawn].entries())await walkTo(page,evidence,p,'birth-return-'+i,.55);
+  const returned=await readPose(page);await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-223,p.north-180)<.8);
+  await picture(page,evidence,'birth-returned');
+  report.traversal={start,mouth,top,returned};
+ }else if(segment==='night-r3-bare-weather'){
+  assert.ok(bare,'The ordinary settings verification must use the bare root');
+  assert.equal(new URL(page.url()).search,'');
+  const menu=page.locator('#town-settings'),toggle=page.locator('#town-panel-toggle');
+  await page.waitForFunction(()=>document.querySelector('#town-summit-status')?.dataset.status==='idle',null,{timeout:15000});
+  assert.match(await page.locator('#town-summit-status').textContent(),/远景常驻.*接近后加载/);
+  const activate=locator=>menuTouch?locator.tap():locator.click();
+  const hiddenIds=['#town-settings','#town-music-toggle','#town-chat','#fullscreen-toggle','#museum-map-button','#snowball-board'];
+  for(const id of hiddenIds)assert.equal(await page.locator(id).isVisible(),false,id+' must not obscure ordinary exploration');
+  assert.ok(await toggle.isVisible());
+  assert.equal(await toggle.getAttribute('aria-expanded'),'false');
+  await activate(toggle);
+  assert.equal(await toggle.getAttribute('aria-expanded'),'true');
+  const bounds=await menu.boundingBox();
+  assert.ok(bounds&&bounds.x>=0&&bounds.y>=0&&bounds.x+bounds.width<=viewport.width+1&&bounds.y+bounds.height<=viewport.height+1);
+  assert.ok(bounds.x+bounds.width>=viewport.width-32,'Drawer must be anchored at right edge');
+  assert.ok(await page.locator('#town-music-toggle').isVisible());
+  assert.ok(await page.locator('#snowball-board').isVisible());
+  const advanced=page.locator('#town-advanced-settings');
+  assert.equal(await advanced.evaluate(el=>el.open),false);
+  await activate(advanced.locator('summary'));assert.ok(await page.locator('#quality-tier').isVisible());
+  const weatherAudio=page.locator('#town-weather-audio'),weatherVolume=page.locator('#town-weather-volume');
+  assert.equal(await weatherAudio.isChecked(),false);
+  await activate(weatherAudio);assert.equal(await weatherAudio.isChecked(),true);
+  await page.waitForFunction(()=>JSON.parse(localStorage.getItem('unwritten.weather.audio.v1')??'{}').enabled===true);
+  await weatherVolume.fill('35');
+  await page.waitForFunction(()=>JSON.parse(localStorage.getItem('unwritten.weather.audio.v1')??'{}').volume===35);
+  await activate(weatherAudio);assert.equal(await weatherAudio.isChecked(),false);
+  await activate(advanced.locator('summary'));assert.equal(await page.locator('#quality-tier').isVisible(),false);
+  const chat=page.locator('#town-chat-toggle');
+  await chat.waitFor({state:'visible'});
+  assert.equal(await chat.getAttribute('aria-expanded'),'false');
+  await activate(chat);assert.ok(await page.locator('#town-chat-text').isVisible());
+  await page.locator('#town-chat-text').fill('菜单原生验收');
+  await page.locator('#town-chat-form button[type=submit]').click();
+  await page.waitForFunction(()=>document.querySelector('#town-chat-log')?.textContent?.includes('菜单原生验收'));
+  await activate(chat);
+  assert.equal(await page.locator('#town-chat-text').isVisible(),false);
+  const status=page.locator('#town-regional-weather');
+  await status.waitFor({state:'visible'});
+  await page.waitForFunction(()=>/能见度约/.test(document.querySelector('#town-regional-weather')?.textContent??''),null,{timeout:15000});
+  const weather=await status.textContent();
+  const lighting=page.locator('#lighting'),snow=page.locator('#snow');
+  assert.ok(await lighting.isDisabled(),'The ordinary clock must not be manually overrideable');
+  const before=await snow.getAttribute('aria-pressed');
+  assert.ok(before==='true'||before==='false');
+  await snow.click();
+  assert.notEqual(await snow.getAttribute('aria-pressed'),before);
+  await snow.click();
+  assert.equal(await snow.getAttribute('aria-pressed'),before);
+  assert.ok((await status.textContent()).includes('能见度约'));
+  await picture(page,evidence,'bare-weather-settings');
+  // The menu's actual activity button must open only one modal and
+  // leave the game operable when that activity closes.
+  await activate(page.locator('#town-passport-button'));
+  await page.locator('#place-card[open]').waitFor({state:'visible'});
+  assert.equal(await menu.evaluate(el=>el.open),false);
+  assert.equal(await page.locator('dialog[open]').count(),1);
+  await activate(page.locator('#place-card .close-card'));
+  await page.locator('#place-card').waitFor({state:'hidden'});
+  await activate(toggle);
+  await activate(page.locator('#town-settings-close'));
+  await page.waitForFunction(()=>document.querySelector('#town-panel-toggle')?.getAttribute('aria-expanded')==='false');
+  // A genuine second Presence client sends a town message while the
+  // visual browser is walking. No mocked events or extra WebGL context.
+  const peerUrl=new URL('/presence',origin);peerUrl.protocol='ws:';
+  const peer=new WebSocket(peerUrl);
+  try{
+   await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(Error('Peer join timeout')),8000);
+    peer.once('error',e=>{clearTimeout(timer);reject(e);});
+    peer.once('open',()=>peer.send(JSON.stringify({type:'join',name:'菜单验收伙伴'})));
+    peer.on('message',(raw,binary)=>{if(binary)return;const f=JSON.parse(raw.toString());if(f.type==='join'&&f.self===true){clearTimeout(timer);resolve();}});
+   });
+   peer.send(JSON.stringify({type:'chat',scope:'town',text:'未读提示实际联机'}));
+   await page.waitForFunction(()=>document.querySelector('#town-panel-toggle')?.dataset.chatUnread==='true'&&document.querySelector('#town-chat-log')?.textContent?.includes('未读提示实际联机'));
+   assert.equal(await menu.isVisible(),false);
+   assert.match(await toggle.getAttribute('aria-label'),/未读/);
+   assert.notEqual(await toggle.evaluate(el=>getComputedStyle(el,'::after').content),'none');
+   await activate(toggle);await activate(chat);
+   await page.waitForFunction(()=>document.querySelector('#town-panel-toggle')?.dataset.chatUnread==='false');
+   assert.equal(await page.locator('#town-chat-unread').evaluate(el=>el.hidden),true);
+   await activate(page.locator('#town-settings-close'));await menu.waitFor({state:'hidden'});
+  }finally{peer.terminate();}
+  // A raw protocol probe, not a walked avatar or transport certificate.
+  // The local production launcher explicitly keeps summit release off.
+  const summitUrl=new URL('/presence-summit',origin);summitUrl.protocol='ws:';
+  const probe=new WebSocket(summitUrl);const frames=[];
+  try{
+   await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(Error('Summit protocol join timeout')),8000);
+    probe.once('error',e=>{clearTimeout(timer);reject(e);});
+    probe.once('open',()=>probe.send(JSON.stringify({type:'join',name:'后山协议验收',presenceFrame:'summit-v1'})));
+    probe.on('message',(raw,binary)=>{if(binary)return;const f=JSON.parse(raw.toString());frames.push(f);if(frames.some(m=>m.type==='join'&&m.self===true)&&frames.some(m=>m.type==='cable-line'&&m.line===2)){clearTimeout(timer);resolve();}});
+   });
+   const hello=frames.find(m=>m.type==='join'&&m.self===true);assert.equal(hello.presenceFrame,'summit-v1');
+   const line=frames.find(m=>m.type==='cable-line'&&m.line===2);assert.equal(line.stage,'dormant');
+   probe.send(JSON.stringify({type:'event',kind:'cable-release-summit'}));
+   await page.waitForTimeout(300);assert.ok(frames.filter(m=>m.type==='cable-line'&&m.line===2).every(m=>m.stage==='dormant'));
+   report.summitProtocol={frame:hello.presenceFrame,closedStage:line.stage,releaseAttemptRejected:true,scope:'raw separate socket, no player movement or transfer'};
+  }finally{probe.terminate();}
+  if(!menuTouch){
+   await page.keyboard.press('Enter');
+   await page.waitForFunction(()=>document.querySelector('#town-settings')?.open&&document.activeElement?.id==='town-chat-text');
+   await page.keyboard.press('Escape'); // blurs chat input
+   await page.keyboard.press('Escape'); // closes menu
+   await menu.waitFor({state:'hidden'});
+  }
+  await activate(toggle);
+  // Backdrop click is a real native interaction outside the drawer.
+  const drawer=await menu.boundingBox();
+  if(drawer.x>4){if(menuTouch)await page.touchscreen.tap(2,Math.floor(height/2));else await page.mouse.click(2,Math.floor(height/2));}
+  else await activate(page.locator('#town-settings-close'));
+  await menu.waitFor({state:'hidden'});
+  await page.locator('#scene canvas').click({position:{x:Math.round(width*.35),y:dragY}});
+  const start=await readPose(page);
+  if(menuTouch){
+   await page.locator('#touch-walk').waitFor({state:'visible'});
+   const pad=await page.locator('#touch-walk').boundingBox();
+   const cdp=await page.context().newCDPSession(page);
+   const touch=(type,touchPoints)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints});
+   const p={x:pad.x+pad.width/2,y:pad.y+pad.height/2,id:1};
+   await touch('touchStart',[p]);try{await touch('touchMove',[{...p,y:p.y-37}]);await page.waitForTimeout(650);}finally{await touch('touchEnd',[]);}
+   await page.waitForTimeout(200);
+  }else{
+   await page.keyboard.down('w');try{await page.waitForTimeout(500);}finally{await page.keyboard.up('w');}
+  }
+  const moved=await readPose(page);
+  assert.ok(Math.hypot(moved.east-start.east,moved.north-start.north)>.3,'Native keyboard walking must remain available');
+  await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-moved.east,p.north-moved.north)<1);
+  await picture(page,evidence,'bare-weather-walk');
+  report.entry={scope:'ordinary bare root, single corner menu, nested settings, chat send, close and native movement',weather,lightingDisabled:true,snowToggleRestored:true,menuTouch,drawer:bounds,hiddenIds,chatSent:true,remoteUnread:true,start,moved};
+  report.traversal={top:moved,returned:moved};
+ }else if(segment==='a31-front-north'){
+  // Normal root, read-only profiling, ordinary station menu as segmented start.
+  const state=()=>page.evaluate(()=>window.__za22Frame);
+  await page.waitForFunction(()=>window.__za22Frame?.ridge?.roads===4&&window.__za22Frame?.summitProduction?.status==='idle',null,{timeout:45000});
+  await page.locator('#town-panel-toggle').click();await page.locator('#jump').selectOption({label:'火车站'});
+  if(await page.locator('#town-settings').evaluate(d=>d.open))await page.locator('#town-settings-close').click();
+  await page.waitForFunction(()=>{const f=window.__za22Frame?.ridge?.foot;return f&&Math.hypot(f[0]-526,f[1]-305)<1.2;},null,{timeout:20000});
+  await page.waitForFunction(()=>window.__za22Frame?.summitProduction?.publicTransportBound===true,null,{timeout:150000});
+  await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-526,p.north-305)<1.2);
+  await face(page,evidence,0);
+  await walkTo(page,evidence,[526,349.5],'base-dock',.35);
+  await walkTo(page,evidence,[526,354.8],'base-exit',.35);
+  await walkTo(page,evidence,[516.5,355],'base-road',.35);
+  const guide=(await state()).ridge.roadGuide;assert.ok(guide.length>100&&guide.at(-1).cum>1268);
+  const begin=guide.reduce((best,p,i)=>Math.hypot(p.east-516.5,p.north-355)<Math.hypot(guide[best].east-516.5,guide[best].north-355)?i:best,0);
+  const end=guide.findIndex((p,i)=>i>begin&&p.north>=654);
+  assert.ok(end>begin);
+  function chordError(a,b,p){
+   const de=b.east-a.east,dn=b.north-a.north,l2=de*de+dn*dn;
+   const t=l2?Math.max(0,Math.min(1,((p.east-a.east)*de+(p.north-a.north)*dn)/l2)):0;
+   return Math.hypot(p.east-a.east-t*de,p.north-a.north-t*dn);
+  }
+  const targets=[guide[begin]];
+  for(let i=begin;i<end;){
+   let j=i+1;
+   while(j<end&&guide[j+1].cum-guide[i].cum<=16&&guide.slice(i+1,j+1).every(p=>chordError(guide[i],guide[j+1],p)<=.32))j++;
+   targets.push(guide[j]);i=j;
+  }
+  for(const [i,p] of targets.entries())await walkTo(page,evidence,[p.east,p.north],'north-road-'+i,.35);
+  const top=await readPose(page);
+  const highWire=await waitForWire(page,evidence,p=>p?.area==='mountain'&&p.north>=650&&Math.hypot(p.east-top.east,p.north-top.north)<.8);
+  await picture(page,evidence,'front-north-mountain-room');
+  const peerUrl=new URL('/presence-mountain',origin);peerUrl.protocol='ws:';
+  const peer=new WebSocket(peerUrl);let peerId,seen=false;
+  try{
+   await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(Error('Mountain peer join timeout')),8000);
+    peer.once('error',e=>{clearTimeout(timer);reject(e);});
+    peer.once('open',()=>peer.send(JSON.stringify({type:'join',name:'前山联机验收伙伴'})));
+    peer.on('message',(raw,binary)=>{if(binary){if(raw[0]>0)seen=true;return;}const f=JSON.parse(raw.toString());if(f.type==='join'&&f.self===true){peerId=f.id;clearTimeout(timer);resolve();}});
+   });
+   const b=Buffer.alloc(12);b.writeUInt16LE(Math.round((highWire.east+1)*100),2);b.writeUInt16LE(Math.round((highWire.north-540)*100),4);b.writeUInt16LE(Math.round(highWire.height*100),6);b.writeUInt16LE(1,10);peer.send(b);
+   const deadline=Date.now()+5000;while(!seen&&Date.now()<deadline)await page.waitForTimeout(50);
+   assert.ok(peerId&&seen,'Actual mountain peer must receive nearby snapshot');
+  }finally{peer.terminate();}
+  let returned;
+  for(const [i,p] of targets.slice(0,-1).reverse().entries()){
+   await walkTo(page,evidence,[p.east,p.north],'north-return-'+i,.35);
+   if(p.north<648){returned=await readPose(page);break;}
+  }
+  assert.ok(returned&&returned.north<650);
+  await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-returned.east,p.north-returned.north)<.8);
+  await picture(page,evidence,'front-north-town-room-return');
+  report.entry={scope:'public station UI segmented arrival, native road walking across town/mountain room boundary and back; raw second peer, no summit release or public transport',targets:targets.length,highWire,secondRawPeer:seen};
+  report.traversal={top,returned};
+ }else if(segment==='r31-turn-audit'){
+  const stats=values=>{const s=values.filter(Number.isFinite).sort((a,b)=>a-b);return {mean:s.reduce((a,b)=>a+b,0)/s.length,p95:s[Math.floor((s.length-1)*.95)],p99:s[Math.floor((s.length-1)*.99)],max:s.at(-1)};};
+  const results=[];
+  const sweep=async(p,ev,mode,site)=>{
+   await face(p,ev,0);await p.waitForTimeout(800);
+   await p.evaluate(()=>{window.__turnFrames=[];window.__turnListener=e=>{const f=e.detail;window.__turnFrames.push({frame:f.frameMs,detail:f.detailMs,calls:f.calls,triangles:f.triangles,heading:f.ridge?.heading});};document.addEventListener('town-frame-profile',window.__turnListener,true);});
+   for(let k=1;k<=8;k++)await face(p,ev,k*Math.PI/4);
+   const rows=await p.evaluate(()=>{document.removeEventListener('town-frame-profile',window.__turnListener,true);return window.__turnFrames;});
+   const turning=rows.filter((f,i)=>i>0&&Math.abs(Math.atan2(Math.sin(f.heading-rows[i-1].heading),Math.cos(f.heading-rows[i-1].heading)))>.005);
+   const summarize=r=>({n:r.length,frameMs:stats(r.map(x=>x.frame)),detailMs:stats(r.map(x=>x.detail)),calls:stats(r.map(x=>x.calls)),triangles:stats(r.map(x=>x.triangles))});
+   const result={mode,site,all:summarize(rows),turning:summarize(turning)};
+   assert.ok(turning.length>5);results.push(result);console.log('TURN-AUDIT '+JSON.stringify(result));
+  };
+  const runMode=async(p,ev,mode)=>{
+   await sweep(p,ev,mode,'plaza');
+   await p.locator('#town-panel-toggle').click();await p.locator('#jump').selectOption({label:'陨石坑口'});
+   if(await p.locator('#town-settings').evaluate(d=>d.open))await p.locator('#town-settings-close').click();
+   await waitForWire(p,ev,q=>q?.area==='town'&&Math.hypot(q.east-2,q.north-159)<1.2,20000);
+   await sweep(p,ev,mode,'crater-mouth');
+  };
+  await runMode(page,evidence,'cached-cull');
+  await page.context().close();
+  url.searchParams.set('mTerrainCullOff','');
+  const second=await openTown('terrain-cull-off');await runMode(second.page,second.evidence,'chunk-only');
+  report.turnAudit={scope:'native 360deg mouse sweep in normal public renderer; current cached cull vs diagnostic cull-off, fixed positions, not GPU timer',results};
+  const pose=await readPose(second.page);report.traversal={top:pose,returned:pose};
+ }else if(segment==='a32-stream'){
+  assert.ok(!bare);
+  const state=()=>page.evaluate(()=>window.__za22Frame);
+  const first=await state();assert.equal(first.terrainPreload?.mode,'worker',JSON.stringify(first.terrainPreload));assert.ok(first.terrainPreload.ms>0);assert.equal(first.summitProduction.status,'idle');assert.equal(first.summitProduction.installed.length,0);assert.equal(first.summitProduction.farVisible,true);
+  await picture(page,evidence,'a32-cold-plaza');
+  const startup=await page.evaluate(()=>({navigationMs:performance.now(),resources:performance.getEntriesByType('resource').filter(x=>/town-d2-r30-production-host|town-d2-r30-sector-installers/.test(x.name)).map(x=>x.name)}));
+  assert.equal(startup.resources.length,0,'cold town must not download rear production chunks');
+  const visit=async(label)=>{await page.locator('#town-panel-toggle').click();await page.locator('#jump').selectOption({label});if(await page.locator('#town-settings').evaluate(d=>d.open))await page.locator('#town-settings-close').click();};
+  await visit('陨石坑口');await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-2,p.north-159)<1.2);
+  for(const p of [[-12,159],[-40,159]])await walkTo(page,evidence,p,'cold-crater',.55);
+  await face(page,evidence,0);await picture(page,evidence,'a32-crater-north');
+  assert.equal((await state()).summitProduction.status,'idle');
+  await visit('山口站');
+  await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-296,p.north-520)<1.2,20000);
+  await page.waitForFunction(()=>window.__za22Frame?.summitProduction?.status!=='idle',null,{timeout:20000});
+  await picture(page,evidence,'a32-prefetch-start');
+  await page.waitForFunction(()=>window.__za22Frame?.summitProduction?.publicTransportBound===true,null,{timeout:150000});
+  const assembled=await state();
+  report.streaming={startup,terrainPreload:first.terrainPreload,cold:first.summitProduction,assembled:assembled.summitProduction,ridge:{roads:assembled.ridge.roads,frontRoadHandoffs:assembled.ridge.frontRoadHandoffs,transportReady:assembled.ridge.transportReady,cloudSeam:assembled.ridge.cloudSeam}};
+  assert.equal(assembled.summitProduction.status,'ready',JSON.stringify(report.streaming));
+  assert.equal(assembled.summitProduction.ready,true);
+  assert.equal(assembled.summitProduction.canonicalPreparation?.mode,'worker',JSON.stringify(assembled.summitProduction.canonicalPreparation));
+  assert.ok(assembled.summitProduction.southSlices?.count>1,JSON.stringify(assembled.summitProduction.southSlices));
+  assert.ok(assembled.summitProduction.westSlices?.count>1,JSON.stringify(assembled.summitProduction.westSlices));
+  assert.equal(assembled.summitProduction.westPreparation?.mode,'worker',JSON.stringify(assembled.summitProduction.westPreparation));
+  assert.equal(assembled.ridge.transportReady,true,JSON.stringify(assembled.summitProduction));
+  assert.equal(assembled.ridge.cloudSeam.domainReady,true,JSON.stringify(assembled.ridge.cloudSeam));
+  assert.equal(assembled.summitProduction.cable.boardable,true,JSON.stringify(assembled.summitProduction.cable));
+  assert.ok(assembled.summitProduction.frontAuditSlices?.count>1&&assembled.summitProduction.cable.slices?.count>1);
+  assert.ok(assembled.summitProduction.hiking?.ready,JSON.stringify(assembled.summitProduction.hiking));
+  assert.ok(assembled.summitProduction.hiking.markers>240&&assembled.summitProduction.hiking.maxGrade<=.70);
+  assert.deepEqual(assembled.summitProduction.registrationRoutes.map(r=>r.id),['fromTrail','fromCable']);
+  assert.ok(assembled.summitProduction.registrationRoutes.every(r=>r.ready&&r.samples>200&&r.markers>0),JSON.stringify(assembled.summitProduction.registrationRoutes));
+  assert.equal(assembled.summitProduction.southRoad.intervalComplete,true);
+  assert.deepEqual(assembled.summitProduction.southRoad.boundaryExits.map(r=>Math.round(r.length)),[36,55]);
+  assert.ok(assembled.ridge.frontRoadHandoffs.length===4&&assembled.ridge.frontRoadHandoffs.every(r=>r.domain==='front'&&r.installed&&r.surface.maxGrade<=.120001));
+  assert.equal(assembled.summitProduction.southRoad.cutPreparation.mode,'worker');
+  assert.ok(assembled.summitProduction.southRoad.cutPreparation.changed>0);
+  assert.ok(assembled.summitProduction.warmup?.meshes>0&&assembled.summitProduction.warmup?.batches>0);
+  assert.equal(assembled.summitProduction.farVisible,true);
+  await face(page,evidence,0);await picture(page,evidence,'a32-foothill-ready');
+  await walkTo(page,evidence,[296,516],'station-out',.35);await walkTo(page,evidence,[296,520],'station-return',.35);
+  await picture(page,evidence,'a32-foothill-walked');
+  const loaded=await page.evaluate(()=>window.__a31LoadFrames);
+  report.streaming.frames=loaded;
+  report.streaming.longFrames=loaded.filter(f=>f.ms>50).map(f=>({ms:f.ms,status:f.status,stage:f.stage}));
+  await visit('广场南侧');await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-223,p.north-180)<1);
+  await face(page,evidence,0);await picture(page,evidence,'a32-loaded-plaza');
+  // Two independent Chromium processes, same actual Presence room.
+  const firstBrowser=browser,firstEvidence=evidence;
+  const peerBrowser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:graphicsArgs});
+  try{
+   browser=peerBrowser;const peer=await openTown('a32-second-browser');
+   await page.waitForFunction(()=>document.querySelector('#town-presence-status')?.textContent.includes('2 人'),null,{timeout:15000});
+   await peer.page.waitForFunction(()=>document.querySelector('#town-presence-status')?.textContent.includes('2 人'),null,{timeout:15000});
+   const a=(await state()).weatherCycle,b=await peer.page.evaluate(()=>window.__za22Frame.weatherCycle);
+   assert.equal(a.dawnEpoch,b.dawnEpoch);
+   await picture(peer.page,peer.evidence,'a32-second-browser-plaza');
+   report.streaming.twoBrowsers={sameDawnEpoch:a.dawnEpoch,firstStatus:await page.locator('#town-presence-status').innerText(),secondStatus:await peer.page.locator('#town-presence-status').innerText()};
+  }finally{await peerBrowser.close();browser=firstBrowser;lastPage=page;lastEvidence=firstEvidence;}
+  report.traversal={top:await readPose(page),returned:await readPose(page)};
+  assert.ok(report.performanceSamples.every(x=>x.frames>0&&Number.isFinite(x.fps)&&Number.isFinite(x.frameMs.p99)));
+ }else if(segment==='night-r3-entry'){
+  const state=()=>page.evaluate(()=>window.__za22Frame);
+  await page.waitForFunction(()=>window.__za22Frame?.ridge?.roads===4&&window.__za22Frame?.summitProduction?.status==='idle',null,{timeout:45000});
+  const initial=await state();
+  assert.deepEqual(initial.summitProduction.installed,[]);assert.equal(initial.summitProduction.cutTiles,0);
+  assert.equal(initial.summitProduction.cable.boardable,false);
+  assert.equal(initial.summitProduction.near,false);assert.equal(initial.summitProduction.draws,0);assert.equal(initial.ridge.transportReady,false);assert.equal(initial.ridge.cloudSeam.physicalReady,true);
+  const snapshots=[];
+  const take=async(label)=>{const f=await state();assert.equal(f.ridge.roads,4);assert.ok(f.calls>0&&f.triangles>0);
+   const w=f.weatherCycle;assert.ok(w&&Number.isFinite(w.phase)&&w.phase>=0&&w.phase<1&&Number.isFinite(w.dawnEpoch));
+   assert.ok(Number.isFinite(w.visibility)&&w.visibility>0&&w.snow>0&&f.fogFar>f.fogNear);
+   snapshots.push({label,foot:f.ridge.foot,calls:f.calls,triangles:f.triangles,ridge:f.ridge,weatherCycle:w,fogNear:f.fogNear,fogFar:f.fogFar,points:f.points,summitProduction:f.summitProduction});
+   await picture(page,evidence,label);};
+  await take('normal-entry');
+  await page.locator('#town-panel-toggle').click();
+  await page.locator('#jump').selectOption({label:'山口站'});
+  if(await page.locator('#town-settings').evaluate(d=>d.open))await page.locator('#town-settings-close').click();
+  await page.waitForFunction(()=>{const f=window.__za22Frame?.ridge?.foot;return f&&Math.hypot(f[0]-296,f[1]-520)<1.2;},null,{timeout:20000});
+  await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-296,p.north-520)<1.2);
+  await face(page,evidence,0);
+  await page.waitForFunction(()=>{const s=window.__za22Frame?.summitProduction;return s?.ready&&!s.near&&s.draws===0&&s.farVisible&&s.farDraws>0&&s.sceneOwner==='town'&&s.publicTransportBound;},null,{timeout:150000});
+  await page.waitForFunction(()=>{const s=window.__za22Frame?.summitProduction;return s?.frontTrail||s?.frontTrailFailure;},null,{timeout:30000});
+  const frontTrail=(await state()).summitProduction.frontTrail;
+  console.log('R31 public front trail',JSON.stringify({frontTrail,error:(await state()).summitProduction.frontTrailFailure}));
+  assert.ok(frontTrail?.ready&&frontTrail.markers>0,JSON.stringify(frontTrail));
+  await take('mountain-foot-north');
+  await page.locator('#town-panel-toggle').click();await page.locator('#lighting').click();await page.locator('#town-settings-close').click();
+  const prior=snapshots.at(-1).weatherCycle;
+  await page.waitForFunction(p=>{const w=window.__za22Frame?.weatherCycle;return w&&w.skyColor!==p.skyColor&&w.dawnEpoch===p.dawnEpoch&&Math.abs(w.phase-p.phase)>.1;},prior,{timeout:15000});
+  await take('mountain-foot-other-light');
+  // The existing actual station approach is safe and near, not a claim
+  // of the full 1268m road. Use ordinary keys and real wire poses.
+  await walkTo(page,evidence,[296,516],'station-out',.35);
+  await walkTo(page,evidence,[296,520],'station-return',.35);
+  const returned=await readPose(page);await take('mountain-foot-return');
+  const frames=await page.evaluate(()=>window.__a31LoadFrames);
+  const loading=frames.filter(f=>f.status==='loading'||f.status==='ready').map(f=>f.ms).sort((a,b)=>a-b);
+  const loadFrames={samples:loading.length,p95:loading[Math.floor((loading.length-1)*.95)],p99:loading[Math.floor((loading.length-1)*.99)],max:loading.at(-1),stages:frames.filter(f=>f.ms>100)};
+  report.entry={scope:'public viewer with actual resident four-sector mount, safe far LOD and closed access; menu station arrival then native 4m out/back, not a continuous ascent',snapshots,loadFrames};
+  report.traversal={top:returned,returned};
+ }else if(mobileReview){
   const cdp=await page.context().newCDPSession(page),touch=async(type,points)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:points});
   assert.equal(await page.evaluate(()=>matchMedia('(pointer: coarse)').matches),true);
   await page.locator('#touch-walk').waitFor({state:'visible',timeout:12000});
@@ -435,6 +792,7 @@ try{
  ]:null;
  const path=jointInscription??joint?.points??salvagePath??ruinsPath??(segment==='inscription-access'?[...rail.stationWalkRoutes.find(r=>r.id==='transfer-dock').points.slice(0,5),...rail.stationWalkRoutes.find(r=>r.id==='inscription-access').points]:segment==='rail-buffer'?[[526,305],[526,312],[526,320],[526,338],[526,347],[514,352],[500,362],[482,371]].map(([east,north])=>({east,north,height:grid.heightAt(east,north)})):segment==='rail-valley'?[[296,520],[291,530],[288,531],[243,515]].map(([east,north])=>({east,north,height:grid.heightAt(east,north)})):scenic?(reverseScenic?[...scenic.points].reverse():scenic.points):segment==='outerclusters'?[[-68,220],[-68,232],[-83,235],[-98,243],[-95,261],[-90,265]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
    segment==='outcrop'?[[-60,55],[-147,52],[-155,51],[-164,51]].map(([east,north])=>({east,north,height:road.heightAt(east,north)})):
+   segment==='west-mountain'?westMountainFootway.map(([east,north])=>({east,north,height:westMountain.heightAt(east,north)??road.heightAt(east,north)})):
    segment==='northwalk'?[[-12,320],[-12,336],[-12,400],[-12,450],[-9,470],[-4,485],[2,490]].map(([east,north])=>({east,north,height:east<0?road.heightAt(east,north):grid.heightAt(east,north)})):
    segment==='wall'?[-9,-15,-21,-28].map(east=>({east,north:159,height:road.heightAt(east,159)})):
    tower?[tower.entry,...tower.stairs]:segment==='supply'?road.mouthWorks.supplyDeckRoute:
@@ -445,11 +803,11 @@ try{
    ['kengkou','freight','shankou'].includes(segment)?rail.stationWalkRoutes.find(t=>t.id===(segment==='freight'?'freight-shed':segment+'-station')).points:
    road.outerWorks.industrialRoutes.find(t=>t.id===(['gatehouse','ore-yard','cold-furnace','water-tower'].includes(segment)?segment:segment+'-plant')).points);
  async function step(point,label){
-   await walkTo(page,evidence,[point.east,point.north],label,joint&&Number.isFinite(point.t)?.35:(scenic||['northwalk','outcrop','outerclusters'].includes(segment))?.35:.18);
+   await walkTo(page,evidence,[point.east,point.north],label,joint&&Number.isFinite(point.t)?.35:(scenic||['northwalk','west-mountain','outcrop','outerclusters'].includes(segment))?.35:.18);
    await page.waitForTimeout(joint&&Number.isFinite(point.t)?55:140);
    const pose=await readPose(page);
    assert.ok(Math.abs(pose.height-point.height)<(joint&&Number.isFinite(point.t)?.75:.39),JSON.stringify({label,pose,point}));
-   if(joint)await appendFile(join(output,'native-validated-steps.ndjson'),JSON.stringify({label,pose,point})+'\n');
+   if(joint||segment==='west-mountain')await appendFile(join(output,'native-validated-steps.ndjson'),JSON.stringify({label,pose,point})+'\n');
    return pose;
  }
  async function wallView(label,heading){
@@ -534,6 +892,7 @@ try{
      await wallView('ore-yard-'+i,Math.atan2(site.east-point.east,site.north-point.north));
    }
    if(segment==='shankou'&&i===0)await wallView('shankou-arrival',Math.PI);
+   if(segment==='west-mountain'&&i===path.length-1)await wallView('west-mountain-'+i,Math.PI/4);
    if(segment==='northwalk'&&(i===1||i===2))await wallView('northwalk-'+(i===1?'seam':'mid'),0);
    if(segment==='wall'&&i===0)await wallView('wall-town-face',-Math.PI/2);
    if(segment==='wall'&&i===path.length-1)await wallView('wall-crater-face',Math.PI/2);
@@ -686,6 +1045,12 @@ try{
    await page.keyboard.press('e');
  }
  for(const [i,point] of path.slice().reverse().slice(1).entries())await step(point,segment+'-down-'+i);
+ if(segment==='west-mountain'){
+   // Close the actual pit-to-new-ground loop, not only the final seam.
+   for(const [i,target] of approach[segment].slice(0,-1).reverse().entries())await walkTo(page,evidence,target,'west-mountain-return-'+i,.46);
+   await walkTo(page,evidence,[2,159],'west-mountain-town-return',.46);
+   await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-2,p.north-159)<.8);
+ }
  if(joint){
    await walkTo(page,evidence,[-67,159],'joint-return-outside',.35);
    await waitForWire(page,evidence,p=>p?.area==='west'&&Math.hypot(p.east+67,p.north-159)<.7);
@@ -706,7 +1071,7 @@ try{
  }
  if(segment==='gatehouse')assert.ok(Math.abs(returned.height-path[0].height)<.08,JSON.stringify({returned,ground:path[0]}));
  await picture(page,evidence,segment+'-return');
- report.traversal={top,returned,expectedTop:path.at(-1),expectedReturn:path[0]};
+ report.traversal={top,returned,expectedTop:path.at(-1),expectedReturn:segment==='west-mountain'?{east:2,north:159,height:grid.heightAt(2,159)}:path[0]};
  }
 }catch(e){report.failure=String(e.stack||e);process.exitCode=1;try{await picture(lastPage,lastEvidence,'failed-position');}catch{}}
 finally{

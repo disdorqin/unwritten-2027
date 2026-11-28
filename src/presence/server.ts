@@ -27,6 +27,7 @@ import type {
   Za36CableRepairEvent, Za36CableRepairLine,
 } from '../shared/za36-cable-repair.js';
 import { isSummitPassportAction } from '../shared/summit-passport.js';
+import {summitGuestPassportPosition,type SummitPassportRoom,type createSummitPassportGuestAuthority} from './summit-passport-guest.js';
 import { snowWallBuildLayers } from '../shared/snow-stock.js';
 import {
   createSummitPassportAuthority, summitPassportUnavailable, type SummitPassportHost,
@@ -108,6 +109,13 @@ type Options = {
   townNight?: PresenceTownNightOptions;
   /** Secondary rooms consume the primary town's committed frames. */
   townNightFeed?: TownNightFeed;
+  /** One server-owned cable authority for the town and connected mountain rooms. */
+  cableLineAuthority?: ReturnType<typeof createCableLineAuthority>;
+  /** Production forbids line-2 impact wake. Only the summit host may authorize release from its accepted wire pose. */
+  requireSummitCableRelease?: boolean;
+  authorizeSummitCableRelease?: (record: Readonly<PresenceRecord>) => boolean;
+  authorizeCableRepair?: (line:Za36CableRepairLine,event:Za36CableRepairEvent,record?:Readonly<PresenceRecord>)=>boolean;
+  summitRoom?: boolean;
   /** Author weather only in the primary room, using the same wall clock and dawn anchor as ZB-17. */
   townOutdoorWeather?: TownWeatherOptions;
   /** Secondary rooms relay primary-town weather rather than running a second schedule. */
@@ -127,6 +135,8 @@ type Options = {
   ceremonyStartAt?: number;
   bellConfig?: Partial<BellConfig>;
   summitPassportHost?: SummitPassportHost;
+  /** Optional, explicitly approved location-gated guest passport, shared across outdoor rooms. */
+  summitPassportGuest?: {authority:ReturnType<typeof createSummitPassportGuestAuthority>;room:SummitPassportRoom};
   /** S2 结构化连接日志的注入点；默认 console.log。 */
   connectionLog?: PresenceConnectionLog;
 };
@@ -147,6 +157,8 @@ type Peer = {
   id: number;
   name?: string;
   record?: PresenceRecord;
+  recordAt?: number;
+  passportProfileKey?: string;
   version: number;
   visible: { id: number; version: number }[];
   joinTimer?: ReturnType<typeof setTimeout>;
@@ -329,6 +341,9 @@ export async function createPresenceServer(options: Options = {}) {
   }
   const egress = createPresenceEgress();
   const fireworks = options.testFireworks ? createTestFireworksSchedule() : undefined;
+  const horizontalWireScale=options.summitRoom?4:1;
+  const verticalWireScale=options.summitRoom?2:1;
+  const wireCell=centimetresPerCell/horizontalWireScale;
   const eastLimit = metresToLimit(options.width ?? TOWN_BOUNDS.width);
   const northLimit = metresToLimit(options.depth ?? TOWN_BOUNDS.depth);
   const heightLimit = metresToLimit(options.height ?? TOWN_BOUNDS.height);
@@ -348,9 +363,9 @@ export async function createPresenceServer(options: Options = {}) {
   // per line, this server the only writer. The wire frame is B's
   // CableLineFrame plus the full snapshot the client repair host syncs
   // from; flags stay derived inside the authority, never set here.
-  const cableLine = createCableLineAuthority();
-  const cableLineWire = (frame: CableLineFrame) =>
-    JSON.stringify({ ...frame, state: cableLine.snapshot(frame.line) });
+  const cableLine = options.cableLineAuthority ?? createCableLineAuthority(wallNow);
+  const cableLineWire = (frame: CableLineFrame,peer:Peer) =>
+    JSON.stringify({ ...frame, state: cableLine.snapshotFor(frame.line,peer) });
   // Ice palace rites: the authority validates the caller's alcove pose and
   // delegates to policy stores. None of the three stores (ice window, forge
   // inventory, solstice) exists yet, so snapshots honestly report every rite
@@ -514,7 +529,7 @@ export async function createPresenceServer(options: Options = {}) {
         return;
       }
     }
-    let body: { name?: unknown; state?: unknown; events?: unknown };
+    let body: { name?: unknown; state?: unknown; events?: unknown; presenceFrame?:unknown; passportCredential?:unknown };
     try { body = JSON.parse(await readBody(req) || '{}') as typeof body; }
     catch {
       if (req.url === POLL_JOIN_PATH) connLog('poll', '-', 'attempt', 'body');
@@ -531,7 +546,7 @@ export async function createPresenceServer(options: Options = {}) {
       connLog('poll', '-', 'attempt', 'accepted');
       const peer = createPeer('poll');
       connLog('poll', peer.id, 'session', 'ok');
-      receiveText(peer, Buffer.from(JSON.stringify({ type: 'join', name: body.name }), 'utf8'));
+      receiveText(peer, Buffer.from(JSON.stringify({ type: 'join', name: body.name, presenceFrame:body.presenceFrame,passportCredential:body.passportCredential }), 'utf8'));
       if (!peer.name || !peers.has(peer.id)) { reply(400, { error: 'name' }); return; }
       const session = randomBytes(16).toString('hex');
       peer.session = session;
@@ -567,7 +582,7 @@ export async function createPresenceServer(options: Options = {}) {
         if (frame.t === 'text' && typeof frame.d === 'string') {
           const pending = receiveText(peer, Buffer.from(frame.d, 'utf8'));
           if (pending) await pending;
-        } else if (frame.t === 'bin' && typeof frame.d === 'string') {
+        } else if (!options.summitRoom&&frame.t === 'bin' && typeof frame.d === 'string') {
           const bytes = Buffer.from(frame.d, 'base64');
           if (bytes.byteLength === RECORD_BYTES && bytes.readUInt16LE(0) === MASCOT_ACTOR_ID) {
             receiveState(peer, bytes);
@@ -785,12 +800,12 @@ export async function createPresenceServer(options: Options = {}) {
   function relevantPeers(peer: Peer, radius: number, limit: number, heightGate = false) {
     const state = peer.record;
     if (!state) return [];
-    const radiusSquared = (radius * 100) ** 2;
+    const radiusSquared = (radius * 100 / horizontalWireScale) ** 2;
     const nearby: { peer: Peer; distance: number }[] = [];
     for (const candidate of peers.values()) {
       const candidateState = candidate.record;
       if (candidate === peer || !candidateState) continue;
-      if (heightGate && Math.abs(state.height - candidateState.height) > 1000) continue;
+      if (heightGate && Math.abs(state.height - candidateState.height) > 1000/verticalWireScale) continue;
       const distance = horizontalDistanceSquared(state, candidateState);
       if (distance <= radiusSquared) nearby.push({ peer: candidate, distance });
     }
@@ -1036,7 +1051,7 @@ export async function createPresenceServer(options: Options = {}) {
     if (typeof pose !== 'number' || !Number.isInteger(pose) || pose < 0 || pose > 8 || pose === 6 ||
         peer.pose === pose || !consume(peer.poseRate, now(), 5, 5)) return;
     peer.pose = pose;
-    observeIceThrone(peer, now());
+    if(!options.summitRoom)observeIceThrone(peer, now());
     const relay = poseMessage(peer);
     for (const recipient of relevantPeers(peer, tier.radius, eventVisibleLimits[tierIndex])) send(recipient, relay);
   }
@@ -1061,6 +1076,7 @@ export async function createPresenceServer(options: Options = {}) {
 
   function remove(peer: Peer) {
     if (!peers.delete(peer.id)) return;
+    cableLine.releaseActor(peer);
     summitPassport?.forget(peer.id);
     if (peer.session) pollSessions.delete(peer.session);
     connLog(peer.transport, peer.id, 'drop', peer.dropReason ?? (peer.name ? 'closed' : 'unjoined'));
@@ -1194,6 +1210,8 @@ export async function createPresenceServer(options: Options = {}) {
       failPeer(peer);
       return;
     }
+    // Do not interpret compressed coordinates as old town game positions.
+    if(options.summitRoom&&peer.name&&!['leave','chat','clock','pose'].includes(String(message.type))&&!(message.type==='event'&&'kind' in message&&['cable-release-summit','cable-repair','summit-passport'].includes(String(message.kind))))return;
     if (message.type === 'event' && 'kind' in message && message.kind === 'fireworks' && peer.name) {
       if ('seed' in message && isFireworksSeed(message.seed) && 'theme' in message && isFireworksTheme(message.theme)) {
         requestFireworks(peer, message.seed, message.theme);
@@ -1242,18 +1260,32 @@ export async function createPresenceServer(options: Options = {}) {
       return;
     }
     if (message.type === 'event' && 'kind' in message && peer.name) {
+      if (message.kind === 'cable-release-summit') {
+        if (allowEvent(peer, now()) && peer.record && options.authorizeSummitCableRelease?.(peer.record) === true) {
+          cableLine.applyEvent(2, {kind:'wake',impact:'night-window'});
+        }
+        return;
+      }
       if (message.kind === 'cable-repair') {
         const line = 'line' in message ? message.line : undefined;
         const event = 'event' in message ? message.event : undefined;
         if (allowEvent(peer, now()) && isCableRepairLine(line) && isCableRepairEvent(event)) {
-          const frame = cableLine.applyEvent(line, event);
-          if (frame) broadcast(cableLineWire(frame));
+          // The production summit route must first be released by the verified summit host.
+          if (line===2 && event.kind==='wake' && options.requireSummitCableRelease) return;
+          if(options.summitRoom&&line!==2)return;
+          if(options.authorizeCableRepair&&!options.authorizeCableRepair(line,event,peer.record))return;
+          // The shared authority publishes once to every attached room, including this one.
+          cableLine.applyEvent(line, event,peer);
         }
         return;
       }
       if (message.kind === 'summit-passport') {
         const action = 'action' in message ? message.action : undefined;
         if (allowEvent(peer, now()) && isSummitPassportAction(action)) {
+          const guest = options.summitPassportGuest;
+          if (guest) return guest.authority.request(peer.passportProfileKey,summitGuestPassportPosition(guest.room,peer.record,now()-(peer.recordAt??-Infinity),peer.pose),action).then(reply => {
+            if (peers.get(peer.id) === peer) send(peer, JSON.stringify(reply));
+          });
           if (summitPassport) return summitPassport.request(peer.id, action).then(reply => {
             if (peers.get(peer.id) === peer) send(peer, JSON.stringify(reply));
           });
@@ -1333,17 +1365,23 @@ export async function createPresenceServer(options: Options = {}) {
       failPeer(peer);
       return;
     }
+    const requestedFrame='presenceFrame' in message?message.presenceFrame:undefined;
+    if((options.summitRoom&&requestedFrame!=='summit-v1')||(!options.summitRoom&&requestedFrame!==undefined)){failPeer(peer);return;}
     const name = validName(message.name);
     if (!name) { peer.dropReason ??= 'invalid-name'; failPeer(peer); return; }
     clearTimeout(peer.joinTimer);
     peer.name = name;
+    const passportGuest=options.summitPassportGuest?.authority.bind('passportCredential' in message?message.passportCredential:undefined);
+    if(passportGuest)peer.passportProfileKey=passportGuest.profileKey;
     const joinedAt = wallNow();
     peer.joinedAt = joinedAt;
     if (joinedAt < ceremonyEndAt) ceremonyWaiting.add(peer);
     online++;
     connLog(peer.transport, peer.id, 'join', 'ok');
     send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true, freeSnowWalls: true, firecrackers: true, iceThrone: true, cableLine: true, icePalaceRites: true,
-      ...(summitPassport ? { summitPassport: true } : {}),
+      ...(options.summitRoom?{presenceFrame:'summit-v1',fireworks:false,plazaPhoto:false,bell:false,snowfight:false,freeSnowWalls:false,firecrackers:false,iceThrone:false,icePalaceRites:false}:{}),
+      ...(summitPassport || passportGuest ? { summitPassport: true } : {}),
+      ...(passportGuest?{passportCredential:passportGuest.credential}:{}),
       townNightWindow: nightFeed?.snapshot(),
       undergroundWater: waterFeed?.snapshot(),
       townOutdoorWeather: weatherFeed?.snapshot(),
@@ -1352,8 +1390,8 @@ export async function createPresenceServer(options: Options = {}) {
     if (photo && !photo.ended && wallNow() < photo.invite.captureAt - plazaPhotoLockMs) send(peer, JSON.stringify(photo.invite));
     const bellEvent = bellStateEvent();
     if (bellEvent) send(peer, JSON.stringify(bellEvent));
-    send(peer, cableLineWire(cableLine.hello(1)));
-    send(peer, cableLineWire(cableLine.hello(2)));
+    send(peer, cableLineWire(cableLine.hello(1),peer));
+    send(peer, cableLineWire(cableLine.hello(2),peer));
     send(peer, JSON.stringify({ type: 'ice-palace-rite', state: icePalaceRites.snapshot(peer.id).rites }));
     send(peer, JSON.stringify(icePalaceFragment.frame()));
     for (const other of peers.values()) {
@@ -1379,6 +1417,7 @@ export async function createPresenceServer(options: Options = {}) {
     const record = readRecord(bytes);
     if (!peer.name || !record) { failPeer(peer); return; }
     const time = now();
+    if(options.summitRoom&&(record.id===MASCOT_ACTOR_ID||record.east>eastLimit||record.north>northLimit||record.height>heightLimit))return;
     if (record.id === MASCOT_ACTOR_ID) {
       if (peer !== owner) {
         rejectedMascotClaims++;
@@ -1406,32 +1445,33 @@ export async function createPresenceServer(options: Options = {}) {
     record.height = Math.min(heightLimit, record.height);
     if (peer.record?.seq === record.seq) return;
     peer.record = record;
+    peer.recordAt=time;
     peer.version++;
-    observeIceThrone(peer, time);
+    if(!options.summitRoom)observeIceThrone(peer, time);
   }
 
   function sendSnapshots() {
     const grid = new Map<number, Peer[]>();
-    const cellStride = Math.ceil(eastLimit / centimetresPerCell) + 1;
+    const cellStride = Math.ceil(eastLimit / wireCell) + 1;
     for (const peer of peers.values()) {
       const state = peer.record;
       if (!state) continue;
-      const key = Math.floor(state.east / centimetresPerCell) + Math.floor(state.north / centimetresPerCell) * cellStride;
+      const key = Math.floor(state.east / wireCell) + Math.floor(state.north / wireCell) * cellStride;
       const bucket = grid.get(key);
       if (bucket) bucket.push(peer);
       else grid.set(key, [peer]);
     }
 
-    const radius = tier.radius * 100;
+    const radius = tier.radius * 100 / horizontalWireScale;
     const radiusSquared = radius * radius;
     for (const peer of peers.values()) {
       const state = peer.record;
       if (!state) continue;
       const nearby: { peer: Peer; distance: number }[] = [];
-      const minX = Math.floor(Math.max(0, state.east - radius) / centimetresPerCell);
-      const maxX = Math.floor(Math.min(eastLimit, state.east + radius) / centimetresPerCell);
-      const minN = Math.floor(Math.max(0, state.north - radius) / centimetresPerCell);
-      const maxN = Math.floor(Math.min(northLimit, state.north + radius) / centimetresPerCell);
+      const minX = Math.floor(Math.max(0, state.east - radius) / wireCell);
+      const maxX = Math.floor(Math.min(eastLimit, state.east + radius) / wireCell);
+      const minN = Math.floor(Math.max(0, state.north - radius) / wireCell);
+      const maxN = Math.floor(Math.min(northLimit, state.north + radius) / wireCell);
       for (let north = minN; north <= maxN; north++) {
         for (let east = minX; east <= maxX; east++) {
           for (const other of grid.get(east + north * cellStride) ?? []) {
@@ -1489,6 +1529,7 @@ export async function createPresenceServer(options: Options = {}) {
         if (!peers.has(peer.id)) return;
         const bytes = bytesOf(data);
         if (!binary) receiveText(peer, bytes);
+        else if(options.summitRoom){if(bytes.byteLength===RECORD_BYTES)receiveState(peer,bytes);}
         else if (bytes.byteLength === RECORD_BYTES || bytes[0] !== SNOWBALL_EVENT_PREFIX) receiveState(peer, bytes);
         else if (bytes[1] === SNOWFIGHT_PLACE || bytes[1] === SNOWFIGHT_WALL_HIT ||
           bytes[1] === SNOWFIGHT_SLED_SMASH) receiveSnowfight(peer, bytes);
@@ -1504,6 +1545,7 @@ export async function createPresenceServer(options: Options = {}) {
       resolve();
     });
   });
+  const stopFollowingCable = cableLine.subscribe(frame => {for(const peer of peers.values())if(peer.name)send(peer,cableLineWire(frame,peer));});
   const stopFollowingNight = options.townNightFeed?.subscribe(frame => broadcast(frame));
   const stopFollowingWater = options.undergroundWaterFeed?.subscribe(frame => broadcast(frame));
   const stopFollowingWeather = options.townOutdoorWeatherFeed?.subscribe(frame => broadcast(frame));
@@ -1565,18 +1607,20 @@ export async function createPresenceServer(options: Options = {}) {
       closing = true;
       clearInterval(tick);
       clearInterval(heartbeat);
+      stopFollowingCable();
       stopFollowingNight?.();
       stopFollowingWater?.();
       stopFollowingWeather?.();
       nightListeners.clear();
       weatherListeners.clear();
       for (const peer of peers.values()) {
+        cableLine.releaseActor(peer);
         clearTimeout(peer.joinTimer);
         peer.socket?.terminate();
       }
       wss.close();
       stop = new Promise<void>((resolve, reject) => http.close(error => error ? reject(error) : resolve()))
-        .then(() => summitPassport?.flush());
+        .then(() => summitPassport?.flush()).then(()=>options.summitPassportGuest?.authority.flush());
       return stop;
     },
   };

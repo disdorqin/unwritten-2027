@@ -19,6 +19,9 @@ for(const candidate of [false,true])test('production ridge consumes real railway
  const ridge=mountProductionRidge(root,grid,{loop:rail.route.points,branch:branch.samples,rearConnectorCandidate:candidate});
  assert.ok(ridge.changedVertices>100000);assert.equal(ridge.roads.length,candidate?4:3);assert.equal(ridge.rearConnected,candidate);assert.equal(ridge.stationReady,true);
  assert.equal(ridge.transportReady,false);
+ assert.equal(ridge.frontRoadHandoffs.filter(r=>r.installed).length,candidate?4:3);
+ assert.ok(ridge.frontRoadHandoffs.every(r=>r.domain==='front'&&(!r.installed||r.surface!.maxGrade<=.120001)));
+ assert.ok(Math.abs(ridge.frontRoadHandoffs.find(r=>r.id==='lower-east-service')!.toHeight!-87.5)<.001);
  const lowerEnd=ridge.roads.at(-1)!.route.at(-1)!;
  const midEnd=ridge.roads[1]!.route.at(-1)!;
  assert.equal(ridge.roadTerminalAction(lowerEnd.east,lowerEnd.north,lowerEnd.height)?.title,candidate?undefined:'后坡施工终点');

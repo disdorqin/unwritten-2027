@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<link rel="icon" href="data:," />
+<title>FR-10 连续昼夜 · 权威时钟天空验收</title>
+<style>
+  :root{
+    --panel:#0d1726d9; --panel-2:#0a121fcc; --line:#9db8d233; --ink:#eaf2f9; --dim:#93a9bd;
+    --amber:#e8c184; --cold:#9dc4e8; --night:#7f9bd6;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0;overflow:hidden;background:#0b1220;color:var(--ink);
+    font:13.5px/1.55 "Segoe UI",system-ui,-apple-system,"Microsoft YaHei",sans-serif}
+  #scene{position:absolute;inset:0}
+  #scene canvas{display:block;width:100%;height:100%;touch-action:none;cursor:grab}
+  #scene canvas:active{cursor:grabbing}
+  .hud{position:absolute;top:16px;left:16px;width:min(370px,calc(100vw - 32px));
+    max-height:calc(100vh - 32px);overflow:auto;padding:15px 17px;border:1px solid var(--line);
+    border-radius:16px;background:var(--panel);backdrop-filter:blur(14px);box-shadow:0 20px 50px #0007}
+  h1{font-size:15px;margin:0 0 2px;color:#f6ddb2;letter-spacing:.2px}
+  .sub{font-size:11px;color:var(--dim);margin:0 0 11px}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 11px}
+  .chip{padding:3px 8px;border-radius:999px;border:1px solid #ffffff1c;background:#101d2ccc;
+    font-size:11.5px;color:#c7d9e9;font-variant-numeric:tabular-nums}
+  .chip b{color:var(--amber);font-weight:600}
+  #night.night{border-color:#7f9bd688;background:#1b2a4bcc;color:#c7d8ff}
+  .readouts{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin:4px 0 12px}
+  .readouts div{padding:6px 8px;border-radius:9px;background:var(--panel-2);border:1px solid #ffffff10}
+  .readouts span{display:block;font-size:10px;color:var(--dim);letter-spacing:.4px}
+  .readouts b{display:block;font-size:13px;font-weight:600;color:#dcebf8;font-variant-numeric:tabular-nums}
+  .label{font-size:10.5px;color:var(--dim);letter-spacing:.6px;margin:2px 0 6px;text-transform:uppercase}
+  #phase-buttons{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:12px}
+  button{border:1px solid #8aacc655;background:#16283bc9;color:#e7f1fa;padding:5px 7px;
+    border-radius:8px;cursor:pointer;font:inherit;font-size:11.5px;line-height:1.2}
+  button:hover{background:#244059}
+  button:active{transform:translateY(1px)}
+  #cycle{position:relative;margin:3px 0 4px;border-radius:9px;overflow:hidden;border:1px solid #ffffff16}
+  #cycle canvas{display:block;width:100%;height:60px}
+  #cycle-marker{position:absolute;top:0;bottom:0;width:2px;margin-left:-1px;background:#ffefc9;
+    box-shadow:0 0 8px #ffe3a6;pointer-events:none;transition:left .08s linear}
+  .legend{display:flex;justify-content:space-between;font-size:10px;color:#8299ad;margin-top:4px}
+  .legend i{display:inline-block;width:8px;height:2px;margin-right:4px;vertical-align:middle}
+  .controls{position:absolute;left:50%;bottom:18px;transform:translateX(-50%);
+    display:flex;align-items:center;gap:9px;width:min(660px,calc(100vw - 32px));padding:10px 14px;
+    border-radius:14px;border:1px solid var(--line);background:var(--panel);backdrop-filter:blur(14px);
+    box-shadow:0 18px 40px #0007}
+  .controls button{padding:6px 10px}
+  #play{min-width:64px;background:#2b4a66cc;border-color:#8db4d4aa}
+  #speed-label{min-width:44px;text-align:center;color:var(--amber);font-variant-numeric:tabular-nums}
+  #timeline{flex:1;accent-color:#e8c184;cursor:pointer}
+  .foot{position:absolute;right:16px;bottom:84px;font-size:10.5px;color:#7f95a9;pointer-events:none;
+    text-shadow:0 1px 4px #0009;text-align:right}
+  @media (max-width:720px){
+    .hud{top:10px;left:10px;width:calc(100vw - 20px);max-height:52vh;padding:12px 13px}
+    .controls{bottom:10px;width:calc(100vw - 20px);gap:6px;padding:8px 10px}
+    .foot{display:none}
+  }
+</style>
+</head>
+<body>
+<div id="scene"></div>
+
+<div class="hud">
+  <h1>FR-10 · 连续昼夜天空验收</h1>
+  <p class="sub">权威 dawnEpoch + 服务器时钟驱动 · 独立预览页不接生产 viewer</p>
+  <div class="chips">
+    <div class="chip">时钟 <b id="clock">17:16</b></div>
+    <div class="chip">阶段 <b id="phase">dusk</b></div>
+    <div class="chip" id="night">日侧</div>
+  </div>
+  <div class="readouts">
+    <div><span>太阳强度</span><b id="sun">1.70</b></div>
+    <div><span>环境光</span><b id="ambient">1.35</b></div>
+    <div><span>灯光</span><b id="lamp">0.00</b></div>
+    <div><span>太阳高度</span><b id="elev">20°</b></div>
+    <div><span>曝光</span><b id="exposure">1.00</b></div>
+    <div><span>雾距</span><b id="fog">80–560m</b></div>
+  </div>
+  <div class="label">十秒一天 · 连续曲线</div>
+  <div id="cycle"><canvas id="cycle-strip" width="1024" height="120"></canvas><div id="cycle-marker"></div></div>
+  <div class="legend">
+    <span><i style="background:#9dc4e8"></i>天空色</span>
+    <span><i style="background:#e8c184"></i>灯光</span>
+    <span><i style="background:#ffe39a"></i>太阳</span>
+    <span>0 → 10 分钟</span>
+  </div>
+  <div class="label" style="margin-top:11px">定位阶段</div>
+  <div id="phase-buttons"></div>
+</div>
+
+<div class="controls">
+  <button id="play" aria-pressed="true">暂停</button>
+  <button id="speed-down" aria-label="减速">−</button>
+  <span id="speed-label">8×</span>
+  <button id="speed-up" aria-label="加速">+</button>
+  <input id="timeline" type="range" min="0" max="1000" step="1" value="470" aria-label="昼夜时间轴" />
+</div>
+<div class="foot">拖拽旋转视角 · 滚轮缩放<br />同一 dawnEpoch + now ⇒ 每台设备相同天空</div>
+
+<script type="module" src="./town-blockout/town-night-weather-preview.ts"></script>
+</body>
+</html>

@@ -11,9 +11,9 @@ test('touch environment follows the touch-walk rule: coarse pointer or a seen to
   assert.equal(isTouchEnvironment(false, false), false);
 });
 
-test('chat starts collapsed only in a touch environment', () => {
+test('chat starts collapsed in the corner menu on touch and desktop', () => {
   assert.equal(chatStartsCollapsed(true), true);
-  assert.equal(chatStartsCollapsed(false), false);
+  assert.equal(chatStartsCollapsed(false), true);
 });
 
 test('fullscreen API detection accepts the standard and WebKit-prefixed forms only', () => {

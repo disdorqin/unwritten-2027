@@ -1,0 +1,1 @@
+{"extends":"../../tsconfig.json","include":["town-blockout/engine-perf/**/*.ts","../../tests/town-engine-perf-*.test.ts"]}

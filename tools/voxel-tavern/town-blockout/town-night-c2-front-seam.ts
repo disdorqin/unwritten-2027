@@ -12,7 +12,7 @@ import { BoxGeometry, Color, DataTexture, Group, InstancedMesh, Matrix4, MeshLam
  * lifts the barrier, and `domainReady` is never hard-set true.
  *
  * Measured on the live field: the 347 m plateau at this seam occupies
- * E300-354, N662-668. The apron therefore runs E327 at 2.8 m width from
+ * E300-354, N662-668. The apron therefore runs E300 at 2.8 m width from
  * N663.25 to N666.5, emitting the exact same-foot contact points D2 and A
  * must agree on. The gate bar blocks only while it is closed; opening it is a
  * host decision, not something this module grants.
@@ -21,9 +21,9 @@ import { BoxGeometry, Color, DataTexture, Group, InstancedMesh, Matrix4, MeshLam
 export type SeamHeightAt = (east: number, north: number) => number | undefined;
 
 export const c2FrontSeamSpec = Object.freeze({
-  east: 327,
+  east: 300,
   seamNorth: 663.25,
-  gateNorth: 666,
+  gateNorth: 663.25,
   contactNorth: 666.5,
   halfWidth: 1.4,
   deckHeight: 347,
@@ -55,7 +55,7 @@ export function planC2FrontSeam(heightAt: SeamHeightAt): SeamPlan {
   const pieces: SeamPiece[] = [];
   let maxDeviation = 0, supported = true;
   const stations: { north: number; height: number }[] = [];
-  for (let north = spec.seamNorth; north <= spec.contactNorth + 1e-9; north += spec.step) {
+  for (const north of [...Array.from({length:Math.floor((spec.contactNorth-spec.seamNorth)/spec.step)+1},(_,i)=>spec.seamNorth+i*spec.step),spec.contactNorth]) {
     const height = heightAt(spec.east, north);
     if (height === undefined || !Number.isFinite(height)) { supported = false; continue; }
     const deviation = Math.abs(height - spec.deckHeight);
@@ -77,8 +77,8 @@ export function planC2FrontSeam(heightAt: SeamHeightAt): SeamPlan {
     });
   }
   pieces.push({
-    family: 'bar', east: spec.east, north: spec.seamNorth, y: spec.deckHeight + .82,
-    w: spec.halfWidth * 2, h: .12, d: .12, yaw: 0, shade: 2,
+    family: 'bar', east: spec.east, north: spec.seamNorth, y: spec.deckHeight,
+    w: 3.75, h: 1.24, d: .16, yaw: 0, shade: 2,
   });
   const contactHeight = heightAt(spec.east, spec.contactNorth) ?? spec.deckHeight;
   pieces.push({
@@ -120,7 +120,7 @@ function paletteTexture() {
   return texture;
 }
 
-export function mountC2FrontSeam(heightAt: SeamHeightAt) {
+export function mountC2FrontSeam(heightAt: SeamHeightAt,existingPosts=false) {
   const plan = planC2FrontSeam(heightAt);
   const group = new Group();
   group.name = 'town-night-c2-front-seam';
@@ -128,7 +128,7 @@ export function mountC2FrontSeam(heightAt: SeamHeightAt) {
   const geometry = new BoxGeometry();
   const material = new MeshLambertMaterial({ color: '#ffffff', map: texture });
   const bar = plan.pieces.find(piece => piece.family === 'bar')!;
-  const posts = plan.pieces.filter(piece => piece.family === 'post');
+  const posts = existingPosts?[]:plan.pieces.filter(piece => piece.family === 'post');
   // The bar and posts are the only solid parts, and the bar is removable.
   const mesh = new InstancedMesh(geometry, material, Math.max(1, plan.pieces.length));
   mesh.instanceMatrix.setUsage(StaticDrawUsage);
@@ -139,8 +139,9 @@ export function mountC2FrontSeam(heightAt: SeamHeightAt) {
   const write = () => {
     index = 0;
     for (const piece of plan.pieces) {
-      if (piece.family === 'bar' && !closed) continue;
-      transform.position.set(piece.east, piece.y + piece.h / 2, -piece.north);
+      if (piece.family === 'bar' && !closed || piece.family==='post'&&existingPosts) continue;
+      // Paving top is flush with the canonical walking surface.
+      transform.position.set(piece.east, piece.y + (piece.family==='apron'||piece.family==='contact'?-1:1)*piece.h / 2, -piece.north);
       transform.rotation.set(0, piece.yaw, 0);
       transform.scale.set(piece.w, piece.h, piece.d);
       transform.updateMatrix();
