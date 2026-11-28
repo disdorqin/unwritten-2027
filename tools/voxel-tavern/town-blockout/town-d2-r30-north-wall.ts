@@ -1,5 +1,5 @@
 import {
-  BoxGeometry, BufferGeometry, CylinderGeometry, Group, InstancedMesh, Matrix4,
+  BoxGeometry, BufferGeometry, Color, CylinderGeometry, Group, InstancedMesh, Matrix4,
   Mesh, MeshLambertMaterial, Object3D, Quaternion, Vector3,
 } from 'three';
 import {
@@ -231,25 +231,63 @@ export function createTownD2R30NorthWall(options: {
   // the climb surface stays non-solid so the ascent never freezes.
   const ledgeMin = 15, ledgeMax = 20;
   const ledgeAnchors: TownD2R30NorthWallAnchor[] = [climbAnchors[0]!];
+  // The anchor rises are irregular (7-30 m), so a ledge is emitted the moment
+  // the accumulated rise enters 15-20 m; when one anchor step overshoots the
+  // band the ledge is interpolated on the climb line at 17.5 m instead of
+  // leaving a 30 m unprotected pitch.
   let ledgeRise = 0;
+  let ledgePrevious: TownD2R30NorthWallAnchor = climbAnchors[0]!;
   for (let index = 1; index < climbAnchors.length; index++) {
     const anchor = climbAnchors[index]!;
-    const rise = anchor.ground - climbAnchors[index - 1]!.ground;
-    const projected = ledgeRise + rise;
-    if (rise >= ledgeMin || projected >= ledgeMin) {
-      if (projected > ledgeMax && ledgeRise >= ledgeMin * .8) {
-        ledgeAnchors.push(climbAnchors[index - 1]!);
-        ledgeRise = rise;
-      } else {
-        ledgeAnchors.push(anchor);
-        ledgeRise = 0;
-      }
-    } else {
-      ledgeRise = projected;
+    const step = anchor.ground - ledgePrevious.ground;
+    ledgeRise += step;
+    if (ledgeRise >= ledgeMin && ledgeRise <= ledgeMax) {
+      ledgeAnchors.push(anchor);
+      ledgeRise = 0;
+    } else if (ledgeRise > ledgeMax && step > 0) {
+      const target = (ledgeMin + ledgeMax) / 2;
+      const weight = (target - (ledgeRise - step)) / step;
+      ledgeAnchors.push(Object.freeze({
+        id: `${ledgePrevious.id}+`,
+        east: ledgePrevious.east + (anchor.east - ledgePrevious.east) * weight,
+        north: ledgePrevious.north + (anchor.north - ledgePrevious.north) * weight,
+        ground: ledgePrevious.ground + step * weight,
+        top: anchor.top,
+      }));
+      ledgeRise -= target;
     }
+    ledgePrevious = anchor;
   }
   const summitAnchor = climbAnchors[climbAnchors.length - 1]!;
   if (ledgeAnchors[ledgeAnchors.length - 1] !== summitAnchor) ledgeAnchors.push(summitAnchor);
+  // The red route flags: one cloth pennant on a short staff at every rest
+  // ledge, on the outer side of the climb, so the route is marked the way the
+  // reference does it. One instanced batch — no extra draw per flag.
+  const routeFlags = new InstancedMesh(new BoxGeometry(.72, .44, .04), cloth, ledgeAnchors.length);
+  routeFlags.name = 'town-d2-r30-climb-route-flags';
+  const flagPole = new InstancedMesh(new BoxGeometry(.06, 1.15, .06), iron, ledgeAnchors.length);
+  flagPole.name = 'town-d2-r30-climb-route-flag-staffs';
+  const flagDummy = new Object3D();
+  ledgeAnchors.forEach((ledge, index) => {
+    const side = spec.climbEast > 0 ? 1 : -1;
+    const staffEast = ledge.east + side * (spec.rungHalfWidth + 1.1);
+    flagDummy.position.set(staffEast, ledge.ground + .75, -ledge.north);
+    flagDummy.rotation.set(0, 0, 0);
+    flagDummy.scale.set(1, 1, 1);
+    flagDummy.updateMatrix();
+    routeFlags.setMatrixAt(index, flagDummy.matrix);
+    routeFlags.setColorAt(index, index % 2 === 0 ? new Color('#b5463e') : new Color('#8c332c'));
+    flagDummy.position.set(staffEast, ledge.ground + .58, -ledge.north);
+    flagDummy.updateMatrix();
+    flagPole.setMatrixAt(index, flagDummy.matrix);
+  });
+  if (routeFlags.instanceColor) routeFlags.instanceColor.needsUpdate = true;
+  routeFlags.instanceMatrix.needsUpdate = true;
+  flagPole.instanceMatrix.needsUpdate = true;
+  routeFlags.computeBoundingSphere();
+  flagPole.computeBoundingSphere();
+  group.add(routeFlags, flagPole);
+
   const ledgeSlabs = new InstancedMesh(
     new BoxGeometry(spec.rungHalfWidth * 2 + 2.4, .6, 3.4), stone, ledgeAnchors.length);
   ledgeSlabs.name = 'town-d2-r30-climb-ledges';
@@ -604,6 +642,10 @@ export function createTownD2R30NorthWall(options: {
   return {
     group,
     climbAnchors: climbAnchors as readonly TownD2R30NorthWallAnchor[],
+    /** Rest ledges, 15-20 m of rise apart: a slip lands on the one below. */
+    climbLedges: ledgeAnchors as readonly TownD2R30NorthWallAnchor[],
+    /** The marked red-flag route: one pennant per rest ledge. */
+    routeFlags: ledgeAnchors.length,
     collisionBoxes: collisionBoxes as readonly TownD2R30NorthWallBox[],
     blocked,
     maxFootSlope: MAX_FOOT_SLOPE,

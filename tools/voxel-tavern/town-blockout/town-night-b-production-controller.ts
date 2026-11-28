@@ -7,6 +7,7 @@ import type {mountMainSummitCableWorkshop} from './main-summit-cable-workshop';
 import {createCableRepairHost,cableWakeEvent,type RepairAnchors} from './town-cable-repair-host';
 import {createNightBPryHold} from './town-night-b-pry-hold';
 import {createNightBFrontBoardPresenter} from './town-night-b-front-boards';
+import type {mountNightBUpperDispatcher} from './town-night-b-upper-dispatcher';
 import {summitReleaseApproaches} from '../../../src/shared/za22-summit-presence-domain';
 type Foot={east:number;north:number;height:number};
 type Presence=Pick<ReturnType<typeof createTownPresence>,'getCableLineState'|'cableServerNow'|'getTownNightWindow'|'getCableLineWokeAt'|'getCableLineOpenedAt'|'getTownWeatherDawnEpoch'|'sampleCableRide'|'setActivityPose'|'sendSummitCableRelease'|'sendCableRepair'>;
@@ -16,7 +17,7 @@ type Upper=ReturnType<typeof installNightBUpperOperation>;
 type Input={
  presence:Presence;
  front?:Front;
- upper?:Upper;
+ upper?:Upper & {dispatcher?:ReturnType<typeof mountNightBUpperDispatcher>};
  ropeway?:ReturnType<typeof createTownD2R30Ropeway>;
  workshop?:ReturnType<typeof mountMainSummitCableWorkshop>;
  frontRepair?:{anchors:RepairAnchors;surfaceAt:(e:number,n:number)=>number|undefined;clear:(p:Foot)=>boolean};
@@ -42,14 +43,14 @@ export function createNightBProductionController(input:Input){
  const pry=createNightBPryHold({state:p.getCableLineState,send:p.sendCableRepair,now:input.inputNow});
  const ride=createNightBCableRideHost({front:front?.service,frontFacilities:front?.facilities,upper:upper?.service,upperRopeway:upper?.ropeway,upperOrigin:input.upperOrigin,
  domain:()=>{const d=input.domain();return d==='mountain'?'town':d;},acceptLanding:input.acceptLanding});
- const repair=input.frontRepair&&createCableRepairHost(1,input.frontRepair.anchors);
+ const repair=input.frontRepair&&createCableRepairHost(1,front?.repairProps?.anchors??input.frontRepair.anchors);
  const boards=front&&createNightBFrontBoardPresenter(front.facilities.group.parent??front.facilities.group,front.facilities.survey);
  let boardStatus:Parameters<ReturnType<typeof createNightBFrontBoardPresenter>>[0]|undefined;
  const local=(f:Foot)=>({...f,east:f.east-input.upperOrigin.east,north:f.north-input.upperOrigin.north});
  function tick(yaw:number):CableRideFrame|undefined{
   if(upper)upper.update();
   ride.updateVisuals(!!upper);
-  const s=p.getCableLineState(1);if(s)repair?.sync(s);
+  const s=p.getCableLineState(1);if(s)repair?.sync(s);front?.repairProps?.sync(s);
   if(front&&boards){const status=!s||p.cableServerNow()===undefined?'offline':s.stage==='dormant'?'dormant':s.stage==='one-station'||front.service.firstRun()?.phase==='reposition'?'repair':front.service.serviceOpen()?'running':'parked';if(status!==boardStatus){boards(status);boardStatus=status;}}
   const frame=ride.pose();if(frame)p.sampleCableRide(frame,yaw);return frame;
  }
@@ -61,17 +62,19 @@ export function createNightBProductionController(input:Input){
   const available:{id:string;label:string}[]=[];
   for(const cabin of [0,1] as const)if(ride.boardCandidate(feet,line,cabin))available.push({id:'board-'+cabin,label:'登乘'+(cabin+1)+'号车厢'});
   if(line===2&&upper&&p.getCableLineState(2)?.stage==='dormant'&&p.cableServerNow()!==undefined&&summitReleaseApproaches[0]&&Math.hypot(feet.east-summitReleaseApproaches[0].east,feet.north-summitReleaseApproaches[0].north)<=1.35&&Math.abs(feet.height-800)<=.43)available.push({id:'release',label:'放下绝顶缆车'});
+  if(line===2&&upper?.dispatcher?.available(local(feet)))available.push({id:'dispatcher',label:'询问调度员 · 班次'});
   if(line===2&&upper&&workshop&&p.getCableLineState(2)?.stage==='one-station')for(const a of workshop.repairActions(local(feet)))available.push({id:a.id,label:a.id==='pry-cable'?'按住 E 撬正缆绳':a.label});
   if(line===1&&front&&input.frontRepair&&repair&&Math.abs(feet.height-(input.frontRepair.surfaceAt(feet.east,feet.north)??Infinity))<=.43&&input.frontRepair.clear(feet)){
    const s=p.getCableLineState(1);if(s)for(const a of repair.actions(s,feet))available.push({id:a.id,label:a.id==='pry-cable'?'按住 E 撬正缆绳':a.label});
   }
   return available;
  }
- function action(id:string,feet:Foot):{accepted:boolean;landing?:Foot}{
+ function action(id:string,feet:Foot):{accepted:boolean;landing?:Foot;notice?:string}{
   if(!actions(feet).some(a=>a.id===id))return {accepted:false};
   if(id==='exit'){const landing=ride.exit();if(!landing)return {accepted:false};p.setActivityPose(0);return {accepted:true,landing};}
   const line=input.domain()==='summit'?2:1;
   if(id==='board-0'||id==='board-1')return {accepted:ride.board(feet,line,id==='board-0'?0:1)};
+  if(id==='dispatcher')return {accepted:true,notice:upper?.dispatcher?.notice()};
   if(id==='release')return {accepted:p.sendSummitCableRelease()};
   if(id==='pry-cable')return {accepted:pry.begin(line)};
   const state=p.getCableLineState(line);

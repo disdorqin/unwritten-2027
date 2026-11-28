@@ -196,6 +196,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number,
     includeSummitFacilities: true,
     includeNightLights: true,
     includeRopeway: true,
+    includeNorthWall: true,
     ropewayEpochMs: epochMs,
   });
   let activeCable = cable;
@@ -250,7 +251,15 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number,
     wreckageSites: wreckage.sites, aimWreckage: wreckage.aim,
     atCloudStamp: (position: ReturnType<typeof summitWorldPoint>) =>
       withinMainSummitRegistrationReach(position, landmarks.cloudDeck.stampPoint),
-    summitSnowAt: (east: number, north: number) => block.snowDepthAt(east, north, frontSnowAt(east, seam)),
+    // The terrace sampler can report a depth outside the normalized band (or
+    // undefined at the very edge of the field). Clamp rather than return no
+    // snow at all: an undefined summitSnowAt told the consumer nothing.
+    summitSnowAt: (east: number, north: number) => {
+      const terrace = frontSnowAt(east, seam);
+      const depth = typeof terrace === 'number' && Number.isFinite(terrace)
+        ? Math.max(0, Math.min(1, terrace)) : .5;
+      return block.snowDepthAt(east, north, depth);
+    },
     blocked(east: number, north: number, feet: number, radius: number, bodyHeight: number) {
       if (activeStations.blocked(east, north, feet, radius, bodyHeight)) return true;
       const front = north < seam;
@@ -259,6 +268,18 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number,
         (candidate?.workshop.blocked(east, north, feet, radius, bodyHeight) ?? false) ||
         (candidate?.cloudBells.blocked(east, north, feet, radius, bodyHeight) ?? false)
       )) return true;
+      // D2-R3 production gate: the R30 massif is the one canonical height
+      // authority. Reject feet on a centre slope steeper than the same
+      // 55 deg walkable threshold the R30 collision uses, and reject the new
+      // north-wall landmark bodies (obelisk / mast / lookout rails) so the
+      // player cannot walk through them. The climb rungs are deliberately
+      // left non-solid so the ascent itself stays traversable.
+      if (r30 && !front) {
+        const slope = r30.collision.slopeAt(east, north);
+        if (slope !== undefined && slope > (r30.northWall?.maxFootSlope ?? 55 * Math.PI / 180)) return true;
+        if (r30.northWall?.blocked(east, north, feet, radius, bodyHeight)) return true;
+        if (r30.cableTowers?.blocked(east, north, feet, radius, bodyHeight)) return true;
+      }
       const position = front ? summitWorldPoint(east, north, feet) : { east, north, height: feet };
       const boxes = front ? cloudRegistration.colliders : cabin.colliders;
       return boxes.some(({ min, max }) => {

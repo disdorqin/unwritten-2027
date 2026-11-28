@@ -6,7 +6,7 @@ import {auditRidgeRoadCrossings,type RidgeRoadPoint} from './town-d-r30-road-sur
 
 type EN={east:number;north:number};
 type Allowed=(e:number,n:number)=>boolean;
-const B=frontRidgeR30Bounds,half=2.8,shoulder=8,cutLimit=8;
+const B=frontRidgeR30Bounds,half=2.8,shoulder=8;
 // Survey waypoint is not a new gameplay anchor. It is the end of the
 // first middle-to-upper switchback construction section.
 export const middleEastRoadControls=Object.freeze([
@@ -88,7 +88,12 @@ type Core={e:number;n:number;lo:number;hi:number;natural:number};
  * vertices. Feasible interval propagation enforces a conservative
  * triangle gradient bound, not just a nominal centreline profile.
  * No road overlay, no write to the source array, no authority claim. */
-export function buildMiddleEastRoadbed(field:FrontRidgeR30Field,allowed:Allowed,controls:readonly EN[]=middleEastRoadControls,terminal?:Readonly<{startHeight?:number;endHeight?:number}>){
+export function buildMiddleEastRoadbed(field:FrontRidgeR30Field,allowed:Allowed,controls:readonly EN[]=middleEastRoadControls,terminal?:Readonly<{startHeight?:number;endHeight?:number}>,limits?:Readonly<{earthwork?:number}>){
+ // The 8 m per-vertex cap is the general road budget. A specific alignment may
+ // declare its own, recorded cap instead of silently reshaping a whole flank;
+ // callers that do must publish the measured cut/fill with the route.
+ const cutLimit=limits?.earthwork??8;
+ if(!Number.isFinite(cutLimit)||cutLimit<=0)throw new RangeError('road earthwork cap');
  if(controls.length<2||controls.some((p,i)=>!Number.isFinite(p.east)||!Number.isFinite(p.north)||(i>0&&p.east===controls[i-1]!.east&&p.north===controls[i-1]!.north)))throw new RangeError('road controls');
  const path=smoothPath(controls);
  let cum=0;

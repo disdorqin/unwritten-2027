@@ -286,7 +286,7 @@ export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Fiel
  });
  type CabinState=ReturnType<typeof clock.cabinsAt>[number];
  type Positioned=CabinState&P;
- let operational=false,lastOperational:Positioned[]=[];
+ let operational=false,lastOperational:Positioned[]=[],disposed=false;
  function update(nowMs:number){
   if(operational)return lastOperational;
   const states=clock.cabinsAt(closed?0:nowMs);
@@ -349,8 +349,8 @@ export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Fiel
   for(const c of tiers){const d=Math.hypot(e-c.east,n-c.north);c.near.visible=c.near.visible?d<150:d<120;if(c.far)c.far.visible=!c.near.visible}
  }
  return {group,survey,clock,update,presentOperational,updateView,visibleInstances:()=>batches.reduce((n,b)=>n+(b.visible?b.count:0),0),blocked(e:number,n:number,y:number,r=.27){
-  return solids.some(s=>{const dx=e-s.e,dn=n-s.n,c=Math.cos(s.yaw),a=Math.sin(s.yaw),x=dx*c+dn*a,z=-dx*a+dn*c;
+  return !disposed&&solids.some(s=>{const dx=e-s.e,dn=n-s.n,c=Math.cos(s.yaw),a=Math.sin(s.yaw),x=dx*c+dn*a,z=-dx*a+dn*c;
    return y+1.8>s.bottom&&y<s.top&&Math.hypot(Math.max(0,Math.abs(x)-s.w/2),Math.max(0,Math.abs(z)-s.d/2))<r})
  },setNight(night:boolean){const lit=night&&!operational;lamp.emissive.set(lit?'#e9c58e':'#000000');lamp.emissiveIntensity=lit?.65:0;lights.forEach(l=>l.intensity=lit?8:0)},
- dispose(){group.removeFromParent();batches.forEach(b=>b.dispose());geometry.dispose();materials.forEach(m=>m.dispose());lines.forEach(l=>{l.geometry.dispose();(l.material as LineBasicMaterial).dispose()});boards.forEach(b=>{b.geometry.dispose();b.material.map?.dispose();b.material.dispose()})}};
+ dispose(){if(disposed)return;disposed=true;group.removeFromParent();batches.forEach(b=>b.dispose());geometry.dispose();materials.forEach(m=>m.dispose());lines.forEach(l=>{l.geometry.dispose();(l.material as LineBasicMaterial).dispose()});boards.forEach(b=>{b.geometry.dispose();b.material.map?.dispose();b.material.dispose()})}};
 }
