@@ -392,18 +392,95 @@ test('D32-2 the seam crossing is measured, not opened by deleting a railing', ()
     host.install('B', createWestSectorInstaller());
     host.install('C2', createEastSectorInstaller());
     const crossing = host.certifySeamCrossing();
-    assert.equal(crossing.samples, 30);
-    assert.equal(crossing.unsupported, 0, 'the seam floor must exist on the host');
-    assert.ok(crossing.maxFloorDrift <= .45, `floor drift ${crossing.maxFloorDrift}`);
     assert.equal(crossing.contract.floor, 347);
-    assert.equal(crossing.contract.south, 666.5);
+    assert.equal(crossing.contract.railingNorth, 663.25);
     assert.equal(crossing.contract.north, 669);
-    // The host's own bodies must not close the contract. The front room's
-    // N663.25 railing lives in another owner's route file; if it blocks, the
-    // report says so instead of the host pretending the way is open.
-    assert.deepEqual([...crossing.blockedSamples], []);
+    // The contract band D2 owns (N666.5..669) is clean and walkable.
+    assert.equal(crossing.band.samples, 30);
+    assert.equal(crossing.band.unsupported, 0, 'the seam floor must exist on the host');
+    assert.equal(crossing.band.obstructed, 0, 'no D2 body may close the contract band');
+    assert.ok(crossing.maxFloorDrift <= .45, `floor drift ${crossing.maxFloorDrift}`);
     assert.equal(crossing.open, true);
+    // The strip between the N663.25 railing and the domain edge has no D2
+    // ground at all. The report says so with a number and a row list instead
+    // of the host pretending the whole passage is open, and the railing itself
+    // is never removed to fake a door.
+    assert.ok(crossing.frontStripMetres > 0,
+      `the railing-to-domain strip must be reported, got ${crossing.frontStripMetres}`);
+    assert.ok(crossing.frontStripMetres < 5, `unexpected strip ${crossing.frontStripMetres} m`);
+    assert.ok(crossing.closedRows.length > 0, 'the closed rows must be listed');
+    for (const row of crossing.closedRows) {
+      assert.ok(row.north < 666.5, `row N${row.north} is inside the D2 contract band`);
+    }
     assert.ok(Object.isFrozen(crossing));
+  } finally {
+    host.dispose();
+  }
+});
+
+test('D32-P1 the central spiral really joins C2 centreline, and gaps are measured', () => {
+  const host = createTownD2R30ProductionHost();
+  try {
+    host.install('A', createSouthSectorInstaller());
+    host.install('B', createWestSectorInstaller());
+    host.install('C2', createEastSectorInstaller());
+    const joint = host.certifyRoadJoint();
+    assert.equal(joint.version, 'd2-road-joint-1.0');
+    assert.equal(joint.handoffs, 4);
+    const byId = new Map(joint.reports.map(report => [report.id, report]));
+    // C2's middle-east-upper endpoint lands on the canonical central spiral
+    // and the walking surface between them is supported: that is a real joint.
+    const joined = byId.get('middle-east-upper')!;
+    assert.equal(joined.joined, true, `gap ${joined.gapMetres}`);
+    assert.ok(joined.gapMetres <= 2, `gap ${joined.gapMetres} m`);
+    assert.equal(joined.unsupported, 0);
+    assert.equal(joined.obstructed, 0);
+    // The other three C2 segments end far from the central spiral. They must be
+    // reported as open with their real gap, never rounded up to "joined".
+    for (const id of ['lower-east-service', 'middle-south-exit', 'rear-connector'] as const) {
+      const report = byId.get(id)!;
+      assert.equal(report.joined, false, `${id} must not be claimed as joined`);
+      assert.equal(report.reason, 'no-gap');
+      assert.ok(report.gapMetres > 2, `${id} gap ${report.gapMetres}`);
+    }
+    assert.deepEqual([...joint.joined], ['middle-east-upper']);
+    assert.equal(joint.allJoined, false);
+  } finally {
+    host.dispose();
+  }
+});
+
+test('D32-2 detail sleeps by view but the mountain and its collision stay resident', () => {
+  const host = createTownD2R30ProductionHost();
+  try {
+    host.install('A', createSouthSectorInstaller());
+    host.install('B', createWestSectorInstaller());
+    host.install('C2', createEastSectorInstaller());
+    const visible = () => new Map(host.group.children.map(child => [
+      child.name, (child as unknown as { visible: boolean }).visible,
+    ]));
+    // Standing in the south: the west and east dressings go to sleep.
+    host.setDetailFocus(0, 100);
+    const south = visible();
+    assert.equal(south.get('town-d2-r30-assembly'), true, 'the coarse massif is resident');
+    assert.equal(south.get('night-a-south-sector'), true);
+    assert.equal(south.get('night-b-west-sector'), false);
+    assert.equal(south.get('town-night-c2-summit-east-production'), false);
+    // Walking to the summit wakes the east and sleeps the south.
+    host.setDetailFocus(50, 1000);
+    const summit = visible();
+    assert.equal(summit.get('town-d2-r30-assembly'), true);
+    assert.equal(summit.get('night-a-south-sector'), false);
+    // Sleeping is a render decision only: the ground and its collision are
+    // still there where nobody is looking.
+    const ground = host.supportAt(0, 100);
+    assert.notEqual(ground, undefined);
+    assert.equal(host.blocked(0, 100, ground!), false);
+    assert.notEqual(host.collision.surfaceAt(0, 100), undefined);
+    // Re-focusing back south wakes it again.
+    host.setDetailFocus(0, 100);
+    assert.equal(visible().get('night-a-south-sector'), true);
+    assert.throws(() => host.setDetailFocus(NaN, 0), /finite/);
   } finally {
     host.dispose();
   }

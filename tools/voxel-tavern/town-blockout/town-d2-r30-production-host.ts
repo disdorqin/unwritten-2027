@@ -10,6 +10,7 @@ import { createTownD2R30Ropeway } from './town-d2-r30-ropeway';
 import { mainSummitR30CableWorkshopAnchor, mountMainSummitCableWorkshop } from './main-summit-cable-workshop';
 import { installNightBUpperOperation } from './town-night-b-summit-upper-install';
 import { createTownD2R30SummitPlay, type TownD2R30SummitPlay } from './town-d2-r30-summit-play';
+import { certifyRoadJoint } from './town-d2-r30-road-joint';
 
 /**
  * D2's real production host for the 3.1 four-sector summit (D31-1).
@@ -367,6 +368,8 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
       pkg = installer(createPort(prior));
       const settlement = settle(sector, pkg);
       installed.set(sector, pkg);
+      collectSleepers();
+      if (detailFocus) setDetailFocus(detailFocus.east, detailFocus.north);
       failures.delete(sector);
       return settlement;
     } catch (error) {
@@ -403,14 +406,22 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
   // D2 does not delete a railing to "open" the mountain — it measures the real
   // crossing and refuses while a mounted body still blocks it.
   const SEAM_CROSSING_WORLD = Object.freeze({
-    west: 298, east: 302, south: 666.5, north: 669, floor: 347, tolerance: .45,
+    // The corridor runs from the N663.25 railing line to the N669 seam: the
+    // whole passage, not just the contract band, so the report can say where a
+    // body actually closes it. The railing itself is a real physical object and
+    // is never deleted to "open" the way.
+    west: 298, east: 302, railingNorth: 663.25, south: 662.5, north: 669,
+    floor: 347, tolerance: .45,
   });
   const anchor = townD2SectorContract.worldAnchor;
 
   function certifySeamCrossing() {
     const recorded: { east: number; north: number; support: number | undefined; blocked: boolean }[] = [];
     let unsupported = 0, obstructed = 0, worst = 0, samples = 0;
+    let contractUnsupported = 0, contractObstructed = 0, contractSamples = 0;
+    const rows: { north: number; unsupported: number; obstructed: number }[] = [];
     for (let north = SEAM_CROSSING_WORLD.south; north <= SEAM_CROSSING_WORLD.north + 1e-9; north += .5) {
+      let rowUnsupported = 0, rowObstructed = 0;
       for (const east of [298, 299, 300, 301, 302]) {
         // World -> summit-local (x=east, z=-north, anchor at E300/N676).
         const localEast = east - anchor.east;
@@ -418,12 +429,18 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
         samples++;
         const support = supportAt(localEast, localNorth);
         const blockedAt = support === undefined ? true : blocked(localEast, localNorth, support);
-        if (support === undefined) unsupported++;
-        else worst = Math.max(worst, Math.abs(support - SEAM_CROSSING_WORLD.floor));
-        if (blockedAt) obstructed++;
+        const inContract = north >= SEAM_CROSSING_WORLD.south - 1e-9 &&
+          north >= 666.5;
+        if (inContract) contractSamples++;
+        if (support === undefined) { unsupported++; rowUnsupported++; if (inContract) contractUnsupported++; }
+        else if (inContract) worst = Math.max(worst, Math.abs(support - SEAM_CROSSING_WORLD.floor));
+        if (blockedAt) { obstructed++; rowObstructed++; if (inContract) contractObstructed++; }
         if (blockedAt && recorded.length < 24) {
           recorded.push({ east, north, support, blocked: blockedAt });
         }
+      }
+      if (rowUnsupported > 0 || rowObstructed > 0) {
+        rows.push({ north, unsupported: rowUnsupported, obstructed: rowObstructed });
       }
     }
     return Object.freeze({
@@ -436,8 +453,21 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
       maxFloorDrift: worst,
       /** Open only when every sample stands on the published floor and no
        * mounted body blocks it — the N663.25 railing included. */
-      open: unsupported === 0 && obstructed === 0 && worst <= SEAM_CROSSING_WORLD.tolerance,
+      /** The contract band (N666.5..669) is what D2 owns; it is open only when
+       * every sample there stands on the floor and nothing blocks it. */
+      open: contractUnsupported === 0 && contractObstructed === 0 &&
+        worst <= SEAM_CROSSING_WORLD.tolerance,
+      band: Object.freeze({
+        samples: contractSamples, unsupported: contractUnsupported, obstructed: contractObstructed,
+      }),
+      /** Metres between the railing line and the first row D2 has ground on:
+       * that strip belongs to the front owner's terrain, not to this domain. */
+      frontStripMetres: Math.max(0, (rows.find(row => row.north >= 662.5 && row.unsupported === 0)?.north ??
+        SEAM_CROSSING_WORLD.north) - SEAM_CROSSING_WORLD.railingNorth),
       blockedSamples: Object.freeze(recorded),
+      /** Every north row that closes the corridor, so the owner of the body is
+       * obvious instead of the whole passage reading "blocked". */
+      closedRows: Object.freeze(rows),
     });
   }
 
@@ -492,6 +522,54 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
   function setFrontSnow(next: ((east: number, north: number) => number | undefined) | undefined) {
     if (next !== undefined && typeof next !== 'function') throw new TypeError('setFrontSnow expects a sampler or undefined.');
     frontSnow = next;
+  }
+
+  // ---- coarse resident, detail sleeps (D32-2) ------------------------------
+  // The canonical massif stays mounted forever: it is the ground the player
+  // walks on and the silhouette the far view sees. Heavy detail bodies (the
+  // summit facilities, north wall, cloud terrace, each sector's own dressing
+  // and the cable line) only render while the view is actually near them.
+  // Sleeping is a render decision only — support, collision and domain logic
+  // never depend on it, so a sleeping sector is still solid.
+  const DETAIL_RADIUS = 620;
+  let detailFocus: { east: number; north: number } | undefined;
+  const sleepers: { name: string; object: { visible: boolean }; east: number; north: number }[] = [];
+
+  function collectSleepers() {
+    sleepers.length = 0;
+    for (const child of group.children) {
+      // The massif is the resident coarse model and never sleeps.
+      if (child === assembly.group) continue;
+      const box = new Box3().setFromObject(child);
+      if (box.isEmpty()) continue;
+      sleepers.push({
+        name: child.name,
+        object: child,
+        east: (box.min.x + box.max.x) / 2,
+        north: -(box.min.z + box.max.z) / 2,
+      });
+    }
+  }
+
+  /** Focus the detail layer on the player's actual position. Returns how many
+   * bodies are awake so a caller can assert the switch really happened. */
+  function setDetailFocus(east: number, north: number, radius = DETAIL_RADIUS) {
+    if (disposed) return 0;
+    if (!Number.isFinite(east) || !Number.isFinite(north) || !Number.isFinite(radius) || radius <= 0) {
+      throw new RangeError('Detail focus needs a finite position and a positive radius.');
+    }
+    detailFocus = { east, north };
+    if (sleepers.length === 0) collectSleepers();
+    let awake = 0;
+    for (const sleeper of sleepers) {
+      const distance = Math.hypot(sleeper.east - east, sleeper.north - north);
+      // The line and the sectors carry their own large bounds; a hard radius
+      // keeps a distant dressing layer out of the frame entirely.
+      const visible = distance <= radius;
+      sleeper.object.visible = visible;
+      if (visible) awake++;
+    }
+    return awake;
   }
 
   // ---- the original summit play, bound to the real bodies (D32-P1) ---------
@@ -744,6 +822,10 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     setFrontSnow,
     certifySeamCrossing,
     summitPlay,
+    setDetailFocus,
+    /** D32-P1 #8: measure the real joint between the central spiral and C2's
+     * single east-sector centreline, on this host's live support and collision. */
+    certifyRoadJoint: () => certifyRoadJoint({ trail, supportAt, blocked }),
     preparePublicCable,
     uninstallCable,
     cableState,
