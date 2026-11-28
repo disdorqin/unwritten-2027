@@ -337,6 +337,78 @@ test('D32-1 uninstalling the line releases every body and re-closes the slot', a
   }
 });
 
+test('D32-2 snow depth is same-source, laddered and seam-safe', () => {
+  const host = createTownD2R30ProductionHost();
+  try {
+    const tier = (east: number, north: number) => host.snowTierAt(east, north)!;
+    const depth = (east: number, north: number) => host.snowAt(east, north)!;
+    // The original design ladder: high mountain 4-5 tiers, summit cap 1-2.
+    assert.ok(tier(0, 700) >= 4, 'the high mountain must carry 4-5 tiers');
+    assert.ok(tier(50, 800) >= 4);
+    const cap = tier(50, 1000);
+    assert.ok(cap >= 1 && cap <= 2, `summit cap tier ${cap} must be 1-2`);
+    assert.ok(tier(0, 300) < tier(0, 700), 'snow must deepen with altitude');
+    for (const [east, north] of [[0, 100], [0, 480], [50, 1000], [-400, 900]] as const) {
+      const value = depth(east, north);
+      assert.ok(value !== undefined && value >= 0 && value <= 1, `depth at E${east}/N${north}`);
+      assert.equal(Math.abs(value - tier(east, north) / 5) < 1e-9, true, 'depth must come from the same tier list');
+    }
+    assert.equal(host.snowAt(4000, 4000), undefined, 'outside the domain there is no snow to report');
+
+    // Every tier is derived from the canonical field, so it cannot contradict
+    // the ground: a 700 m sample is never bare and an 800 m cap is never deep.
+    for (let north = 100; north < 1700; north += 100) {
+      for (let east = -900; east <= 900; east += 150) {
+        const h = host.heightAt(east, north);
+        if (h === undefined) continue;
+        const t = tier(east, north);
+        if (h >= 770) assert.ok(t <= 2, `E${east}/N${north} at ${h.toFixed(0)} m must be cap-thin`);
+        else if (h >= 610) assert.ok(t >= 4, `E${east}/N${north} at ${h.toFixed(0)} m must carry 4-5 tiers`);
+      }
+    }
+
+    // The seam may not jump more than one tier from the front authority,
+    // whatever weather that authority reports.
+    for (const reported of [0, .2, .4, .6, .8, 1]) {
+      host.setFrontSnow(() => reported);
+      const frontier = Math.round(reported * 5);
+      for (const north of [466, 480, 494, 520, 560] as const) {
+        const here = tier(0, north);
+        assert.ok(Math.abs(here - frontier) <= 1,
+          `seam tier ${here} vs front ${frontier} at N${north}`);
+      }
+    }
+    host.setFrontSnow(undefined);
+    assert.throws(() => host.setFrontSnow('nope' as never), /sampler/);
+  } finally {
+    host.dispose();
+  }
+});
+
+test('D32-2 the seam crossing is measured, not opened by deleting a railing', () => {
+  const host = createTownD2R30ProductionHost();
+  try {
+    host.install('A', createSouthSectorInstaller());
+    host.install('B', createWestSectorInstaller());
+    host.install('C2', createEastSectorInstaller());
+    const crossing = host.certifySeamCrossing();
+    assert.equal(crossing.samples, 30);
+    assert.equal(crossing.unsupported, 0, 'the seam floor must exist on the host');
+    assert.ok(crossing.maxFloorDrift <= .45, `floor drift ${crossing.maxFloorDrift}`);
+    assert.equal(crossing.contract.floor, 347);
+    assert.equal(crossing.contract.south, 666.5);
+    assert.equal(crossing.contract.north, 669);
+    // The host's own bodies must not close the contract. The front room's
+    // N663.25 railing lives in another owner's route file; if it blocks, the
+    // report says so instead of the host pretending the way is open.
+    assert.deepEqual([...crossing.blockedSamples], []);
+    assert.equal(crossing.open, true);
+    assert.ok(Object.isFrozen(crossing));
+  } finally {
+    host.dispose();
+  }
+});
+
 test('D31-1 the host publishes the four sector bounds it enforces', () => {
   assert.deepEqual({ ...townD2SectorBounds.A }, { west: -1100, east: 1100, south: -10, north: 480 });
   assert.deepEqual({ ...townD2SectorBounds.B }, { west: -1100, east: -300, south: 480, north: 1790 });

@@ -3,7 +3,7 @@ import { createMainSummitBlock, mainSummitLayout } from './main-summit-block';
 import { createMainSummitTrail, type MainSummitTrailPoint } from './main-summit-trail';
 import { createTownD2R30Assembly, type TownD2R30Assembly } from './town-d2-r30-assembly';
 import type { TownD2R30Collision } from './town-d2-r30-collision';
-import { sampleTownD2R30Height } from './town-d2-r30-domain';
+import { sampleTownD2R30Height, sampleTownD2R30Normal } from './town-d2-r30-domain';
 import { townD2SectorAt, townD2SectorContract } from './town-d2-r30-sector-audit';
 import { createTownD2R30CableTowers } from './town-d2-r30-cable-towers';
 import { createTownD2R30Ropeway } from './town-d2-r30-ropeway';
@@ -396,6 +396,103 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     return Object.freeze({ sector, node, cutTilesRestored: residue === 0, residue });
   }
 
+  // ---- front/rear airlock (D32-2) ------------------------------------------
+  // The seam contract is published in WORLD metres (the front room's frame):
+  // the same foot must be standable on both sides of N666.5..669 at H347.
+  // D2 does not delete a railing to "open" the mountain — it measures the real
+  // crossing and refuses while a mounted body still blocks it.
+  const SEAM_CROSSING_WORLD = Object.freeze({
+    west: 298, east: 302, south: 666.5, north: 669, floor: 347, tolerance: .45,
+  });
+  const anchor = townD2SectorContract.worldAnchor;
+
+  function certifySeamCrossing() {
+    const recorded: { east: number; north: number; support: number | undefined; blocked: boolean }[] = [];
+    let unsupported = 0, obstructed = 0, worst = 0, samples = 0;
+    for (let north = SEAM_CROSSING_WORLD.south; north <= SEAM_CROSSING_WORLD.north + 1e-9; north += .5) {
+      for (const east of [298, 299, 300, 301, 302]) {
+        // World -> summit-local (x=east, z=-north, anchor at E300/N676).
+        const localEast = east - anchor.east;
+        const localNorth = north - anchor.north;
+        samples++;
+        const support = supportAt(localEast, localNorth);
+        const blockedAt = support === undefined ? true : blocked(localEast, localNorth, support);
+        if (support === undefined) unsupported++;
+        else worst = Math.max(worst, Math.abs(support - SEAM_CROSSING_WORLD.floor));
+        if (blockedAt) obstructed++;
+        if (blockedAt && recorded.length < 24) {
+          recorded.push({ east, north, support, blocked: blockedAt });
+        }
+      }
+    }
+    return Object.freeze({
+      version: 'd2-seam-crossing-1.0',
+      contract: SEAM_CROSSING_WORLD,
+      frame: 'world; local = world - (300, 676)',
+      samples,
+      unsupported,
+      obstructed,
+      maxFloorDrift: worst,
+      /** Open only when every sample stands on the published floor and no
+       * mounted body blocks it — the N663.25 railing included. */
+      open: unsupported === 0 && obstructed === 0 && worst <= SEAM_CROSSING_WORLD.tolerance,
+      blockedSamples: Object.freeze(recorded),
+    });
+  }
+
+  // ---- same-source snow depth (D32-2) --------------------------------------
+  // The original design's ladder: the high mountain carries 4-5 tiers, the
+  // wind-scoured summit cap only 1-2. Everything here samples the one canonical
+  // height field, so snow cannot disagree with the ground under it, and the
+  // front terrace is F's authority handed in by A — never a second clock or a
+  // locally generated weather.
+  const SNOW_TIERS = 5;
+  /** Width of the seam band where the rear ladder may not out-jump the front. */
+  const SNOW_SEAM_BAND = 96;
+  let frontSnow: ((east: number, north: number) => number | undefined) | undefined;
+
+  const clampTier = (value: number) => Math.max(0, Math.min(SNOW_TIERS, Math.round(value)));
+
+  function snowTierAt(east: number, north: number) {
+    if (disposed) return;
+    if (!Number.isFinite(east) || !Number.isFinite(north)) return;
+    const height = sampleTownD2R30Height(east, north, arrivalHeight);
+    if (height === undefined) return;
+    const slope = 1 - sampleTownD2R30Normal(east, north, arrivalHeight)[1];
+    let tier: number;
+    if (height >= 770) tier = slope >= .45 ? 1 : 2;          // wind-scoured cap
+    else if (height >= 610) tier = slope < .45 ? 5 : 4;
+    else if (height >= 500) tier = slope < .5 ? 4 : 3;
+    else if (height >= 350) tier = slope < .45 ? 3 : 2;
+    else if (height >= 245) tier = slope < .4 ? 2 : 1;
+    else tier = slope < .4 ? 1 : 0;
+    // The town-side terrace is the weather authority's business. Across the
+    // shared seam the step may never exceed one tier, so a blizzard on one
+    // side cannot meet bare ground on the other.
+    const seam = townD2SectorContract.world.splitNorth;
+    if (frontSnow && Math.abs(north - seam) <= SNOW_SEAM_BAND) {
+      const reported = frontSnow(east, north);
+      if (typeof reported === 'number' && Number.isFinite(reported)) {
+        const frontier = clampTier(reported * SNOW_TIERS);
+        tier = Math.max(frontier - 1, Math.min(frontier + 1, tier));
+      }
+    }
+    return tier;
+  }
+
+  /** Normalized depth 0..1 for the summit/trail host. Same source as the raw
+   * tier list; undefined only outside the canonical domain. */
+  function snowAt(east: number, north: number) {
+    const tier = snowTierAt(east, north);
+    return tier === undefined ? undefined : tier / SNOW_TIERS;
+  }
+
+  /** A hands in F's weather authority (front terrace depth 0..1). */
+  function setFrontSnow(next: ((east: number, north: number) => number | undefined) | undefined) {
+    if (next !== undefined && typeof next !== 'function') throw new TypeError('setFrontSnow expects a sampler or undefined.');
+    frontSnow = next;
+  }
+
   // ---- the one real cable line (D32-1) -------------------------------------
   // D2 owns the slot and the host lifecycle; B owns the operation. The line is
   // built from B's actual upper installer, claims the ropeway clock so nothing
@@ -625,6 +722,10 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     port: createPort(Object.freeze([])),
     createPort,
     sectorLiveCheck,
+    snowTierAt,
+    snowAt,
+    setFrontSnow,
+    certifySeamCrossing,
     preparePublicCable,
     uninstallCable,
     cableState,
