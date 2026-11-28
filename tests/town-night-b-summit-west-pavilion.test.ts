@@ -15,7 +15,7 @@ test('west pavilion replaces upper-cloud at a surveyed trail point with continuo
   assert.ok(pavilion.group.children.filter(c=>c.name==='west-pavilion-footing').length>=4);
   for(let distance=0;distance<=9.5;distance+=.1){const e:number=site.approach.east+site.viewEast*distance,n:number=site.approach.north+site.viewNorth*distance;assert.equal(pavilion.supportAt(e,n),site.height);assert.equal(pavilion.blocked(e,n,site.height),false);}
   // Entrance is reversible on the same floor; the exposed opposite edge is now a physical guard.
-  for(let distance=9.5;distance>=0;distance-=.1){const e=site.approach.east+site.viewEast*distance,n=site.approach.north+site.viewNorth*distance;assert.equal(pavilion.supportAt(e,n),site.height);assert.equal(pavilion.blocked(e,n,site.height),false);}
+  for(let distance=9.5;distance>=0;distance-=.1){const e:number=site.approach.east+site.viewEast*distance,n:number=site.approach.north+site.viewNorth*distance;assert.equal(pavilion.supportAt(e,n),site.height);assert.equal(pavilion.blocked(e,n,site.height),false);}
   const edge=9.5+3.27;assert.equal(pavilion.blocked(site.approach.east+site.viewEast*edge,site.approach.north+site.viewNorth*edge,site.height),true);
   const mid=site.approach;assert.ok(pavilion.blocked(mid.east+site.viewEast*3-site.viewNorth*.94,mid.north+site.viewNorth*3+site.viewEast*.94,site.height));
   console.log(JSON.stringify(site));

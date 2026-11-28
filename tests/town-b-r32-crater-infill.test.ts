@@ -6,11 +6,14 @@ import {mountWestCraterRoad} from '../tools/voxel-tavern/town-blockout/town-za22
 import {buildCraterRailExtension} from '../tools/voxel-tavern/town-blockout/town-crater-rail-extension';
 import {createTownRailway} from '../tools/voxel-tavern/town-blockout/town-railway';
 import {ar30SurfacePort} from '../tools/voxel-tavern/town-blockout/town-a-r30-surface-port';
+import type {attachBR30CraterCompletion} from '../tools/voxel-tavern/town-blockout/town-b-r30-crater-completion';
 import {surveyAR30InscriptionAccess} from '../tools/voxel-tavern/town-blockout/town-a-r30-unified-surface-host';
 test('B33 actual public crater host has grounded north/west/floor physical strata, same geometry and collision, unchanged inscription path and rollback',()=>{
  const grid=createTerrainGrid(),port=ar30SurfacePort(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n),{unifiedStory:port.story}),railway=createTownRailway(grid,()=>0),rail=buildCraterRailExtension(grid,road,railway.route.points);
  const before=surveyAR30InscriptionAccess(road,rail),original=road.group.userData.colliders;
- const completion=port.attach(road,rail),infill=completion.infill;
+ const completion=port.attach(road,rail);
+ assert.ok('infill' in completion,'the actual B attachment must expose the mounted infill');
+ const infill=completion.infill as ReturnType<typeof attachBR30CraterCompletion>['infill'];
  try{
   const stats=infill.stats();console.log(JSON.stringify({stats,clusters:infill.sites.length}));
   assert.ok(stats.north>0&&stats.west>0&&stats.floor>0);
