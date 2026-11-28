@@ -36,7 +36,7 @@ import {createA33ExactGroundCoverage} from './town-a33-pit-ridge-ground';
 import { createTerrainSupportContract } from './town-a-r30-terrain-contract';
 import { supportFootprintOverlaps } from './town-a-r30-oriented-support';
 import { mainSummitLayout, mainSummitSpec } from './main-summit-block';
-import { buildR31PublicSkyline } from './town-r31-public-skyline';
+import {createA33PublicRearFar} from './town-a33-public-rear-far';
 import {createA31PublicSummitRoute} from './town-a31-public-summit';
 import {createNightBProductionController,nightBProductionAuthority} from './town-night-b-production-controller';
 import {readA31FrontCable,type A31CableBindings} from './town-a31-cable-binding';
@@ -511,15 +511,13 @@ const summitSkylinePeak = new Vector3(mainSummitLayout.summit.east, mainSummitSp
   -mainSummitLayout.summit.north).add(summitSkylineOrigin);
 const summitSkylinePeakNdc = new Vector3();
 let summitSkylineDraws = 0;
-const summitSkylineDayMaterial = new MeshLambertMaterial({fog:true,vertexColors:true});
-const summitSkylineNightMaterial = new MeshLambertMaterial({fog:true,vertexColors:true});
-const summitSkylineMesh: Mesh<BufferGeometry, MeshLambertMaterial | MeshBasicMaterial> =
-  new Mesh(buildR31PublicSkyline(worldBounds.depth),summitSkylineDayMaterial);
+const summitFar=createA33PublicRearFar(worldBounds.depth);
+const summitSkylineMesh=summitFar.mesh;
 const {summitHeight}=mainSummitSpec;
 const summitSkyline = new Group();
 summitSkyline.name = 'main-summit-world-skyline';
 summitSkyline.position.copy(summitSkylineOrigin);
-summitSkyline.add(summitSkylineMesh);
+summitSkyline.add(summitFar.group);
 scene.add(summitSkyline);
 // Banner cloud (追令二): a voxel plume streaming east from the summit,
 // ~1.5x the summit plateau width long, tapering downwind.
@@ -996,7 +994,7 @@ function applyNightSide(skyFrame:TownNightWeatherSkyFrame){
 }
 function setNight(night: boolean) {
   nightMode = night;
-  summitSkylineMesh.material = night ? summitSkylineNightMaterial : summitSkylineDayMaterial;
+  summitFar.setNight(night);
   cloudRoute.setNight(night);
   // Background, light colour/intensity and fog are owned by the continuous sky rig.
   timeOfDay.textContent = night ? '雪夜' : '白昼';
@@ -4688,7 +4686,7 @@ renderer.setAnimationLoop(now => {
         weatherCycle:southWeatherProfile(skyFrame,outdoorWeather,weather,regionalWeather?.weather),
         fogNear: weatherFog.near, fogFar: weatherFog.far, points: renderer.info.render.points,
         craterPerf:{exteriorCertified:craterExteriorCertified,undergroundVisible:undergroundRenderParent?.visible},
-        summitProduction:{...cloudRoute.state(),farDraws:summitSkylineDraws,frontPreparationMs,frontPreparationError,frontAuditSlices:productionRidge?.frontAuditSlices,frontRouteAudit:productionRidge?.frontRouteAudit,rearSeam:rearSeamCertificate,publicTransportBound,frontTrail:frontTrail?{ready:frontTrail.ready,metres:frontTrail.metres,maxGrade:frontTrail.maxGrade,samples:frontTrail.samples,markers:frontTrailGuides?.markers,...(!frontTrail.ready?{failed:frontTrail.failed}:{})}:undefined,frontTrailFailure},
+        summitProduction:{...cloudRoute.state(),farDraws:summitSkylineDraws,farCanonical:summitFar.stats,frontPreparationMs,frontPreparationError,frontAuditSlices:productionRidge?.frontAuditSlices,frontRouteAudit:productionRidge?.frontRouteAudit,rearSeam:rearSeamCertificate,publicTransportBound,frontTrail:frontTrail?{ready:frontTrail.ready,metres:frontTrail.metres,maxGrade:frontTrail.maxGrade,samples:frontTrail.samples,markers:frontTrailGuides?.markers,...(!frontTrail.ready?{failed:frontTrail.failed}:{})}:undefined,frontTrailFailure},
       terrainPreload:townTerrainPreloadStats(),
         ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,frontRoadHandoffs:productionRidge.frontRoadHandoffs,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],heading:yaw,...(previewOptions.has('mRoadSurvey')?{roadGuide:productionRidge.baseToMiddleGuide,rearConnected:productionRidge.rearConnected,moveReject:ridgeMoveReject}:{}),surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities,cableInstances:productionRidge.facilities?.visibleInstances(),terraceMounted:!!productionRidge.terrace,cloudSeam:productionRidge.cloudSeam},
         ...(skylinePeak ? { summitSkyline: { draws: summitSkylineDraws, peakNdc: skylinePeak.toArray(),
