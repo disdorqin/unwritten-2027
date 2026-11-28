@@ -487,6 +487,7 @@ const summitSkylineFar = 2400;
 const reportSummitSkyline = previewOptions.get('summitSkyline') === 'on';
 const camera = new PerspectiveCamera(58, innerWidth / innerHeight, .1, summitSkylineFar);
 const renderer = new WebGLRenderer({ antialias: true });
+renderer.localClippingEnabled=true; // A33 real rear exterior partition, not collision
 renderer.setPixelRatio(Math.min(devicePixelRatio, qualityPixelRatioCap()));
 renderer.setSize(innerWidth, innerHeight);
 element('scene').append(renderer.domElement);
@@ -576,7 +577,7 @@ function exitSkyCity() { skyCityViewKind = 'ground'; }
 void enterSkyCity; void exitSkyCity; void skyCityHost;
 // A31 public world: one real four-sector owner and the existing far LOD.
 // Old ZA22 moving cabins and their independent mountain are review-only.
-const cloudRoute = createA31PublicSummitRoute({town:scene,skyline:summitSkyline,now:presence.serverNow,profile:previewOptions.has('profile'),cableAuthority:nightBProductionAuthority(presence,2),
+const cloudRoute = createA31PublicSummitRoute({town:scene,skyline:summitSkyline,now:presence.serverNow,townNorth:worldBounds.depth,profile:previewOptions.has('profile'),cableAuthority:nightBProductionAuthority(presence,2),
  frontSnow:(e,n)=>{const w=presence.getTownOutdoorWeather();return w?sampleSouthRegionalWeather(w,e,n,347,false).weather.targetCover:undefined;},
  frontWind:(e,n)=>{const w=presence.getTownOutdoorWeather();return w?Math.max(0,Math.min(1,sampleSouthRegionalWeather(w,e,n,347,false).exposure)):undefined;},
  warm:(root,yieldFrame,cancelled)=>warmA32SummitMeshes(renderer,root,yieldFrame,cancelled)});
@@ -631,7 +632,7 @@ function makePublicCableController(assets:A31CableBindings={}){return createNigh
  ...assets,presence,upperOrigin:{east:300,north:676},
  // A31 shows the complete massif only on the high cloud apron or in the
  // rear scene. Use a conservative larger band to wake its visuals early.
- upperVisible:()=>cloudRoute.active()||(x>=280&&x<=360&&n>=625&&n<=680&&ground>=340),
+ upperVisible:()=>cloudRoute.presentationVisible(),
  domain:()=>!walking||homeReturn?undefined:cloudRoute.active()?'summit':x<0?undefined:n>=650?'mountain':'town',
  acceptLanding:(line,foot)=>{
   if(line===2)return cloudRoute.active()&&Math.abs((cloudRoute.surveyedSupport(foot.east,foot.north)??Infinity)-foot.height)<=.08&&!cloudRoute.surveyedBlocked(foot.east,foot.north,foot.height);

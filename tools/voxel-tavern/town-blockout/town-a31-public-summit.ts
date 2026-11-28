@@ -12,12 +12,13 @@ import {certifyHikingSteps,hikingWaypoints,hikingProgress} from './town-a32-summ
 import {mountHikingGuides} from './town-a32-summit-hiking-guides';
 import {createMainSummitRegistrationLandmarks} from './main-summit-registration';
 import {finishNightBAuditAsync} from './town-night-b-audit-slices';
+import {a33RearPresentation,createA33RearExterior,type RearPresentation} from './town-a33-rear-presentation';
 
 type Foot=Readonly<{east:number;north:number;height:number}>;
 type Production=ReturnType<typeof createTownD2R30ProductionHost>;
 type Status='idle'|'loading'|'ready'|'failed'|'disposed';
 type Action={label:string;run():void};
-type Input={town:Scene;skyline:Group;now():number;yieldFrame?:()=>Promise<void>;profile?:boolean;cableAuthority?:A31CableAuthority;frontSnow?:(e:number,n:number)=>number|undefined;frontWind?:(e:number,n:number)=>number|undefined;warm?:(root:Group,yieldFrame:()=>Promise<void>,cancelled:()=>boolean)=>Promise<A32WarmupStats>};
+type Input={town:Scene;skyline:Group;now():number;yieldFrame?:()=>Promise<void>;profile?:boolean;townNorth?:number;cableAuthority?:A31CableAuthority;frontSnow?:(e:number,n:number)=>number|undefined;frontWind?:(e:number,n:number)=>number|undefined;warm?:(root:Group,yieldFrame:()=>Promise<void>,cancelled:()=>boolean)=>Promise<A32WarmupStats>};
 const finite=(p:Foot)=>[p.east,p.north,p.height].every(Number.isFinite);
 const local=(e:number,n:number)=>[e-summitAssemblyAnchor.east,n-summitAssemblyAnchor.north] as const;
 
@@ -33,6 +34,7 @@ export function createA31PublicSummitRoute(input:Input){
  let status:Status='idle',stage='idle',failure:string|undefined,night=false,active=false;
  let production:Production|undefined,load:Promise<boolean>|undefined;
  let closure:ReturnType<Group['getObjectByName']>[]=[];
+ let presentation:RearPresentation='far',exterior:ReturnType<typeof createA33RearExterior>|undefined;
  const stagingAbort=new AbortController();
  let audit:ReturnType<Production['sectorLiveCheck']>|undefined;
  let visual:ReturnType<typeof retireA31LegacySectorOverlays>|undefined;
@@ -103,11 +105,12 @@ export function createA31PublicSummitRoute(input:Input){
     // Retain one group identity for the future certified domain handoff.
     input.town.add(candidate.group);candidate.setNight(night);if(night)visual.afterNightChange();
     closure=['town-d2-r30-closed-perimeter','town-d2-r30-floor'].map(name=>candidate!.group.getObjectByName(name));
+    exterior=createA33RearExterior(candidate.group,input.townNorth??800);
     production=candidate;assembly={group:candidate.group,r30:candidate.assembly,
      summitSnowAt:(e,n)=>{const depth=host.snowAt(e,n);if(depth===undefined)return;const front=input.frontSnow?.(e+summitAssemblyAnchor.east,n+summitAssemblyAnchor.north);return front!==undefined&&Number.isFinite(front)&&n<=86?Math.max(0,Math.min(1,Math.max(front-.2,Math.min(front+.2,depth)))):depth;}};
     status='ready';stage='mounted';elapsedMs=performance.now()-started;return true;
    }catch(error){
-    preparedSouth?.dispose();disposeRegistrationGuides();hikingGuide?.dispose();hikingGuide=undefined;candidate?.dispose();production=undefined;assembly=undefined;
+    preparedSouth?.dispose();exterior?.dispose();exterior=undefined;disposeRegistrationGuides();hikingGuide?.dispose();hikingGuide=undefined;candidate?.dispose();production=undefined;assembly=undefined;
     if((status as Status)!=='disposed'){status='failed';failure=error instanceof Error?error.message:String(error);}
     input.skyline.visible=true;return false;
    }
@@ -130,20 +133,21 @@ export function createA31PublicSummitRoute(input:Input){
   // sees the complete production body. No overlapping town collisions.
   // Hysteresis covers the actual high terrace and the crossing, not just
   // the old 4m strip. Never turn off both near and far representations.
-  near=active||position.east>=(near?275:286.5)&&position.east<=(near?365:352)&&
-   position.north>=(near?620:635)&&position.north<=(near?690:680)&&position.height>=(near?340:346);
-  production.group.visible=near;input.skyline.visible=!near&&!active;
+  presentation=a33RearPresentation(position,active,true,presentation);
+  near=presentation==='apron'||presentation==='rear';
+  exterior?.set(presentation==='exterior');
+  production.group.visible=presentation!=='far';input.skyline.visible=presentation==='far';
   // The isolated domain's artificial closure is not exterior scenery.
   // Its colliders and real top tiles are unchanged.
   for(const object of closure)if(object)object.visible=active;
-  if(near){
+  if(presentation!=='far'){
    const [e,n]=local(position.east,position.north);
    if(Math.hypot(e-detailEast,n-detailNorth)>32){production.setDetailFocus(e,n,1550);detailEast=e;detailNorth=n;}
    if(now-lastViewAt>=150||Math.hypot(e-lastViewEast,n-lastViewNorth)>=8){production.update(e,n,input.now());lastViewAt=now;lastViewEast=e;lastViewNorth=n;}
   }else{snowPending=0;detailEast=detailNorth=lastViewEast=lastViewNorth=Infinity;}
  }
  function updateSnow(dt:number,sample:SouthSnowVisualSample){
-  if(!production||!near||!Number.isFinite(dt)||dt<=0)return;
+  if(!production||presentation==='far'||!Number.isFinite(dt)||dt<=0)return;
   snowPending+=Math.min(dt,.25);if(snowPending<1)return;
   const seconds=snowPending;snowPending=0;
   production.updateSnow(seconds,(e:number,n:number,h:number)=>sample(e+summitAssemblyAnchor.east,n+summitAssemblyAnchor.north,h));
@@ -171,7 +175,7 @@ export function createA31PublicSummitRoute(input:Input){
   const h=surveyedSupport(p.east,p.north);
   if(h===undefined||Math.abs(h-p.height)>.08||surveyedBlocked(p.east,p.north,h)||!accept())return false;
   const transfer=production.enterRear(p);if(!transfer.ok)return false;
-  active=true;scene.add(production.group);production.group.visible=true;input.skyline.visible=false;return true;
+  active=true;presentation='rear';exterior?.set(false);scene.add(production.group);production.group.visible=true;input.skyline.visible=false;return true;
  }
  function leaveAt(p:Foot,accept:()=>boolean){
   if(!active||!production||!finite(p)||!gate(p))return false;
@@ -191,7 +195,7 @@ export function createA31PublicSummitRoute(input:Input){
   if(night===value)return;night=value;production?.setNight(value);visual?.afterNightChange();
  }
  function state(){
-  return {status,stage,failure,cableFailure,canonicalPreparation,southSlices:southSlices.length?{count:southSlices.length,max:Math.max(...southSlices),median:[...southSlices].sort((a,b)=>a-b)[Math.floor(southSlices.length/2)]}:undefined,stages:meter.records(),warmup,active,near,farVisible:input.skyline.visible,draws,elapsedMs,ready:audit?.ready===true&&status==='ready',
+  return {status,stage,failure,cableFailure,canonicalPreparation,southSlices:southSlices.length?{count:southSlices.length,max:Math.max(...southSlices),median:[...southSlices].sort((a,b)=>a-b)[Math.floor(southSlices.length/2)]}:undefined,stages:meter.records(),warmup,active,near,presentation,exteriorClipped:exterior?.active()??false,farVisible:input.skyline.visible,draws,elapsedMs,ready:audit?.ready===true&&status==='ready',
    installed:production?.installed()??[],cutTiles:production?cutTiles:0,
    duplicates:production?duplicates:[],sectorSamples:audit?.sectors.map(s=>s.samples)??[],
    legacyPruned:visual?{roadTriangles:visual.removedTrailTriangles,forestInstances:visual.removedForestInstances}:undefined,
@@ -212,7 +216,8 @@ export function createA31PublicSummitRoute(input:Input){
   seamReady:()=>status==='ready'&&production?.certifySeamCrossing().open===true,
   seamCertificate:()=>production?.certifySeamCrossing(),
   windAt:(e:number,n:number)=>{const [le,ln]=local(e,n),wind=production?.windAt(le,ln),front=input.frontWind?.(e,n);return wind!==undefined&&front!==undefined&&Number.isFinite(front)&&ln<=86?Math.max(0,Math.min(1,Math.max(front-.2,Math.min(front+.2,wind)))):wind;},
+  presentationVisible:()=>presentation!=='far',
   assembly:()=>active?assembly:undefined,
-  dispose(){if(status==='disposed')return;status='disposed';stagingAbort.abort();active=false;near=false;disposeRegistrationGuides();hikingGuide?.dispose();hikingGuide=undefined;production?.dispose();production=undefined;assembly=undefined;input.skyline.visible=true;}
+  dispose(){if(status==='disposed')return;status='disposed';stagingAbort.abort();active=false;near=false;presentation='far';exterior?.dispose();exterior=undefined;disposeRegistrationGuides();hikingGuide?.dispose();hikingGuide=undefined;production?.dispose();production=undefined;assembly=undefined;input.skyline.visible=true;}
  };
 }

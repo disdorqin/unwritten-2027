@@ -5,11 +5,12 @@ const distance=(e:number,n:number,x:number,z:number)=>Math.hypot(e-x,n-z);
 // Prefetch at the actual railway approach / foothill, not on initial plaza
 // load. Speed prediction is bounded so a menu jump cannot make every zone hot.
 export function a32SummitPrefetch(p:Foot,v:Velocity={east:0,north:0}){
- if(!finite(p)||p.east<0||p.north<0||![v.east,v.north].every(Number.isFinite))return false;
+ if(!finite(p)||p.east< -240||p.north<0||![v.east,v.north].every(Number.isFinite))return false;
  const speed=Math.hypot(v.east,v.north),scale=speed>0?Math.min(12,180/speed):0;
  const next={east:p.east+v.east*scale,north:p.north+v.north*scale};
  // Approaching along the western/southern face or on the high apron
  // must also initiate staging, even outside the railway approach circle.
+ if(p.north>=500&&p.north<=800&&p.east<=640)return true;
  if(p.height>=90&&p.north>=390&&p.north<=800&&p.east<=640)return true;
  return [p,next].some(q=>q.north>=290&&q.east>=240&&distance(q.east,q.north,430,490)<=245);
 }
