@@ -12,8 +12,8 @@ const area=(a:Point,b:Point,c:Point)=>(b.east-a.east)*(c.north-a.north)-(b.north
  * The returned indexed cutTread describes the entire walking strip;
  * do not mount the old tread or admit walking before cut is installed.
  * This module deliberately does not replace a shared height authority. */
-export function mountSouthEarthworks(points:readonly Point[],first:number,last:number,groundAt:SouthGround,cap=5){
- if(first<1||last>=points.length-1||first>=last||!Number.isFinite(cap)||cap<=0)throw Error('Invalid southern earthwork range');
+export function mountSouthEarthworks(points:readonly Point[],first:number,last:number,groundAt:SouthGround,cap=5,northLimit=448){
+ if(first<1||last>=points.length-1||first>=last||!Number.isFinite(cap)||cap<=0||!Number.isFinite(northLimit)||northLimit<448||northLimit>480)throw Error('Invalid southern earthwork range');
  const group=new Group();group.name='night-a-south-road-earthworks';
  const treadMat=new MeshLambertMaterial({vertexColors:true}),stoneMat=new MeshLambertMaterial({vertexColors:true,side:DoubleSide});
  const chunks=new Map<string,{road:number[];roadColor:number[];walls:number[];wallColor:number[]}>();
@@ -35,7 +35,7 @@ export function mountSouthEarthworks(points:readonly Point[],first:number,last:n
  function ground(p:Point){const h=groundAt(p.east,p.north);if(h===undefined||!Number.isFinite(h))throw Error('Missing earthwork ground');return h;}
  const sections=points.slice(first,last+1).map((p,j)=>{
   const i=first+j,a=points[i-1]!,b=points[i+1]!,dx=b.east-a.east,dn=b.north-a.north,l=Math.hypot(dx,dn);
-  if(![p.east,p.north,p.height,l].every(Number.isFinite)||l<1e-8||p.north<0||p.north>=448||Math.abs(p.east)>=1068)throw Error('Road outside south construction core');
+  if(![p.east,p.north,p.height,l].every(Number.isFinite)||l<1e-8||p.north<0||p.north>=northLimit||Math.abs(p.east)>=1068)throw Error('Road outside south construction core');
   const at=(t:number,h=p.height+lift)=>point(p.east-dn/l*t,p.north+dx/l*t,h);
   return {p,at};
  });

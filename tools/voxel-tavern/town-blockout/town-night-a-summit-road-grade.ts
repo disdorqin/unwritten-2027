@@ -4,11 +4,11 @@ const grade=.1199;
 /** Fixed EN centreline and fixed endpoints; necessary and sufficient
  * interval certificate for the bounded discrete 12% grade problem.
  * This is a proposed elevation profile for C2, not a new route authority. */
-export function proposeSouthRoadGrade(points:readonly Point[],first:number,last:number,groundAt:SouthGround,cap=5){
- if(first<1||last>=points.length-1||first>=last||!Number.isFinite(cap)||cap<=0)throw Error('Invalid road range');
+export function proposeSouthRoadGrade(points:readonly Point[],first:number,last:number,groundAt:SouthGround,cap=5,northLimit=448){
+ if(first<1||last>=points.length-1||first>=last||!Number.isFinite(cap)||cap<=0||!Number.isFinite(northLimit)||northLimit>480||northLimit<448)throw Error('Invalid road range');
  const rows=points.slice(first,last+1).map((p,j)=>{
   const i=first+j,a=points[i-1]!,b=points[i+1]!,dx=b.east-a.east,dn=b.north-a.north,l=Math.hypot(dx,dn);
-  if(!l||p.north>=448||Math.abs(p.east)>1068)throw Error('Route leaves south core');
+  if(!l||p.north>=northLimit||Math.abs(p.east)>1068)throw Error('Route leaves south core');
   const samples=[-1.5,-.75,0,.75,1.5].map(t=>groundAt(p.east-dn/l*t,p.north+dx/l*t));
   if(samples.some(v=>v===undefined||!Number.isFinite(v)))throw Error('Missing ground');
   return {p,min:Math.min(...samples as number[]),max:Math.max(...samples as number[])};

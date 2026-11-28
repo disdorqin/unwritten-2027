@@ -15,7 +15,8 @@ type Input={
  /** C2's accepted profile and the exact A-owned interval, not a new EN alignment. */
  trail:readonly MainSummitTrailPoint[];
  first:number;last:number;
- extension?:Readonly<{trail:readonly MainSummitTrailPoint[];first:number;last:number;cap:number}>;
+ northLimit?:number;
+ extension?:Readonly<{trail:readonly MainSummitTrailPoint[];first:number;last:number;cap:number;northLimit?:number}>;
  preparedRoad?:ReturnType<typeof prepareSouthRoads>;
  nearTiles:readonly Mesh[];
  legacySouthVegetationExcluded:boolean;
@@ -40,10 +41,10 @@ function combineSouthRoads(a:ReturnType<typeof mountSouthEarthworks>,b:ReturnTyp
  return {group,cutTread,stats,supportAt(e:number,n:number){const x=a.supportAt(e,n),y=b.supportAt(e,n);return x===undefined?y:y===undefined?x:Math.max(x,y);},blocked(e:number,n:number,h:number,r=.27,body=1.8){return a.blocked(e,n,h,r,body)||b.blocked(e,n,h,r,body);},dispose(){a.dispose();b.dispose();cutTread.dispose();group.removeFromParent();group.clear();}};
 }
 
-export function prepareSouthRoads(input:Pick<Input,'trail'|'first'|'last'|'groundAt'|'extension'>){
- const base=mountSouthEarthworks(input.trail,input.first,input.last,input.groundAt);
+export function prepareSouthRoads(input:Pick<Input,'trail'|'first'|'last'|'groundAt'|'extension'|'northLimit'>){
+ const base=mountSouthEarthworks(input.trail,input.first,input.last,input.groundAt,5,input.northLimit);
  let extra:ReturnType<typeof mountSouthEarthworks>|undefined;
- try{if(input.extension)extra=mountSouthEarthworks(input.extension.trail,input.extension.first,input.extension.last,input.groundAt,input.extension.cap);
+ try{if(input.extension)extra=mountSouthEarthworks(input.extension.trail,input.extension.first,input.extension.last,input.groundAt,input.extension.cap,input.extension.northLimit);
  return extra?combineSouthRoads(base,extra):base;}
  catch(error){extra?.dispose();base.dispose();throw error;}
 }
