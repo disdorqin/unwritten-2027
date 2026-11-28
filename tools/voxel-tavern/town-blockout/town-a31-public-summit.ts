@@ -4,12 +4,13 @@ import {retireA31LegacySectorOverlays} from './town-a31-summit-visual-ownership'
 import {summitAssemblyAnchor} from './main-summit-assembly';
 import type {SouthSnowVisualSample} from './town-night-a-summit-snow-appearance';
 import {a31GateFoot} from './town-a31-gate-handoff';
+import {readA31UpperCable,type A31RearCableOwner,type A31CableAuthority} from './town-a31-cable-binding';
 
 type Foot=Readonly<{east:number;north:number;height:number}>;
 type Production=ReturnType<typeof createTownD2R30ProductionHost>;
 type Status='idle'|'loading'|'ready'|'failed'|'disposed';
 type Action={label:string;run():void};
-type Input={town:Scene;skyline:Group;now():number;yieldFrame?:()=>Promise<void>;profile?:boolean};
+type Input={town:Scene;skyline:Group;now():number;yieldFrame?:()=>Promise<void>;profile?:boolean;cableAuthority?:A31CableAuthority};
 const finite=(p:Foot)=>[p.east,p.north,p.height].every(Number.isFinite);
 const local=(e:number,n:number)=>[e-summitAssemblyAnchor.east,n-summitAssemblyAnchor.north] as const;
 
@@ -53,10 +54,15 @@ export function createA31PublicSummitRoute(input:Input){
     await yieldFrame();check();stage='south';candidate.install('A',createSouthSectorInstaller());
     await yieldFrame();check();stage='west';candidate.install('B',createWestSectorInstaller());
     await yieldFrame();check();stage='east';candidate.install('C2',createEastSectorInstaller());
+    // Only the D2-owned hook may mount a real B cable package.
+    const cableOwner:A31RearCableOwner=candidate;
+    if(input.cableAuthority&&cableOwner.preparePublicCable){
+     await yieldFrame();check();stage='cable';await cableOwner.preparePublicCable(input.cableAuthority);check();
+    }
     await yieldFrame();check();stage='audit';
     audit=candidate.sectorLiveCheck();
     const mountStats=candidate.stats();cutTiles=mountStats.tiles.cut;duplicates=mountStats.duplicates;
-    if(!audit.ready||duplicates.length||candidate.cableState().boardable)throw Error('Four-sector public mount refused');
+    if(!audit.ready||duplicates.length||candidate.cableState().boardable&&!readA31UpperCable(candidate))throw Error('Four-sector public mount refused');
     visual=retireA31LegacySectorOverlays(candidate.group);
     candidate.group.position.set(summitAssemblyAnchor.east,0,-summitAssemblyAnchor.north);
     candidate.group.visible=false;
@@ -152,6 +158,7 @@ export function createA31PublicSummitRoute(input:Input){
   action(_p:Foot):Action|undefined{return;},surfaceAt,walkingSurfaceAt:surfaceAt,acceptsStep,
   blocked(e:number,n:number,h:number,r=.27,b=1.8){return active&&surveyedBlocked(e,n,h,r,b);},
   surveyedSupport,surveyedBlocked,enterAt,leaveAt,setNight,state,updateSnow,
+  upperOperation:()=>status==='ready'?readA31UpperCable(production):undefined,
   assembly:()=>active?assembly:undefined,
   dispose(){if(status==='disposed')return;status='disposed';active=false;near=false;production?.dispose();production=undefined;assembly=undefined;input.skyline.visible=true;}
  };

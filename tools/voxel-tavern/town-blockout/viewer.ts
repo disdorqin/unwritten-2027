@@ -36,7 +36,8 @@ import { supportFootprintOverlaps } from './town-a-r30-oriented-support';
 import { mainSummitLayout, mainSummitSpec } from './main-summit-block';
 import { buildR30TownSkyline } from './town-d2-r30-skyline';
 import {createA31PublicSummitRoute} from './town-a31-public-summit';
-import {createNightBProductionController} from './town-night-b-production-controller';
+import {createNightBProductionController,nightBProductionAuthority} from './town-night-b-production-controller';
+import {readA31FrontCable,type A31CableBindings,type A31FrontCableOwner} from './town-a31-cable-binding';
 import {createA31CableInput} from './town-a31-cable-input';
 import {syncA31OutdoorRoom} from './town-a31-outdoor-presence';
 import {a31GateCrossing,a31GateEligible} from './town-a31-gate-handoff';
@@ -588,20 +589,35 @@ function exitSkyCity() { skyCityViewKind = 'ground'; }
 void enterSkyCity; void exitSkyCity; void skyCityHost;
 // A31 public world: one real four-sector owner and the existing far LOD.
 // Old ZA22 moving cabins and their independent mountain are review-only.
-const cloudRoute = createA31PublicSummitRoute({town:scene,skyline:summitSkyline,now:presence.serverNow,profile:previewOptions.has('profile')});
+const cloudRoute = createA31PublicSummitRoute({town:scene,skyline:summitSkyline,now:presence.serverNow,profile:previewOptions.has('profile'),cableAuthority:nightBProductionAuthority(presence,2)});
 window.addEventListener('pagehide',event=>{if(!event.persisted)cloudRoute.dispose();});
-export const preparePublicSummit=()=>cloudRoute.prepare();
+let publicTransportBound=false;
+export const preparePublicSummit=async()=>{
+ const ready=await cloudRoute.prepare();
+ if(!publicTransportBound&&document.body.classList.contains('town-entry-pending')){
+  const frontOwner:A31FrontCableOwner|undefined=productionRidge;
+  if(frontOwner?.preparePublicFrontCable)await frontOwner.preparePublicFrontCable(nightBProductionAuthority(presence,1));
+  const front=readA31FrontCable(frontOwner),upper=ready?cloudRoute.upperOperation():undefined;
+  // C2 may have atomically replaced the parked facilities; the real
+  // collision index must reference the accepted replacement, not old boxes.
+  if(front.front)walkGeometry=geometry();
+  if(front.front||upper)cableController=makePublicCableController({...front,upper});
+  publicTransportBound=true;
+ }
+ return ready;
+};
 const southEntryHost=createSouthEntryHost();
 // B's one production controller. The current C2/D2 candidate has no
 // certified continuous dock approaches, so neither ready installer is supplied.
-const cableController=createNightBProductionController({
- presence,upperOrigin:{east:300,north:676},
+function makePublicCableController(assets:A31CableBindings={}){return createNightBProductionController({
+ ...assets,presence,upperOrigin:{east:300,north:676},
  domain:()=>!walking||homeReturn?undefined:cloudRoute.active()?'summit':x<0?undefined:'town',
  acceptLanding:(line,foot)=>{
   if(line===2)return cloudRoute.active()&&Math.abs((cloudRoute.surveyedSupport(foot.east,foot.north)??Infinity)-foot.height)<=.08&&!cloudRoute.surveyedBlocked(foot.east,foot.north,foot.height);
   return !cloudRoute.active()&&Math.abs((dryTownLandingHeight(foot.east,foot.north,foot.height,true)??Infinity)-foot.height)<=.08;
  }
-});
+});}
+let cableController=makePublicCableController();
 let cableFrame:CableRideFrame|undefined;
 function currentCableAction(){
  if(!walking||homeReturn||houseDoorTravel||seated||boardingGround||sledRide.active()||airHeight!==undefined||townSettings.open||placeCard.open||museumVisit.dialog.open||presence.chatFocused()||document.hidden)return;
