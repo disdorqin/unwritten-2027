@@ -144,6 +144,19 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
 
   const group = new Group();
   group.name = 'town-d2-r30-production';
+  // One survey for the whole mount: the host owns the accepted walkway and the
+  // assembly consumes it instead of surveying the same ground again.
+  const survey = createMainSummitBlock(mainSummitLayout, arrivalHeight, 100);
+  let trail: readonly MainSummitTrailPoint[];
+  let surveyMetrics: ReturnType<typeof createMainSummitTrail>['metrics'];
+  try {
+    const built = createMainSummitTrail(survey.heightAt, arrivalHeight);
+    trail = built.points;
+    surveyMetrics = Object.freeze({ ...built.metrics });
+  } finally {
+    survey.dispose();
+  }
+
   const assembly: TownD2R30Assembly = createTownD2R30Assembly({
     arrivalHeight,
     // Static tiles only: an excavated road needs a floor that stays resident.
@@ -157,6 +170,7 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     includeRopeway,
     includeNorthWall: true,
     ropewayEpochMs: epochMs,
+    trail: { points: trail, metrics: surveyMetrics },
   });
   group.add(assembly.group);
 
@@ -165,16 +179,6 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
   if (tiles.length === 0) {
     assembly.dispose();
     throw new Error('The production host needs canonical near tiles; streaming terrain cannot host sectors.');
-  }
-
-  // The accepted P-3 walkway survey, sampled exactly the way the assembly and
-  // A's accepted production test sample it.
-  const survey = createMainSummitBlock(mainSummitLayout, arrivalHeight, 100);
-  let trail: readonly MainSummitTrailPoint[];
-  try {
-    trail = createMainSummitTrail(survey.heightAt, arrivalHeight).points;
-  } finally {
-    survey.dispose();
   }
 
   // Snapshot the untouched canonical geometry so an uninstall can be proven
