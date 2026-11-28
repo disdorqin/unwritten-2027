@@ -11,7 +11,8 @@ import { createTownD2R30Ropeway } from './town-d2-r30-ropeway';
 import { mainSummitR30CableWorkshopAnchor, mountMainSummitCableWorkshop } from './main-summit-cable-workshop';
 import { installNightBUpperOperation } from './town-night-b-summit-upper-install';
 import { createTownD2R30SummitPlay, type TownD2R30SummitPlay } from './town-d2-r30-summit-play';
-import { certifyRoadJoint } from './town-d2-r30-road-joint';
+import { certifyRoadJoint, surveyRoadConnector } from './town-d2-r30-road-joint';
+import { c2EastRoadHandoffs } from './town-night-c2-summit-road-handoff';
 
 /**
  * D2's real production host for the 3.1 four-sector summit (D31-1).
@@ -1005,6 +1006,13 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     /** D32-P1 #8: measure the real joint between the central spiral and C2's
      * single east-sector centreline, on this host's live support and collision. */
     certifyRoadJoint: () => certifyRoadJoint({ trail, supportAt, blocked }),
+    /** Survey a connector candidate to one C2 handoff and hand the numbers to
+     * the sector owner. Builds nothing; it measures whether a legal path fits. */
+    surveyRoadConnector: (id: string) => {
+      const handoff = c2EastRoadHandoffs.find(entry => entry.id === id);
+      if (!handoff) throw new RangeError('Unknown C2 road handoff id: ' + id);
+      return surveyRoadConnector({ trail, supportAt, blocked, handoff });
+    },
     preparePublicCable,
     uninstallCable,
     cableRidePlan,

@@ -54,6 +54,114 @@ export type RoadJointSummary = Readonly<{
 const JOINT_GAP = 2;
 const MAX_STEP = .45;
 
+export type ConnectorSurvey = Readonly<{
+  id: string;
+  ok: boolean;
+  from: Readonly<{ east: number; north: number }>;
+  to: Readonly<{ east: number; north: number }>;
+  lengthMetres: number;
+  maxGrade: number;
+  /** Height difference the connector has to absorb between the two ends. */
+  heightDelta: number;
+  /** Shortest legal ramp that can absorb it at the 12 % design limit; a
+   * straight line shorter than this is a staircase, not a road. */
+  requiredRampMetres: number;
+  cutMetres: number;
+  fillMetres: number;
+  widthClear: boolean;
+  unsupported: number;
+  obstructed: number;
+  reason?: 'no-ground' | 'grade' | 'obstructed' | 'width';
+}>;
+
+/**
+ * Survey a connector candidate between a C2 handoff endpoint and the nearest
+ * canonical spiral station, and hand the numbers to the sector owner.
+ *
+ * This builds nothing: it measures whether a legal path exists (<= 12 %,
+ * 2.5 m clear, real ground) so the owning window can adopt or reject a real
+ * alignment instead of starting from a gap in metres.
+ */
+export function surveyRoadConnector(options: Readonly<{
+  trail: readonly MainSummitTrailPoint[];
+  supportAt(east: number, north: number): number | undefined;
+  blocked(east: number, north: number, height: number, radius?: number, bodyHeight?: number): boolean;
+  handoff: RoadHandoff;
+  /** Half-width of the legal corridor the survey must keep clear. */
+  halfWidth?: number;
+  maxGrade?: number;
+}>): ConnectorSurvey {
+  const anchor = townD2R30Spec.worldAnchor;
+  const halfWidth = options.halfWidth ?? 1.25;
+  const maxGrade = options.maxGrade ?? .12;
+  const local = {
+    east: options.handoff.to.east - anchor.east,
+    north: options.handoff.to.north - anchor.north,
+  };
+  let station = 0, gap = Infinity;
+  options.trail.forEach((point, index) => {
+    const distance = Math.hypot(point.east - local.east, point.north - local.north);
+    if (distance < gap) { gap = distance; station = index; }
+  });
+  const target = options.trail[station]!;
+  const eastDelta = target.east - local.east, northDelta = target.north - local.north;
+  const lengthMetres = Math.hypot(eastDelta, northDelta);
+  const length = Math.max(1, lengthMetres);
+  const unitEast = eastDelta / length, unitNorth = northDelta / length;
+  const steps = Math.max(1, Math.ceil(lengthMetres));
+  let maxGradeSeen = 0, cutMetres = 0, fillMetres = 0, unsupported = 0, obstructed = 0;
+  let firstHeight: number | undefined, lastHeight: number | undefined;
+  let widthClear = true, previous: number | undefined;
+  for (let index = 0; index <= steps; index++) {
+    const along = Math.min(lengthMetres, index * (lengthMetres / steps));
+    const east = local.east + unitEast * along;
+    const north = local.north + unitNorth * along;
+    const support = options.supportAt(east, north);
+    if (support === undefined) { unsupported++; previous = undefined; continue; }
+    if (previous !== undefined && along > 0) {
+      maxGradeSeen = Math.max(maxGradeSeen, Math.abs(support - previous) / (lengthMetres / steps));
+    }
+    previous = support;
+    if (firstHeight === undefined) firstHeight = support;
+    lastHeight = support;
+    // Both shoulders must be walkable: a 2.5 m road that clips a wall is not a road.
+    for (const side of [-halfWidth, 0, halfWidth]) {
+      const shoulderEast = east - unitNorth * side, shoulderNorth = north + unitEast * side;
+      const shoulder = options.supportAt(shoulderEast, shoulderNorth);
+      if (shoulder === undefined) { widthClear = false; continue; }
+      if (shoulder > support + .45) cutMetres = Math.max(cutMetres, shoulder - support);
+      if (shoulder < support - .45) fillMetres = Math.max(fillMetres, support - shoulder);
+      if (options.blocked(shoulderEast, shoulderNorth, Math.max(shoulder, support))) widthClear = false;
+    }
+    // The centreline walk itself must be clear.
+    if (options.blocked(east, north, support)) obstructed++;
+  }
+  const heightDelta = firstHeight === undefined || lastHeight === undefined
+    ? 0 : Math.abs(lastHeight - firstHeight);
+  const reason: ConnectorSurvey['reason'] =
+    unsupported > 0 ? 'no-ground'
+      : maxGradeSeen > maxGrade ? 'grade'
+        : obstructed > 0 ? 'obstructed'
+          : !widthClear ? 'width'
+            : undefined;
+  return Object.freeze({
+    id: options.handoff.id,
+    ok: reason === undefined,
+    from: Object.freeze({ ...local }),
+    to: Object.freeze({ east: target.east, north: target.north }),
+    lengthMetres,
+    maxGrade: maxGradeSeen,
+    heightDelta,
+    requiredRampMetres: heightDelta / maxGrade,
+    cutMetres,
+    fillMetres,
+    widthClear,
+    unsupported,
+    obstructed,
+    ...(reason === undefined ? {} : { reason }),
+  });
+}
+
 export function certifyRoadJoint(options: Readonly<{
   trail: readonly MainSummitTrailPoint[];
   supportAt(east: number, north: number): number | undefined;
