@@ -113,6 +113,15 @@ export function createSledMotion() {
     const sampledBackward = ground.sampledBackward ?? (speed > gradeVelocityThreshold && forwardMomentum < 0);
     const facingGrade = sampledBackward ? -ground.grade : ground.grade;
     braking = controls.brake === true || (reverseInput && (airborne || (!rollingBack && speed > restSpeed)));
+    // Explicit brake at rest holds the sled while the player aims for the
+    // next trail segment. Do not oscillate between forward and reverse on
+    // a steep sample (which also flips A/D steering every other frame).
+    // This does not change moving braking, reverse input or airborne glide.
+    if(!airborne&&controls.brake===true&&speed<=gradeVelocityThreshold&&(Math.abs(turn)>.01||speed<=restSpeed)){
+      rollingBack=false;drifting=false;driftTime=uphillTime=0;
+      east=north=0;heading+=turn*1.5*dt;
+      return updateState();
+    }
     const steeringBackward = !airborne && (rollingBack || (reverseInput && !braking));
     drifting = !airborne && !rollingBack && (braking || controls.drift === true) && Math.abs(turn) > .1 && speed >= driftMinSpeed;
     // A/D steer the end that leads movement. In reverse the tail moves first.
