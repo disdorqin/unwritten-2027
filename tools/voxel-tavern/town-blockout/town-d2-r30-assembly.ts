@@ -1,6 +1,6 @@
 import { Group, type Mesh, type Object3D } from 'three';
 import { createMainSummitBlock, mainSummitLayout } from './main-summit-block';
-import { createMainSummitTrail } from './main-summit-trail';
+import { createMainSummitTrail, type MainSummitTrailPoint } from './main-summit-trail';
 import { createTownD2R30CableTowers } from './town-d2-r30-cable-towers';
 import { createTownD2R30ChunkLod } from './town-d2-r30-chunk-lod';
 import { createTownD2R30CloudTerraceHost } from './town-d2-r30-cloud-terrace-host';
@@ -53,6 +53,12 @@ export type TownD2R30AssemblyOptions = Readonly<{
   ropewayEpochMs?: number;
   /** D2-R2: include the north-wall via-ferrata, monument, great flag and lookout (default false). */
   includeNorthWall?: boolean;
+  /** The already-surveyed accepted walkway. Supplying it avoids re-running the
+   * P-1 block survey inside the assembly (one survey per mount, not two). */
+  trail?: Readonly<{
+    points: readonly MainSummitTrailPoint[];
+    metrics: ReturnType<typeof createMainSummitTrail>['metrics'];
+  }>;
 }>;
 
 export type TownD2R30Assembly = Readonly<{
@@ -121,7 +127,15 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
     pointCount: number;
     metrics: ReturnType<typeof createMainSummitTrail>['metrics'];
   }> | undefined;
-  if (includeCloudTerrace || includeNightLights) {
+  if (options.trail) {
+    // The host already surveys the accepted walkway once; re-surveying it here
+    // burned a second 100 m block and a full trail build for the same numbers.
+    trailPoints = options.trail.points;
+    trailSurveyStats = Object.freeze({
+      pointCount: options.trail.points.length,
+      metrics: Object.freeze({ ...options.trail.metrics }),
+    });
+  } else if (includeCloudTerrace || includeNightLights) {
     const block = createMainSummitBlock(mainSummitLayout, arrivalHeight, 100);
     try {
       const trail = createMainSummitTrail(block.heightAt, arrivalHeight);
