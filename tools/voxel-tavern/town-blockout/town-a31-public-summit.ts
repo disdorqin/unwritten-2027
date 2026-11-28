@@ -35,6 +35,7 @@ export function createA31PublicSummitRoute(input:Input){
  let near=false,elapsedMs=0,cutTiles=0,draws=0,snowPending=0,duplicates:readonly string[]=[];
  const yieldFrame=input.yieldFrame??a32YieldFrame,meter=createA32StageMeter(),quiet=createA32QuietGate();
  let canonicalPreparation: {mode:string;ms?:number;elapsedMs?:number;error?:string}|undefined;
+ const southSlices:number[]=[];
  let warmup:A32WarmupStats|undefined,cableFailure:string|undefined,previousFoot:Foot|undefined,previousAt=0,detailEast=Infinity,detailNorth=Infinity,lastViewAt=0,lastViewEast=Infinity,lastViewNorth=Infinity;
  const waitForQuiet=()=>quiet.wait(yieldFrame,()=>status==='disposed');
  const stageRun=async<T,>(name:string,task:()=>T|Promise<T>)=>{stage='queued-'+name;await waitForQuiet();stage=name;return meter.run(name,task);};
@@ -61,7 +62,7 @@ export function createA31PublicSummitRoute(input:Input){
     host.setNight(night);
     for(const name of host.pendingDetails())await stageRun('detail-'+name,()=>host.mountDetails(name));
     const south=await stageRun('south-prepare',()=>prepareA32SouthSectorInstaller(host.port,stagingAbort.signal));preparedSouth=south;
-    await stageRun('south',()=>host.install('A',south.install));preparedSouth=undefined;
+    await stageRun('south',()=>host.installAsync('A',(port,valid)=>south.installAsync(port,{budgetMs:6,valid,yieldTask:yieldFrame,onSlice:ms=>southSlices.push(ms)})));preparedSouth=undefined;
     await stageRun('west',()=>host.install('B',createWestSectorInstaller()));
     await stageRun('east',()=>host.install('C2',createEastSectorInstaller()));
     host.setFrontSnow(input.frontSnow?(e,n)=>input.frontSnow!(e+summitAssemblyAnchor.east,n+summitAssemblyAnchor.north):undefined);
@@ -164,7 +165,7 @@ export function createA31PublicSummitRoute(input:Input){
   if(night===value)return;night=value;production?.setNight(value);visual?.afterNightChange();
  }
  function state(){
-  return {status,stage,failure,cableFailure,canonicalPreparation,stages:meter.records(),warmup,active,near,farVisible:input.skyline.visible,draws,elapsedMs,ready:audit?.ready===true&&status==='ready',
+  return {status,stage,failure,cableFailure,canonicalPreparation,southSlices:southSlices.length?{count:southSlices.length,max:Math.max(...southSlices),median:[...southSlices].sort((a,b)=>a-b)[Math.floor(southSlices.length/2)]}:undefined,stages:meter.records(),warmup,active,near,farVisible:input.skyline.visible,draws,elapsedMs,ready:audit?.ready===true&&status==='ready',
    installed:production?.installed()??[],cutTiles:production?cutTiles:0,
    duplicates:production?duplicates:[],sectorSamples:audit?.sectors.map(s=>s.samples)??[],
    legacyPruned:visual?{roadTriangles:visual.removedTrailTriangles,forestInstances:visual.removedForestInstances}:undefined,

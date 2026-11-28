@@ -2,7 +2,8 @@ import {BufferGeometry,Float32BufferAttribute,Group,type Mesh,type Object3D} fro
 import type {MainSummitTrailPoint} from './main-summit-trail';
 import type {SouthGround,SouthProtection} from './town-night-a-summit-landform';
 import {mountSouthEarthworks} from './town-night-a-summit-road-earthworks';
-import {mountSouthSector} from './town-night-a-summit-sector';
+import {mountSouthSector,southSectorSteps} from './town-night-a-summit-sector';
+import {finishNightBAudit} from './town-night-b-audit-slices';
 
 type CutSurface={covers(e:number,n:number):boolean;surfaceAt:SouthGround;dispose():void};
 type Cut={mesh:Mesh;original:BufferGeometry;geometry:BufferGeometry;surface:CutSurface};
@@ -51,7 +52,7 @@ export function prepareSouthRoads(input:Pick<Input,'trail'|'first'|'last'|'groun
  * ownership only after every tread vertex has a genuine near-ground tile.
  * The D2 host owns the unmodified meshes, keeps cut collision data resident
  * across LOD changes, and must release this package before the terrain. */
-export function mountSouthProduction(input:Input){
+export function* southProductionSteps(input:Input){
  if(!input.legacySouthVegetationExcluded||!input.legacyTreadExcluded)throw Error('South production requires exclusive asset ownership');
  if(input.owner.getObjectByName('night-a-south-sector'))throw Error('South sector already mounted');
  if(!input.nearTiles.length||new Set(input.nearTiles).size!==input.nearTiles.length)throw Error('Missing or duplicate canonical near tiles');
@@ -88,6 +89,7 @@ export function mountSouthProduction(input:Input){
   const bounds=road.cutTread.boundingBox!;
   const coveredTiles:Mesh[]=[];
   for(const mesh of input.nearTiles){
+   yield;
    const original=mesh.geometry as BufferGeometry;
    if(!original.boundingBox)original.computeBoundingBox();
    const b=original.boundingBox!;
@@ -95,6 +97,7 @@ export function mountSouthProduction(input:Input){
    const pos=original.getAttribute('position');
    if(!original.getIndex()||!pos)throw Error('Missing indexed canonical top tile');
    for(let i=0;i<pos.count;i++){
+    if(i%128===0)yield;
     const h=input.groundAt(pos.getX(i),-pos.getZ(i));
     if(h===undefined||!Number.isFinite(h)||Math.abs(h-pos.getY(i))>.001)throw Error('Near tile differs from final canonical ground');
    }
@@ -106,6 +109,7 @@ export function mountSouthProduction(input:Input){
   }
   const tread=road.cutTread.getAttribute('position');
   for(let i=0;i<tread.count;i++){
+   if(i%64===0)yield;
    const e=tread.getX(i),z=tread.getZ(i);
    if(!coveredTiles.some(m=>{const b=m.geometry.boundingBox!;return e>=b.min.x-.001&&e<=b.max.x+.001&&z>=b.min.z-.001&&z<=b.max.z+.001;}))throw Error('South tread lacks canonical near tile coverage');
   }
@@ -113,6 +117,7 @@ export function mountSouthProduction(input:Input){
   // Check the actual clear walking band, including both shoulders,
   // rather than demanding the adjacent high wall disappear.
   for(const strip of strips)for(let i=strip.first+1;i<=strip.last;i++){
+   if(i%16===0)yield;
    const a=strip.trail[i-1]!,b=strip.trail[i]!,prev=strip.trail[i-2]!,next=strip.trail[i+1]!;
    const side=(p:MainSummitTrailPoint,lo:MainSummitTrailPoint,hi:MainSummitTrailPoint,t:number)=>{
     const de=hi.east-lo.east,dn=hi.north-lo.north,l=Math.hypot(de,dn);
@@ -126,9 +131,11 @@ export function mountSouthProduction(input:Input){
   }
   // No new terrain or duplicate mesh. The existing host meshes are replaced
   // atomically only after the full cut/collision staging has succeeded.
-  for(const c of cuts)c.mesh.geometry=c.geometry;
-  sector=mountSouthSector({heightAt:groundAt,reserved:input.reserved,
+  // Stage every detail on the prospective cut, while the live owner still
+  // displays its original terrain. Commit the tile and sector together.
+  sector=yield* southSectorSteps({heightAt:groundAt,reserved:input.reserved,
    legacySouthVegetationExcluded:true,legacyTreadExcluded:true,earthworks:road,canonicalCutInstalled:true});
+  for(const c of cuts)c.mesh.geometry=c.geometry;
   input.owner.add(sector.group);
  }catch(error){sector?.dispose();if(!sector)road.dispose();restore();throw error;}
  const mounted=sector;
@@ -153,3 +160,4 @@ export function mountSouthProduction(input:Input){
   dispose(){if(disposed)return;disposed=true;mounted.dispose();restore();}
  };
 }
+export function mountSouthProduction(input:Input){return finishNightBAudit(southProductionSteps(input));}

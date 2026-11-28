@@ -224,7 +224,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
 
   if (includeTrailSupport) {
     addDetail('trail-support', () => {
-      const support = createTownD2R30TrailSupport({ heightAt, arrivalHeight });
+      const support = createTownD2R30TrailSupport({ heightAt, arrivalHeight,trailPoints });
       children.push(support.group);
       disposers.push(() => support.dispose());
       nightHooks.push(value => support.setNight(value));

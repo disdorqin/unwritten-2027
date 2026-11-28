@@ -61,13 +61,16 @@ export function mountNightBWestProduction(input:Input){
   return Math.max(...heights as number[]);
  }
  return {sector,group:sector.group,groundAt,cutChunks:cuts.length,
+  coversCut(e:number,n:number){return !disposed&&cuts.some(c=>c.surface.covers(e,n));},
+  cutGroundAt(e:number,n:number){return !disposed&&cuts.some(c=>c.surface.covers(e,n))?groundAt(e,n):undefined;},
+  deckAt(e:number,n:number,r=.27){return disposed?undefined:sector.supportAt(e,n,r);},
   supportAt(e:number,n:number,r=.27){
    if(disposed)return;
    const ground=groundAt(e,n);if(ground===undefined)return;
    const deck=sector.supportAt(e,n,r);return deck===undefined?ground:Math.max(ground,deck);
   },
   blocked(e:number,n:number,h:number,r=.27,body=1.8){return disposed||sector.blocked(e,n,h,r,body);},
-  updateView:sector.updateView,
+  updateView:sector.updateView,setNight:sector.setNight,
   dispose(){if(disposed)return;disposed=true;sector.dispose();for(const c of cuts){if(c.mesh.geometry===c.geometry)c.mesh.geometry=c.original;c.surface.dispose();c.geometry.dispose();}}
  };
 }

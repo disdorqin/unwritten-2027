@@ -283,9 +283,10 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     return (east: number, north: number) => {
       let height = collision.surfaceAt(east, north);
       for (const pkg of prior) {
+        if(!ownsPoint(pkg.sector,east,north))continue;
+        if(pkg.coversCut){if(pkg.coversCut(east,north))return pkg.cutGroundAt?.(east,north);continue;}
         const cut = pkg.groundAt?.(east, north);
-        if (cut === undefined) continue;
-        height = height === undefined ? cut : Math.max(height, cut);
+        if (cut !== undefined) height=cut;
       }
       return height;
     };
@@ -365,11 +366,12 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     });
   }
 
-  function install(sector: TownD2SectorKey, installer: TownD2SectorInstaller): TownD2SectorSettlement {
+  let sectorInstalling=false;
+  function beginInstall(sector:TownD2SectorKey){
+    if(sectorInstalling)throw Error('Sector installation already pending');
     if (disposed) throw new Error('The production host is disposed.');
     if(cableInstalling||cablePackage)throw Error('Remove the certified cable before modifying sector geometry');
     if (installed.has(sector)) throw new Error(`Sector ${sector} is already installed.`);
-    if (typeof installer !== 'function') throw new TypeError('A sector installer must be a function.');
     const before = group.children.length;
     const prior = Object.freeze([...installed.values()]);
     // Snapshot what THIS install starts from — including the cuts the already
@@ -377,30 +379,45 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     // silently undo A's and B's excavation when C2 fails.
     const tileSnapshot = new Map<Mesh, BufferGeometry>();
     for (const tile of tiles) tileSnapshot.set(tile, tile.geometry as BufferGeometry);
-    let pkg: TownD2SectorPackage | undefined;
-    try {
-      pkg = installer(createPort(prior));
+    sectorInstalling=true;
+    function commit(pkg:TownD2SectorPackage){
+      if(disposed)throw Error('Sector owner disposed during installation');
       const settlement = settle(sector, pkg);
       installed.set(sector, pkg);
+      pkg.setNight?.(night);
       collectSleepers();
       if (detailFocus) setDetailFocus(detailFocus.east, detailFocus.north);
       failures.delete(sector);
       return settlement;
-    } catch (error) {
+    }
+    function rollback(error:unknown,pkg?:TownD2SectorPackage):never{
+      installed.delete(sector);
       try { pkg?.dispose(); } catch { /* the original failure is the one to report */ }
       // Roll back exactly this install: detach what it added and restore the
       // geometry that was live before it ran, leaving other sectors untouched.
       for (const child of [...group.children].slice(before)) child.removeFromParent();
-      for (const tile of tiles) {
+      if(!disposed)for (const tile of tiles) {
         const snapshot = tileSnapshot.get(tile);
         if (snapshot !== undefined && tile.geometry !== snapshot) tile.geometry = snapshot;
       }
       failures.set(sector, error instanceof Error ? error.message : String(error));
       throw error;
     }
+    return {port:createPort(prior),commit,rollback,finish(){sectorInstalling=false;}};
+  }
+  function install(sector: TownD2SectorKey, installer: TownD2SectorInstaller): TownD2SectorSettlement {
+    if(typeof installer!=='function')throw TypeError('A sector installer must be a function.');
+    const tx=beginInstall(sector);let pkg:TownD2SectorPackage|undefined;
+    try{pkg=installer(tx.port);return tx.commit(pkg);}catch(error){return tx.rollback(error,pkg);}finally{tx.finish();}
+  }
+  /** The public staging host is detached until this transaction commits. */
+  async function installAsync(sector:TownD2SectorKey,installer:(port:TownD2SectorHostPort,valid:()=>boolean)=>Promise<TownD2SectorPackage>){
+    const tx=beginInstall(sector);let pkg:TownD2SectorPackage|undefined;
+    try{pkg=await installer(tx.port,()=>!disposed);return tx.commit(pkg);}catch(error){return tx.rollback(error,pkg);}finally{tx.finish();}
   }
 
   function uninstall(sector: TownD2SectorKey) {
+    if(sectorInstalling)throw Error('Sector installation already pending');
     if (disposed) throw new Error('The production host is disposed.');
     if(cableInstalling||cablePackage)throw Error('Remove the certified cable before modifying sector geometry');
     const pkg = installed.get(sector);
@@ -744,7 +761,7 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
   async function preparePublicCable(authority: TownD2CableAuthority,options:NightBAuditSliceOptions={}) {
     if (disposed) throw new Error('The production host is disposed.');
     if (cable) return cableState();
-    if(cableInstalling)throw Error('Cable installation already pending');
+    if(cableInstalling||sectorInstalling)throw Error('Cable or sector installation already pending');
     if (!authority || typeof authority.state !== 'function' || typeof authority.now !== 'function' ||
         typeof authority.daylight !== 'function') {
       throw new TypeError('preparePublicCable needs the presence authority (state/now/daylight).');
@@ -946,6 +963,7 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
      * a caller can hand out one stage per frame instead of one 1.5 s hitch. */
     mountDetails: (only?: string) => {
       if (disposed) throw new Error('The production host is disposed.');
+      if(sectorInstalling)throw Error('Sector installation already pending');
       const timings = assembly.mountDetails(only);
       refreshRegistrationBoxes();
       collectSleepers();
@@ -979,6 +997,7 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
       return cable;
     },
     install,
+    installAsync,
     uninstall,
     installed: () => Object.freeze([...installed.keys()]),
     package: (sector: TownD2SectorKey) => installed.get(sector),

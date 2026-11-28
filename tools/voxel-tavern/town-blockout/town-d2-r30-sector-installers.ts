@@ -124,19 +124,17 @@ export function createWestSectorInstaller(): TownD2SectorInstaller {
       nearTiles: port.tiles,
       legacyWestExcluded: true,
     });
-    // The frozen B package does not publish a top-level night hook; its sector
-    // body still owns one, so the host drives it through the body and stays
-    // silent when a future B revision drops it.
-    const body = west.sector as unknown as { setNight?(night: boolean): void };
+    // Consume B a6095936's exact west night hook and expose the actual cut/deck split.
     return {
       sector: 'B',
       group: west.group,
       groundAt: (east, north) => west.groundAt(east, north),
+      coversCut:west.coversCut,cutGroundAt:west.cutGroundAt,deckAt:west.deckAt,
       supportAt: (east, north) => west.supportAt(east, north),
       blocked: (east, north, height, radius, bodyHeight) =>
         west.blocked(east, north, height, radius ?? .27, bodyHeight ?? 1.8),
       updateView: (east, north) => west.updateView(east, north),
-      setNight: value => body.setNight?.(value),
+      setNight: west.setNight,
       dispose: () => west.dispose(),
     };
   };

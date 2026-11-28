@@ -1,4 +1,5 @@
 import {Group} from 'three';
+import {applyTownD2R30NightTint} from './town-d2-r30-night-lights';
 import {createNightBWestRoad} from './town-night-b-summit-west-road';
 import {createNightBWestDressing} from './town-night-b-summit-west-dressing';
 import {createNightBWestPavilion,findNightBWestPavilionSite} from './town-night-b-summit-west-pavilion';
@@ -24,7 +25,7 @@ export function createNightBWestSector(heightAt:Height,trail:readonly MainSummit
   const reserve:WestReserve=(e,n,r)=>externalReserve(e,n,r)||road.reserved(e,n,r)||Math.hypot(e-site.east,n-site.north)<=7+r||inEntrance(e,n,r)||Math.hypot(e-approach.east,n-approach.north)<=3+r;
   dressing=createNightBWestDressing(heightAt,reserve);
   const p=pavilion,d=dressing;group.add(road.group,p.group,d.group);
-  let disposed=false;
+  let disposed=false,night=false;
   return {group,road,pavilion:p,dressing:d,reserved:reserve,cutTread:road.cutTread,
    supportAt(e:number,n:number,r=.27){
     if(!inNightBWest(e,n))return;
@@ -33,6 +34,7 @@ export function createNightBWestSector(heightAt:Height,trail:readonly MainSummit
    },
    blocked(e:number,n:number,h:number,r=.27,body=1.8){return road.blocked(e,n,h,r,body)||p.blocked(e,n,h,r,body)||d.blocked(e,n,h,r,body);},
    updateView:d.updateView,
+   setNight(value:boolean){if(disposed||night===value)return;night=value;applyTownD2R30NightTint(group,value);},
    dispose(){if(disposed)return;disposed=true;group.removeFromParent();road.dispose();p.dispose();d.dispose();group.clear();}
   };
  }catch(error){road.dispose();pavilion?.dispose();dressing?.dispose();throw error;}

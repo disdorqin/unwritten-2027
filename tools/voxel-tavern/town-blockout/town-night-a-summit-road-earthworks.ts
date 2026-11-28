@@ -3,7 +3,9 @@ import type {MainSummitTrailPoint as Point} from './main-summit-trail';
 import type {SouthGround} from './town-night-a-summit-landform';
 
 type Tri=readonly [Point,Point,Point];
-const cell=24,half=1.5,lift=.055;
+const cell=4,half=1.5,lift=.055;
+// Conservative bucket padding covers the existing barycentric tolerance.
+const bucketEpsilon=.00001;
 const area=(a:Point,b:Point,c:Point)=>(b.east-a.east)*(c.north-a.north)-(b.north-a.north)*(c.east-a.east);
 /** A bounded earthwork on C2's accepted centreline/profile. Supply the
  * identical canonical terrain to this builder and D2's terrain cutter.
@@ -27,7 +29,7 @@ export function mountSouthEarthworks(points:readonly Point[],first:number,last:n
   if(road&&Math.abs(area(a,b,c))<1e-9)return;
   const bin=get(a),p=road?bin.road:bin.walls,colors=road?bin.roadColor:bin.wallColor;
   for(const q of [a,b,c]){p.push(q.east,q.height,-q.north);colors.push(color.r,color.g,color.b);}
-  if(road){idx.push(put(a),put(b),put(c));const t=[a,b,c] as const;for(const k of keys(Math.min(a.east,b.east,c.east),Math.max(a.east,b.east,c.east),Math.min(a.north,b.north,c.north),Math.max(a.north,b.north,c.north))){const list=triangleCells.get(k)??[];list.push(t);triangleCells.set(k,list);}}
+  if(road){idx.push(put(a),put(b),put(c));const t=[a,b,c] as const;for(const k of keys(Math.min(a.east,b.east,c.east)-bucketEpsilon,Math.max(a.east,b.east,c.east)+bucketEpsilon,Math.min(a.north,b.north,c.north)-bucketEpsilon,Math.max(a.north,b.north,c.north)+bucketEpsilon)){const list=triangleCells.get(k)??[];list.push(t);triangleCells.set(k,list);}}
  }
  const quad=(a:Point,b:Point,c:Point,d:Point,road:boolean,color:Color)=>{emit(a,b,c,road,color);emit(c,b,d,road,color);};
  function ground(p:Point){const h=groundAt(p.east,p.north);if(h===undefined||!Number.isFinite(h))throw Error('Missing earthwork ground');return h;}
