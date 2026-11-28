@@ -19,7 +19,7 @@ type Input={
  authority:ReturnType<typeof nightBProductionAuthority>;
  /** Host certifies actual continuous path from its route network to each
   * approach and every repair anchor, using the supplied combined collider. */
- certifyRoutes:(docks:readonly Dock[],repair:ReturnType<typeof mountMainSummitCableWorkshop>['repairAnchors'],supportAt:Ground,blocked:Input['blocked'])=>boolean;
+ certifyRoutes:(docks:readonly Dock[],repair:ReturnType<typeof mountMainSummitCableWorkshop>['repairAnchors'],supportAt:Ground,blocked:Input['blocked'],repairFootClear:(foot:Foot)=>boolean)=>boolean;
  authorized:boolean;
 };
 /** D2 calls inside the actual production owner after A/B/C2 have landed.
@@ -62,7 +62,7 @@ export function mountNightBPublicRearCable(input:Input){
      if(input.blocked(p.feet.east+x*c+z*s,p.feet.north-x*s+z*c,p.feet.height,.025,p.bodyTop))return true;
     }return false;
    },
-   dockClear,certifyApproaches:docks=>input.certifyRoutes(docks,w.repairAnchors,supportAt,blocked)});
+   dockClear,certifyApproaches:docks=>input.certifyRoutes(docks,w.repairAnchors,supportAt,blocked,w.repairFootClear)});
   if(!op.ready)return {ready:false as const,reason:op.reason,audit:op.audit,docks:op.docks,meshAudit:scan.stats(),paintTrianglesRemoved:paint.removed};
   accepted=true;
   return {ready:true as const,certified:true,boardable:true,group,cableOperation:op,stations:op.docks,

@@ -3,6 +3,7 @@ import {execFileSync} from 'node:child_process';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import path from 'node:path';
 import {Box3,Group,Vector3} from 'three';
+import {auditNightBRearCableAccess} from './voxel-tavern/town-blockout/town-night-b-rear-cable-access.ts';
 import {mountNightBPublicRearCable} from './voxel-tavern/town-blockout/town-night-b-public-rear-cable.ts';
 import {mountNorthRidgeMiddleStation} from './voxel-tavern/town-blockout/north-ridge-middle-station.ts';
 import {createNightBMountedClearance} from './voxel-tavern/town-blockout/town-night-b-mounted-clearance.ts';
@@ -11,26 +12,33 @@ import {auditNightBSummitCable} from './voxel-tavern/town-blockout/town-night-b-
 import {auditNightBFrontOpenFacilities} from './voxel-tavern/town-blockout/town-night-b-summit-front-sweep.ts';
 import {mountRidgeCableFacilities} from './voxel-tavern/town-blockout/town-d-r30-cable-facilities.ts';
 const here=fileURLToPath(new URL('../',import.meta.url));
-const paired=path.resolve(here,'../window-a-a0-a6'),expected=process.argv[3];
-const git=(...args)=>execFileSync('git',['-C',paired,...args],{encoding:'utf8'}).trim();
-assert.ok(expected&&git('rev-parse','HEAD')===expected&&git('status','--porcelain','--untracked-files=no')==='','Paired A owner must be exact tracked-clean SHA');
-const load=name=>import(pathToFileURL(path.join(paired,'tools','voxel-tavern','town-blockout',name+'.ts')).href);
 const scope=process.argv[2];
-if(scope==='rear'||scope==='rear-mount'){
- const [{createTownD2R30ProductionHost},{createSouthSectorInstaller,createWestSectorInstaller,createEastSectorInstaller},{retireA31LegacySectorOverlays}]=await Promise.all([load('town-d2-r30-production-host'),load('town-d2-r30-sector-installers'),load('town-a31-summit-visual-ownership')]);
+const paired=path.resolve(here,process.argv[4]==='d2'?'../window-d2':'../window-a-a0-a6'),expected=process.argv[3];
+const git=(...args)=>execFileSync('git',['-C',paired,...args],{encoding:'utf8'}).trim();
+assert.ok(expected&&git('rev-parse','HEAD')===expected&&git('status','--porcelain','--untracked-files=no')==='','Paired owner must be exact tracked-clean SHA');
+const load=name=>import(pathToFileURL(path.join(paired,'tools','voxel-tavern','town-blockout',name+'.ts')).href);
+if(scope==='rear'||scope==='rear-mount'||scope==='rear-routes'){
+ const [{createTownD2R30ProductionHost},{createSouthSectorInstaller,createWestSectorInstaller,createEastSectorInstaller},{retireA31LegacySectorOverlays}]=await Promise.all([load('town-d2-r30-production-host'),load('town-d2-r30-sector-installers'),import(pathToFileURL(path.resolve(here,'../window-a-a0-a6/tools/voxel-tavern/town-blockout/town-a31-summit-visual-ownership.ts')).href)]);
  const host=createTownD2R30ProductionHost({includeRopeway:false});
  try{
   host.install('A',createSouthSectorInstaller());host.install('B',createWestSectorInstaller());host.install('C2',createEastSectorInstaller());
   const visual=retireA31LegacySectorOverlays(host.group);
-  if(scope==='rear-mount'){
+  if(scope==='rear-mount'||scope==='rear-routes'){
    const old=host.group.getObjectByName('main-summit-machine-room');assert.ok(old);const oldParent=old.parent;old.removeFromParent();
    const originalPaint=host.group.getObjectByName('main-summit-paint')?.geometry;
+   let routeAudit;
    const result=mountNightBPublicRearCable({owner:host.group,groundAt:host.surfaceAt,supportAt:host.supportAt,
     blocked:(e,n,h,r,b)=>host.blocked(e,n,h,r,b)||!!host.assembly.northWall?.blocked(e,n,h,r,b),
     groundMeshes:host.tiles,authorized:true,authority:{state:()=>undefined,now:()=>undefined,daylight:()=>undefined,firstRun:{wokeAt:()=>undefined,openedAt:()=>undefined,dawnEpoch:()=>undefined}},
-    certifyRoutes:()=>false});
-   console.log(JSON.stringify({scope:'actual four-sector host, legacy room physically detached in paired ephemeral object, B real mount, route gate deliberately refused',paired:expected,result:result.ready?{ready:true}:result,paintRestored:host.group.getObjectByName('main-summit-paint')?.geometry===originalPaint,remainingCable:!!host.group.getObjectByName('night-b-public-rear-cable')}));
-   if(result.ready)result.dispose();oldParent.add(old);
+    certifyRoutes:(docks,repair,supportAt,blocked,repairFootClear)=>{
+     if(scope!=='rear-routes')return false;
+     const a=auditNightBRearCableAccess({docks,repair,supportAt,blocked,repairFootClear,gate:{east:0,north:-8,height:347},summitLanding:host.trail.at(-1)}),l=a.lower,u=a.upper;
+     const compact=a=>({...a,routes:a.routes.map(({path,...p})=>({...p,points:path?.length,turns:path?.filter((x,i)=>i===0||i===path.length-1||i%20===0)}))});
+     routeAudit={lower:compact(l),upper:compact(u)};
+     return l.ready&&u.ready;
+    }});
+   console.log(JSON.stringify({scope:'actual four-sector host with paired B real mount; legacy room detached only in ephemeral object; no browser entry or live authority claim',paired:expected,routeAudit,result:result.ready?{ready:true,audit:result.cableOperation.audit,meshAudit:result.meshAudit}:result,paintRestored:host.group.getObjectByName('main-summit-paint')?.geometry===originalPaint,remainingCable:!!host.group.getObjectByName('night-b-public-rear-cable')}));
+   if(result.ready){result.dispose();assert.equal(host.group.getObjectByName('main-summit-paint')?.geometry,originalPaint);assert.equal(host.group.getObjectByName('night-b-public-rear-cable'),undefined);console.log('Accepted cable teardown restored original paint geometry and removed the sole cable group.');}oldParent.add(old);
   }else{
   const ropeway=createTownD2R30Ropeway({heightAt:host.surfaceAt,controlPointSupports:false});
   const corridor=ropeway.cable.ropes.flatMap(r=>r.points.slice(1).map((p,i)=>{const a=r.points[i];return new Box3().setFromPoints([new Vector3(a.east,a.height,-a.north),new Vector3(p.east,p.height,-p.north)]).expandByScalar(5)}));
