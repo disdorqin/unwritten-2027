@@ -619,6 +619,7 @@ function preparePublicTransport(foot:{east:number;north:number;height:number}){
   const front=readA31FrontCable(productionRidge),upper=ready?cloudRoute.upperOperation():undefined;
   if(front.front)walkGeometry=geometry();
   if(front.front||upper)cableController=makePublicCableController({...front,upper});
+  if(ready&&cloudRoute.seamReady())productionRidge?.certifyPublicSeam((e,n)=>{const h=cloudRoute.surveyedSupport(e,n);return h!==undefined&&!cloudRoute.surveyedBlocked(e,n,h)?h:undefined;});
   publicTransportBound=true;publicTransportPreparing=false;
  })();
 }

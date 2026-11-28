@@ -78,13 +78,15 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
  const serviceExit=roads.includes(lower)&&Math.abs((field.heightAt(522,355)??-1)-26)<.001;
  const facilities=stationReady&&cableAudit.groundHits===0&&cableAudit.minMoving>=.25
   ?mountRidgeCableFacilities(owner,field,true,true,serviceExit):undefined;
- const cloudSeam=auditProductionCloudSeam(field);
+ const seamAudit=auditProductionCloudSeam(field);let seamCertified=false;
+ const cloudSeam={...seamAudit,get domainReady(){return seamCertified;}};
+ let activeFacilities=facilities;
  // The terrace routes its own cloud paths, so it must keep seeing the cable
  // facility (otherwise it draws a path straight through the station). The
  // cable envelope query below leaves the terrace out instead: B's mounted-mesh
  // triangle scan already covers the terrace geometry, so re-entering the
  // facility through the terrace would only reproduce the loop.
- const terrace=cloudSeam.physicalReady?mountRidgeCloudTerrace(owner,field,(e,n,y,r)=>forest.blocked(e,n,y,r)||!!facilities?.blocked(e,n,y,r)||!!station?.blocked(e,n,y,r)||furniture.some(f=>f.blocked(e,n,y,r))||banks.some(b=>b.blocked(e,n,y,r)),true):undefined;
+ const terrace=cloudSeam.physicalReady?mountRidgeCloudTerrace(owner,field,(e,n,y,r)=>forest.blocked(e,n,y,r)||!!activeFacilities?.blocked(e,n,y,r)||!!station?.blocked(e,n,y,r)||furniture.some(f=>f.blocked(e,n,y,r))||banks.some(b=>b.blocked(e,n,y,r)),true):undefined;
  function heightAt(e:number,n:number){
   return patch.ownsCell(Math.floor(e),Math.floor(n))?grid.heightAt(e,n):undefined;
  }
@@ -107,7 +109,6 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
  // C32-1: the closed facility is replaced in place by B's certified open one.
  // Until that swap really succeeds `transportReady` stays false and A's
  // readA31FrontCable keeps returning nothing.
- let activeFacilities=facilities;
  let frontOperation:C2FrontOperation|undefined;
  let frontRepair:C2FrontRepair|undefined;
  let transport=false;
@@ -150,6 +151,7 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
    prepareReason=undefined;
    return true;
   },
+  certifyPublicSeam(rear:(e:number,n:number)=>number|undefined){seamCertified=terrace?.certifySeam(rear)===true;return seamCertified;},
   get facilities(){return activeFacilities;},
   get frontOperation(){return frontOperation;},
   get frontRepair(){return frontRepair;},
