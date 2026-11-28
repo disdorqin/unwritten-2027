@@ -10,6 +10,7 @@ import type {A32WarmupStats} from './town-a32-gpu-warmup';
 import {prepareA32Canonical} from './town-a32-canonical-preload';
 import {certifyHikingSteps,hikingWaypoints,hikingProgress} from './town-a32-summit-hiking';
 import {mountHikingGuides} from './town-a32-summit-hiking-guides';
+import {createMainSummitRegistrationLandmarks} from './main-summit-registration';
 import {finishNightBAuditAsync} from './town-night-b-audit-slices';
 
 type Foot=Readonly<{east:number;north:number;height:number}>;
@@ -40,6 +41,9 @@ export function createA31PublicSummitRoute(input:Input){
  let canonicalPreparation: {mode:string;ms?:number;elapsedMs?:number;error?:string}|undefined;
  const southSlices:number[]=[],westSlices:number[]=[];
  let hiking:ReturnType<typeof import('./town-a32-summit-hiking').certifyHiking>|undefined,hikingGuide:ReturnType<typeof mountHikingGuides>|undefined;
+ const registrationGuides:ReturnType<typeof mountHikingGuides>[]=[];
+ let registrationRoutes:{id:string;ready:boolean;metres:number;samples:number;markers:number}[]=[];
+ function disposeRegistrationGuides(){for(const guide of registrationGuides)guide.dispose();registrationGuides.length=0;registrationRoutes=[];}
  let warmup:A32WarmupStats|undefined,cableFailure:string|undefined,previousFoot:Foot|undefined,previousAt=0,detailEast=Infinity,detailNorth=Infinity,lastViewAt=0,lastViewEast=Infinity,lastViewNorth=Infinity;
  const waitForQuiet=()=>quiet.wait(yieldFrame,()=>status==='disposed');
  const stageRun=async<T,>(name:string,task:()=>T|Promise<T>)=>{stage='queued-'+name;await waitForQuiet();stage=name;return meter.run(name,task);};
@@ -77,6 +81,15 @@ export function createA31PublicSummitRoute(input:Input){
     }
     hiking=await stageRun('hiking',()=>finishNightBAuditAsync(certifyHikingSteps(host,hikingWaypoints),{budgetMs:6,signal:stagingAbort.signal,yieldTask:yieldFrame}));
     if(hiking.ready){hikingGuide=mountHikingGuides(host,hiking.path);host.group.add(hikingGuide.group);}
+    const landmarks=createMainSummitRegistrationLandmarks();
+    // The final hut/monument are already mounted and collidable. Certify
+    // both approaches after the final cable owner and cut are in place.
+    for(const [id,points] of Object.entries(landmarks.summit.routes)){
+     const cert=await stageRun('registration-'+id,()=>finishNightBAuditAsync(certifyHikingSteps(host,points),{budgetMs:6,signal:stagingAbort.signal,yieldTask:yieldFrame}));
+     const guide=cert.ready?mountHikingGuides(host,cert.path):undefined;
+     if(guide){guide.group.name='a32-registration-guide-'+id;registrationGuides.push(guide);host.group.add(guide.group);}
+     registrationRoutes.push({id,ready:cert.ready,metres:cert.metres,samples:cert.samples,markers:guide?.markers??0});
+    }
     audit=await stageRun('audit',()=>host.sectorLiveCheck());
     const mountStats=candidate.stats();cutTiles=mountStats.tiles.cut;duplicates=mountStats.duplicates;
     if(!audit.ready||duplicates.length||candidate.cableState().boardable&&!readA31UpperCable(candidate))throw Error('Four-sector public mount refused');
@@ -92,7 +105,7 @@ export function createA31PublicSummitRoute(input:Input){
      summitSnowAt:(e,n)=>{const depth=host.snowAt(e,n);if(depth===undefined)return;const front=input.frontSnow?.(e+summitAssemblyAnchor.east,n+summitAssemblyAnchor.north);return front!==undefined&&Number.isFinite(front)&&n<=86?Math.max(0,Math.min(1,Math.max(front-.2,Math.min(front+.2,depth)))):depth;}};
     status='ready';stage='mounted';elapsedMs=performance.now()-started;return true;
    }catch(error){
-    preparedSouth?.dispose();hikingGuide?.dispose();hikingGuide=undefined;candidate?.dispose();production=undefined;assembly=undefined;
+    preparedSouth?.dispose();disposeRegistrationGuides();hikingGuide?.dispose();hikingGuide=undefined;candidate?.dispose();production=undefined;assembly=undefined;
     if((status as Status)!=='disposed'){status='failed';failure=error instanceof Error?error.message:String(error);}
     input.skyline.visible=true;return false;
    }
@@ -179,6 +192,7 @@ export function createA31PublicSummitRoute(input:Input){
    westPreparation:production?.group.getObjectByName('night-b-west-sector')?.userData.cutPreparation,
    westSlices:westSlices.length?{count:westSlices.length,max:Math.max(...westSlices),median:[...westSlices].sort((a,b)=>a-b)[Math.floor(westSlices.length/2)]}:undefined,
    hiking:hiking?{ready:!!production&&hiking.ready,metres:hiking.metres,maxGrade:hiking.maxGrade,samples:hiking.samples,markers:hikingGuide?.markers??0,skipped:hikingGuide?.skipped??0,...(input.profile&&hiking.ready?{waypoints:hiking.path}: {})}:undefined,
+   registrationRoutes:production?registrationRoutes:[],
    cable:production?.cableState()??{installed:false,boardable:false,certified:false},
    sceneOwner:production?.group.parent===input.town?'town':production?.group.parent===scene?'summit':undefined};
  }
@@ -192,6 +206,6 @@ export function createA31PublicSummitRoute(input:Input){
   seamCertificate:()=>production?.certifySeamCrossing(),
   windAt:(e:number,n:number)=>{const [le,ln]=local(e,n),wind=production?.windAt(le,ln),front=input.frontWind?.(e,n);return wind!==undefined&&front!==undefined&&Number.isFinite(front)&&ln<=86?Math.max(0,Math.min(1,Math.max(front-.2,Math.min(front+.2,wind)))):wind;},
   assembly:()=>active?assembly:undefined,
-  dispose(){if(status==='disposed')return;status='disposed';stagingAbort.abort();active=false;near=false;hikingGuide?.dispose();hikingGuide=undefined;production?.dispose();production=undefined;assembly=undefined;input.skyline.visible=true;}
+  dispose(){if(status==='disposed')return;status='disposed';stagingAbort.abort();active=false;near=false;disposeRegistrationGuides();hikingGuide?.dispose();hikingGuide=undefined;production?.dispose();production=undefined;assembly=undefined;input.skyline.visible=true;}
  };
 }

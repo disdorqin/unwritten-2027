@@ -1622,14 +1622,14 @@ let nextSummitStatus=0;
 function showSummitStatus(now:number){
  if(now<nextSummitStatus)return;nextSummitStatus=now+250;
  const s=cloudRoute.state();
- summitPassportInput.tick(cloudRoute.active()?'summit':n>=650?'mountain':x<0?'west':'town');
+ summitPassportInput.tick(presence.currentRoom());
  const progress=summitPassportInput.progress();
  const passportText=progress?`主峰护照 ${Number(progress.cloudStamped)+Number(progress.summitStamped)}/2 · ${progress.summitRegistered?'已登记（雪翼领取资格）':'未登记'}`:'主峰护照 · 未连接权威';
  if(summitPassportStatus.textContent!==passportText)summitPassportStatus.textContent=passportText;
  summitStatus.hidden=!!cableFrame?.whiteout;
  summitStatus.style.display=cableFrame?.whiteout?'none':'block';
  const message=s.status==='ready'?(s.cable.boardable?'后山 · 地形与索道已就绪 · 依现场权限通行':'后山 · 四区地形已就绪 · 交通检修中'):s.status==='failed'?'后山 · 加载未完成 · 暂未开放':s.status==='idle'?'后山 · 远景常驻 · 接近后加载':'后山 · 分区预加载中 · 暂未开放';
- const routeNote=s.hiking?.ready?' · 金色标记为陡坡徒步线（非缓坡盘山公路）':'';
+ const routeNote=s.hiking?.ready?' · 金色标记为陡坡徒步线（非缓坡盘山公路）'+(s.registrationRoutes.every(r=>r.ready)&&s.registrationRoutes.length===2?'，峰顶接纪念碑及登记小屋':''):'';
  if(summitStatus.textContent!==message+routeNote)summitStatus.textContent=message+routeNote;
  summitStatus.dataset.status=s.status;
 }
