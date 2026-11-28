@@ -529,7 +529,7 @@ export async function createPresenceServer(options: Options = {}) {
         return;
       }
     }
-    let body: { name?: unknown; state?: unknown; events?: unknown; presenceFrame?:unknown; passportCredential?:unknown };
+    let body: { name?: unknown; state?: unknown; events?: unknown; presenceFrame?:unknown; passportCredential?:unknown; cableResync?:unknown };
     try { body = JSON.parse(await readBody(req) || '{}') as typeof body; }
     catch {
       if (req.url === POLL_JOIN_PATH) connLog('poll', '-', 'attempt', 'body');
@@ -596,7 +596,12 @@ export async function createPresenceServer(options: Options = {}) {
       }
     }
     if (!peers.has(peer.id)) { reply(410, { error: 'gone' }); return; }
-    reply(200, { messages: drainOutbox(peer) });
+    // A previous HTTP response may have drained a repair frame without
+    // delivering it. On request, append both current per-peer snapshots
+    // after queued events; this does not replay actions or broadcast again.
+    const messages=drainOutbox(peer);
+    if(body.cableResync===true)for(const line of [1,2] as const)messages.push({t:'text',d:cableLineWire(cableLine.hello(line),peer)});
+    reply(200, { messages });
   }
 
   function broadcast(data: string, exclude?: Peer) {

@@ -206,6 +206,7 @@ export function createTownPresence(
   type PollChannel = {
     session: string; timer: number; inFlight: boolean;
     outEvents: (string | Uint8Array)[]; pendingState?: ArrayBuffer;
+    needsCableResync:boolean;
   };
   let poll: PollChannel | undefined;
   let pollRetryTimer: number | undefined;
@@ -229,7 +230,7 @@ export function createTownPresence(
   let haveId = false;
   let cableClockReady=false;
   const cableLease=createCableTransportLease();
-  const cableReady=()=>haveId&&cableLineSupported&&cableClockReady&&cableLease.fresh();
+  const cableReady=()=>haveId&&cableLineSupported&&cableClockReady&&cableLease.fresh()&&(socketJoined||poll?.needsCableResync===false);
   let insideSharedHome = false;
   let epoch = 0;
   let seq = 0;
@@ -324,7 +325,10 @@ export function createTownPresence(
         else receive(base64ToArrayBuffer(message.d));
       }
     } finally { receivingFrom = 'ws'; }
-    if(haveId&&!socketJoined)cableLease.renew();
+    if(haveId&&!socketJoined&&poll){
+      if(poll.needsCableResync&&cableLineStates.has(1)&&cableLineStates.has(2))poll.needsCableResync=false;
+      if(!poll.needsCableResync)cableLease.renew();
+    }
     return true;
   }
 
@@ -346,7 +350,7 @@ export function createTownPresence(
 
   async function startPoll() {
     if (poll || !inTown) return;
-    const channel: PollChannel = { session: '', timer: 0, inFlight: false, outEvents: [] };
+    const channel: PollChannel = { session: '', timer: 0, inFlight: false, outEvents: [],needsCableResync:true };
     poll = channel;
     if (!await pollJoin(channel) || poll !== channel) {
       if (poll === channel) poll = undefined;
@@ -367,12 +371,15 @@ export function createTownPresence(
       const response = await fetch(presencePath(POLL_URL), {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-presence-session': channel.session },
-        body: buildPollBody(state, events),signal:AbortSignal.timeout(4000),
+        body: buildPollBody(state, events,channel.needsCableResync),signal:AbortSignal.timeout(4000),
       });
       if (poll !== channel) return;
       if (response.status === 401 || response.status === 410) {
         // 会话已被服务端回收（超时/重启）：事件未被处理，塞回队列并重新入镇。
-        requeuePollEvents(channel.outEvents, events);
+        // 410 can follow partially executed events. Never replay repair.
+        requeuePollEvents(channel.outEvents,retryablePollEvents(events));
+        channel.outEvents=retryablePollEvents(channel.outEvents);
+        channel.needsCableResync=true;
         channel.session = '';
         haveId=false;cableClockReady=false;cableLease.invalidate();cableLineSupported=false;clearCableFrames();
         townNight.disconnect();
@@ -388,7 +395,10 @@ export function createTownPresence(
       if (poll === channel&&!feedPollMessages(payload))throw new Error('invalid poll messages');
     } catch {
       // 往返失败：事件塞回队首下轮重发；状态帧只保最新，旧帧直接丢弃。
-      if (poll === channel){cableLease.invalidate();requeuePollEvents(channel.outEvents,retryablePollEvents(events));channel.outEvents=retryablePollEvents(channel.outEvents);}
+      if (poll === channel){
+        cableLease.invalidate();clearCableFrames();channel.needsCableResync=true;
+        requeuePollEvents(channel.outEvents,retryablePollEvents(events));channel.outEvents=retryablePollEvents(channel.outEvents);
+      }
     } finally { channel.inFlight = false; }
   }
 

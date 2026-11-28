@@ -59,8 +59,9 @@ export function encodePollEvent(event: string | Uint8Array): PollWireMessage {
 }
 
 /** 组装一次轮询往返的请求体：最新状态一帧 + 本周期攒下的事件。 */
-export function buildPollBody(state: ArrayBuffer | undefined, events: readonly (string | Uint8Array)[]): string {
-  const payload: { state?: string; events?: PollWireMessage[] } = {};
+export function buildPollBody(state: ArrayBuffer | undefined, events: readonly (string | Uint8Array)[],cableResync=false): string {
+  const payload: { state?: string; events?: PollWireMessage[]; cableResync?:true } = {};
+  if(cableResync)payload.cableResync=true;
   if (state) payload.state = bytesToBase64(new Uint8Array(state));
   if (events.length) payload.events = events.map(encodePollEvent);
   return JSON.stringify(payload);
