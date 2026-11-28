@@ -1,0 +1,63 @@
+{
+  "scope": "isolated west geometry, not production route or real phone",
+  "sha": "841ea6973c2f3fb1be6e8b5dc4cf58e5413d119d",
+  "views": [
+    {
+      "file": "west-1.jpg",
+      "label": "西次峰与西沟 · 全区",
+      "draws": 352,
+      "triangles": 356983,
+      "gpu": "ANGLE (Intel, Intel(R) UHD Graphics (0x0000A788) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "fps": 59.99520038396924,
+      "p95": 16.90000000000009,
+      "cutCount": 18,
+      "lowered": 319
+    },
+    {
+      "file": "west-2.jpg",
+      "label": "西沟林岩雪带",
+      "draws": 162,
+      "triangles": 332802,
+      "gpu": "ANGLE (Intel, Intel(R) UHD Graphics (0x0000A788) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "fps": 60.024009603841534,
+      "p95": 16.800000000000182,
+      "cutCount": 18,
+      "lowered": 319
+    },
+    {
+      "file": "west-3.jpg",
+      "label": "观云亭与连续道路",
+      "draws": 244,
+      "triangles": 237645,
+      "gpu": "ANGLE (Intel, Intel(R) UHD Graphics (0x0000A788) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "fps": 60.009601536245746,
+      "p95": 16.800000000000182,
+      "cutCount": 18,
+      "lowered": 319
+    },
+    {
+      "file": "west-4.jpg",
+      "label": "西部索道格构塔架",
+      "draws": 134,
+      "triangles": 276899,
+      "gpu": "ANGLE (Intel, Intel(R) UHD Graphics (0x0000A788) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "fps": 60.00960153624588,
+      "p95": 16.699999999999818,
+      "cutCount": 18,
+      "lowered": 319
+    },
+    {
+      "file": "west-5.jpg",
+      "label": "二线维修机房",
+      "draws": 56,
+      "triangles": 129594,
+      "gpu": "ANGLE (Intel, Intel(R) UHD Graphics (0x0000A788) Direct3D11 vs_5_0 ps_5_0, D3D11)",
+      "fps": 60.009601536245746,
+      "p95": 16.800000000000182,
+      "cutCount": 18,
+      "lowered": 319
+    }
+  ],
+  "errors": [],
+  "complete": true
+}
