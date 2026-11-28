@@ -7,7 +7,7 @@ const [east,north]=northRidgeCableAnchors[1];
 export const middleStationFoot=Object.freeze({east,north,height:northRidgeMidStation.height});
 const station=middleStationFoot;
 export const middleStationWaitingPoints=Object.freeze({
-  up:{east:station.east+4.2,north:station.north-2.4,height:station.height},
+  up:{east:station.east+4.2,north:station.north+2.4,height:station.height},
   down:{east:station.east-4.2,north:station.north-2.4,height:station.height},
 });
 const palette={stone:'#777b78',timber:'#725139',iron:'#4c606b',brass:'#b59669',
@@ -27,7 +27,9 @@ export function mountNorthRidgeMiddleStation(parent:Object3D){
   const parts=new Map<Finish,Matrix4[]>();
   const solids:Box[]=[];
   const materials=new Map<Finish,MeshLambertMaterial>();
+  let bay=0;
   function add(f:Finish,e:number,n:number,y:number,w:number,d:number,h:number,solid=false){
+    if(bay){e=bay*(4.8+(Math.abs(e)-4.55)*.78);w*=.78;n=bay*2.05+n*.42;d*=.42;}
     const matrix=new Matrix4().makeScale(w,h,d);
     matrix.setPosition(station.east+e,station.height+y,-station.north-n);
     const batch=parts.get(f)??[];batch.push(matrix);parts.set(f,batch);
@@ -35,9 +37,10 @@ export function mountNorthRidgeMiddleStation(parent:Object3D){
   }
   // Same dark iron, wood and brass family as the existing cable terminal.
   // Keep both cable lanes and the T5 centreline unobstructed.
-  add('stone',0,0,-.22,12,8,.44);
+  // Finish planks share the exact 140m walk/boarding datum.
+  add('stone',0,0,-.236,12,8,.408);
   for(let e=-5.5;e<=5.6;e+=.8)for(let n=-3.4;n<=3.5;n+=1.7){
-    add(Math.round((e+6)*10+(n+4)*10)%3?'timber':'woodLight',e,n,.016,.77,1.65,.032);
+    add(Math.round((e+6)*10+(n+4)*10)%3?'timber':'woodLight',e,n,-.016,.77,1.65,.032);
     if(Math.abs(e)>4.7&&Math.round((e+6)*10+(n+4)*10)%4===0)add('snowShadow',e,n,.043,.51,.74,.019);
   }
   // Layered exposed stone foundation and timber edge beam, as in ref-m28.
@@ -48,7 +51,9 @@ export function mountNorthRidgeMiddleStation(parent:Object3D){
     add('iron',e,side*3.97,-.06,.075,.27,.24);
   }
   for(const s of [-1,1]){
-    // Sheltered waiting bays on outer wings; not across cabin sweep.
+    // Stagger the outer shelters away from the diagonal arriving/departing
+    // cable envelope. Compress only the wing, never the platform or ropes.
+    bay=s;
     for(const n of [-3.35,3.35])for(const e of [s*3.6,s*5.5]){
       add('stone',e,n,.20,.58,.58,.40,true);
       add('iron',e,n,1.75,.19,.19,3.1,true);
@@ -83,7 +88,7 @@ export function mountNorthRidgeMiddleStation(parent:Object3D){
     for(let n=-2.4;n<=2.4;n+=1.2)add('brass',s*3.1,n,.04,.12,.75,.045);
   }
   // A sheltered bell and hardware cupboard at the outer rear of each bay.
-  for(const s of [-1,1]){
+  for(const s of [-1,1]){bay=s;
     add('timber',s*5.27,2.95,1.19,.58,.55,1.19,true);
     add('iron',s*5.27,2.65,1.31,.42,.055,.58);
     add('brass',s*5.27,2.61,1.31,.07,.05,.08);
@@ -91,6 +96,7 @@ export function mountNorthRidgeMiddleStation(parent:Object3D){
     add('brass',s*4.55,-3.21,2.50,.33,.33,.24);
     add('brass',s*4.55,-3.21,2.34,.43,.43,.10);
   }
+  bay=0;
   for(const [f,matrices]of parts){
     const material=new MeshLambertMaterial({color:palette[f]});materials.set(f,material);
     const mesh=new InstancedMesh(geom,material,matrices.length);
@@ -112,7 +118,7 @@ export function mountNorthRidgeMiddleStation(parent:Object3D){
       // occluded by its own bell; the wall-mounted face is front-facing.
       board=new Mesh(new PlaneGeometry(2.0,1.0),new MeshBasicMaterial({map:texture}));
       board.name='middle-station-direction-board';board.rotation.y=-Math.PI/2;
-      board.position.set(station.east+5.60,station.height+2.08,-station.north-2.10);group.add(board);
+      board.position.set(station.east+5.60,station.height+2.08,-station.north-2.05);group.add(board);
     }
   }
   return {group,surfaceAt:middleStationSurfaceAt,waiting:middleStationWaitingPoints,
