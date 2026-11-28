@@ -16,10 +16,11 @@ import {auditNightBFrontOpenFacilities} from '../tools/voxel-tavern/town-blockou
 import {createNightBProductionController,nightBProductionAuthority} from '../tools/voxel-tavern/town-blockout/town-night-b-production-controller';
 import {createZa36CableRepair,type Za36CableRepairEvent} from '../src/shared/za36-cable-repair';
 import {installNightBFrontOperation} from '../tools/voxel-tavern/town-blockout/town-night-b-summit-front-install';
-test('front production field and actual rail, station, forest, roads, banks and terrace audit',()=>{
+for(const rearConnectorCandidate of [false,true])test(`front production field and actual external sweep (${rearConnectorCandidate?'default four-road':'legacy three-road'} candidate)`,()=>{
  const grid=createTerrainGrid(),root=new Group(),west=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
  const rail=createTownRailway(grid,()=>0),branch=buildCraterRailExtension(grid,west,rail.route.points);
- const ridge=mountProductionRidge(root,grid,{loop:rail.route.points,branch:branch.samples});
+ const ridge=mountProductionRidge(root,grid,{loop:rail.route.points,branch:branch.samples,rearConnectorCandidate});
+ assert.equal(ridge.roads.length,rearConnectorCandidate?4:3);
  assert.ok(ridge.facilities&&ridge.stationReady&&ridge.serviceExit);assert.equal(ridge.transportReady,false);
  const owner=new Group(),field=ridge.field,allowed=(e:number,n:number)=>ridge.ownership.distance(e,n)>0;
  const facility=mountRidgeCableFacilities(owner,field,true,false,true),station=mountNorthRidgeMiddleStation(owner);
