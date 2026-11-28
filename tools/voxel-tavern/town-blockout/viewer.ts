@@ -31,6 +31,7 @@ import {mountWestMountainGround,westMountainTrackProtection} from './town-night-
 import {westPresenceBounds} from '../../../src/shared/za22-west-domain';
 import {createSouthEntryHost} from './town-night-a-summit-entry-host';
 import {mountA33WestFoothillDressing} from './town-a33-west-foothill-dressing';
+import {a33WestReturnRoute} from './town-a33-west-foothill';
 import {mountWestMountainFootway} from './town-night-a-summit-west-footway';
 import {createA33ExactGroundCoverage} from './town-a33-pit-ridge-ground';
 import { createTerrainSupportContract } from './town-a-r30-terrain-contract';
@@ -905,6 +906,9 @@ productionRidge=mountProductionRidge(scene,grid,{loop:railway.route.points,branc
   // field. mountProductionRidge retains the original three roads if its
   // protected-vertex / grade / cable audit rejects the connector.
   rearConnectorCandidate:!(previewOptions.has('mRearConnectorOff')&&['127.0.0.1','localhost'].includes(location.hostname))});
+// The surveyed north-side trail crosses the real E0 seam after the rail
+// curves south into town. Both original ground owners remain authoritative.
+scene.add(mountWestMountainFootway((e,n)=>e<0?westGroundAt(e,n):grid.heightAt(e,n),a33WestReturnRoute,'a33-west-north-return').group);
 if(westSurfacePort){
   westSurfaceAssembly=westSurfacePort.attach(ensureWestCraterRoad(),railExtension);
   try{assertAR30SurfaceAttachment(ensureWestCraterRoad(),railExtension);}

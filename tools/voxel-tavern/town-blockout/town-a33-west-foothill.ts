@@ -1,6 +1,10 @@
 /** A33 terrain-only footprint: EN metres. No new surface, no relay frame
  * expansion. The north end remains inside the existing west room (N540). */
 export const a33WestFoothillRoute=[[-90,350],[-93,371],[-103,398],[-108,425],[-103,453],[-91,481],[-86,507],[-86,526]] as const;
+/** Existing rail curves into town south of this north-side crossing.
+ * N536 stays below the west-room N540 limit, and the complete body fits.
+ * It is a walking route along real terrain, not a new railway crossing. */
+export const a33WestReturnRoute=[[-86,526],[-88,536],[-62,536],[-36,536],[-12,536],[2,536]] as const;
 const clamp=(v:number)=>Math.max(0,Math.min(1,v));
 const smooth=(v:number)=>{const t=clamp(v);return t*t*(3-2*t);};
 export function a33WestTrailDistance(e:number,n:number){
