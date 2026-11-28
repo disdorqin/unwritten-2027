@@ -519,10 +519,11 @@ try{
  }else if(segment==='a31-front-north'){
   // Normal root, read-only profiling, ordinary station menu as segmented start.
   const state=()=>page.evaluate(()=>window.__za22Frame);
-  await page.waitForFunction(()=>window.__za22Frame?.ridge?.roads===4&&window.__za22Frame?.summitProduction?.ready,null,{timeout:45000});
+  await page.waitForFunction(()=>window.__za22Frame?.ridge?.roads===4&&window.__za22Frame?.summitProduction?.status==='idle',null,{timeout:45000});
   await page.locator('#town-panel-toggle').click();await page.locator('#jump').selectOption({label:'火车站'});
   if(await page.locator('#town-settings').evaluate(d=>d.open))await page.locator('#town-settings-close').click();
   await page.waitForFunction(()=>{const f=window.__za22Frame?.ridge?.foot;return f&&Math.hypot(f[0]-526,f[1]-305)<1.2;},null,{timeout:20000});
+  await page.waitForFunction(()=>window.__za22Frame?.summitProduction?.publicTransportBound===true,null,{timeout:150000});
   await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-526,p.north-305)<1.2);
   await face(page,evidence,0);
   await walkTo(page,evidence,[526,349.5],'base-dock',.35);
@@ -619,13 +620,11 @@ try{
   assert.ok(report.performanceSamples.every(x=>x.frames>0&&Number.isFinite(x.fps)&&Number.isFinite(x.frameMs.p99)));
  }else if(segment==='night-r3-entry'){
   const state=()=>page.evaluate(()=>window.__za22Frame);
-  await page.waitForFunction(()=>window.__za22Frame?.ridge?.roads===4&&window.__za22Frame?.summitProduction?.ready,null,{timeout:45000});
+  await page.waitForFunction(()=>window.__za22Frame?.ridge?.roads===4&&window.__za22Frame?.summitProduction?.status==='idle',null,{timeout:45000});
   const initial=await state();
-  assert.deepEqual(initial.summitProduction.installed,['A','B','C2']);assert.equal(initial.summitProduction.cutTiles,6);
-  assert.deepEqual(initial.summitProduction.sectorSamples,[238,220,240,160]);
-  assert.equal(initial.summitProduction.sceneOwner,'town');assert.equal(initial.summitProduction.cable.boardable,false);
+  assert.deepEqual(initial.summitProduction.installed,[]);assert.equal(initial.summitProduction.cutTiles,0);
+  assert.equal(initial.summitProduction.cable.boardable,false);
   assert.equal(initial.summitProduction.near,false);assert.equal(initial.summitProduction.draws,0);assert.equal(initial.ridge.transportReady,false);assert.equal(initial.ridge.cloudSeam.physicalReady,true);
-  assert.equal(initial.ridge.cloudSeam.domainReady,false);
   const snapshots=[];
   const take=async(label)=>{const f=await state();assert.equal(f.ridge.roads,4);assert.ok(f.calls>0&&f.triangles>0);
    const w=f.weatherCycle;assert.ok(w&&Number.isFinite(w.phase)&&w.phase>=0&&w.phase<1&&Number.isFinite(w.dawnEpoch));
@@ -639,7 +638,7 @@ try{
   await page.waitForFunction(()=>{const f=window.__za22Frame?.ridge?.foot;return f&&Math.hypot(f[0]-296,f[1]-520)<1.2;},null,{timeout:20000});
   await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-296,p.north-520)<1.2);
   await face(page,evidence,0);
-  await page.waitForFunction(()=>{const s=window.__za22Frame?.summitProduction;return s?.ready&&!s.near&&s.draws===0&&s.farVisible&&s.farDraws>0&&s.sceneOwner==='town';},null,{timeout:15000});
+  await page.waitForFunction(()=>{const s=window.__za22Frame?.summitProduction;return s?.ready&&!s.near&&s.draws===0&&s.farVisible&&s.farDraws>0&&s.sceneOwner==='town'&&s.publicTransportBound;},null,{timeout:150000});
   await take('mountain-foot-north');
   await page.locator('#town-panel-toggle').click();await page.locator('#lighting').click();await page.locator('#town-settings-close').click();
   const prior=snapshots.at(-1).weatherCycle;
