@@ -19,7 +19,11 @@ test('public route owns the actual four sector mount and exclusive far/near disp
   route.update(far);assert.equal(skyline.visible,true);assert.equal(root.visible,false);
   route.update(station);assert.equal(skyline.visible,true);assert.equal(root.visible,false);
   route.update({...near,height:140});assert.equal(skyline.visible,true);assert.equal(root.visible,false);
+  let snowSamples=0;
+  const weather=(e:number,n:number,h:number)=>{assert.ok(Number.isFinite(e+n+h));assert.ok(n>=666);snowSamples++;return {targetCover:.2,pilingRate:.1};};
+  for(let i=0;i<4;i++)route.updateSnow(.25,weather);assert.equal(snowSamples,0);
   route.update(near);assert.equal(skyline.visible,false);assert.equal(root.visible,true);
+  for(let i=0;i<4;i++)route.updateSnow(.25,weather);assert.ok(snowSamples>0);
   route.setNight(true);route.setNight(false);
   const trail=root.getObjectByName('town-d2-r30-trail-support')!;
   trail.traverse(node=>{
@@ -35,6 +39,7 @@ test('public route owns the actual four sector mount and exclusive far/near disp
   // An affirmative test certificate exercises reparenting, not public access.
   assert.equal(route.enterAt(gate,()=>true),true);
   assert.equal(route.state().sceneOwner,'summit');assert.equal(root.parent,route.scene);assert.equal(route.surfaceAt(gate.east,gate.north),347);
+  assert.equal(route.leaveAt({...gate,height:340},()=>{throw Error('unsupported exit must not reach authority');}),false);
   assert.equal(route.leaveAt(gate,()=>false),false);assert.equal(route.active(),true);
   assert.equal(route.leaveAt(gate,()=>true),true);assert.equal(root.parent,town);assert.equal(route.surfaceAt(gate.east,gate.north),undefined);
   route.update(far);assert.equal(skyline.visible,true);

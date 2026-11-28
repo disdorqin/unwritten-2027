@@ -36,7 +36,9 @@ import { supportFootprintOverlaps } from './town-a-r30-oriented-support';
 import { mainSummitLayout, mainSummitSpec } from './main-summit-block';
 import { buildR30TownSkyline } from './town-d2-r30-skyline';
 import {createA31PublicSummitRoute} from './town-a31-public-summit';
-import { cableWakeEvent, createCableRepairHost } from './town-cable-repair-host';
+import {createNightBProductionController} from './town-night-b-production-controller';
+import {createA31CableInput} from './town-a31-cable-input';
+import type {CableRideFrame} from './town-night-b-summit-ride-host';
 import { mountZa29GuardPost, type Za29GuardPostKind } from './town-za29-guard-scenes';
 import { createZa29GuardDuty, za29GuardDutyForPhase } from './town-za29-guard-duty';
 import { createTownViewBatches } from './town-view-batches';
@@ -588,32 +590,51 @@ const cloudRoute = createA31PublicSummitRoute({town:scene,skyline:summitSkyline,
 window.addEventListener('pagehide',event=>{if(!event.persisted)cloudRoute.dispose();});
 export const preparePublicSummit=()=>cloudRoute.prepare();
 const southEntryHost=createSouthEntryHost();
-// 缆车修缮一线宿主 (B2): the host holds no repair state — actions are
-// derived per frame from the server-authored state in town-presence.
-// Anchors follow the repair spec's three fault points: the rust brake
-// at the base station brake gate, the derailed cable at the mid-line
-// tower between base and mid stations, the counterweights at the mid
-// station tower with the hanging frame beside it. Physical props are
-// D3 form work; the anchors are the host-supplied positions.
-const cableRepairHost1 = createCableRepairHost(1, {
-  brake: { east: 524.6, north: 326.6 },
-  cableWheel: { east: 483, north: 424.5 },
-  weightTower: { east: 436.8, north: 523.2 },
-  weightFrame: { east: 440.6, north: 517.4 },
+// B's one production controller. The current C2/D2 candidate has no
+// certified continuous dock approaches, so neither ready installer is supplied.
+const cableController=createNightBProductionController({
+ presence,upperOrigin:{east:300,north:676},
+ domain:()=>!walking||homeReturn?undefined:cloudRoute.active()?'summit':x<0?undefined:'town',
+ acceptLanding:(line,foot)=>{
+  if(line===2)return cloudRoute.active()&&Math.abs((cloudRoute.surveyedSupport(foot.east,foot.north)??Infinity)-foot.height)<=.08&&!cloudRoute.surveyedBlocked(foot.east,foot.north,foot.height);
+  return !cloudRoute.active()&&Math.abs((dryTownLandingHeight(foot.east,foot.north,foot.height,true)??Infinity)-foot.height)<=.08;
+ }
 });
-const cableStationPoints = [[526, 329], [440, 520], [336, 640]] as const;
-let cableStageSeen: string | undefined;
+let cableFrame:CableRideFrame|undefined;
+function currentCableAction(){
+ if(!walking||homeReturn||houseDoorTravel||seated||boardingGround||sledRide.active()||airHeight!==undefined||townSettings.open||placeCard.open||museumVisit.dialog.open||presence.chatFocused()||document.hidden)return;
+ return cableController.actions({east:x,north:n,height:ground})[0];
+}
+function runCableAction(id:string){
+ const result=cableController.action(id,{east:x,north:n,height:ground});
+ if(!result.accepted)return false;
+ if(id.startsWith('board-')){
+  resetMovement();airHeight=undefined;riseSpeed=0;
+  if(!cloudRoute.active())presence.setFrontCableRideDomain(scene);
+ }
+ if(result.landing){
+  // The read-only acceptLanding callback never moves the player.
+  // Only an accepted B exit commits this exact supported foot.
+  x=result.landing.east;n=result.landing.north;ground=result.landing.height;
+  cableFrame=undefined;airHeight=undefined;riseSpeed=0;stopTravel();
+  storeWalkView(walkCurrent);walkPrevious.copy(walkCurrent);
+ }
+ return true;
+}
+const cableInput=createA31CableInput({current:currentCableAction,invoke:runCableAction,
+ hold:held=>cableController.updateRepairHold(held,{east:x,north:n,height:ground})});
+function cableAction(){
+ const action=currentCableAction();
+ return action?{label:action.label,run(){cableInput.click();}}:undefined;
+}
 let sledWasRiding = false;
 let sledSpeedBeforeStop = 0;
 /** A hard impact on a station structure wakes line 1 (host mapping:
  * sled strikes and snow-wall collapses qualify, hand snowballs never). */
 function reportCableWake(kind: 'sled' | 'snow-wall', east: number, north: number) {
   if(!productionRidge?.transportReady)return;
-  const state = presence.getCableLineState(1);
-  if (!state || state.stage !== 'dormant') return;
-  if (!cableStationPoints.some(([e, n]) => Math.hypot(east - e, north - n) <= 15)) return;
-  const event = cableWakeEvent(kind);
-  if (event) presence.sendCableRepair(1, event);
+  const h=outdoorSurfaceAt(east,north);
+  if(Number.isFinite(h))cableController.reportFrontImpact(kind,{east,north,height:h});
 }
 function connectGuardPost(kind: Za29GuardPostKind, model: ReturnType<typeof mountZa29GuardPost>) {
   const duty = createZa29GuardDuty(kind, model.anchors, announceActivity);
@@ -624,7 +645,7 @@ let mountainGuardPost: TownGuardPost | undefined;
 let craterGuardPost: TownGuardPost | undefined;
 
 function currentGuardDuty() {
-  if (cloudRoute.riding()) return undefined;
+  if (cableController.riding()) return undefined;
   return (cloudRoute.active() ? mountainGuardPost : craterGuardPost)?.duty;
 }
 
@@ -2455,16 +2476,17 @@ const baseSnowControls = createTownSnowControls({
 const snowControls:typeof baseSnowControls={
   ...baseSnowControls,
   keyDown(code,repeat){
+    if(code==='KeyE'&&cableInput.down(code,repeat)){baseSnowControls.cancel();dreamEKey=false;return true;}
     if((code==='KeyE'||code==='KeyQ')&&!repeat&&craterPlayInput.down(code,code==='KeyQ'?-1:1)){baseSnowControls.cancel();dreamEKey=false;return true;}
     if((code==='KeyE'||code==='KeyQ')&&repeat&&craterPlayInput.target())return true;
     return baseSnowControls.keyDown(code,repeat);
   },
-  keyUp(code){return craterPlayInput.up(code)||baseSnowControls.keyUp(code);},
-  pressTouch(pointer){if(craterPlayInput.down('touch-'+pointer)){baseSnowControls.cancel();return true;}return baseSnowControls.pressTouch(pointer);},
-  releaseTouch(pointer){return craterPlayInput.up('touch-'+pointer)||baseSnowControls.releaseTouch(pointer);},
-  cancelTouch(pointer){craterPlayInput.cancelSource('touch-'+pointer);baseSnowControls.cancelTouch(pointer);},
-  interact(){return craterPlayInput.click()||baseSnowControls.interact();},
-  cancel(){craterPlayInput.clear();baseSnowControls.cancel();dreamEKey=false;},
+  keyUp(code){return cableInput.up(code)||craterPlayInput.up(code)||baseSnowControls.keyUp(code);},
+  pressTouch(pointer){if(cableInput.down('touch-'+pointer)||craterPlayInput.down('touch-'+pointer)){baseSnowControls.cancel();return true;}return baseSnowControls.pressTouch(pointer);},
+  releaseTouch(pointer){return cableInput.up('touch-'+pointer)||craterPlayInput.up('touch-'+pointer)||baseSnowControls.releaseTouch(pointer);},
+  cancelTouch(pointer){cableInput.up('touch-'+pointer);craterPlayInput.cancelSource('touch-'+pointer);baseSnowControls.cancelTouch(pointer);},
+  interact(){return cableInput.click()||craterPlayInput.click()||baseSnowControls.interact();},
+  cancel(){cableInput.cancel();craterPlayInput.clear();baseSnowControls.cancel();dreamEKey=false;},
   update(dt){craterPlayInput.update();baseSnowControls.update(dt);},
 };
 const mobileControls = mountTownMobileControls(snowControls, {
@@ -2840,15 +2862,12 @@ let craterTelescopeActive = false;
 let craterTelescopeSpot:{east:number;north:number;height:number;range:number}|undefined;
 function currentAction() {
   if (houseDoorTravel || !walking || placeCard.open || museumVisit.dialog.open) return undefined;
+  if(cableController.riding())return cableAction();
   if (sledRide.active()) return { label: '下橇', run: leaveSled };
   if (airHeight !== undefined) return undefined;
   const guardAction = !homeReturn && currentGuardDuty()?.action({ east: x, north: n, height: ground });
   if (guardAction) return guardAction;
-  if (cloudRoute.active()) {
-    if (cloudRoute.riding()) return undefined;
-    const cable = cloudRoute.action({ east: x, north: n, height: ground });
-    return cable ?? nearestTownActivity(summitSledRacks?.actions ?? [], x, n, ground);
-  }
+  if(cloudRoute.active())return cableAction()??nearestTownActivity(summitSledRacks?.actions??[],x,n,ground);
   if (boardingGround) {
     if (railHorseCharm.visibleTo(camera)) return railHorseCharm.action;
     const stop = railway.currentStop;
@@ -2880,6 +2899,7 @@ function currentAction() {
       ridePitch = 0;
     } };
   }
+  const cable=cableAction();if(cable)return cable;
   const terminalAction=!homeReturn&&productionRidge?.roadTerminalAction(x,n,ground);
   if(terminalAction)return {label:terminalAction.title,run(){announceActivity(terminalAction.message)}};
   const terraceAction=!homeReturn&&productionRidge?.terrace?.action({east:x,north:n,height:ground});
@@ -2887,17 +2907,6 @@ function currentAction() {
   if (!homeReturn && (Math.hypot(x-526,n-329)<18 || Math.hypot(x-526,n-354)<12 || Math.hypot(x-440,n-520)<12 || Math.hypot(x-336,n-640)<12) && !productionRidge?.transportReady) return {
     label:'缆车线路检修中',run(){announceActivity('新山地形已启用，缆车与上山道路正在施工，请沿现有安全地面探索。');}
   };
-  const cable = productionRidge?.transportReady ? cloudRoute.action({ east: x, north: n, height: ground }) : undefined;
-  if (cable) return cable;
-  // 缆车修缮 (B2 host): the host offers the repair action for where the
-  // player stands under the latest broadcast state; running it only
-  // submits the event — the authority's frame is what changes the world.
-  const repairState = homeReturn || !productionRidge?.transportReady ? undefined : presence.getCableLineState(1);
-  if (repairState) {
-    cableRepairHost1.sync(repairState);
-    const repair = cableRepairHost1.actions(repairState, { east: x, north: n })[0];
-    if (repair) return { label: repair.label, run() { presence.sendCableRepair(1, repair.event); } };
-  }
   // ZA-36 crater outside works: public-layer E actions only (salvage ①).
   // Routed through the existing E affordance, not a disconnected preview UI.
   const works = homeReturn ? undefined : westCraterRoad?.craterActions;
@@ -2986,7 +2995,7 @@ function landAtSelectedDestination() {
     announceActivity('星港坪暂未开放跨域交通，请从已认证入口进入。');
     return false;
   }
-  if (cloudRoute.active() || skyCityViewKind === 'summit') {
+  if (cableController.riding() || cloudRoute.active() || skyCityViewKind === 'summit') {
     announceActivity('请沿已认证的后山返程路线离开，不能使用前往菜单跨域。');
     return false;
   }
@@ -3070,7 +3079,7 @@ function lookAllowed() {
   return walking && !houseDoorTravel && !presence.chatFocused() && !museumOverlay() &&
     !townSettings.open && !placeCard.open && !museumVisit.dialog.open;
 }
-function moveAllowed() { return lookAllowed() && !seated && !boardingGround && !cloudRoute.riding() && !plazaPhoto.locked() && !dreamControlsLocked && !dreamCampSeated; }
+function moveAllowed() { return lookAllowed() && !seated && !boardingGround && !cableController.riding() && !plazaPhoto.locked() && !dreamControlsLocked && !dreamCampSeated; }
 function skatesOnIce() {
   return lakeSkating.enabled() && airHeight === undefined && isLakeSkateIce(x, n) &&
     Math.abs(ground - grid.heightAt(x, n)) <= .16;
@@ -3848,14 +3857,34 @@ function updateSledPresentation(visuals: SledRackVisuals, dt: number) {
     : sledRide.recovering() ? '翻橇了，缓一缓' : '';
 }
 
+/** Line one stays in the real town scene. B owns cabin position and presence;
+ * the regular walking frame must not overwrite either while aboard. */
+function renderFrontCableFrame(frame: CableRideFrame,dt:number,now:number){
+ const f=frame.feet;
+ const ceremony=ceremonyStateAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes);
+ const sky=updateNightSky(dimLevelAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes));applyNightSide(sky);
+ const weatherState=presence.getTownOutdoorWeather();
+ const local=weatherState&&ceremony.phase==='ordinary'?sampleSouthRegionalWeather(weatherState,f.east,f.north,f.height,false):undefined;
+ const weather=local?.weather??(ceremony.phase==='ordinary'?townSnowWeatherAt(ceremony.now,'light'):townSnowWeatherForFrame(ceremony));
+ faceFrom(f.east,f.north,f.height+eye,yaw,pitch);
+ element('position').textContent='缆车一线 · 前山'+(frame.synchronized?'':' · 等待同步');
+ presence.update(dt);
+ townWeatherVisual.update(weather,local?.weather,local?.exposure??1,dt,now);
+ snowfall.update(camera,dt,false,true);
+ applySouthWeatherPresentation(scene,weatherFog,weather,sky,particleDensityScale(),local?.weather);
+ regionalAudio.sync(local?.weather,true,true,ceremony.phase==='ordinary',now);
+ showRegionalWeather(southWeatherStatus(sky,weatherState,local?.weather,ceremony.phase!=='ordinary',true,true));
+ touchWalk.setAllowed(false);crosshair.hidden=!lookAllowed();touchJump.disabled=true;museumMapButton.hidden=true;snowballControls.hidden=true;
+ refreshPlayerControls();renderer.render(scene,camera);
+}
 function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame) {
-  const cabin = cloudRoute.ridePoint();
+  const cabin = cableFrame?.feet;
   const weatherState=presence.getTownOutdoorWeather();
   const ceremonyState=ceremonyStateAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes);
   if (cabin) {
     cloudRoute.updateView(cabin);
     faceFrom(cabin.east, cabin.north, cabin.height + eye, yaw, pitch);
-    element('position').textContent = '缆车一线 · 前山';
+    element('position').textContent = '缆车二线 · 主峰';
   } else {
     summitSledRacks ??= createSledRacks('summit');
     const { forward, right, sprint } = walkingAxes();
@@ -3883,8 +3912,10 @@ function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame
     element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · ${place}${sledRide.active() ? ' · 雪橇' : ''}`;
     updateSledPresentation(summitSledRacks.visuals, Math.min(.25, frameSeconds));
   }
-  presence.setActivityPose(effectiveTownAvatarPose(false, false, false, false, 0, sledRide.active(), sledRide.drifting()));
-  presence.sample(!cabin && walking, x, n, airHeight ?? ground, playerBodyYaw());
+  if(!cabin){
+    presence.setActivityPose(effectiveTownAvatarPose(false, false, false, false, 0, sledRide.active(), sledRide.drifting()));
+    presence.sample(walking, x, n, airHeight ?? ground, playerBodyYaw());
+  }
   presence.update(Math.min(.25, frameSeconds));
   skyCityHost.update({ kind: skyCityViewKind }, Math.min(.25, frameSeconds));
   const enabled = moveAllowed();
@@ -3899,10 +3930,6 @@ function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame
   const weather=local?.weather??(ceremonyState.phase==='ordinary'?townSnowWeatherAt(ceremonyState.now,'light'):townSnowWeatherForFrame(ceremonyState));
   summitWeatherVisual.update(weather,local?.weather,local?.exposure??1,Math.min(.25,frameSeconds),performance.now());
   const summitDt=Math.min(.25,frameSeconds);
-  // Visual accumulation uses fixed, surveyed asset positions. One update
-  // per second; never recolor the whole massif from the player's camera.
-  southEntryHost.updateSnow(summitDt,(e,n,h)=>weatherState&&ceremonyState.phase==='ordinary'
-   ?sampleSouthRegionalWeather(weatherState,e,n,h,true).weather:weather);
   const roof=southEntryHost.sheltered(x,n,ground);
   summitSnowfall.update(camera,summitDt,!cabin&&walking,roof);
   // Reuse the single existing player frost tracker in the early-return
@@ -3942,7 +3969,13 @@ renderer.setAnimationLoop(now => {
   // The root entry awaits the real D2 staging behind the existing loading
   // screen. Do not render or accept movement into a half-built world.
   if(document.body.classList.contains('town-entry-pending'))return;
-  cloudRoute.update({east:x,north:n,height:ground});
+  cableInput.tick();cableFrame=cableController.tick(playerBodyYaw());
+  cloudRoute.update(cableFrame?.feet??{east:x,north:n,height:ground});
+  const summitWeatherState=presence.getTownOutdoorWeather();
+  const summitCeremony=ceremonyStateAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes);
+  cloudRoute.updateSnow(dt,(e,n,h)=>summitWeatherState&&summitCeremony.phase==='ordinary'
+    ?sampleSouthRegionalWeather(summitWeatherState,e,n,h,true).weather
+    :summitCeremony.phase==='ordinary'?townSnowWeatherAt(summitCeremony.now,'light'):townSnowWeatherForFrame(summitCeremony));
   showSummitStatus(now);
   // The mountain branch returns before the ordinary town weather block.
   // Apply the same authoritative cycle here, before its scene is rendered.
@@ -3954,6 +3987,7 @@ renderer.setAnimationLoop(now => {
     renderCloudRoute(frameSeconds,summitSkyFrame);
     return;
   }
+  if(cableFrame?.line===1){renderFrontCableFrame(cableFrame,dt,now);return;}
   practiceTarget.updateRound();
   const startEast = x, startNorth = n;
   if (ceremonyLook) {
@@ -4169,19 +4203,6 @@ renderer.setAnimationLoop(now => {
     walking && !museumOverlay(),
   );
   presence.update(dt);
-  const cableState1 = presence.getCableLineState(1);
-  if (cableState1&&productionRidge?.transportReady) {
-    cableRepairHost1.sync(cableState1);
-    if (cableStageSeen !== cableState1.stage) {
-      if (cableStageSeen !== undefined && cableState1.stage === 'one-station') {
-        announceActivity('缆车被震醒了，只先动一站');
-      }
-      if (cableStageSeen !== undefined && cableState1.stage === 'full-line') {
-        announceActivity('缆车修通了，全线通车');
-      }
-      cableStageSeen = cableState1.stage;
-    }
-  }
   icePalaceCrown.render(icePalaceSelfCrowned ? 'self' : presence.remoteCrown() ?? null, camera);
   bellGame.update(dt);
   // 3.0 D2: sled presentation, field track rendering, grand prix timing/board.

@@ -2,6 +2,7 @@ import {AmbientLight,Color,DirectionalLight,Fog,Mesh,Scene,type Group} from 'thr
 import type {createTownD2R30ProductionHost} from './town-d2-r30-production-host';
 import {retireA31LegacySectorOverlays} from './town-a31-summit-visual-ownership';
 import {summitAssemblyAnchor} from './main-summit-assembly';
+import type {SouthSnowVisualSample} from './town-night-a-summit-snow-appearance';
 
 type Foot=Readonly<{east:number;north:number;height:number}>;
 type Production=ReturnType<typeof createTownD2R30ProductionHost>;
@@ -25,7 +26,7 @@ export function createA31PublicSummitRoute(input:Input){
  let audit:ReturnType<Production['sectorLiveCheck']>|undefined;
  let visual:ReturnType<typeof retireA31LegacySectorOverlays>|undefined;
  let assembly:Readonly<{group:Group;r30:Production['assembly'];summitSnowAt(e:number,n:number):number|undefined}>|undefined;
- let near=false,elapsedMs=0,cutTiles=0,draws=0,duplicates:readonly string[]=[];
+ let near=false,elapsedMs=0,cutTiles=0,draws=0,snowPending=0,duplicates:readonly string[]=[];
  const yieldFrame=input.yieldFrame??(()=>new Promise<void>(resolve=>{
   // The ordinary entry screen owns the expensive initial mesh build.
   // Yield between sectors so that the loading UI can repaint, without
@@ -90,6 +91,13 @@ export function createA31PublicSummitRoute(input:Input){
    position.north>=(near?631:635)&&position.north<666&&position.height>=(near?345:346);
   production.group.visible=near;input.skyline.visible=!near&&!active;
   if(near)production.update(...local(position.east,position.north),input.now());
+  else snowPending=0;
+ }
+ function updateSnow(dt:number,sample:SouthSnowVisualSample){
+  if(!production||!near||!Number.isFinite(dt)||dt<=0)return;
+  snowPending+=Math.min(dt,.25);if(snowPending<1)return;
+  const seconds=snowPending;snowPending=0;
+  production.updateSnow(seconds,(e:number,n:number,h:number)=>sample(e+summitAssemblyAnchor.east,n+summitAssemblyAnchor.north,h));
  }
  function surveyedSupport(e:number,n:number,r=.27){
   if(!production||!Number.isFinite(e)||!Number.isFinite(n)||!Number.isFinite(r)||r<0)return;
@@ -116,7 +124,9 @@ export function createA31PublicSummitRoute(input:Input){
   active=true;scene.add(production.group);production.group.visible=true;input.skyline.visible=false;return true;
  }
  function leaveAt(p:Foot,accept:()=>boolean){
-  if(!active||!production||!finite(p)||!gate(p)||!accept())return false;
+  if(!active||!production||!finite(p)||!gate(p))return false;
+  const h=surveyedSupport(p.east,p.north);
+  if(h===undefined||Math.abs(h-p.height)>.08||surveyedBlocked(p.east,p.north,h)||!accept())return false;
   active=false;input.town.add(production.group);near=false;update(p);return true;
  }
  function surfaceAt(e:number,n:number,r=.27){return active?surveyedSupport(e,n,r):undefined;}
@@ -140,7 +150,7 @@ export function createA31PublicSummitRoute(input:Input){
   riding:()=>false,ridePoint:():Foot|undefined=>undefined,
   action(_p:Foot):Action|undefined{return;},surfaceAt,walkingSurfaceAt:surfaceAt,acceptsStep,
   blocked(e:number,n:number,h:number,r=.27,b=1.8){return active&&surveyedBlocked(e,n,h,r,b);},
-  surveyedSupport,surveyedBlocked,enterAt,leaveAt,setNight,state,
+  surveyedSupport,surveyedBlocked,enterAt,leaveAt,setNight,state,updateSnow,
   assembly:()=>active?assembly:undefined,
   dispose(){if(status==='disposed')return;status='disposed';active=false;near=false;production?.dispose();production=undefined;assembly=undefined;input.skyline.visible=true;}
  };
