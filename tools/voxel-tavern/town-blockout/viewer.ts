@@ -3966,7 +3966,7 @@ function updateSledPresentation(visuals: SledRackVisuals, dt: number) {
 
 /** Line one stays in the real town scene. B owns cabin position and presence;
  * the regular walking frame must not overwrite either while aboard. */
-function renderFrontCableFrame(frame: CableRideFrame,dt:number,now:number){
+function renderFrontCableFrame(frame: CableRideFrame,dt:number,now:number,frameSeconds:number){
  const f=frame.feet;
  const ceremony=ceremonyStateAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes);
  const sky=updateNightSky(dimLevelAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes));applyNightSide(sky);
@@ -3974,6 +3974,13 @@ function renderFrontCableFrame(frame: CableRideFrame,dt:number,now:number){
  const local=weatherState&&ceremony.phase==='ordinary'?sampleSouthRegionalWeather(weatherState,f.east,f.north,f.height,false):undefined;
  const weather=local?.weather??(ceremony.phase==='ordinary'?townSnowWeatherAt(ceremony.now,'light'):townSnowWeatherForFrame(ceremony));
  faceFrom(f.east,f.north,f.height+eye,yaw,pitch);
+ // Riding bypasses the ordinary walking renderer; keep actual terrain LOD
+ // ahead of the moving cabin rather than freezing it at the boarding dock.
+ const detailStart=profileTown?performance.now():0;
+ snowCover.update(dt,nightMode);
+ prepareTerrain(f.east,f.north,false,false,visualSnowCover,camera,true);
+ productionRidge?.updateView(f.east,f.north,!previewOptions.has('mRidgeDistantOff'));
+ const detailMs=profileTown?performance.now()-detailStart:0;
  element('position').textContent='缆车一线 · 前山'+(frame.synchronized?'':' · 等待同步');
  presence.update(dt);
  townWeatherVisual.update(weather,local?.weather,local?.exposure??1,dt,now);
@@ -3983,6 +3990,7 @@ function renderFrontCableFrame(frame: CableRideFrame,dt:number,now:number){
  showRegionalWeather(southWeatherStatus(sky,weatherState,local?.weather,ceremony.phase!=='ordinary',true,true));
  touchWalk.setAllowed(false);crosshair.hidden=!lookAllowed();touchJump.disabled=true;museumMapButton.hidden=true;snowballControls.hidden=true;
  refreshPlayerControls();renderer.render(scene,camera);
+ if(profileTown)renderer.domElement.dispatchEvent(new CustomEvent('town-frame-profile',{detail:{frameMs:frameSeconds*1000,detailMs,calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,cameraY:camera.position.y,weatherCycle:southWeatherProfile(sky,weatherState,weather,local?.weather),fogNear:weatherFog.near,fogFar:weatherFog.far,points:renderer.info.render.points,summitProduction:cloudRoute.state(),cableRide:frame,actualFoot:f}}));
 }
 function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame) {
   const cabin = cableFrame?.feet;
@@ -4068,6 +4076,7 @@ function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame
       triangles: renderer.info.render.triangles, cameraY: camera.position.y,
       weatherCycle:southWeatherProfile(skyFrame,weatherState,weather,local?.weather),
       fogNear:fog.near,fogFar:fog.far,points:renderer.info.render.points,mountainSheltered:roof,mountainSnowDepth:coldDepth,
+      summitProduction:cloudRoute.state(),cableRide:cableFrame,actualFoot:cableFrame?.feet??{east:x,north:n,height:airHeight??ground},
     } }));
   }
 }
@@ -4101,7 +4110,7 @@ renderer.setAnimationLoop(now => {
     renderCloudRoute(frameSeconds,summitSkyFrame);
     return;
   }
-  if(cableFrame?.line===1){renderFrontCableFrame(cableFrame,dt,now);return;}
+  if(cableFrame?.line===1){renderFrontCableFrame(cableFrame,dt,now,frameSeconds);return;}
   practiceTarget.updateRound();
   const startEast = x, startNorth = n;
   if (ceremonyLook) {
