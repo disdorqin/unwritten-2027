@@ -651,6 +651,39 @@ test('D32-P1 connector survey turns a gap into a design number for the owner', (
   }
 });
 
+test('D32 performance: the host measures its own mount and per-region cost', async () => {
+  const { profileTownD2Host } = await import('../tools/voxel-tavern/town-blockout/town-d2-r30-host-profile');
+  const profile = profileTownD2Host();
+  assert.equal(profile.version, 'd2-host-profile-1.0');
+  // Every stage of the real mount is timed, and the parts add up.
+  assert.ok(profile.stages.length >= 4, `stages ${profile.stages.length}`);
+  for (const stage of profile.stages) {
+    assert.equal(Number.isFinite(stage.ms), true, `${stage.stage} is not finite`);
+    assert.ok(stage.ms >= 0);
+  }
+  const sum = profile.stages.reduce((total, stage) => total + stage.ms, 0);
+  assert.ok(Math.abs(sum - profile.mountMs) < 1e-6);
+  assert.deepEqual(profile.stages.map(stage => stage.stage),
+    ['host-assembly', 'sector-A', 'sector-B', 'sector-C2']);
+  // Real tiles were excavated, so the numbers describe the production mount.
+  assert.ok(profile.tiles.count >= 64);
+  assert.ok(profile.tiles.cut > 0, 'no sector cut a tile');
+  // Per-region cost only counts what is submitted: sleeping bodies are not free
+  // draws in the report, and the four viewpoints differ.
+  assert.equal(profile.regions.length, 4);
+  for (const region of profile.regions) {
+    assert.ok(region.draws > 0, `${region.focus} reports no draws`);
+    assert.ok(region.triangles > 0);
+    assert.ok(region.awake + region.asleep <= 12);
+  }
+  const east = profile.regions.find(region => region.focus === 'east')!;
+  const summit = profile.regions.find(region => region.focus === 'summit')!;
+  assert.ok(east.draws < summit.draws,
+    `sleeping must reduce the submitted cost: east ${east.draws} vs summit ${summit.draws}`);
+  assert.ok(profile.draws > 0, 'the whole host must report a mounted cost');
+  assert.ok(profile.liveCheckMs > 0 && profile.terrainIntegrityMs > 0);
+});
+
 test('D31-1 the host publishes the four sector bounds it enforces', () => {
   assert.deepEqual({ ...townD2SectorBounds.A }, { west: -1100, east: 1100, south: -10, north: 480 });
   assert.deepEqual({ ...townD2SectorBounds.B }, { west: -1100, east: -300, south: 480, north: 1790 });

@@ -571,6 +571,24 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
       sleeper.object.visible = visible;
       if (visible) awake++;
     }
+    // Inside the assembly the coarse massif and its skirt stay resident (that
+    // is the silhouette and the ground); the detail packages — summit
+    // facilities, night lamps, north-wall climb, cloud terrace, ropeway,
+    // foundations — sleep on the same radius. They are still mounted and still
+    // solid, they just stop being submitted.
+    for (const child of assembly.group.children) {
+      const name = child.name ?? '';
+      const resident = name.includes('massif') || name.includes('chunk') || name.includes('lod') ||
+        name.includes('-skirt') || name.includes('floor');
+      if (resident) continue;
+      const box = new Box3().setFromObject(child);
+      if (box.isEmpty()) continue;
+      const centreEast = (box.min.x + box.max.x) / 2;
+      const centreNorth = -(box.min.z + box.max.z) / 2;
+      const visible = Math.hypot(centreEast - east, centreNorth - north) <= radius;
+      (child as unknown as { visible: boolean }).visible = visible;
+      if (visible) awake++;
+    }
     return awake;
   }
 
