@@ -1,4 +1,4 @@
-import {Group,type Object3D} from 'three';
+import {Box3,Group,Vector3,type Object3D} from 'three';
 import {createTownD2R30Ropeway} from './town-d2-r30-ropeway';
 import {createTownD2R30CableTowers} from './town-d2-r30-cable-towers';
 import {mountMainSummitCableWorkshop,mainSummitR30CableWorkshopAnchor} from './main-summit-cable-workshop';
@@ -30,8 +30,9 @@ export function mountNightBPublicRearCable(input:Input){
  if(owner.getObjectByName(group.name))throw Error('Rear production cable already mounted');
  const existing=owner.getObjectByName('town-d2-r30-ropeway')||owner.getObjectByName('town-d2-r30-cable-towers')||owner.getObjectByName('main-summit-cable-machine-workshop')||owner.getObjectByName('main-summit-machine-room');
  if(existing)return {ready:false as const,reason:'existing-legacy-cable-or-machine-room:'+existing.name};
- const scan=createNightBMountedClearance(owner,input.groundMeshes);
  const ropeway=createTownD2R30Ropeway({heightAt:input.groundAt,controlPointSupports:false});
+ const corridor=ropeway.cable.ropes.flatMap(r=>r.points.slice(1).map((p,i)=>{const a=r.points[i]!;return new Box3().setFromPoints([new Vector3(a.east,a.height,-a.north),new Vector3(p.east,p.height,-p.north)]).expandByScalar(5);}));
+ const scan=createNightBMountedClearance(owner,input.groundMeshes,corridor);
  let towers:ReturnType<typeof createTownD2R30CableTowers>|undefined,workshop:ReturnType<typeof mountMainSummitCableWorkshop>|undefined,op:ReturnType<typeof installNightBUpperOperation>|undefined;
  let disposed=false,accepted=false;
  function dispose(){if(disposed)return;disposed=true;op?.dispose();workshop?.dispose();towers?.dispose();ropeway.dispose();group.removeFromParent();group.clear();}
