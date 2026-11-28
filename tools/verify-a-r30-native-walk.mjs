@@ -456,6 +456,23 @@ try{
    assert.equal(await page.locator('#town-chat-unread').evaluate(el=>el.hidden),true);
    await activate(page.locator('#town-settings-close'));await menu.waitFor({state:'hidden'});
   }finally{peer.terminate();}
+  // A raw protocol probe, not a walked avatar or transport certificate.
+  // The local production launcher explicitly keeps summit release off.
+  const summitUrl=new URL('/presence-summit',origin);summitUrl.protocol='ws:';
+  const probe=new WebSocket(summitUrl);const frames=[];
+  try{
+   await new Promise((resolve,reject)=>{
+    const timer=setTimeout(()=>reject(Error('Summit protocol join timeout')),8000);
+    probe.once('error',e=>{clearTimeout(timer);reject(e);});
+    probe.once('open',()=>probe.send(JSON.stringify({type:'join',name:'后山协议验收',presenceFrame:'summit-v1'})));
+    probe.on('message',(raw,binary)=>{if(binary)return;const f=JSON.parse(raw.toString());frames.push(f);if(frames.some(m=>m.type==='join'&&m.self===true)&&frames.some(m=>m.type==='cable-line'&&m.line===2)){clearTimeout(timer);resolve();}});
+   });
+   const hello=frames.find(m=>m.type==='join'&&m.self===true);assert.equal(hello.presenceFrame,'summit-v1');
+   const line=frames.find(m=>m.type==='cable-line'&&m.line===2);assert.equal(line.stage,'dormant');
+   probe.send(JSON.stringify({type:'event',kind:'cable-release-summit'}));
+   await page.waitForTimeout(300);assert.ok(frames.filter(m=>m.type==='cable-line'&&m.line===2).every(m=>m.stage==='dormant'));
+   report.summitProtocol={frame:hello.presenceFrame,closedStage:line.stage,releaseAttemptRejected:true,scope:'raw separate socket, no player movement or transfer'};
+  }finally{probe.terminate();}
   if(!menuTouch){
    await page.keyboard.press('Enter');
    await page.waitForFunction(()=>document.querySelector('#town-settings')?.open&&document.activeElement?.id==='town-chat-text');
