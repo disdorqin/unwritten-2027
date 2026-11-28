@@ -8,7 +8,7 @@ const terrainChunkCells = 64 / gridStep;
 const aerialTileCells = 4 / gridStep;
 const clipTolerance = .0001;
 type TerrainSpan = { start: number; count: number; bounds: Box3 };
-type WalkingChunk={mesh:Mesh;first:number;count:number;spans:TerrainSpan[];bounds:Box3;index?:BufferAttribute};
+type WalkingChunk={mesh:Mesh;first:number;count:number;spans:TerrainSpan[];bounds:Box3;index?:BufferAttribute;selection?:TerrainSpan[]};
 const palette = ['#d8e1ef', '#9a887c', '#bcac97', '#c7b795', '#78b8d9'].map(value => new Color(value));
 
 export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof createTerrainGrid>, ridgeOwnsCell?: (east:number,north:number)=>boolean) {
@@ -292,7 +292,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
     eye.setFromMatrixPosition(camera.matrixWorld);
     rotation.setFromRotationMatrix(camera.matrixWorld);
     const now=performance.now();
-    if(walkingActive&&walkingProjection.equals(camera.projectionMatrix)&&walkingEye.distanceToSquared(eye)<=9&&walkingRotation.angleTo(rotation)<=.065&&
+    if(walkingActive&&walkingProjection.equals(camera.projectionMatrix)&&walkingEye.distanceToSquared(eye)<=9&&walkingRotation.angleTo(rotation)<=.13&&
        (walkingVertices===nextVertex||now-walkingLastUpdate<250))return;
     walkingActive=true;walkingEye.copy(eye);walkingRotation.copy(rotation);walkingProjection.copy(camera.projectionMatrix);
     walkingVertices=nextVertex;walkingLastUpdate=now;
@@ -306,7 +306,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
       const {min,max}=c.bounds;
       const distance=Math.hypot(Math.max(Math.abs(min.x-eye.x),Math.abs(max.x-eye.x)),
         Math.max(Math.abs(min.y-eye.y),Math.abs(max.y-eye.y)),Math.max(Math.abs(min.z-eye.z),Math.abs(max.z-eye.z)));
-      const pad=4+.11*distance;
+      const pad=4+.18*distance;
       let outside=false,inside=true;
       for(const p of frustum.planes){
         const n=p.normal;
@@ -326,7 +326,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
           Math.max(Math.abs(min.y-eye.y),Math.abs(max.y-eye.y)),Math.max(Math.abs(min.z-eye.z),Math.abs(max.z-eye.z)));
         // Plane normal rotation <= 2 sin(theta/2). Include the 3m
         // cache translation and additional head/camera motion margin.
-        const pad=4+.11*distance;
+        const pad=4+.18*distance;
         let visible=true;
         for(const p of frustum.planes){
           const n=p.normal;
@@ -340,11 +340,18 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
         continue;
       }
       c.index??=new BufferAttribute(new Uint32Array(c.count),1).setUsage(DynamicDrawUsage);
-      const indices=c.index.array;let offset=0;
-      for(const tile of selected)for(let v=tile.start-c.first;v<tile.start-c.first+tile.count;v++)indices[offset++]=v;
+      // A camera rotation can keep exactly the same conservative selection.
+      // Reuse the resident GPU index buffer instead of writing/uploading it
+      // again. The cached selection also survives a full-chunk draw.
+      const changed=c.selection?.length!==selected.length||selected.some((tile,i)=>tile!==c.selection?.[i]);
+      if(changed){
+        const indices=c.index.array;let offset=0;
+        for(const tile of selected)for(let v=tile.start-c.first;v<tile.start-c.first+tile.count;v++)indices[offset++]=v;
+        c.selection=selected;
+        c.index.clearUpdateRanges();c.index.addUpdateRange(0,count);c.index.needsUpdate=true;
+      }
       if(c.mesh.geometry.index!==c.index)c.mesh.geometry.setIndex(c.index);
       c.mesh.geometry.setDrawRange(0,count);
-      c.index.clearUpdateRanges();c.index.addUpdateRange(0,count);c.index.needsUpdate=true;
     }
   }
 

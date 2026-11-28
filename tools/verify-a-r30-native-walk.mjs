@@ -11,7 +11,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : segment==='a31-front-north'?'/?profile&mRoadSurvey':'/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','west-mountain','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review','night-r3-entry','night-r3-bare-weather','night-r3-bare-west','a31-bare-crater-return','a31-front-north','a32-stream'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','west-mountain','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review','night-r3-entry','night-r3-bare-weather','night-r3-bare-west','a31-bare-crater-return','a31-front-north','a32-stream','r31-turn-audit'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -574,6 +574,32 @@ try{
   await picture(page,evidence,'front-north-town-room-return');
   report.entry={scope:'public station UI segmented arrival, native road walking across town/mountain room boundary and back; raw second peer, no summit release or public transport',targets:targets.length,highWire,secondRawPeer:seen};
   report.traversal={top,returned};
+ }else if(segment==='r31-turn-audit'){
+  const stats=values=>{const s=values.filter(Number.isFinite).sort((a,b)=>a-b);return {mean:s.reduce((a,b)=>a+b,0)/s.length,p95:s[Math.floor((s.length-1)*.95)],p99:s[Math.floor((s.length-1)*.99)],max:s.at(-1)};};
+  const results=[];
+  const sweep=async(p,ev,mode,site)=>{
+   await face(p,ev,0);await p.waitForTimeout(800);
+   await p.evaluate(()=>{window.__turnFrames=[];window.__turnListener=e=>{const f=e.detail;window.__turnFrames.push({frame:f.frameMs,detail:f.detailMs,calls:f.calls,triangles:f.triangles,heading:f.ridge?.heading});};document.addEventListener('town-frame-profile',window.__turnListener,true);});
+   for(let k=1;k<=8;k++)await face(p,ev,k*Math.PI/4);
+   const rows=await p.evaluate(()=>{document.removeEventListener('town-frame-profile',window.__turnListener,true);return window.__turnFrames;});
+   const turning=rows.filter((f,i)=>i>0&&Math.abs(Math.atan2(Math.sin(f.heading-rows[i-1].heading),Math.cos(f.heading-rows[i-1].heading)))>.005);
+   const summarize=r=>({n:r.length,frameMs:stats(r.map(x=>x.frame)),detailMs:stats(r.map(x=>x.detail)),calls:stats(r.map(x=>x.calls)),triangles:stats(r.map(x=>x.triangles))});
+   const result={mode,site,all:summarize(rows),turning:summarize(turning)};
+   assert.ok(turning.length>5);results.push(result);console.log('TURN-AUDIT '+JSON.stringify(result));
+  };
+  const runMode=async(p,ev,mode)=>{
+   await sweep(p,ev,mode,'plaza');
+   await p.locator('#town-panel-toggle').click();await p.locator('#jump').selectOption({label:'陨石坑口'});
+   if(await p.locator('#town-settings').evaluate(d=>d.open))await p.locator('#town-settings-close').click();
+   await waitForWire(p,ev,q=>q?.area==='town'&&Math.hypot(q.east-2,q.north-159)<1.2,20000);
+   await sweep(p,ev,mode,'crater-mouth');
+  };
+  await runMode(page,evidence,'cached-cull');
+  await page.context().close();
+  url.searchParams.set('mTerrainCullOff','');
+  const second=await openTown('terrain-cull-off');await runMode(second.page,second.evidence,'chunk-only');
+  report.turnAudit={scope:'native 360deg mouse sweep in normal public renderer; current cached cull vs diagnostic cull-off, fixed positions, not GPU timer',results};
+  const pose=await readPose(second.page);report.traversal={top:pose,returned:pose};
  }else if(segment==='a32-stream'){
   assert.ok(!bare);
   const state=()=>page.evaluate(()=>window.__za22Frame);

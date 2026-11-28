@@ -56,6 +56,13 @@ test('walking draws upload only their local slices of the unchanged aerial terra
   prepare(543.6,412,false,false,.55,camera,true);assertCoverage();
   camera.position.x-=1;camera.rotateY(.035);prepare(542.6,412,false,false,.55,camera,true);assertCoverage();
   camera.rotateY(.9);prepare(542.6,412,false,false,.55,camera,true);assertCoverage();
+  // Exercise the wider conservative angular cache, including mixed pitch/yaw
+  // and near-edge translation, without dropping a potentially visible triangle.
+  for(const delta of [.11,.09,-.12,.3,-.11]){
+    camera.rotateY(delta);camera.rotateX(.018);
+    camera.position.x-=.4;camera.position.z+=.2;
+    prepare(camera.position.x,-camera.position.z,false,false,.55,camera,true);assertCoverage();
+  }
   prepare(542.6,412,false,false);assert.ok(detail.children.every(o=>o.visible&&!(o as Mesh<BufferGeometry>).geometry.index));
   camera.position.set(543.6,11.8934618+1.65,-412);camera.lookAt(camera.position.x-1,camera.position.y,camera.position.z);
   prepare(543.6, 412, true, false, .55, camera);
