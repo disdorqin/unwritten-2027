@@ -5,6 +5,10 @@ import { createTownD2R30Assembly, type TownD2R30Assembly } from './town-d2-r30-a
 import type { TownD2R30Collision } from './town-d2-r30-collision';
 import { sampleTownD2R30Height } from './town-d2-r30-domain';
 import { townD2SectorAt, townD2SectorContract } from './town-d2-r30-sector-audit';
+import { createTownD2R30CableTowers } from './town-d2-r30-cable-towers';
+import { createTownD2R30Ropeway } from './town-d2-r30-ropeway';
+import { mainSummitR30CableWorkshopAnchor, mountMainSummitCableWorkshop } from './main-summit-cable-workshop';
+import { installNightBUpperOperation } from './town-night-b-summit-upper-install';
 
 /**
  * D2's real production host for the 3.1 four-sector summit (D31-1).
@@ -66,26 +70,36 @@ export type TownD2SectorPackage = Readonly<{
 
 export type TownD2SectorInstaller = (port: TownD2SectorHostPort) => TownD2SectorPackage;
 
-/** The one cable line authority. B owns the towers, the rope, the stations,
- * the repair order and the ride controller; D2 only carries the slot. A line
- * may only be boarded when its installer declares itself certified — an
- * uncertified candidate is refused and the line stays closed. */
-export type TownD2CablePackage = Readonly<{
-  /** True only when the owner has certified station support, deck clearance
-   * and the external obstruction sweep for this exact build. */
-  certified: boolean;
-  group: Group;
-  /** Ride boarding is gated on this; a closed line must leave it false. */
-  boardable: boolean;
-  stations?: readonly unknown[];
-  supportAt?(east: number, north: number, radius?: number): number | undefined;
-  blocked?(east: number, north: number, height: number, radius?: number, bodyHeight?: number): boolean;
-  update?(nowMs: number): void;
-  setNight?(night: boolean): void;
+/** A foot in the summit-local frame (east, north, height). */
+export type CableFoot = Readonly<{ east: number; north: number; height: number }>;
+
+/** What A hands in: its presence authority for line 2 (see
+ * town-night-b-production-controller / nightBProductionAuthority). D2 never
+ * invents a clock, a repair state or a daylight source. */
+export type TownD2CableAuthority = Readonly<{
+  state: () => unknown;
+  now: () => number | undefined;
+  daylight: () => boolean | undefined;
+  firstRun?: unknown;
+}>;
+
+/** B's actual upper operation, consumed whole — not a registration record. */
+export type TownD2CableOperation = Readonly<{
+  ready: boolean;
+  reason?: string;
+  service?: { physical?: boolean };
+  ropeway?: { group: Group };
+  workshop?: { group: Group };
+  update?(): void;
   dispose(): void;
 }>;
 
-export type TownD2CableInstaller = (port: TownD2SectorHostPort) => TownD2CablePackage;
+/** The bodies D2 mounts for the line and must release again. */
+type TownD2CableRig = Readonly<{
+  ropeway: ReturnType<typeof createTownD2R30Ropeway>;
+  towers: ReturnType<typeof createTownD2R30CableTowers>;
+  workshop: ReturnType<typeof mountMainSummitCableWorkshop>;
+}>;
 
 export type TownD2SectorSettlement = Readonly<{
   sector: TownD2SectorKey;
@@ -216,6 +230,16 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
       if (deck === undefined) continue;
       height = height === undefined ? deck : Math.max(height, deck);
     }
+    // The line is part of the walking surface: station decks you board from and
+    // the workshop floor you repair on are real support, not decoration.
+    if (cableRig) {
+      for (const piece of [cableRig.ropeway, cableRig.workshop] as const) {
+        const deck = (piece as { supportAt?(east: number, north: number, radius?: number): number | undefined })
+          .supportAt?.(east, north, radius);
+        if (deck === undefined) continue;
+        height = height === undefined ? deck : Math.max(height, deck);
+      }
+    }
     return height;
   }
 
@@ -223,6 +247,16 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     if (disposed) return true;
     for (const pkg of installed.values()) {
       if (pkg.blocked?.(east, north, height, radius, bodyHeight)) return true;
+    }
+    // Real bodies on the line: tower masts, station walls, cabin docks and the
+    // workshop walls all block a walking player, not just the cable audit.
+    if (cableRig) {
+      for (const piece of [cableRig.towers, cableRig.ropeway, cableRig.workshop] as const) {
+        const hit = (piece as {
+          blocked?(east: number, north: number, feet: number, radius: number, body: number): boolean;
+        }).blocked?.(east, north, height, radius, bodyHeight);
+        if (hit) return true;
+      }
     }
     return false;
   }
@@ -362,48 +396,151 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     return Object.freeze({ sector, node, cutTilesRestored: residue === 0, residue });
   }
 
-  let cable: TownD2CablePackage | undefined;
+  // ---- the one real cable line (D32-1) -------------------------------------
+  // D2 owns the slot and the host lifecycle; B owns the operation. The line is
+  // built from B's actual upper installer, claims the ropeway clock so nothing
+  // else may move the cabins, and stays closed until A hands in the presence
+  // authority and the operation certifies itself.
+  let cable: TownD2CableOperation | undefined;
+  let cableRig: TownD2CableRig | undefined;
   let cableRefusal: string | undefined;
 
-  /** Install the single cable line. An uncertified package is refused and the
-   * line stays closed: the host never marks an unverified ride as boardable. */
-  function installCable(installer: TownD2CableInstaller) {
+  function cableClosed(reason: string) {
+    cableRefusal = reason;
+    return Object.freeze({ installed: false as const, certified: false as const, boardable: false as const, reason });
+  }
+
+  /** Called by A with its presence authority. Idempotent after a successful
+   * build; a refused attempt can be retried. */
+  async function preparePublicCable(authority: TownD2CableAuthority) {
     if (disposed) throw new Error('The production host is disposed.');
-    if (cable) throw new Error('A cable line is already installed.');
-    if (typeof installer !== 'function') throw new TypeError('A cable installer must be a function.');
+    if (cable) return cableState();
+    if (!authority || typeof authority.state !== 'function' || typeof authority.now !== 'function' ||
+        typeof authority.daylight !== 'function') {
+      throw new TypeError('preparePublicCable needs the presence authority (state/now/daylight).');
+    }
+    // The line is certified against the final four-sector ground; building it on
+    // a partial mountain would certify clearances that no longer exist.
+    const missing = (['A', 'B', 'C2'] as const).filter(key => !installed.has(key));
+    if (missing.length) {
+      cableClosed('sector-' + missing.join('-') + '-not-mounted');
+      throw new Error('Cable needs the mounted ground of sector ' + missing.join(', ') + ' first.');
+    }
     const before = group.children.length;
     const tileSnapshot = new Map<Mesh, BufferGeometry>();
     for (const tile of tiles) tileSnapshot.set(tile, tile.geometry as BufferGeometry);
-    let pkg: TownD2CablePackage | undefined;
+    let rig: TownD2CableRig | undefined;
     try {
-      pkg = installer(createPort(Object.freeze([...installed.values()])));
-      if (pkg.certified !== true) throw new Error('Cable line is not certified; it stays closed.');
-      if (!pkg.group || pkg.group.parent !== group) throw new Error('Cable line was not mounted into the host owner.');
-      if (pkg.boardable !== true) throw new Error('Cable line is installed but not boardable.');
-      cable = pkg;
+      const ropeway = createTownD2R30Ropeway({
+        heightAt, arrivalHeight, epochMs, controlPointSupports: false,
+      });
+      // One rope, one cable object: the towers must support the very same rope.
+      const towers = createTownD2R30CableTowers({ cable: ropeway.cable, heightAt, arrivalHeight });
+      group.add(ropeway.group, towers.group);
+      const workshop = mountMainSummitCableWorkshop(group, surfaceAt, mainSummitR30CableWorkshopAnchor);
+      rig = { ropeway, towers, workshop };
+      // Publish the rig before certification: the docks stand on the line's own
+      // station decks, so support/block must already see them while B sweeps.
+      cableRig = rig;
+      const dockClear = (feet: CableFoot) => {
+        if (!feet || ![feet.east, feet.north, feet.height].every(Number.isFinite)) return false;
+        const support = supportAt(feet.east, feet.north);
+        if (support === undefined) return false;
+        // The board foot must stand on the real deck, not 1.7 m of air above it.
+        if (Math.abs(support - feet.height) > .35) return false;
+        return !blocked(feet.east, feet.north, Math.max(support, feet.height), .27, 1.8);
+      };
+      const certifyApproaches = (docks: readonly Readonly<{ board: CableFoot; approach: CableFoot }>[]) => {
+        for (const dock of docks) {
+          const eastDelta = dock.approach.east - dock.board.east;
+          const northDelta = dock.approach.north - dock.board.north;
+          const length = Math.hypot(eastDelta, northDelta);
+          const steps = Math.max(1, Math.ceil(length / .5));
+          for (let index = 0; index <= steps; index++) {
+            const weight = index / steps;
+            const east = dock.board.east + eastDelta * weight;
+            const north = dock.board.north + northDelta * weight;
+            const feet = dock.board.height + (dock.approach.height - dock.board.height) * weight;
+            const support = supportAt(east, north);
+            if (support === undefined) return false;
+            // No step up a cliff and no walking through a buried ramp section.
+            if (support > feet + .45 || support < feet - 1.6) return false;
+            if (blocked(east, north, Math.max(feet, support), .27, 1.8)) return false;
+          }
+        }
+        return true;
+      };
+      const operation = installNightBUpperOperation({
+        authorized: true,
+        firstRun: authority.firstRun,
+        state: authority.state,
+        now: authority.now,
+        daylight: authority.daylight,
+        ropeway,
+        towers,
+        workshop,
+        groundAt: surfaceAt,
+        // Everything mounted by this host except the line itself: the four
+        // sectors, the summit facilities, the north wall and the workshop.
+        externalBlocked: (probe: { feet: CableFoot; bodyTop: number }) => blocked(
+          probe.feet.east, probe.feet.north, probe.feet.height, .05, probe.bodyTop),
+        // B calls dockClear(station, foot): the station label is informational,
+        // the foot is what must stand on a real deck.
+        dockClear: (_station: string, feet: CableFoot) => dockClear(feet),
+        certifyApproaches,
+      } as never);
+      if (operation.ready !== true) {
+        throw new Error('Cable refused: ' + (operation.reason ?? 'uncertified'));
+      }
+      cable = operation;
       cableRefusal = undefined;
-      return Object.freeze({ installed: true as const, certified: true, group: pkg.group.name });
+      return cableState();
     } catch (error) {
-      try { pkg?.dispose(); } catch { /* report the refusal, not the cleanup */ }
+      // Atomic: refuse the line, unwind every body this attempt mounted.
+      cableRig = undefined;
+      try { rig?.towers.dispose(); } catch { /* ignore */ }
+      try { rig?.ropeway.dispose(); } catch { /* ignore */ }
+      try { (rig?.workshop as { dispose?(): void } | undefined)?.dispose?.(); } catch { /* ignore */ }
       for (const child of [...group.children].slice(before)) child.removeFromParent();
       for (const tile of tiles) {
         const snapshot = tileSnapshot.get(tile);
         if (snapshot !== undefined && tile.geometry !== snapshot) tile.geometry = snapshot;
       }
       cable = undefined;
-      cableRefusal = error instanceof Error ? error.message : String(error);
+      cableRig = undefined;
+      cableClosed(error instanceof Error ? error.message : String(error));
       throw error;
     }
   }
 
-  /** What A may consume: a closed line reports installed:false and boardable:false. */
+  /** The exact contract A reads (town-a31-cable-binding readA31UpperCable). */
   function cableState() {
+    const certified = cable?.ready === true;
+    const boardable = certified && cable?.service?.physical === true;
     return Object.freeze({
       installed: cable !== undefined,
-      boardable: cable?.boardable === true && cable?.certified === true,
-      certified: cable?.certified === true,
+      certified,
+      boardable,
+      tickOwner: (cable === undefined ? 'none' : 'b-controller') as 'none' | 'b-controller',
       refusal: cableRefusal,
     });
+  }
+
+  /** Release the line and every body it mounted; the slot can be rebuilt. */
+  function uninstallCable() {
+    if (disposed) throw new Error('The production host is disposed.');
+    if (!cable) throw new Error('No cable line is installed.');
+    try { cable.dispose(); } catch { /* keep releasing */ }
+    const rig = cableRig;
+    cable = undefined;
+    cableRig = undefined;
+    try { (rig?.workshop as { dispose?(): void } | undefined)?.dispose?.(); } catch { /* ignore */ }
+    try { rig?.ropeway.dispose(); } catch { /* ignore */ }
+    try { rig?.towers.dispose(); } catch { /* ignore */ }
+    for (const name of ['town-d2-r30-ropeway', 'town-d2-r30-cable-towers', 'main-summit-cable-workshop']) {
+      group.getObjectByName(name)?.removeFromParent();
+    }
+    return cableState();
   }
 
   /** Per-sector live check on the mounted host: real support and collision over
@@ -488,8 +625,13 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     port: createPort(Object.freeze([])),
     createPort,
     sectorLiveCheck,
-    installCable,
+    preparePublicCable,
+    uninstallCable,
     cableState,
+    /** A's readA31UpperCable consumes this directly; undefined while closed. */
+    get cableOperation() {
+      return cable;
+    },
     install,
     uninstall,
     installed: () => Object.freeze([...installed.keys()]),
@@ -513,6 +655,10 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
       night = value;
       assembly.setNight(value);
       for (const pkg of installed.values()) pkg.setNight?.(value);
+      // One night state for the whole mountain, the line included.
+      for (const piece of [cableRig?.ropeway, cableRig?.towers] as const) {
+        (piece as { setNight?(night: boolean): void } | undefined)?.setNight?.(value);
+      }
       for (const hook of nightHooks) hook(value);
     },
     updateSnow(...args: unknown[]) {
@@ -524,6 +670,15 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
       if (disposedOnce) return;
       disposedOnce = true;
       disposed = true;
+      // Release the line first: its operation owns the ropeway clock.
+      if (cable) { try { cable.dispose(); } catch { /* keep releasing */ } cable = undefined; }
+      const rig = cableRig;
+      cableRig = undefined;
+      if (rig) {
+        try { (rig.workshop as { dispose?(): void }).dispose?.(); } catch { /* ignore */ }
+        try { rig.ropeway.dispose(); } catch { /* ignore */ }
+        try { rig.towers.dispose(); } catch { /* ignore */ }
+      }
       // Sectors own their cut geometry: release them before the terrain.
       for (const sector of [...installed.keys()]) {
         const pkg = installed.get(sector)!;

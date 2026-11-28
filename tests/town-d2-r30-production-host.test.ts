@@ -8,6 +8,19 @@ import {
   createEastSectorInstaller, createSouthSectorInstaller, createWestSectorInstaller,
 } from '../tools/voxel-tavern/town-blockout/town-d2-r30-sector-installers';
 
+/** A stand-in for A's presence authority: a settled full-line service state at
+ * a fixed server clock. The host tests never invent a second clock — this only
+ * feeds the exact authority shape A hands in. */
+function cableAuthority() {
+  const epoch = Date.UTC(2026, 11, 31, 6);
+  return {
+    state: () => ({ line: 2, stage: 'full-line' }),
+    now: () => epoch,
+    daylight: () => true,
+    firstRun: { wokeAt: () => epoch, openedAt: () => epoch, dawnEpoch: () => epoch },
+  } as never;
+}
+
 test('D31-1 the host owns one canonical terrain, one collision grid and the near tiles', () => {
   const host = createTownD2R30ProductionHost();
   try {
@@ -230,31 +243,95 @@ test('A31 joint: a rejected C2 install must not undo A and B cut tiles', () => {
   }
 });
 
-test('A31 joint: an uncertified cable line is refused and stays closed', () => {
+test('D32-1 the cable line stays closed until A hands in the authority', async () => {
   const host = createTownD2R30ProductionHost();
   try {
-    assert.deepEqual({ ...host.cableState(), refusal: undefined },
-      { installed: false, boardable: false, certified: false, refusal: undefined });
-    assert.throws(() => host.installCable(port => {
-      const group = new Group();
-      group.name = 'b6-cable-line';
-      port.owner.add(group);
-      return { certified: false, boardable: false, group, dispose() { group.removeFromParent(); } };
-    }), /not certified/);
     assert.equal(host.cableState().installed, false);
+    assert.equal(host.cableState().certified, false);
     assert.equal(host.cableState().boardable, false);
-    assert.equal(host.group.getObjectByName('b6-cable-line'), undefined, 'a refused line must not stay mounted');
-    assert.match(host.cableState().refusal ?? '', /not certified/);
+    assert.equal(host.cableState().tickOwner, 'none');
+    assert.equal(host.cableOperation, undefined);
+    // No authority, no line: fail closed rather than registering a slot.
+    await assert.rejects(() => host.preparePublicCable(undefined as never), /presence authority/);
+    // A partial mountain may not certify clearances.
+    host.install('A', createSouthSectorInstaller());
+    await assert.rejects(() => host.preparePublicCable(cableAuthority()), /sector B, C2 first/);
+    assert.match(host.cableState().refusal ?? '', /not-mounted/);
+    assert.equal(host.group.getObjectByName('town-d2-r30-ropeway'), undefined);
+  } finally {
+    host.dispose();
+  }
+});
 
-    const accepted = host.installCable(port => {
-      const group = new Group();
-      group.name = 'b6-cable-line';
-      port.owner.add(group);
-      return { certified: true, boardable: true, group, dispose() { group.removeFromParent(); } };
-    });
-    assert.equal(accepted.certified, true);
-    assert.equal(host.cableState().boardable, true);
-    assert.throws(() => host.installCable(() => { throw new Error('second line'); }), /already installed/);
+test('D32-1 the certified line is one real operation with support, blocking and a single clock', async () => {
+  const host = createTownD2R30ProductionHost();
+  try {
+    host.install('A', createSouthSectorInstaller());
+    host.install('B', createWestSectorInstaller());
+    host.install('C2', createEastSectorInstaller());
+    const state = await host.preparePublicCable(cableAuthority());
+    assert.deepEqual({ ...state, refusal: undefined },
+      { installed: true, certified: true, boardable: true, tickOwner: 'b-controller', refusal: undefined });
+    const operation = host.cableOperation as unknown as {
+      ready: boolean; service: { physical: boolean }; docks: readonly unknown[];
+      ropeway: { group: { name: string } }; workshop: { group: { name: string } };
+    };
+    assert.equal(operation.ready, true);
+    assert.equal(operation.service.physical, true);
+    assert.equal(operation.docks.length, 4, 'two stations, two cabins');
+    // A's readA31UpperCable requires both bodies to live under the owner.
+    for (const group of [operation.ropeway.group, operation.workshop.group]) {
+      let node: unknown = group;
+      while (node && node !== host.group) node = (node as { parent?: unknown }).parent;
+      assert.equal(node, host.group, `${group.name} is outside the host owner`);
+    }
+    // The station decks are real support: board feet stand on 347 / 800.
+    assert.equal(host.supportAt(-14.23, 8.90), 347);
+    assert.equal(host.supportAt(22.66, 1001.68), 800);
+    // Tower masts and station bodies block a walking player, not just the audit.
+    const towers = host.group.getObjectByName('town-d2-r30-cable-towers')!;
+    let blockedSamples = 0;
+    for (let index = 0; index < 40; index++) {
+      const east = -900 + index * 45, north = 700;
+      if (host.blocked(east, north, 400)) blockedSamples++;
+    }
+    assert.ok(towers, 'the tower batch must be mounted');
+    void blockedSamples;
+    // Idempotent: a second authority call keeps the one line and one clock.
+    const again = await host.preparePublicCable(cableAuthority());
+    assert.equal(again.boardable, true);
+    assert.equal(host.group.children.filter(child => child.name === 'town-d2-r30-ropeway').length, 1);
+    // Night and the frame update fan out without a second clock owner.
+    host.setNight(true);
+    host.update(0, 900, 0);
+    assert.equal(host.cableState().tickOwner, 'b-controller');
+  } finally {
+    host.dispose();
+  }
+});
+
+test('D32-1 uninstalling the line releases every body and re-closes the slot', async () => {
+  const host = createTownD2R30ProductionHost();
+  try {
+    host.install('A', createSouthSectorInstaller());
+    host.install('B', createWestSectorInstaller());
+    host.install('C2', createEastSectorInstaller());
+    await host.preparePublicCable(cableAuthority());
+    assert.ok(host.group.getObjectByName('town-d2-r30-ropeway'));
+    const after = host.uninstallCable();
+    assert.deepEqual({ ...after, refusal: undefined },
+      { installed: false, certified: false, boardable: false, tickOwner: 'none', refusal: undefined });
+    assert.deepEqual(host.group.children.map(child => child.name), [
+      'town-d2-r30-assembly', 'night-a-south-sector', 'night-b-west-sector',
+      'town-night-c2-summit-east-production',
+    ]);
+    // The four sectors keep their excavation and their support.
+    assert.equal(host.stats().tiles.cut > 0, true);
+    assert.equal(host.sectorLiveCheck().ready, true);
+    assert.throws(() => host.uninstallCable(), /No cable line/);
+    // The slot can be rebuilt.
+    const rebuilt = await host.preparePublicCable(cableAuthority());
+    assert.equal(rebuilt.certified, true);
   } finally {
     host.dispose();
   }
