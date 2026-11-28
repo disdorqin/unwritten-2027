@@ -193,7 +193,8 @@ export function mountCraterFloorWorklightChain(owner:Group,
     // the three actual workface-side sources have stronger work light.
     // No added light, shadow caster, range, coordinate or phase authority.
     const workside=['c2/winch-watch','c2/south-brace','c2/haulage-turn'].includes(post.id);
-    const light=new PointLight(0xffc17f,workside?12:6,13.5,2);
+    const entrance=post.id==='c2/west-platform';
+    const light=new PointLight(0xffc17f,entrance?32:workside?18:9,entrance?18:13.5,2);
     light.name=post.id+'/light-source';
     light.position.set(post.east,post.bulbHeight,-post.north);
     light.visible=false;
