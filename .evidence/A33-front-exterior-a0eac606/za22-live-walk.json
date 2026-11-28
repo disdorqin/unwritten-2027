@@ -1,0 +1,335 @@
+{
+  "url": "http://127.0.0.1:53351/?profile&mRoadSurvey",
+  "segment": "a33-front-exterior",
+  "viewport": {
+    "width": 960,
+    "height": 540
+  },
+  "deviceScaleFactor": 0.5,
+  "quality": "smooth",
+  "gpu": {
+    "vendor": "Google Inc. (Intel)",
+    "renderer": "ANGLE (Intel, Intel(R) UHD Graphics (0x0000A788) Direct3D11 vs_5_0 ps_5_0, D3D11)"
+  },
+  "paths": [
+    {
+      "name": "a33-front-exterior",
+      "checkpoints": [
+        {
+          "label": "spawn",
+          "hud": "东 223.0 m · 北 180.0 m · 行走",
+          "cameraY": 13.65,
+          "action": "E · 点亮钟楼广场迎宾灯",
+          "status": "已连接 · 1 人",
+          "east": 223,
+          "north": 180,
+          "height": 12,
+          "wire": {
+            "ms": 1795877655397,
+            "east": 223,
+            "north": 180,
+            "height": 12,
+            "area": "town",
+            "yaw": 0.06970025204955382,
+            "seq": 0
+          }
+        },
+        {
+          "label": "failed-position",
+          "lighting": "雪夜",
+          "hud": "东 526.0 m · 北 325.9 m · 行走",
+          "cameraY": 27.79,
+          "action": "长按采雪",
+          "status": "已连接 · 1 人",
+          "east": 526,
+          "north": 325.9,
+          "height": 26.14,
+          "wire": {
+            "ms": 1795877697221,
+            "east": 526,
+            "north": 325.9,
+            "height": 26.14,
+            "area": "town",
+            "yaw": 0,
+            "seq": 23
+          }
+        }
+      ],
+      "sockets": [
+        "ws://127.0.0.1:53351/presence"
+      ],
+      "poses": [
+        {
+          "ms": 1795877655397,
+          "east": 223,
+          "north": 180,
+          "height": 12,
+          "area": "town",
+          "yaw": 0.06970025204955382,
+          "seq": 0
+        },
+        {
+          "ms": 1795877656735,
+          "east": 526,
+          "north": 305,
+          "height": 25.29,
+          "area": "town",
+          "yaw": 0,
+          "seq": 1
+        },
+        {
+          "ms": 1795877656751,
+          "east": 526,
+          "north": 305,
+          "height": 25.29,
+          "area": "town",
+          "yaw": 0,
+          "seq": 2
+        },
+        {
+          "ms": 1795877695225,
+          "east": 526,
+          "north": 305.94,
+          "height": 25.67,
+          "area": "town",
+          "yaw": 0,
+          "seq": 3
+        },
+        {
+          "ms": 1795877695351,
+          "east": 526,
+          "north": 307.45,
+          "height": 25.78,
+          "area": "town",
+          "yaw": 0,
+          "seq": 4
+        },
+        {
+          "ms": 1795877695449,
+          "east": 526,
+          "north": 308.58,
+          "height": 25.83,
+          "area": "town",
+          "yaw": 0,
+          "seq": 5
+        },
+        {
+          "ms": 1795877695543,
+          "east": 526,
+          "north": 309.52,
+          "height": 25.88,
+          "area": "town",
+          "yaw": 0,
+          "seq": 6
+        },
+        {
+          "ms": 1795877695724,
+          "east": 526,
+          "north": 310.65,
+          "height": 25.93,
+          "area": "town",
+          "yaw": 0,
+          "seq": 7
+        },
+        {
+          "ms": 1795877695736,
+          "east": 526,
+          "north": 310.84,
+          "height": 25.94,
+          "area": "town",
+          "yaw": 0,
+          "seq": 8
+        },
+        {
+          "ms": 1795877695824,
+          "east": 526,
+          "north": 311.97,
+          "height": 26.14,
+          "area": "town",
+          "yaw": 0,
+          "seq": 9
+        },
+        {
+          "ms": 1795877695922,
+          "east": 526,
+          "north": 313.1,
+          "height": 26.14,
+          "area": "town",
+          "yaw": 0,
+          "seq": 10
+        },
+        {
+          "ms": 1795877696022,
+          "east": 526,
+          "north": 314.23,
+          "height": 26.14,
+          "area": "town",
+          "yaw": 0,
+          "seq": 11
+        },
+        {
+          "ms": 1795877696122,
+          "east": 526,
+          "north": 315.36,
+          "height": 26.14,
+          "area": "town",
+          "yaw": 0,
+          "seq": 12
+        },
+        {
+          "ms": 1795877696223,
+          "east": 526,
+          "north": 316.49,
+          "height": 26.14,
+          "area": "town",
+          "yaw": 0,
+          "seq": 13
+        },
+        {
+          "ms": 1795877696322,
+          "east": 526,
+          "north": 317.62,
+          "height": 26.14,
+          "area": "town",
+          "yaw": 0,
+          "seq": 14
+        },
+        {
+          "ms": 1795877696424,
+          "east": 526,
+          "north": 318.75,
+          "height": 26.14,
+          "area": "town",
+          "yaw": 0,
+          "seq": 15
+        },
+        {
+          "ms": 1795877696522,
+          "east": 526,
+          "north": 319.88,
+          "height": 26.14,
+          "area": "town",
+          "yaw": 0,
+          "seq": 16
+        },
+        {
+          "ms": 1795877696620,
+          "east": 526,
+          "north": 321.01,
+          "height": 26.14,
+          "area": "town",
+          "yaw": 0,
+          "seq": 17
+        },
+        {
+          "ms": 1795877696722,
+          "east": 526,
+          "north": 322.14,
+          "height": 26.14,
+          "area": "town",
+          "yaw": 0,
+          "seq": 18
+        },
+        {
+          "ms": 1795877696822,
+          "east": 526,
+          "north": 323.27,
+          "height": 26.14,
+          "area": "town",
+          "yaw": 0,
+          "seq": 19
+        },
+        {
+          "ms": 1795877696921,
+          "east": 526,
+          "north": 324.4,
+          "height": 26.14,
+          "area": "town",
+          "yaw": 0,
+          "seq": 20
+        },
+        {
+          "ms": 1795877697022,
+          "east": 526,
+          "north": 325.53,
+          "height": 26.14,
+          "area": "town",
+          "yaw": 0,
+          "seq": 21
+        },
+        {
+          "ms": 1795877697122,
+          "east": 526,
+          "north": 325.9,
+          "height": 26.14,
+          "area": "town",
+          "yaw": 0,
+          "seq": 22
+        },
+        {
+          "ms": 1795877697221,
+          "east": 526,
+          "north": 325.9,
+          "height": 26.14,
+          "area": "town",
+          "yaw": 0,
+          "seq": 23
+        }
+      ]
+    }
+  ],
+  "pageErrors": [],
+  "consoleErrors": [],
+  "requestFailures": [],
+  "httpErrors": [],
+  "performanceSamples": [
+    {
+      "label": "failed-position",
+      "elapsedMs": 1999.7000000029802,
+      "frames": 120,
+      "frameMs": {
+        "median": 16.699999999982538,
+        "p95": 16.80000000000291,
+        "p99": 16.80000000000291,
+        "max": 16.800000000017462,
+        "mean": 16.664166666666762
+      },
+      "fps": 60.00900135020218,
+      "longFrames": {
+        "over50": 0,
+        "over100": 0
+      },
+      "calls": {
+        "median": 308,
+        "p95": 308,
+        "p99": 308,
+        "max": 308,
+        "mean": 308
+      },
+      "triangles": {
+        "median": 395242,
+        "p95": 395242,
+        "p99": 395242,
+        "max": 395242,
+        "mean": 395242
+      },
+      "movementMs": {
+        "median": 0,
+        "p95": 0.09999999403953552,
+        "p99": 0.09999999403953552,
+        "max": 0.10000000894069672,
+        "mean": 0.006666666393478711
+      },
+      "detailMs": {
+        "median": 0.09999999403953552,
+        "p95": 1.2999999970197678,
+        "p99": 2.2000000029802322,
+        "max": 3.9000000059604645,
+        "mean": 0.19583333395421504
+      },
+      "scope": "headless browser, actual renderer event, not physical phone"
+    }
+  ],
+  "failure": "Error: Native walking stopped before base-dock (526, 349.5): {\"hud\":\"东 526.0 m · 北 325.9 m · 疾跑\",\"cameraY\":27.79,\"action\":\"长按采雪\",\"status\":\"已连接 · 1 人\",\"east\":526,\"north\":325.9,\"height\":26.14}\n    at walkTo (D:\\computer learning\\game_exe\\kuanian\\.worktrees\\window-a-a0-a6\\tools\\verify-a-r30-native-walk.mjs:283:13)\n    at async <anonymous> (D:\\computer learning\\game_exe\\kuanian\\.worktrees\\window-a-a0-a6\\tools\\verify-a-r30-native-walk.mjs:532:3)",
+  "errors": 0
+}
