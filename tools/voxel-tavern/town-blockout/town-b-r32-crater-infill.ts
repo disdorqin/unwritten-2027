@@ -71,6 +71,15 @@ export function installBR32CraterInfill(road:Road,tracks:readonly Route[],routes
   const bed=site.zone==='floor'?h*.38:h*.62;
   part('bed',e,z,y,w,d,bed,site.color);
   if(site.zone==='floor'){
+   // Existing ore transport pockets: low timber spoil cribs are contained
+   // inside the accepted rock envelope, never in the rail or walking lane.
+   const rim=Math.min(.12,(h-bed)*.24),board=Math.min(.07,w*.09,d*.09),wood=0x795438;
+   if(stable(e*31+z*17)>.34){
+    for(const k of [-1,1]){
+     part('crib-side-'+k,e+k*(w-board)/2,z,y+bed,board,d,rim,wood);
+     part('crib-end-'+k,e,z+k*(d-board)/2,y+bed,w-2*board,board,rim,wood);
+    }
+   }
    for(let i=0;i<4;i++){
     const dx=(i%2?1:-1)*w*.22,dz=(i<2?1:-1)*d*.22,th=(h-bed)*(.50+.5*stable(i+w*100+d*50));
     part('ore-'+i,e+dx,z+dz,y+bed,w*.40,d*.40,th,palette[(i+2)%5]!);
@@ -80,9 +89,16 @@ export function installBR32CraterInfill(road:Road,tracks:readonly Route[],routes
    part('lamina',e-w*.035,z+d*.035,y+bed,w*.87,d*.84,ledge,palette[3]!);
    part('broken-crown',e+w*.085,z-d*.08,y+bed+ledge,w*.66,d*.57,h-bed-ledge,palette[1]!);
    part('seam',e-w*.36,z,y+bed,w*.11,d*.65,ledge*.28,palette[4]!);
+   if(stable(e*19+z*13)>.72){
+    // Short visible retaining timbers sit on the stone bed and terminate
+    // below the lip; no invented climbable step or invisible floor.
+    const timberH=Math.min(.28,h-bed),timberW=Math.min(.10,w*.08),wood=0x795438;
+    for(const k of [-1,1])part('retaining-post-'+k,e+k*w*.39,z-d*.39,y+bed,timberW,d*.13,timberH,wood);
+    part('retaining-crossbeam',e,z-d*.39,y+bed+timberH*.70,w*.86,d*.14,timberH*.30,wood);
+   }
   }
  }
- const group=new Group();group.name=name;group.userData.owner='B';group.userData.revision='B33-1-r2';group.userData.coordinateFrame='town-world-metres';group.userData.static=true;
+ const group=new Group();group.name=name;group.userData.owner='B';group.userData.revision='B33-1-r3';group.userData.coordinateFrame='town-world-metres';group.userData.static=true;
  const geometry=new BoxGeometry(),textureSize=32,bytes=new Uint8Array(textureSize*textureSize*4);
  for(let y=0;y<textureSize;y++)for(let x=0;x<textureSize;x++){const l=Math.round(175+40*stable(x+32*y)+18*Math.sin(y*.56));bytes.set([l,l,l,255],4*(y*32+x));}
  const map=new DataTexture(bytes,32,32,RGBAFormat);map.minFilter=map.magFilter=NearestFilter;map.needsUpdate=true;
