@@ -1007,7 +1007,7 @@ if(!localLightingReview)timeOfDay.setAttribute('aria-label','当前服务器昼�
 timeOfDay.title = localLightingReview ? '本地验收：昼夜机位切换' : '昼夜随服务器时钟连续变化';
 if(localLightingReview)timeOfDay.onclick = () => {reviewNight=!nightMode;setNight(updateNightSky().nightSide);};
 
-const prepareTerrain = addTerrainMeshes(scene, grid, productionRidge.ownsCell);
+const prepareTerrain = addTerrainMeshes(scene, grid, productionRidge.ownsCell,previewOptions.has('profile')&&previewOptions.has('mTurnCacheWide'));
 
 const stone = new MeshLambertMaterial({ color: '#647382' });
 const timber = new MeshLambertMaterial({ color: '#865f46' });
@@ -3594,10 +3594,16 @@ function tryMove(nextX: number, nextN: number) {
   // must agree before the outgoing scene's ordinary filters veto entry.
   const seamFrom={east:x,north:n,height:ground},seamTo={east:nextX,north:nextN,height:ground};
   if(a31GateCrossing(cloudRoute.active(),seamFrom,seamTo)){
-   if(airHeight!==undefined||sledRide.active()||sledRide.recovering()||!gateStepEligible(seamFrom,seamTo))return false;
+   if(airHeight!==undefined||sledRide.active()||sledRide.recovering()||!gateStepEligible(seamFrom,seamTo)){
+    if(profileTown)ridgeMoveReject={reason:'seam-denied',from:seamFrom,to:seamTo,frontCertified:productionRidge?.cloudSeam.domainReady,rearStatus:cloudRoute.state().status,air:airHeight!==undefined,sled:sledRide.active()};
+    return false;
+   }
    pendingGateStep={from:seamFrom,to:seamTo,entering:!cloudRoute.active()};return true;
   }
-  if (cloudRoute.active() && !cloudRoute.acceptsStep(x, n, nextX, nextN, bodyRadius)) return false;
+  if (cloudRoute.active() && !cloudRoute.acceptsStep(x, n, nextX, nextN, bodyRadius)) {
+    if(profileTown)ridgeMoveReject={reason:'rear-support-or-grade',from:[x,n,ground],next:[nextX,nextN],support:cloudRoute.walkingSurfaceAt(nextX,nextN,bodyRadius)};
+    return false;
+  }
   if (!walkable(nextX, nextN)) {
     if(profileTown&&previewOptions.has('mRoadSurvey'))ridgeMoveReject={reason:'walkable',next:[nextX,nextN],terrain:canEnter(nextX,nextN),scenery:scenery.blocked(nextX,nextN),district:districts.blocked(nextX,nextN),forest:forest.blocked(nextX,nextN),street:streetscape.blocked(nextX,nextN)};
     return false;
@@ -4093,7 +4099,7 @@ function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame
       triangles: renderer.info.render.triangles, cameraY: camera.position.y,
       weatherCycle:southWeatherProfile(skyFrame,weatherState,weather,local?.weather),
       fogNear:fog.near,fogFar:fog.far,points:renderer.info.render.points,mountainSheltered:roof,mountainSnowDepth:coldDepth,
-      summitProduction:cloudRoute.state(),cableRide:cableFrame,actualFoot:cableFrame?.feet??{east:x,north:n,height:airHeight??ground},
+      summitProduction:cloudRoute.state(),cableRide:cableFrame,actualFoot:cableFrame?.feet??{east:x,north:n,height:airHeight??ground},moveReject:ridgeMoveReject,
     } }));
   }
 }

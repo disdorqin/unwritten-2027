@@ -11,7 +11,7 @@ const { Frustum, Group, Matrix4, PerspectiveCamera } = requireFromViewer('three'
 test('walking draws upload only their local slices of the unchanged aerial terrain buffers', () => {
   const grid = createTerrainGrid();
   const scene = new Group();
-  const prepare = addTerrainMeshes(scene, grid);
+  const prepare = addTerrainMeshes(scene, grid, undefined, true);
   const camera = new PerspectiveCamera(58, 1000 / 650, .1, 1400);
   camera.position.set(543.6, 11.8934618 + 1.65, -412);
   camera.lookAt(camera.position.x - 1, camera.position.y, camera.position.z);

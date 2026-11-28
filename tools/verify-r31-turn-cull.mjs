@@ -2,7 +2,7 @@ import {Group,PerspectiveCamera,Frustum,Matrix4} from 'three';
 import {createTerrainGrid} from './voxel-tavern/town-blockout/terrain.ts';
 import {addTerrainMeshes} from './voxel-tavern/town-blockout/terrain-mesh.ts';
 import {performance} from 'node:perf_hooks';
-const grid=createTerrainGrid(),scene=new Group(),prepare=addTerrainMeshes(scene,grid);
+const grid=createTerrainGrid(),scene=new Group(),prepare=addTerrainMeshes(scene,grid,undefined,process.argv.includes('--wide'));
 const detail=scene.getObjectByName('Walkable terrain');
 const camera=new PerspectiveCamera(58,1280/720,.1,2400);
 const output=[];

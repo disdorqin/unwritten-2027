@@ -11,7 +11,8 @@ type TerrainSpan = { start: number; count: number; bounds: Box3 };
 type WalkingChunk={mesh:Mesh;first:number;count:number;spans:TerrainSpan[];bounds:Box3;index?:BufferAttribute;selection?:TerrainSpan[]};
 const palette = ['#d8e1ef', '#9a887c', '#bcac97', '#c7b795', '#78b8d9'].map(value => new Color(value));
 
-export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof createTerrainGrid>, ridgeOwnsCell?: (east:number,north:number)=>boolean) {
+export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof createTerrainGrid>, ridgeOwnsCell?: (east:number,north:number)=>boolean, wideTurnCache=false) {
+  const angleCache=wideTurnCache?.13:.065,planePad=wideTurnCache?.18:.11;
   const { elevation, surfaces, gridWidth, gridDepth } = grid;
   const cellWidth = gridWidth - 1;
   const cellDepth = gridDepth - 1;
@@ -292,7 +293,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
     eye.setFromMatrixPosition(camera.matrixWorld);
     rotation.setFromRotationMatrix(camera.matrixWorld);
     const now=performance.now();
-    if(walkingActive&&walkingProjection.equals(camera.projectionMatrix)&&walkingEye.distanceToSquared(eye)<=9&&walkingRotation.angleTo(rotation)<=.13&&
+    if(walkingActive&&walkingProjection.equals(camera.projectionMatrix)&&walkingEye.distanceToSquared(eye)<=9&&walkingRotation.angleTo(rotation)<=angleCache&&
        (walkingVertices===nextVertex||now-walkingLastUpdate<250))return;
     walkingActive=true;walkingEye.copy(eye);walkingRotation.copy(rotation);walkingProjection.copy(camera.projectionMatrix);
     walkingVertices=nextVertex;walkingLastUpdate=now;
@@ -306,7 +307,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
       const {min,max}=c.bounds;
       const distance=Math.hypot(Math.max(Math.abs(min.x-eye.x),Math.abs(max.x-eye.x)),
         Math.max(Math.abs(min.y-eye.y),Math.abs(max.y-eye.y)),Math.max(Math.abs(min.z-eye.z),Math.abs(max.z-eye.z)));
-      const pad=4+.18*distance;
+      const pad=4+planePad*distance;
       let outside=false,inside=true;
       for(const p of frustum.planes){
         const n=p.normal;
@@ -326,7 +327,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
           Math.max(Math.abs(min.y-eye.y),Math.abs(max.y-eye.y)),Math.max(Math.abs(min.z-eye.z),Math.abs(max.z-eye.z)));
         // Plane normal rotation <= 2 sin(theta/2). Include the 3m
         // cache translation and additional head/camera motion margin.
-        const pad=4+.18*distance;
+        const pad=4+planePad*distance;
         let visible=true;
         for(const p of frustum.planes){
           const n=p.normal;
