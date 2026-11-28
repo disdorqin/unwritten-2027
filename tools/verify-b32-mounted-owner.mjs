@@ -61,7 +61,7 @@ if(scope==='rear'||scope==='rear-mount'||scope==='rear-routes'){
  if(scope==='front-public'){
   assert.equal(typeof ridge.preparePublicFrontCable,'function');const oldFacility=ridge.facilities,old=oldFacility.group;
   const ready=await ridge.preparePublicFrontCable({state:()=>undefined,now:()=>undefined,daylight:()=>undefined,firstRun:{wokeAt:()=>undefined,openedAt:()=>undefined,dawnEpoch:()=>undefined}});
-  console.log(JSON.stringify({scope:'actual C2 public preparePublicFrontCable on production root, rail and hall',paired:expected,ready,transportReady:ridge.transportReady,reason:ridge.frontCablePrepareResult,closedRetained:old.parent===root,operation:ridge.frontOperation?.audit,roadLengths:ridge.roads.map(r=>r.route.at(-1)?.cum)}));
+  console.log(JSON.stringify({scope:'actual C2 public preparePublicFrontCable on production root, rail and hall',paired:expected,ready,transportReady:ridge.transportReady,reason:ridge.frontCablePrepareResult,closedRetained:old.parent===root,operation:ridge.frontOperation?.audit,hostRouteAudit:ridge.frontRouteAudit,roadLengths:ridge.roads.map(r=>r.route.at(-1)?.cum)}));
   assert.equal(ready,ridge.transportReady);if(!ready)assert.equal(old.parent,root);
   if(ready){
    const hallBoxes=(qs)=>qs.map(q=>({min:[q.min[0]+526,q.min[1]+26,q.min[2]-329],max:[q.max[0]+526,q.max[1]+26,q.max[2]-329]}));
@@ -71,7 +71,7 @@ if(scope==='rear'||scope==='rear-mount'||scope==='rear-routes'){
    const {createNightBFrontFloorSupport}=await import('./voxel-tavern/town-blockout/town-night-b-front-floor-support.ts');
    const supportAt=createNightBFrontFloorSupport((e,n)=>grid.heightAt(e,n),floors);
    const fix=process.env.B32_FRONT_FIX==='1';
-   const allowsSupportedStep=(a,b)=>fix&&(a.height>grid.heightAt(a.east,a.north)+.04||b.height>grid.heightAt(b.east,b.north)+.04)&&ridge.allowsUphill(a,b)&&ridge.allowsUphill(b,a);
+   const allowsSupportedStep=(a,b)=>(fix||process.env.B32_FRONT_HOST_STEP==='1')&&(a.height>grid.heightAt(a.east,a.north)+.04||b.height>grid.heightAt(b.east,b.north)+.04)&&ridge.allowsUphill(a,b)&&ridge.allowsUphill(b,a);
    if(fix)oldFacility.blocked=(...args)=>ridge.facilities.blocked(...args); // paired ephemeral equivalent of C2's active reference correction
    const existingBlocked=(e,n,h,r,b)=>ridge.blocked(e,n,h,r)||boxes.some(x=>h+.025<x.max[1]&&h+b-.025>x.min[1]&&overlaps(e,n,r,x));
    let props;
