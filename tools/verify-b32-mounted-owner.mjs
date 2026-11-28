@@ -18,13 +18,22 @@ const paired=path.resolve(here,process.argv[4]==='d2'?'../window-d2':process.arg
 const git=(...args)=>execFileSync('git',['-C',paired,...args],{encoding:'utf8'}).trim();
 assert.ok(expected&&git('rev-parse','HEAD')===expected&&git('status','--porcelain','--untracked-files=no')==='','Paired owner must be exact tracked-clean SHA');
 const load=name=>import(pathToFileURL(path.join(paired,'tools','voxel-tavern','town-blockout',name+'.ts')).href);
-if(scope==='rear'||scope==='rear-mount'||scope==='rear-routes'){
+if(scope==='rear'||scope==='rear-mount'||scope==='rear-routes'||scope==='rear-public'){
  const [{createTownD2R30ProductionHost},{createSouthSectorInstaller,createWestSectorInstaller,createEastSectorInstaller},{retireA31LegacySectorOverlays}]=await Promise.all([load('town-d2-r30-production-host'),load('town-d2-r30-sector-installers'),import(pathToFileURL(path.resolve(here,'../window-a-a0-a6/tools/voxel-tavern/town-blockout/town-a31-summit-visual-ownership.ts')).href)]);
  const host=createTownD2R30ProductionHost({includeRopeway:false});
  try{
   host.install('A',createSouthSectorInstaller());host.install('B',createWestSectorInstaller());host.install('C2',createEastSectorInstaller());
   const visual=retireA31LegacySectorOverlays(host.group);
-  if(scope==='rear-mount'||scope==='rear-routes'){
+  if(scope==='rear-public'){
+   host.mountDetails();
+   assert.equal(host.pendingDetails().length,0);
+   assert.equal(host.group.getObjectByName('main-summit-machine-room'),undefined,'Public owner must not contain the legacy machine room');
+   const slices=[];
+   const state=await host.preparePublicCable({state:()=>undefined,now:()=>undefined,daylight:()=>undefined,firstRun:{wokeAt:()=>undefined,openedAt:()=>undefined,dawnEpoch:()=>undefined}},{budgetMs:6,onSlice:ms=>slices.push(ms)});
+   const op=host.cableOperation;
+   assert.ok(op?.ready,JSON.stringify(state));
+   console.log(JSON.stringify({scope:'direct D2 public preparation after actual sector installation and A visual ownership hook; no live ride or authority claim',paired:expected,state,audit:op.audit,live:host.sectorLiveCheck(),slices:{count:slices.length,max:Math.max(...slices)}}));
+  }else if(scope==='rear-mount'||scope==='rear-routes'){
    const old=host.group.getObjectByName('main-summit-machine-room');assert.ok(old);const oldParent=old.parent;old.removeFromParent();
    const originalPaint=host.group.getObjectByName('main-summit-paint')?.geometry;
    let routeAudit;
