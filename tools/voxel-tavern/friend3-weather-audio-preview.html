@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="dark">
+  <title>Night-F3 区域风雪音效 · 独立预览</title>
+  <link rel="stylesheet" href="./friend3-weather-audio-preview.css">
+</head>
+<body>
+  <main class="f3w-shell">
+    <header class="f3w-header">
+      <div>
+        <p class="f3w-kicker">UNWRITTEN 2027 · Night-F3 独立预览</p>
+        <h1>区域风雪音效</h1>
+        <p class="f3w-sub">四区固定音源库：小镇轻风、山地强风、坑区恶劣、高山风雪。区域权重交叉淡入、室内衰减、限速点缀音；真实天气字段由 Friend1 通过 updateFromField/update 接入。</p>
+      </div>
+    </header>
+
+    <section class="f3w-startbar">
+      <button id="weather-start" class="f3w-primary" type="button">开启区域环境音</button>
+      <button id="weather-stop" type="button" disabled>暂停</button>
+      <output id="weather-state" class="f3w-state" aria-live="polite">未开启</output>
+      <p id="weather-status" class="f3w-status" role="status" aria-live="polite">点击开启后才创建 AudioContext，不自动播放。</p>
+    </section>
+
+    <section class="f3w-layout">
+      <aside class="f3w-controls" aria-label="区域音效控制">
+        <section class="f3w-section">
+          <h2>区域预设</h2>
+          <div id="weather-region-presets" class="f3w-presets" role="group" aria-label="区域预设"></div>
+          <p class="f3w-note">预设切换与权重滑杆都走平滑目标，不销毁音源。</p>
+        </section>
+        <section class="f3w-section">
+          <h2>区域权重</h2>
+          <div id="weather-weights" class="f3w-weights"></div>
+        </section>
+        <section class="f3w-section f3w-grid2">
+          <label>室内衰减 <output id="weather-indoor-value" for="weather-indoor">0%</output><input id="weather-indoor" type="range" min="0" max="100" step="1" value="0"></label>
+          <label>风力强度 <output id="weather-wind-value" for="weather-wind">25%</output><input id="weather-wind" type="range" min="0" max="100" step="1" value="25"></label>
+          <label>雪粒强度 <output id="weather-snow-value" for="weather-snow">35%</output><input id="weather-snow" type="range" min="0" max="100" step="1" value="35"></label>
+          <label>主音量 <output id="weather-master-value" for="weather-master">65</output><input id="weather-master" type="range" min="0" max="100" step="1" value="65"></label>
+        </section>
+        <section class="f3w-section f3w-inline">
+          <button id="weather-mute" type="button" aria-pressed="false">静音</button>
+          <span class="f3w-note">室内衰减最多压低 82%，不直接掐断音源。</span>
+        </section>
+        <section class="f3w-section">
+          <h2>F1 天气字段演示</h2>
+          <label>区域 <select id="weather-field-region"></select></label>
+          <label>severity <output id="weather-field-severity-value">50%</output><input id="weather-field-severity" type="range" min="0" max="100" step="1" value="50"></label>
+          <button id="weather-apply-field" type="button">按字段更新</button>
+          <p class="f3w-note">Friend1 只需传 { region, severity, windStrength, snowIntensityScale }。</p>
+        </section>
+        <section class="f3w-section">
+          <h2>点缀音（限速）</h2>
+          <div id="weather-accents" class="f3w-accents" role="group" aria-label="点缀音"></div>
+        </section>
+      </aside>
+
+      <aside class="f3w-meters-panel" aria-label="实时目标增益">
+        <h2>实时目标增益</h2>
+        <div id="weather-meters" class="f3w-meters"></div>
+        <div class="f3w-meter f3w-hiss">
+          <span class="f3w-meter-label">雪粒层</span>
+          <div id="weather-hiss-bar" class="f3w-meter-bar"><i></i></div>
+          <output id="weather-hiss-value">0.0%</output>
+        </div>
+        <p id="weather-summary" class="f3w-summary"></p>
+      </aside>
+    </section>
+
+    <footer class="f3w-footer">原创 WebAudio 合成 · MIT · 交 Friend1 接入；不改公共天气、地形、玩法或服务器入口</footer>
+  </main>
+  <script type="module" src="./friend3-weather-audio-preview.ts"></script>
+</body>
+</html>

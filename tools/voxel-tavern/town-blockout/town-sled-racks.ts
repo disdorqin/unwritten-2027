@@ -8,6 +8,7 @@ import { pineCampSites } from './town-pine-camp';
 import { za22StationApproach } from './town-za22-cloud-route';
 import { craterWestSurvey } from './town-za22-crater-road';
 import { za22GateSeamNorth } from './town-za22-mountain-gate';
+import {summitAssemblyAnchor} from './main-summit-assembly';
 
 export type SledRackDomain = 'town' | 'summit';
 type Pad = readonly [east: number, north: number, yaw: number];
@@ -54,12 +55,22 @@ export const townSledRackSites: readonly Site[] = [
     [palaceEndEast + 1, palaceEndNorth - 4, 0], [palaceEndEast + 3, palaceEndNorth - 3, 0],
   ] },
   { id: 'mountain-gate', domain: 'summit', pads: [
-    [295.5, za22GateSeamNorth - 3.55, east], [304.5, za22GateSeamNorth - 3.55, west],
+    // The original apron pad is now obstructed by the surveyed gate geometry.
+    // Keep the same flank, on the full-footprint certified 347 m plateau.
+    [295.5, za22GateSeamNorth - 2, east], [304.5, za22GateSeamNorth - 3.55, west],
     [305.5, za22GateSeamNorth - 3.55, west],
   ] },
   { id: 'cloud-terrace', domain: 'summit', pads: [[333, 660.6, west], [331, 660.5, west], [329, 660.5, west]] },
 ];
 
+/** The production rear room begins at N668, not the old front apron.
+ * Keep preview coordinates untouched; place the rear racks on surveyed
+ * real plateau pads, away from the cable lanes and gate centre. */
+const rearPad=(e:number,n:number,yaw:number):Pad=>[summitAssemblyAnchor.east+e,summitAssemblyAnchor.north+n,yaw];
+export const productionRearSledRackSites:readonly Site[]=[
+ {id:'rear-arrival',domain:'summit',pads:[rearPad(10,5,0),rearPad(12,7,0),rearPad(8,14,0),rearPad(14,30,0)]},
+ {id:'rear-summit',domain:'summit',pads:[rearPad(44,984,south),rearPad(38,986,south),rearPad(43,980,south)]},
+];
 export const townSledRackMissingSites = ['old-home'] as const;
 export const townSledRackLegacySites: readonly Site[] = [
   { id: 'north-slope', domain: 'town', pads: [[378, 303, south]] },
@@ -90,8 +101,9 @@ export function resolveTownSledRacks(
   domain: SledRackDomain,
   sample: DryFooting,
   craterLip?: CraterLip,
+  productionRear=false,
 ): (SledRack & { id: string })[] {
-  const sites = townSledRackSites.filter(site => site.domain === domain);
+  const sites = (domain==='summit'&&productionRear?productionRearSledRackSites:townSledRackSites).filter(site => site.domain === domain);
   if (domain === 'town' && craterLip) {
     const { east: lipEast, north: lipNorth } = craterLip;
     sites.push({ id: 'crater-mouth', domain, pads: [

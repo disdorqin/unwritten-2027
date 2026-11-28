@@ -25,6 +25,8 @@ type Input={
  domain:()=>Domain;
  acceptLanding:(line:1|2,feet:Foot,station:string)=>boolean;
  inputNow?:()=>number;
+ /** Rear visual work sleeps outside the rendered massif; authority remains live. */
+ upperVisible?:()=>boolean;
 };
 export function nightBProductionAuthority(p:Presence,line:1|2){
  return {state:()=>p.getCableLineState(line),now:p.cableServerNow,
@@ -48,7 +50,9 @@ export function createNightBProductionController(input:Input){
  let boardStatus:Parameters<ReturnType<typeof createNightBFrontBoardPresenter>>[0]|undefined;
  const local=(f:Foot)=>({...f,east:f.east-input.upperOrigin.east,north:f.north-input.upperOrigin.north});
  function tick(yaw:number):CableRideFrame|undefined{
-  if(upper)upper.update();
+  // present() derives the current pose from the shared authoritative clock,
+  // not accumulated visual ticks. Resume immediately when visible or riding.
+  if(upper&&(ride.riding()||input.upperVisible?.()!==false))upper.update();
   ride.updateVisuals(!!upper);
   const s=p.getCableLineState(1);if(s)repair?.sync(s);front?.repairProps?.sync(s);
   if(front&&boards){const status=!s||p.cableServerNow()===undefined?'offline':s.stage==='dormant'?'dormant':s.stage==='one-station'||front.service.firstRun()?.phase==='reposition'?'repair':front.service.serviceOpen()?'running':'parked';if(status!==boardStatus){boards(status);boardStatus=status;}}
@@ -61,7 +65,7 @@ export function createNightBProductionController(input:Input){
   if(d!=='town'&&d!=='mountain'&&d!=='summit')return [];
   const available:{id:string;label:string}[]=[];
   for(const cabin of [0,1] as const)if(ride.boardCandidate(feet,line,cabin))available.push({id:'board-'+cabin,label:'登乘'+(cabin+1)+'号车厢'});
-  if(line===2&&upper&&p.getCableLineState(2)?.stage==='dormant'&&p.cableServerNow()!==undefined&&summitReleaseApproaches[0]&&Math.hypot(feet.east-summitReleaseApproaches[0].east,feet.north-summitReleaseApproaches[0].north)<=1.35&&Math.abs(feet.height-800)<=.43)available.push({id:'release',label:'放下绝顶缆车'});
+  if(line===2&&upper&&p.getCableLineState(2)?.stage==='dormant'&&p.cableServerNow()!==undefined&&summitReleaseApproaches.some(a=>Math.hypot(feet.east-a.east,feet.north-a.north)<=1.35&&Math.abs(feet.height-a.height)<=.43))available.push({id:'release',label:'放下绝顶缆车'});
   if(line===2&&upper?.dispatcher?.available(local(feet)))available.push({id:'dispatcher',label:'询问调度员 · 班次'});
   if(line===2&&upper&&workshop&&p.getCableLineState(2)?.stage==='one-station')for(const a of workshop.repairActions(local(feet)))available.push({id:a.id,label:a.id==='pry-cable'?'按住 E 撬正缆绳':a.label});
   if(line===1&&front&&input.frontRepair&&repair&&Math.abs(feet.height-(input.frontRepair.surfaceAt(feet.east,feet.north)??Infinity))<=.43&&input.frontRepair.clear(feet)){

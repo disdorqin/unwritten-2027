@@ -1,0 +1,21 @@
+import assert from 'node:assert/strict';
+import {test} from 'node:test';
+import {createA32PassportInput} from '../tools/voxel-tavern/town-blockout/town-a32-passport-input';
+import type {SummitPassportAction,SummitPassportReply} from '../src/shared/summit-passport';
+const reply=(action:SummitPassportAction,stage:number,result:SummitPassportReply['result']='ok'):SummitPassportReply=>({type:'event',kind:'summit-passport-result',action,result,progress:{cloudStamped:stage>=1,summitStamped:stage>=2,summitRegistered:stage>=3,snowWingEligible:stage>=3}});
+test('real landmark and accepted replies gate all three stages; room change restores server state',()=>{
+ const sent:SummitPassportAction[]=[],notices:string[]=[];
+ const p=createA32PassportInput({available:()=>true,request:a=>{sent.push(a);return true},notice:t=>notices.push(t)});
+ const front={east:306,north:659,height:347},peak={east:50,north:998,height:800};
+ p.tick('mountain');assert.deepEqual(sent,['status']);p.receive(reply('status',0));
+ assert.equal(p.action('front',front,()=>false,()=>true),undefined);
+ assert.equal(p.action('rear',peak,()=>true,()=>true),undefined);
+ p.action('front',front,()=>true,()=>false)?.run();assert.equal(sent.length,1);
+ p.action('front',front,()=>true,()=>true)?.run();assert.equal(sent.at(-1),'cloud-stamp');assert.equal(p.progress()?.cloudStamped,false);
+ p.receive(reply('cloud-stamp',0,'position'));assert.equal(p.progress()?.cloudStamped,false);
+ p.action('front',front,()=>true,()=>true)?.run();p.receive(reply('cloud-stamp',1));
+ p.tick('summit');assert.equal(p.progress(),undefined);assert.equal(sent.at(-1),'status');
+ p.receive(reply('status',1));p.action('rear',peak,()=>true,()=>true)?.run();p.receive(reply('summit-stamp',2));
+ p.action('rear',{east:62.5,north:1014,height:800},()=>true,()=>true)?.run();
+ assert.equal(p.progress()?.snowWingEligible,false);p.receive(reply('register-summit',3));assert.equal(p.progress()?.snowWingEligible,true);
+});

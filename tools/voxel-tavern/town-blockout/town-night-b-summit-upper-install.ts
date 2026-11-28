@@ -1,4 +1,4 @@
-import {finishNightBAudit,finishNightBAuditAsync,type NightBAuditSliceOptions} from './town-night-b-audit-slices';
+import {finishNightBAudit,finishNightBAuditAsync,nightBAuditCertificateSteps,type NightBAuditCertificate,type NightBAuditSliceOptions} from './town-night-b-audit-slices';
 import {auditNightBSummitCable,nightBSummitSweepSteps,createNightBLine2Service,type NightBLine2ServiceInput,type SummitSweepProbe} from './town-night-b-summit-line2-service';
 import type {createTownD2R30CableTowers} from './town-d2-r30-cable-towers';
 import {mainSummitR30CableWorkshopAnchor,type mountMainSummitCableWorkshop} from './main-summit-cable-workshop';
@@ -15,7 +15,7 @@ type Input=Omit<NightBLine2ServiceInput,'audit'|'dispatch'|'firstRun'|'dockClear
  /** All remaining mounted components, not just the west sector. */
  externalBlocked:(probe:SummitSweepProbe)=>boolean;
  dockClear:(station:Station,feet:Foot)=>boolean;
- certifyApproaches:(docks:readonly Dock[])=>boolean;
+ certifyApproaches:(docks:readonly Dock[])=>NightBAuditCertificate;
 };
 /** Bind the already mounted production ropeway; never add another rope or
  * machine room. On every rejected gate the car stays parked with doors closed,
@@ -46,7 +46,7 @@ export function* upperOperationSteps(input:Input){
    const {board,approach}=r.cable.ropes[cabin].dock(station);return {station,cabin,board,approach};
   }));
   if(!docks.every(d=>dockClear(d.station,d.board)&&dockClear(d.station,d.approach)))return reject('dock-support-or-obstruction',audit,docks);
-  if(input.certifyApproaches(docks)!==true)return reject('walking-route-not-certified',audit,docks);
+  if(!(yield* nightBAuditCertificateSteps(input.certifyApproaches(docks))))return reject('walking-route-not-certified',audit,docks);
   if(!r.group.parent||!input.towers.group.parent||!input.workshop.group.parent)return reject('owner-changed-during-certification',audit,docks);
   const service=createNightBLine2Service({...input,audit,dockClear});
   if(!service.physical)return reject('service-physical-gate',audit,docks);

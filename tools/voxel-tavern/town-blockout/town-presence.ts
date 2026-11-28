@@ -1116,6 +1116,7 @@ export function createTownPresence(
       if (enabled && skyScene) switchDomain('sky', skyScene);
       else if (!enabled && domain === 'sky' && returnMountainScene) switchDomain('mountain', returnMountainScene);
     },
+    currentRoom:()=>domain,
     summitPassportAvailable: () => haveId && summitPassportSupported,
     requestSummitPassport(action: SummitPassportAction) {
       return summitPassportSupported && sendEvent(JSON.stringify({ type: 'event', kind: 'summit-passport', action }));

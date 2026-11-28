@@ -4,6 +4,8 @@ import {za22CloudSurfaceAt,za07CloudLookouts,cloudTerminal,za22CloudRunway} from
 import {summitAssemblyAnchor} from './main-summit-assembly';
 import {za22GateSeamNorth} from './town-za22-mountain-gate';
 import {mountCloudTerraceArt} from './main-summit-cloud-terrace-art';
+import {mountC2FrontSeam} from './town-night-c2-front-seam';
+import {mountMainSummitRegistration,createMainSummitRegistrationLandmarks} from './main-summit-registration';
 import {mountStarportAssemblySite} from './starport-assembly-site';
 import {townD2CloudTerraceContract} from './town-d2-cloud-terrace-transform';
 import {sampleTownD2R30Height} from './town-d2-r30-domain';
@@ -70,6 +72,10 @@ export function mountRidgeCloudTerrace(owner:Object3D,field:FrontRidgeR30Field,e
  const local=new Group();local.position.set(summitAssemblyAnchor.east,0,-summitAssemblyAnchor.north);group.add(local);
  const art=mountCloudTerraceArt(local);
  const starport=mountStarportAssemblySite(group,ridgeCloudHandoff.assembly);
+ const seam=closedSeam&&auditProductionCloudSeam(field).physicalReady?mountC2FrontSeam(field.heightAt,true):undefined;
+ if(seam)group.add(seam.group);
+ const registration=mountMainSummitRegistration(group,createMainSummitRegistrationLandmarks(),'cloud-deck');
+ let closedSign:Mesh<PlaneGeometry,MeshBasicMaterial>|undefined;
  const geo=new BoxGeometry(),mat=new MeshLambertMaterial({color:'#ffffff'}),glow=new MeshLambertMaterial({color:'#f6cb8a'});
  const tmp=new Object3D(),tint=new Color(),parts:{matrix:import('three').Matrix4;shade:string}[]=[],cores:typeof parts=[];
  const solids:{e:number;n:number;y:number;w:number;d:number;h:number}[]=[],lights:PointLight[]=[],boards:Mesh<PlaneGeometry,MeshBasicMaterial>[]=[];
@@ -77,10 +83,12 @@ export function mountRidgeCloudTerrace(owner:Object3D,field:FrontRidgeR30Field,e
   tmp.position.set(e,y,-n);tmp.rotation.set(0,0,0);tmp.scale.set(w,h,d);tmp.updateMatrix();(light?cores:parts).push({matrix:tmp.matrix.clone(),shade});
   if(solid)solids.push({e,n,y,w,d,h});
  };
- const blocked=(e:number,n:number,y:number,r=.27)=>{
-  return extraBlocked(e,n,y,r)||art.blocked(e-summitAssemblyAnchor.east,n-summitAssemblyAnchor.north,y,r,1.8)||
+ const physicalBlocked=(e:number,n:number,y:number,r=.27)=>{
+  const stampBlocked=registration.colliders.some(b=>y+1.8>b.min[1]&&y<b.max[1]&&Math.hypot(Math.max(b.min[0]-e,e-b.max[0],0),Math.max(b.min[2]+n,-n-b.max[2],0))<r);
+  return stampBlocked||!!seam?.blocked(e,n,y,r)||art.blocked(e-summitAssemblyAnchor.east,n-summitAssemblyAnchor.north,y,r,1.8)||
    starport.blocked({east:e,north:n,height:y},r,1.8)||solids.some(s=>y+1.8>s.y-s.h/2&&y<s.y+s.h/2&&Math.hypot(Math.max(0,Math.abs(e-s.e)-s.w/2),Math.max(0,Math.abs(n-s.n)-s.d/2))<r);
  };
+ const blocked=(e:number,n:number,y:number,r=.27)=>physicalBlocked(e,n,y,r)||extraBlocked(e,n,y,r);
  const flat=(e:number,n:number)=>Math.abs((field.heightAt(e,n)??0)-347)<.025;
  const stone=['#858b82','#96978a','#6f7979','#a3a090','#78837e'];
  // Real terrace snow remains the physical support. Thin paving gives
@@ -140,7 +148,8 @@ export function mountRidgeCloudTerrace(owner:Object3D,field:FrontRidgeR30Field,e
     add(e,s.north,348.18,.26,.26,.65,'#48555b',true);
     add(e,s.north,348.53,.48,.48,.12,'#ccd6db');
    }
-   for(const e of [s.east-3.8,s.east,s.east+3.8]){
+   // Central old fixed bar is replaced by the real C2 controlled bar.
+   for(const e of [s.east-3.8,s.east+3.8]){
     add(e,s.north,347+.62,e===s.east?3.75:3.35,.16,1.24,'#5b625f',true);
     add(e,s.north,348.04,e===s.east?3.75:3.35,.2,.14,'#bca06b');
    }
@@ -153,7 +162,7 @@ export function mountRidgeCloudTerrace(owner:Object3D,field:FrontRidgeR30Field,e
      ctx.font='36px Microsoft YaHei,sans-serif';ctx.fillText('跨域线路验收中 · 请返回云海台',384,191,720);
      const map=new CanvasTexture(canvas);map.colorSpace=SRGBColorSpace;
      const board=new Mesh(new PlaneGeometry(3.6,1.2),new MeshBasicMaterial({map}));
-     board.position.set(s.east,349.35,-s.north+.34);group.add(board);boards.push(board);}
+     board.position.set(s.east,349.35,-s.north+.34);group.add(board);boards.push(board);closedSign=board;}
    }
   }
  }
@@ -167,15 +176,35 @@ export function mountRidgeCloudTerrace(owner:Object3D,field:FrontRidgeR30Field,e
  }
  function action(p:TerraceFoot){
   if(ridgeCloudFootAt(field,p.east,p.north)===undefined||blocked(p.east,p.north,p.height))return;
-  if(closedSeam&&Math.hypot(p.east-productionCloudSeam.east,p.north-(productionCloudSeam.north-1.2))<1.6)
+  if(seam?.closed()&&Math.hypot(p.east-productionCloudSeam.east,p.north-(productionCloudSeam.north-1.2))<1.6)
    return {title:'主峰山门 · 暂闭',message:'云海台与主峰接驳地表已对齐。独立主峰联机房间尚未认证，请沿云海台原路返回。'};
   const q=za07CloudLookouts.find(a=>Math.hypot(a.east-p.east,a.north-p.north)<=1.35&&Math.abs(a.height-p.height)<.55);
   if(q)return {title:q.title,message:q.message};
  }
  let disposed=false;
- return {group,art,starport,paving,blocked,action,
+ let seamFailure:string|undefined;
+ function certifySeam(rear:(e:number,n:number)=>number|undefined){
+  seamFailure=undefined;
+  if(!seam||!seam.plan.supported)return false;
+  // The actual replacement is tested in its open pose in one synchronous
+  // transaction; refusal restores both the rendered and collision bar.
+  seam.open();let accepted=false;
+  try{
+   for(let n=662.5;n<=669;n+=.25)for(let e=298.75;e<=301.25;e+=.25){
+    const h=field.heightAt(e,n);
+    if(h===undefined||Math.abs(h-347)>.08||blocked(e,n,h,.27)){seamFailure=`front ${e},${n},${h}`;return false;}
+    if(n>=666.5){const rh=rear(e,n);if(rh===undefined||Math.abs(rh-h)>.08){seamFailure=`rear ${e},${n},${rh}`;return false;}}
+   }
+   // A real terrace foot must reach the open corridor. No standalone gate.
+   // Use the certified terminal apron, not the moving cabin's centre.
+   const path=surveyCloudFootpath(field,{east:324,north:655,height:347},{east:300,north:662.5,height:347},blocked,.4);
+   if(!path.length){seamFailure='terminal apron disconnected';return false;}
+   accepted=true;return true;
+  }finally{if(!accepted)seam.close();if(closedSign)closedSign.visible=!accepted;}
+ }
+ return {group,art,starport,paving,blocked,physicalBlocked,action,seam,certifySeam,get seamFailure(){return seamFailure;},
   footAt:(e:number,n:number,r=.27)=>ridgeCloudFootAt(field,e,n,r),
   survey:(a:TerraceFoot,b:TerraceFoot,reach=.65)=>surveyCloudFootpath(field,a,b,blocked,reach),
   setNight(night:boolean){art.setNight(night);glow.emissive.set(night?'#f6cb8a':'#000000');glow.emissiveIntensity=night?.7:0;lights.forEach(l=>l.intensity=night?5:0)},
-  dispose(){if(disposed)return;disposed=true;art.dispose();starport.dispose();batches.forEach(b=>b.dispose());geo.dispose();mat.dispose();glow.dispose();boards.forEach(b=>{b.geometry.dispose();b.material.map?.dispose();b.material.dispose()});group.removeFromParent();group.clear()}};
+  dispose(){if(disposed)return;disposed=true;art.dispose();starport.dispose();registration.dispose();seam?.dispose();batches.forEach(b=>b.dispose());geo.dispose();mat.dispose();glow.dispose();boards.forEach(b=>{b.geometry.dispose();b.material.map?.dispose();b.material.dispose()});group.removeFromParent();group.clear()}};
 }

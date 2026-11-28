@@ -1,4 +1,5 @@
 import {BoxGeometry,Color,Group,InstancedMesh,MeshLambertMaterial,Object3D,Vector3} from 'three';
+import {finishNightBAudit} from './town-night-b-audit-slices';
 import {nightBWestBounds as b,westCableDistance,type WestReserve} from './town-night-b-summit-west-relief';
 
 type Height=(e:number,n:number)=>number|undefined;
@@ -11,15 +12,17 @@ const pick=(v:string[],q:number)=>v[Math.min(v.length-1,Math.floor(q*v.length))]
 const cellSize=96;
 /** Grounded west-zone ecology. The host supplies the FINAL canonical height and
  * all route/facility reservations. No base terrain or overlapping east assets. */
-export function createNightBWestDressing(heightAt:Height,reserved:WestReserve){
+export function* nightBWestDressingSteps(heightAt:Height,reserved:WestReserve){
  const root=new Group();root.name='night-b-west-forest-rock-snow';
  const geo=new BoxGeometry(1,1,1),material=new MeshLambertMaterial({color:0xffffff});
  const cells=new Map<string,Cell>(),bodies:Body[]=[];
  const get=(e:number,n:number)=>{const x=Math.floor(e/cellSize),z=Math.floor(n/cellSize),key=x+','+z;let c=cells.get(key);if(!c){c={e:(x+.5)*cellSize,n:(z+.5)*cellSize,items:[],bodies:[]};cells.set(key,c)}return c};
  const add=(c:Cell,e:number,n:number,y:number,w:number,h:number,d:number,angle:number,color:string)=>c.items.push({e,n,y,w,h,d,angle,color});
  const body=(c:Cell,v:Body)=>{c.bodies.push(v);bodies.push(v)};
- let trees=0,rocks=0,snow=0,excluded=0;
+ let trees=0,rocks=0,snow=0,excluded=0,probes=0,committed=false;
+ try{
  for(let n=b.south+40;n<b.north-40;n+=13)for(let e=b.west+40;e<b.east-40;e+=13){
+  if(probes++%16===0)yield;
   const x=e+(hash(e,n,1)-.5)*9,z=n+(hash(e,n,2)-.5)*9,y=heightAt(x,z);
   const a=heightAt(x+2,z),d=heightAt(x-2,z),u=heightAt(x,z+2),v=heightAt(x,z-2);
   if(y===undefined||a===undefined||d===undefined||u===undefined||v===undefined||![y,a,d,u,v].every(Number.isFinite))continue;
@@ -49,7 +52,7 @@ export function createNightBWestDressing(heightAt:Height,reserved:WestReserve){
  }
  const dummy=new Object3D(),color=new Color();
  let instances=0;
- for(const [key,c] of cells){if(!c.items.length){cells.delete(key);continue}const m=new InstancedMesh(geo,material,c.items.length);m.name='west-dressing-'+key;
+ for(const [key,c] of cells){yield;if(!c.items.length){cells.delete(key);continue}const m=new InstancedMesh(geo,material,c.items.length);m.name='west-dressing-'+key;
   c.items.forEach((p,i)=>{dummy.position.set(p.e,p.y,-p.n);dummy.rotation.set(0,p.angle,0);dummy.scale.set(p.w,p.h,p.d);dummy.updateMatrix();m.setMatrixAt(i,dummy.matrix);m.setColorAt(i,color.set(p.color))});
   m.instanceMatrix.needsUpdate=true;if(m.instanceColor)m.instanceColor.needsUpdate=true;m.computeBoundingSphere();c.mesh=m;root.add(m);instances+=c.items.length;
  }
@@ -60,5 +63,8 @@ export function createNightBWestDressing(heightAt:Height,reserved:WestReserve){
   const pad=radius+4;
   for(let z=Math.floor((n-pad)/cellSize);z<=Math.floor((n+pad)/cellSize);z++)for(let x=Math.floor((e-pad)/cellSize);x<=Math.floor((e+pad)/cellSize);x++)for(const v of cells.get(x+','+z)?.bodies??[])if(Math.hypot(e-v.e,n-v.n)<v.r+radius&&foot+height>v.y&&foot<v.y+v.h)return true;return false;
  }
+ committed=true;
  return {group:root,stats:{trees,rocks,snow,excluded,instances,cells:cells.size,triangles:instances*12},bodies,updateView,blocked,dispose(){if(disposed)return;disposed=true;root.removeFromParent();for(const c of cells.values())c.mesh?.dispose();root.clear();cells.clear();geo.dispose();material.dispose();}};
+ }finally{if(!committed){root.removeFromParent();for(const c of cells.values())c.mesh?.dispose();root.clear();cells.clear();geo.dispose();material.dispose();}}
 }
+export function createNightBWestDressing(heightAt:Height,reserved:WestReserve){return finishNightBAudit(nightBWestDressingSteps(heightAt,reserved));}

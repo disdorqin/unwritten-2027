@@ -2,7 +2,7 @@ import {Box3,Group,Vector3,type Object3D} from 'three';
 import {createTownD2R30Ropeway} from './town-d2-r30-ropeway';
 import {createTownD2R30CableTowers} from './town-d2-r30-cable-towers';
 import {mountMainSummitCableWorkshop,mainSummitR30CableWorkshopAnchor} from './main-summit-cable-workshop';
-import {finishNightBAudit,finishNightBAuditAsync,type NightBAuditSliceOptions} from './town-night-b-audit-slices';
+import {finishNightBAudit,finishNightBAuditAsync,type NightBAuditCertificate,type NightBAuditSliceOptions} from './town-night-b-audit-slices';
 import {installNightBUpperOperation,upperOperationSteps} from './town-night-b-summit-upper-install';
 import {stageNightBCablePaintClearance,nightBCablePaintClearanceSteps} from './town-night-b-cable-paint-clearance';
 import {createNightBMountedClearance,nightBMountedClearanceSteps} from './town-night-b-mounted-clearance';
@@ -21,7 +21,7 @@ type Input={
  authority:ReturnType<typeof nightBProductionAuthority>;
  /** Host certifies actual continuous path from its route network to each
   * approach and every repair anchor, using the supplied combined collider. */
- certifyRoutes:(docks:readonly Dock[],repair:ReturnType<typeof mountMainSummitCableWorkshop>['repairAnchors'],supportAt:Ground,blocked:Input['blocked'],repairFootClear:(foot:Foot)=>boolean,dispatcherFoot:Foot)=>boolean;
+ certifyRoutes:(docks:readonly Dock[],repair:ReturnType<typeof mountMainSummitCableWorkshop>['repairAnchors'],supportAt:Ground,blocked:Input['blocked'],repairFootClear:(foot:Foot)=>boolean,dispatcherFoot:Foot)=>NightBAuditCertificate;
  authorized:boolean;
 };
 /** D2 calls inside the actual production owner after A/B/C2 have landed.

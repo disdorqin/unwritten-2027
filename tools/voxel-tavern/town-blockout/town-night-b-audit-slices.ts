@@ -1,3 +1,5 @@
+export type NightBAuditCertificate=boolean|Generator<void,boolean,unknown>;
+export function* nightBAuditCertificateSteps(value:NightBAuditCertificate){return typeof value==='boolean'?value:yield* value;}
 export type NightBAuditSliceOptions=Readonly<{budgetMs?:number;signal?:AbortSignal;valid?:()=>boolean;yieldTask?:()=>Promise<void>;onSlice?:(ms:number)=>void}>;
 /** The exact same iterator powers synchronous tests and the production
  * cooperative install. Only time scheduling changes; every probe executes. */

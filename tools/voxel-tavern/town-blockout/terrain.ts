@@ -165,8 +165,9 @@ function sample(x: number, n: number) {
   return { elevation, plaza: plazaDistance === 0, road: road.edge < 0, plot: plotSurface, ice: ld < -.5 && !isWater(x, n) };
 }
 
-/** Default relief is active on the shipped town grid; relief=false is an audit-only baseline. */
-export function createTerrainGrid(options: { relief?: boolean } = {}) {
+export type TerrainGridSamples={elevation:Float32Array;surfaces:Uint8Array};
+/** The same 1m sample kernel is used on the worker and in the synchronous fallback. */
+export function sampleTerrainGrid(options: { relief?: boolean } = {}):TerrainGridSamples {
   const elevation = new Float32Array(gridWidth * gridDepth);
   const surfaces = new Uint8Array(elevation.length);
   for (let j = 0; j < gridDepth; j++) {
@@ -185,6 +186,13 @@ export function createTerrainGrid(options: { relief?: boolean } = {}) {
       surfaces[index] = cell.ice ? 4 : cell.plaza ? 2 : extension.road ? 1 : extension.plot ? 3 : 0;
     }
   }
+  return {elevation,surfaces};
+}
+
+/** Default relief is active on the shipped town grid; relief=false is an audit-only baseline. */
+export function createTerrainGrid(options: { relief?: boolean; samples?:TerrainGridSamples } = {}) {
+  const {elevation,surfaces}=options.samples??sampleTerrainGrid(options);
+  if(elevation.length!==gridWidth*gridDepth||surfaces.length!==elevation.length)throw new RangeError('Invalid terrain sample dimensions');
   function groundHeightAt(x: number, north: number) {
     const gx = clamp(x / gridStep, 0, gridWidth - 1);
     const gn = clamp(north / gridStep, 0, gridDepth - 1);

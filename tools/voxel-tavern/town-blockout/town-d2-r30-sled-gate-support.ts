@@ -1,5 +1,6 @@
 import {
-  BoxGeometry, BufferGeometry, CylinderGeometry, Group, Mesh, MeshLambertMaterial,
+  BoxGeometry, BufferGeometry, Color, CylinderGeometry, Float32BufferAttribute, Group,
+  Mesh, MeshLambertMaterial,
 } from 'three';
 import { createMainSummitBlock, mainSummitLayout } from './main-summit-block';
 import { createMainSummitTrail } from './main-summit-trail';
@@ -38,14 +39,38 @@ export type TownD2R30SledGateSupportStats = Readonly<{
 
 const DEFAULTS = Object.freeze({ groundedBand: 2, standRadius: 1.4, stoneColor: '#746b5e' });
 
+/** R5: paint a vertical stone gradient onto a geometry so stone supports read
+ *  as real cut rock rather than a flat fill. Costs no extra draw calls; the
+ *  material colour stays a multiplier for the night tint. */
+function applyStoneGradient(geometry: BufferGeometry, topHex: string, bottomHex: string) {
+  const position = geometry.getAttribute('position');
+  const colors = new Float32Array(position.count * 3);
+  const top = new Color(topHex), bottom = new Color(bottomHex);
+  let minY = Infinity, maxY = -Infinity;
+  for (let index = 0; index < position.count; index++) {
+    const y = position.getY(index);
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  const span = maxY - minY || 1;
+  for (let index = 0; index < position.count; index++) {
+    const t = (position.getY(index) - minY) / span;
+    const c = top.clone().lerp(bottom, t);
+    colors[index * 3] = c.r;
+    colors[index * 3 + 1] = c.g;
+    colors[index * 3 + 2] = c.b;
+  }
+  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
+}
+
 /** Derives the 12 survey gates from the canonical P-1 walkway crosswalk. */
-export function surveyTownD2R30SledGates(arrivalHeight: number) {
-  const block = createMainSummitBlock(mainSummitLayout, arrivalHeight, 100);
-  try {
-    const trail = createMainSummitTrail(block.heightAt, arrivalHeight);
+export function surveyTownD2R30SledGates(arrivalHeight:number,supplied?:ReturnType<typeof createMainSummitTrail>['points']){
+  const block=supplied?undefined:createMainSummitBlock(mainSummitLayout,arrivalHeight,100);
+  try{
+    const points=supplied??createMainSummitTrail(block!.heightAt,arrivalHeight).points;
     const cumulative = [0];
-    for (let index = 1; index < trail.points.length; index++) {
-      const a = trail.points[index - 1]!, b = trail.points[index]!;
+    for (let index = 1; index < points.length; index++) {
+      const a = points[index - 1]!, b = points[index]!;
       cumulative.push(cumulative[index - 1]! + Math.hypot(b.east - a.east, b.north - a.north, b.height - a.height));
     }
     const footpathM = cumulative.at(-1)!;
@@ -59,7 +84,7 @@ export function surveyTownD2R30SledGates(arrivalHeight: number) {
         if (cumulative[middle]! > remaining) hi = middle; else lo = middle;
       }
       const fraction = (remaining - cumulative[lo]!) / (cumulative[hi]! - cumulative[lo]!);
-      const a = trail.points[lo]!, b = trail.points[hi]!;
+      const a = points[lo]!, b = points[hi]!;
       return {
         east: a.east + (b.east - a.east) * fraction,
         north: a.north + (b.north - a.north) * fraction,
@@ -68,7 +93,7 @@ export function surveyTownD2R30SledGates(arrivalHeight: number) {
     };
     return Array.from({ length: summitSledGateCount }, (_, index) => pointAt((index + 1) * segmentM));
   } finally {
-    block.dispose();
+    block?.dispose();
   }
 }
 
@@ -76,6 +101,7 @@ export function createTownD2R30SledGateSupport(options: {
   arrivalHeight?: number;
   heightAt?: (east: number, north: number, arrivalHeight?: number) => number | undefined;
   groundedBand?: number;
+  trailPoints?:ReturnType<typeof createMainSummitTrail>['points'];
 } = {}) {
   const arrivalHeight = options.arrivalHeight ?? 347;
   const groundedBand = options.groundedBand ?? DEFAULTS.groundedBand;
@@ -83,13 +109,13 @@ export function createTownD2R30SledGateSupport(options: {
     throw new RangeError('Invalid D2-R03 sled gate support parameters.');
   }
   const heightAt = options.heightAt ?? ((east, north) => sampleTownD2R30Height(east, north, arrivalHeight));
-  const gates = surveyTownD2R30SledGates(arrivalHeight);
+  const gates = surveyTownD2R30SledGates(arrivalHeight,options.trailPoints);
 
   const group = new Group();
   group.name = 'town-d2-r30-sled-gate-support';
   const geometries = new Set<BufferGeometry>();
   const materials = new Set<MeshLambertMaterial>();
-  const stone = new MeshLambertMaterial({ color: DEFAULTS.stoneColor });
+  const stone = new MeshLambertMaterial({ color: '#ffffff' });
   materials.add(stone);
 
   const reports: TownD2R30SledGateReport[] = [];
@@ -109,7 +135,9 @@ export function createTownD2R30SledGateSupport(options: {
     stand.position.set(gate.east, 0, -gate.north);
     const pillar = new CylinderGeometry(DEFAULTS.standRadius, DEFAULTS.standRadius * 1.2, delta, 8);
     pillar.translate(0, ground + delta / 2, 0);
+    applyStoneGradient(pillar, '#8a8174', '#5c544a');
     geometries.add(pillar);
+    stone.vertexColors = true;
     stand.add(new Mesh(pillar, stone));
     group.add(stand);
   }
@@ -142,7 +170,8 @@ export function createTownD2R30SledGateSupport(options: {
     setNight(value: boolean) {
       if (disposed) throw new Error('The D2-R03 sled gate stands are disposed.');
       if (typeof value !== 'boolean') throw new TypeError('setNight expects a boolean.');
-      stone.color.set(value ? '#514b43' : DEFAULTS.stoneColor);
+      // Vertex colours carry the stone gradient; white leaves it intact at day.
+      stone.color.set(value ? '#3f3a33' : '#ffffff');
     },
     dispose() {
       if (disposed) return;
