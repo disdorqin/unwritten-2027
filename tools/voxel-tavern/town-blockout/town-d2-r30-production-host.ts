@@ -410,7 +410,7 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     // whole passage, not just the contract band, so the report can say where a
     // body actually closes it. The railing itself is a real physical object and
     // is never deleted to "open" the way.
-    west: 298, east: 302, railingNorth: 663.25, south: 662.5, north: 669,
+    west: 298, east: 302, railingNorth: 663.25, south: 662.5, frontNorth: 666.5, north: 669,
     floor: 347, tolerance: .45,
   });
   const anchor = townD2SectorContract.worldAnchor;
@@ -570,6 +570,102 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
       if (visible) awake++;
     }
     return awake;
+  }
+
+  // ---- same-source wind resistance (D32-2) ---------------------------------
+  // The movement system needs a wind load per metre of ground, not a second
+  // weather generator. Exposure comes from the same canonical height and slope
+  // as the snow: high and steep is exposed, high and sheltered in a gully is
+  // not, and across the shared seam it is clamped against F's authority so the
+  // player does not hit a wall of wind at the gate.
+  let frontWind: ((east: number, north: number) => number | undefined) | undefined;
+  const WIND_SEAM_BAND = 96;
+
+  function windAt(east: number, north: number) {
+    if (disposed) return;
+    if (!Number.isFinite(east) || !Number.isFinite(north)) return;
+    const height = sampleTownD2R30Height(east, north, arrivalHeight);
+    if (height === undefined) return;
+    const normal = sampleTownD2R30Normal(east, north, arrivalHeight);
+    const slope = 1 - normal[1];
+    // Altitude load, then slope exposure, then a lee reduction for faces that
+    // turn away from the prevailing wind (the same +east bias the summit art
+    // uses for windward shading).
+    const altitude = Math.max(0, Math.min(1, (height - 260) / 520));
+    const exposure = Math.max(0, Math.min(1, (slope - .06) / .5));
+    const lee = Math.max(0, Math.min(1, (.18 - normal[0]) / .36));
+    const wind = Math.max(0, Math.min(1, altitude * .55 + exposure * .3 + altitude * lee * .15));
+    const seam = townD2SectorContract.world.splitNorth;
+    if (frontWind && Math.abs(north - seam) <= WIND_SEAM_BAND) {
+      const reported = frontWind(east, north);
+      if (typeof reported === 'number' && Number.isFinite(reported)) {
+        // Never more than one step of wind across the seam.
+        const scaled = Math.max(0, Math.min(1, reported));
+        return Math.max(scaled - .2, Math.min(scaled + .2, wind));
+      }
+    }
+    return wind;
+  }
+
+  /** A hands in F's front-terrace wind authority (0..1). */
+  function setFrontWind(next: ((east: number, north: number) => number | undefined) | undefined) {
+    if (next !== undefined && typeof next !== 'function') throw new TypeError('setFrontWind expects a sampler or undefined.');
+    frontWind = next;
+  }
+
+  // ---- front/rear airlock (D32-2) ------------------------------------------
+  // A real two-way transition, not a teleport: the front foot must sit in the
+  // certified corridor, the rear foot must land on real supported ground, and
+  // the crossing itself must be open. Anything else fails closed and says why.
+  type AirlockState = 'front' | 'rear';
+  let airlock: AirlockState = 'front';
+
+  function enterRear(fromFront: CableFoot) {
+    if (disposed) throw new Error('The production host is disposed.');
+    if (airlock === 'rear') return Object.freeze({ ok: false as const, reason: 'already-rear' as const });
+    const crossing = certifySeamCrossing();
+    if (!crossing.open) {
+      return Object.freeze({ ok: false as const, reason: 'crossing-closed' as const, crossing });
+    }
+    const inCorridor = fromFront.east >= SEAM_CROSSING_WORLD.west - 1 &&
+      fromFront.east <= SEAM_CROSSING_WORLD.east + 1 &&
+      fromFront.north >= SEAM_CROSSING_WORLD.railingNorth - 1 &&
+      fromFront.north <= SEAM_CROSSING_WORLD.north + 1 &&
+      Math.abs(fromFront.height - SEAM_CROSSING_WORLD.floor) <= 1;
+    if (!inCorridor) return Object.freeze({ ok: false as const, reason: 'outside-corridor' as const });
+    const localEast = fromFront.east - anchor.east;
+    const localNorth = fromFront.north - anchor.north;
+    const support = supportAt(localEast, localNorth);
+    if (support === undefined) return Object.freeze({ ok: false as const, reason: 'no-rear-ground' as const });
+    if (blocked(localEast, localNorth, support)) {
+      return Object.freeze({ ok: false as const, reason: 'rear-blocked' as const });
+    }
+    airlock = 'rear';
+    return Object.freeze({
+      ok: true as const,
+      domain: 'summit' as const,
+      local: Object.freeze({ east: localEast, north: localNorth, height: support }),
+    });
+  }
+
+  function exitRear() {
+    if (disposed) throw new Error('The production host is disposed.');
+    if (airlock !== 'rear') return Object.freeze({ ok: false as const, reason: 'not-rear' as const });
+    const crossing = certifySeamCrossing();
+    if (!crossing.open) {
+      return Object.freeze({ ok: false as const, reason: 'crossing-closed' as const, crossing });
+    }
+    airlock = 'front';
+    return Object.freeze({
+      ok: true as const,
+      domain: 'mountain' as const,
+      // The published seam foot, in world metres, is where the front room
+      // takes over; D2 never moves the player itself.
+      world: Object.freeze({
+        east: anchor.east, north: SEAM_CROSSING_WORLD.frontNorth,
+        height: SEAM_CROSSING_WORLD.floor,
+      }),
+    });
   }
 
   // ---- the original summit play, bound to the real bodies (D32-P1) ---------
@@ -823,6 +919,11 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     certifySeamCrossing,
     summitPlay,
     setDetailFocus,
+    windAt,
+    setFrontWind,
+    enterRear,
+    exitRear,
+    airlockState: () => airlock,
     /** D32-P1 #8: measure the real joint between the central spiral and C2's
      * single east-sector centreline, on this host's live support and collision. */
     certifyRoadJoint: () => certifyRoadJoint({ trail, supportAt, blocked }),

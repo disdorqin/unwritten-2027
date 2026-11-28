@@ -486,6 +486,65 @@ test('D32-2 detail sleeps by view but the mountain and its collision stay reside
   }
 });
 
+test('D32-2 the airlock is a real two-way transition, fail-closed', () => {
+  const host = createTownD2R30ProductionHost();
+  try {
+    host.install('A', createSouthSectorInstaller());
+    host.install('B', createWestSectorInstaller());
+    host.install('C2', createEastSectorInstaller());
+    assert.equal(host.airlockState(), 'front');
+    assert.equal(host.exitRear().ok, false, 'nobody can exit the rear from the front');
+    // Outside the certified corridor: refused with a reason.
+    assert.deepEqual({ ...host.enterRear({ east: 900, north: 200, height: 347 }) },
+      { ok: false, reason: 'outside-corridor' });
+    // Through the seam at the published foot: accepted, landing on real ground.
+    const entered = host.enterRear({ east: 300, north: 667, height: 347 });
+    assert.equal(entered.ok, true);
+    if (entered.ok) {
+      assert.equal(entered.domain, 'summit');
+      assert.ok(Math.abs(entered.local.east) < 1e-9);
+      assert.ok(Math.abs(entered.local.north + 9) < 1e-9);
+      assert.equal(entered.local.height, 347);
+    }
+    assert.equal(host.airlockState(), 'rear');
+    assert.deepEqual({ ...host.enterRear({ east: 300, north: 667, height: 347 }) },
+      { ok: false, reason: 'already-rear' });
+    const exited = host.exitRear();
+    assert.equal(exited.ok, true);
+    if (exited.ok) {
+      assert.equal(exited.domain, 'mountain');
+      assert.equal(exited.world.north, 666.5, 'the handover is at the published seam');
+      assert.equal(exited.world.height, 347);
+    }
+    assert.equal(host.airlockState(), 'front');
+  } finally {
+    host.dispose();
+  }
+});
+
+test('D32-2 wind load comes from the same field and is seam-clamped', () => {
+  const host = createTownD2R30ProductionHost();
+  try {
+    const low = host.windAt(0, 100)!;
+    const high = host.windAt(50, 1000)!;
+    assert.ok(low >= 0 && low <= 1);
+    assert.ok(high > low + .2, `wind must rise with altitude: ${low} -> ${high}`);
+    assert.equal(host.windAt(4000, 4000), undefined, 'outside the domain there is no wind load');
+    for (const reported of [0, .3, .6, 1]) {
+      host.setFrontWind(() => reported);
+      for (const north of [460, 480, 500, 540]) {
+        const here = host.windAt(0, north)!;
+        assert.ok(Math.abs(here - reported) <= .2 + 1e-9,
+          `seam wind ${here} vs front ${reported} at N${north}`);
+      }
+    }
+    host.setFrontWind(undefined);
+    assert.throws(() => host.setFrontWind(1 as never), /sampler/);
+  } finally {
+    host.dispose();
+  }
+});
+
 test('D31-1 the host publishes the four sector bounds it enforces', () => {
   assert.deepEqual({ ...townD2SectorBounds.A }, { west: -1100, east: 1100, south: -10, north: 480 });
   assert.deepEqual({ ...townD2SectorBounds.B }, { west: -1100, east: -300, south: 480, north: 1790 });
