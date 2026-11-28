@@ -597,6 +597,8 @@ try{
   assert.equal(assembled.summitProduction.ready,true);
   assert.equal(assembled.summitProduction.canonicalPreparation?.mode,'worker',JSON.stringify(assembled.summitProduction.canonicalPreparation));
   assert.ok(assembled.summitProduction.southSlices?.count>1,JSON.stringify(assembled.summitProduction.southSlices));
+  assert.ok(assembled.summitProduction.westSlices?.count>1,JSON.stringify(assembled.summitProduction.westSlices));
+  assert.equal(assembled.summitProduction.westPreparation?.mode,'worker',JSON.stringify(assembled.summitProduction.westPreparation));
   assert.equal(assembled.ridge.transportReady,true,JSON.stringify(assembled.summitProduction));
   assert.equal(assembled.ridge.cloudSeam.domainReady,true,JSON.stringify(assembled.ridge.cloudSeam));
   assert.equal(assembled.summitProduction.cable.boardable,true,JSON.stringify(assembled.summitProduction.cable));

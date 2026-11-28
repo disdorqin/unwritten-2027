@@ -5,7 +5,9 @@ import { mountSouthProduction } from './town-night-a-summit-production';
 import { createSouthReservation } from './town-night-a-summit-reservation';
 import { proposeSouthRoadGrade } from './town-night-a-summit-road-grade';
 import { createNightBWestCutSurface, cutNightBWestTerrain } from './town-night-b-summit-west-cut';
-import { mountNightBWestProduction } from './town-night-b-summit-west-production';
+import { mountNightBWestProduction,mountNightBWestProductionAsync } from './town-night-b-summit-west-production';
+import type {TownD2SectorHostPort} from './town-d2-r30-production-host';
+import type {NightBAuditSliceOptions} from './town-night-b-audit-slices';
 
 /**
  * D2-side wiring for the two sectors that already publish a production mount.
@@ -115,15 +117,8 @@ export function createEastSectorInstaller(
 
 /** B / west: the west road, pavilion and dressing, cut in place on the same
  * canonical tiles. The west sector is the only writer of its own bodies. */
-export function createWestSectorInstaller(): TownD2SectorInstaller {
-  return (port): TownD2SectorPackage => {
-    const west = mountNightBWestProduction({
-      owner: port.owner,
-      groundAt: port.groundAt,
-      trail: port.trail,
-      nearTiles: port.tiles,
-      legacyWestExcluded: true,
-    });
+const westInput=(port:TownD2SectorHostPort)=>({owner:port.owner,groundAt:port.groundAt,trail:port.trail,nearTiles:port.tiles,legacyWestExcluded:true});
+function westPackage(west:ReturnType<typeof mountNightBWestProduction>):TownD2SectorPackage{
     // Consume B a6095936's exact west night hook and expose the actual cut/deck split.
     return {
       sector: 'B',
@@ -137,5 +132,6 @@ export function createWestSectorInstaller(): TownD2SectorInstaller {
       setNight: west.setNight,
       dispose: () => west.dispose(),
     };
-  };
 }
+export function createWestSectorInstaller():TownD2SectorInstaller{return port=>westPackage(mountNightBWestProduction(westInput(port)));}
+export async function installWestSectorAsync(port:TownD2SectorHostPort,options:NightBAuditSliceOptions={}){return westPackage(await mountNightBWestProductionAsync(westInput(port),options));}

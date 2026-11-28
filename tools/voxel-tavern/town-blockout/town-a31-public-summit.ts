@@ -38,7 +38,7 @@ export function createA31PublicSummitRoute(input:Input){
  let near=false,elapsedMs=0,cutTiles=0,draws=0,snowPending=0,duplicates:readonly string[]=[];
  const yieldFrame=input.yieldFrame??a32YieldFrame,meter=createA32StageMeter(),quiet=createA32QuietGate();
  let canonicalPreparation: {mode:string;ms?:number;elapsedMs?:number;error?:string}|undefined;
- const southSlices:number[]=[];
+ const southSlices:number[]=[],westSlices:number[]=[];
  let hiking:ReturnType<typeof import('./town-a32-summit-hiking').certifyHiking>|undefined,hikingGuide:ReturnType<typeof mountHikingGuides>|undefined;
  let warmup:A32WarmupStats|undefined,cableFailure:string|undefined,previousFoot:Foot|undefined,previousAt=0,detailEast=Infinity,detailNorth=Infinity,lastViewAt=0,lastViewEast=Infinity,lastViewNorth=Infinity;
  const waitForQuiet=()=>quiet.wait(yieldFrame,()=>status==='disposed');
@@ -52,7 +52,7 @@ export function createA31PublicSummitRoute(input:Input){
    const started=performance.now();
    try{
     stage='import';
-    const [{createTownD2R30ProductionHost},{createWestSectorInstaller,createEastSectorInstaller},{prepareA32SouthSectorInstaller}]=await Promise.all([
+    const [{createTownD2R30ProductionHost},{installWestSectorAsync,createEastSectorInstaller},{prepareA32SouthSectorInstaller}]=await Promise.all([
      import('./town-d2-r30-production-host'),import('./town-d2-r30-sector-installers'),import('./town-a32-south-installer')]);
     // Presence's slewed clock may have fractional milliseconds; the ropeway
     // construction contract requires an integer epoch. Live B authority still
@@ -67,7 +67,7 @@ export function createA31PublicSummitRoute(input:Input){
     for(const name of host.pendingDetails())await stageRun('detail-'+name,()=>host.mountDetails(name));
     const south=await stageRun('south-prepare',()=>prepareA32SouthSectorInstaller(host.port,stagingAbort.signal));preparedSouth=south;
     await stageRun('south',()=>host.installAsync('A',(port,valid)=>south.installAsync(port,{budgetMs:6,valid,yieldTask:yieldFrame,onSlice:ms=>southSlices.push(ms)})));preparedSouth=undefined;
-    await stageRun('west',()=>host.install('B',createWestSectorInstaller()));
+    await stageRun('west',()=>host.installAsync('B',(port,valid)=>installWestSectorAsync(port,{budgetMs:6,signal:stagingAbort.signal,valid,yieldTask:yieldFrame,onSlice:ms=>westSlices.push(ms)})));
     await stageRun('east',()=>host.install('C2',createEastSectorInstaller()));
     host.setFrontSnow(input.frontSnow?(e,n)=>input.frontSnow!(e+summitAssemblyAnchor.east,n+summitAssemblyAnchor.north):undefined);
     host.setFrontWind(input.frontWind?(e,n)=>input.frontWind!(e+summitAssemblyAnchor.east,n+summitAssemblyAnchor.north):undefined);
@@ -176,6 +176,8 @@ export function createA31PublicSummitRoute(input:Input){
    duplicates:production?duplicates:[],sectorSamples:audit?.sectors.map(s=>s.samples)??[],
    legacyPruned:visual?{roadTriangles:visual.removedTrailTriangles,forestInstances:visual.removedForestInstances}:undefined,
    southRoad:production?.group.getObjectByName('night-a-south-sector')?.userData.a32Road,
+   westPreparation:production?.group.getObjectByName('night-b-west-sector')?.userData.cutPreparation,
+   westSlices:westSlices.length?{count:westSlices.length,max:Math.max(...westSlices),median:[...westSlices].sort((a,b)=>a-b)[Math.floor(westSlices.length/2)]}:undefined,
    hiking:hiking?{ready:!!production&&hiking.ready,metres:hiking.metres,maxGrade:hiking.maxGrade,samples:hiking.samples,markers:hikingGuide?.markers??0,skipped:hikingGuide?.skipped??0,...(input.profile&&hiking.ready?{waypoints:hiking.path}: {})}:undefined,
    cable:production?.cableState()??{installed:false,boardable:false,certified:false},
    sceneOwner:production?.group.parent===input.town?'town':production?.group.parent===scene?'summit':undefined};
