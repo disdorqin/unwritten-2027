@@ -34,7 +34,7 @@ export function createNightBWestPavilion(site:WestPavilionSite,heightAt:Height){
  root.position.set(site.east,site.height,-site.north);root.rotation.y=Math.atan2(site.viewEast,-site.viewNorth);
  const yaw=root.rotation.y,world=(x:number,z:number)=>({e:site.east+x*Math.cos(yaw)+z*Math.sin(yaw),n:site.north+x*Math.sin(yaw)-z*Math.cos(yaw)});
  if(!inNightBWest(site.east,site.north)||Math.hypot(site.approach.east-world(0,-offset).e,site.approach.north-world(0,-offset).n)>.01||Math.abs(site.approach.height-site.height)>.01)throw new RangeError('invalid west pavilion approach');
- const stone=new MeshLambertMaterial({color:'#78828b'}),wood=new MeshLambertMaterial({color:'#885e49'});
+ const stone=new MeshLambertMaterial({color:'#8a8378'}),wood=new MeshLambertMaterial({color:'#795344'}),trim=new MeshLambertMaterial({color:'#a47952'}),iron=new MeshLambertMaterial({color:'#45464b'});
  const colliders:Box[]=[...root.userData.colliders],floors:Box[]=[...root.userData.floors];
  function box(name:string,x:number,y:number,z:number,w:number,h:number,d:number,material:MeshLambertMaterial,solid=false){
   const m=new Mesh(new BoxGeometry(w,h,d),material);m.name=name;m.position.set(x,y,z);root.add(m);
@@ -47,6 +47,15 @@ export function createNightBWestPavilion(site:WestPavilionSite,heightAt:Height){
   const heights:number[]=[];for(const dx of [-.4,0,.4])for(const dz of [-.4,0,.4]){const p=world(x+dx,z+dz),h=heightAt(p.e,p.n);if(h===undefined||!Number.isFinite(h))throw new RangeError('missing footing');heights.push(h)}
   const bottom=Math.min(...heights)-site.height-.35;if(bottom>=-.18)return;
   box('west-pavilion-footing',x,(bottom-.18)/2,z,.8,-.18-bottom,.8,stone,true);
+  // Broad ashlar toe rests below the lowest actual footprint corner.
+  const baseHeights:number[]=[];
+  for(const dx of [-.61,0,.61])for(const dz of [-.61,0,.61]){const p=world(x+dx,z+dz),h=heightAt(p.e,p.n);if(h===undefined||!Number.isFinite(h))throw new RangeError('missing ashlar footing');baseHeights.push(h)}
+  const toeBottom=Math.min(...baseHeights)-site.height-.28,toeTop=Math.min(-.22,Math.max(bottom+.30,Math.max(...baseHeights)-site.height+.26));
+  if(toeTop>toeBottom)box('b33-ashlar-toe',x,(toeBottom+toeTop)/2,z,1.22,toeTop-toeBottom,1.22,stone,true);
+  if(-.18-bottom>.85){
+   for(let y=bottom+.72;y<-.36;y+=.72)box('b33-ashlar-course',x,y,z,.83,.065,.83,trim,true);
+   box('b33-ashlar-cap',x,-.25,z,.96,.14,.96,stone,true);
+  }
  }
  for(const x of [-3.5,3.5])for(const z of [-2.5,2.5])pier(x,z);
  const zmid=-depth/2-span/2;box('west-pavilion-walkway',0,-.12,zmid,2,.24,span,wood);
@@ -58,11 +67,34 @@ export function createNightBWestPavilion(site:WestPavilionSite,heightAt:Height){
   box('walkway-rail',x,.95,(railStart+railEnd)/2,.10,.12,railEnd-railStart,wood,true);
   for(let i=0;i<4;i++)box('walkway-post',x,.48,railStart+(railEnd-railStart)*i/3,.13,.96,.13,wood,true);
  }
+ // The view edge used to have no barrier; preserve the actual back
+ // entrance and build a visible timber parapet above the exposed drop.
+ const viewZ=depth/2-.23;
+ for(const x of [-width/2+.25,0,width/2-.25]){
+  box('b33-view-guard-post-base',x,.085,viewZ,.36,.17,.36,stone,true);
+  box('b33-view-guard-post',x,.58,viewZ,.18,.99,.18,wood,true);
+  box('b33-view-guard-cap',x,1.12,viewZ,.25,.11,.25,trim,true);
+ }
+ for(const x of [-width/4,width/4]){
+  box('b33-view-guard-low',x,.28,viewZ,width/2-.16,.14,.13,wood,true);
+  box('b33-view-guard-top',x,.98,viewZ,width/2-.16,.18,.17,wood,true);
+  for(let i=0;i<7;i++)box('b33-view-guard-baluster',x+(i-3)*.60,.62,viewZ,.10,.63,.10,trim,true);
+ }
+ // Real deck edge beams above the already grounded piers. The central
+ // 2m walkway stays open in both directions.
+ for(const x of [-3.5,3.5]){
+  box('b33-pier-longitudinal-beam',x,-.46,0,.36,.35,depth-.45,wood,true);
+  for(const z of [-2.5,2.5])box('b33-pier-iron-seat',x,-.23,z,.56,.12,.56,iron,true);
+ }
+ for(const x of [-.67,.67])box('b33-walkway-long-beam',x,-.32,zmid,.22,.19,span-.25,wood,true);
+ for(const z of [-offset+.8,zmid,-depth/2-.8])box('b33-walkway-crossbeam',0,-.33,z,1.8,.21,.28,wood,true);
+ root.userData.colliders=colliders;root.userData.floors=floors;
+ root.userData.owner='B';root.userData.revision='B33-2';root.userData.chunkId='rear/B/pavilion';root.userData.static=true;
  const local=(e:number,n:number,h:number)=>{const dx=e-site.east,dn=n-site.north;return new Vector3(dx*Math.cos(yaw)+dn*Math.sin(yaw),h-site.height,dx*Math.sin(yaw)-dn*Math.cos(yaw))};
  let disposed=false;
  return {group:root,site,replaces:'upper-cloud' as const,
   supportAt(e:number,n:number,r=.32){const p=local(e,n,site.height);return floors.some(f=>p.x>=f.min[0]!+r&&p.x<=f.max[0]!-r&&p.z>=f.min[2]!+r&&p.z<=f.max[2]!-r)||Math.abs(p.x)<=1-r&&p.z>=-offset&&p.z<=-depth/2+r?site.height:undefined},
-  blocked(e:number,n:number,h:number,r=.32,body=1.8){const p=local(e,n,h);return colliders.some(c=>p.x+r>c.min[0]!&&p.x-r<c.max[0]!&&p.z+r>c.min[2]!&&p.z-r<c.max[2]!&&p.y+body>c.min[1]!&&p.y<c.max[1]!)},
+  blocked(e:number,n:number,h:number,r=.32,body=1.8){const p=local(e,n,h);return colliders.some(c=>p.y+body>c.min[1]!&&p.y<c.max[1]!&&Math.hypot(Math.max(c.min[0]!-p.x,p.x-c.max[0]!,0),Math.max(c.min[2]!-p.z,p.z-c.max[2]!,0))<r)},
   dispose(){if(disposed)return;disposed=true;root.removeFromParent();const geos=new Set<any>(),mats=new Set<any>();root.traverse(o=>{if(o instanceof Mesh){geos.add(o.geometry);for(const m of Array.isArray(o.material)?o.material:[o.material])mats.add(m);if(o instanceof InstancedMesh)o.dispose()}});for(const g of geos)g.dispose();for(const m of mats)m.dispose();root.clear()}
  };
 }

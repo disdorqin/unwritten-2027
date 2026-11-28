@@ -9,6 +9,7 @@ import {installBR30HistoricEastWall} from './town-b-r30-historic-walkway-site';
 import {installBR30RubbingPaper} from './town-b-r30-inscription-rubbing';
 import {surveyBR30ReturnHeadframe} from './town-b-r30-return-headframe';
 import {surveyBR30WorkshopApproaches} from './town-b-r30-workshop-approaches';
+import {installBR32CraterInfill} from './town-b-r32-crater-infill';
 import {surveyBR30InscriptionApproach} from './town-b-r30-inscription-approach';
 type Road=ReturnType<typeof mountWestCraterRoad>;
 type Rail=ReturnType<typeof buildCraterRailExtension>;
@@ -49,9 +50,10 @@ export function attachBR30CraterCompletion(road:Road,rail:HostRail,tracks:readon
    const dock=routes.find(r=>r.id==='transfer-dock');if(!dock)throw Error('Missing real transfer dock');
    if(supportSurvey){const a=supportSurvey(road,rail),actual=routes.find(r=>r.id==='inscription-access');if(!actual||a.routeId!==actual.id||a.points!==actual.points||![a.length,a.bodyGap,a.trackGap,a.maxStep,a.steps].every(Number.isFinite)||a.length<=0||a.bodyGap<.27||a.trackGap<1.30||a.maxStep>.43001||a.steps<1)throw Error('Invalid actual inscription support survey');inscriptionApproach=a;}else inscriptionApproach=surveyBR30InscriptionApproach(road,road.inscription.layout.useFoot,dock,tracks,solids);
   }
+  const infill=take(installBR32CraterInfill(road,tracks,[...(hostRoutes??[]).map(r=>r.points),...(workshopApproaches??[]).map(r=>r.points),...(inscriptionApproach?[inscriptionApproach.points]:[]),mound.route],railBoxes));
   live.add(root);
   let disposed=false;
-  return {kit,melt,mound,flag,historic,paper,returnSurvey,workshopApproaches,inscriptionApproach,
+  return {kit,melt,mound,flag,historic,paper,infill,returnSurvey,workshopApproaches,inscriptionApproach,
    mode,productionReady:false as const,dispose(){
     if(disposed)return;disposed=true;live.delete(root);
     for(const release of undo.reverse())release();
