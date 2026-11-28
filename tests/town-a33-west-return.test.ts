@@ -24,7 +24,7 @@ test('N536 return joins the actual west and town triangle surfaces, avoiding the
  const boxes=[...prior,...dressing.solids].filter(b=>b.max[0]!>-100&&b.min[0]!<4&&b.min[2]!<-510&&b.max[2]!>-540);
  let samples=0,maxGrade=0,minGap=Infinity,metres=0;
  try{
-  assert.ok(Math.abs(west.heightAt(0,536)??road.heightAt(0,536)!-grid.heightAt(0,536))<.001);
+  assert.ok(Math.abs((west.heightAt(0,536)??road.heightAt(0,536)!)-grid.heightAt(0,536))<.001);
   for(const direction of [1,-1]){
    const path=direction===1?a33WestReturnRoute:[...a33WestReturnRoute].reverse();
    let prev:{e:number;n:number;h:number}|undefined;

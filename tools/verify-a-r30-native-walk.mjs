@@ -8,10 +8,10 @@ import {fromSummitPresencePose} from '../src/shared/za22-summit-presence-domain.
 const [origin, output, segment = 'all'] = process.argv.slice(2);
 assert.ok(origin && output, 'Use the production-preview loopback URL and an evidence directory');
 const bare = process.env.ZA22_BARE === '1';
-const url = new URL(bare ? '/' : ['a31-front-north','a33-front-exterior','a33-west-foothill'].includes(segment)?'/?profile&mRoadSurvey':'/?profile', origin);
+const url = new URL(bare ? '/' : ['a31-front-north','a33-front-exterior','a33-west-foothill','a33-west-north-return'].includes(segment)?'/?profile&mRoadSurvey':'/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','west-mountain','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review','night-r3-entry','night-r3-bare-weather','night-r3-bare-west','a31-bare-crater-return','a31-front-north','a32-stream','a33-front-exterior','a33-west-foothill'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','west-mountain','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review','night-r3-entry','night-r3-bare-weather','night-r3-bare-west','a31-bare-crater-return','a31-front-north','a32-stream','a33-front-exterior','a33-west-foothill','a33-west-north-return'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -257,7 +257,7 @@ async function walkTo(page, evidence, target, label, precision=.46) {
     if (distance <= precision) {
       const checkpoint={ label, target, ...from, wire: evidence.poses.at(-1) };
       evidence.checkpoints.push(checkpoint);
-      if(['joint-historic','west-mountain','night-r3-bare-west','a31-bare-crater-return','a31-front-north','a33-front-exterior','a33-west-foothill'].includes(segment))await appendFile(join(output,'native-checkpoints.ndjson'),JSON.stringify(checkpoint)+'\n');
+      if(['joint-historic','west-mountain','night-r3-bare-west','a31-bare-crater-return','a31-front-north','a33-front-exterior','a33-west-foothill','a33-west-north-return'].includes(segment))await appendFile(join(output,'native-checkpoints.ndjson'),JSON.stringify(checkpoint)+'\n');
       console.log(JSON.stringify({ phase: label, east: from.east, north: from.north, y: from.height }));
       return;
     }
@@ -317,7 +317,7 @@ async function picture(page,evidence,label){
 import {buildCraterRailExtension} from './voxel-tavern/town-blockout/town-crater-rail-extension.ts';
 import {buildTownRailRoute} from './voxel-tavern/town-blockout/town-railway.ts';
 import {mountWestMountainGround,westMountainTrackProtection} from './voxel-tavern/town-blockout/town-night-a-summit-west-ground.ts';
-import {a33WestFoothillRoute} from './voxel-tavern/town-blockout/town-a33-west-foothill.ts';
+import {a33WestFoothillRoute,a33WestReturnRoute} from './voxel-tavern/town-blockout/town-a33-west-foothill.ts';
 import {westMountainFootway} from './voxel-tavern/town-blockout/town-night-a-summit-west-footway.ts';
 const grid=createTerrainGrid(), road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
 const rail=['kengkou','freight','shankou','transfer-dock','ore-yard-dock','rail-valley','rail-buffer','inscription-access','west-mountain'].includes(segment)?buildCraterRailExtension(grid,road,['rail-buffer','west-mountain'].includes(segment)?buildTownRailRoute(grid).points:undefined):undefined;
@@ -373,7 +373,7 @@ try{
   for(const [i,p] of [...path.slice(0,-1).reverse(),spawn].entries())await walkTo(page,evidence,p,'crater-return-'+i,.65);
   const returned=await readPose(page);await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-223,p.north-180)<1);
   await picture(page,evidence,'town-returned');report.traversal={start,mouth,top:mouth,returned};
- }else if(segment==='a33-west-foothill'){
+ }else if(segment==='a33-west-foothill'||segment==='a33-west-north-return'){
   // Ordinary in-game destination menu only. Then all poses come from the
   // real keyboard/mouse and accepted socket; no candidate-only spawn.
   await page.locator('#town-panel-toggle').click();
@@ -384,13 +384,26 @@ try{
   const way=[...approach['west-mountain'],...westMountainFootway.slice(1),...a33WestFoothillRoute.slice(1)];
   for(const [i,p] of way.entries()){
    await walkTo(page,evidence,p,'a33-foothill-out-'+i,.46);
-   if(i===way.length-1||i===way.length-4||p[1]===350){
+   if(segment==='a33-west-foothill'&&(i===way.length-1||i===way.length-4||p[1]===350)){
     await face(page,evidence,-Math.PI/2);
     await picture(page,evidence,'a33-foothill-'+p[1]+'-west');
    }
   }
   const top=await readPose(page);
   const wire=await waitForWire(page,evidence,p=>p?.area==='west'&&Math.hypot(p.east+86,p.north-526)<.8);
+  if(segment==='a33-west-north-return'){
+   await face(page,evidence,Math.PI/2);await picture(page,evidence,'north-return-start');
+   for(const [i,p] of a33WestReturnRoute.slice(1).entries())await walkTo(page,evidence,p,'a33-north-return-'+i,.40);
+   const returned=await readPose(page);
+   const returnWire=await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-2,p.north-536)<1);
+   await picture(page,evidence,'north-return-town');
+   await walkTo(page,evidence,[-12,536],'north-return-reenter-west',.40);
+   const backWire=await waitForWire(page,evidence,p=>p?.area==='west'&&Math.hypot(p.east+12,p.north-536)<1);
+   await walkTo(page,evidence,[2,536],'north-return-final-town',.4);
+   const finalWire=await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-2,p.north-536)<1);
+   await picture(page,evidence,'north-return-final');
+   report.traversal={start,top,returned,topWire:wire,returnWire,backWire,finalWire};report.entry={scope:'ordinary crater UI, continuous walk west foothill to town N536, cross seam both ways',waypoints:way.length};
+  }else{
   await face(page,evidence,0);await picture(page,evidence,'a33-foothill-north');
   await face(page,evidence,Math.PI);await picture(page,evidence,'a33-foothill-south');
   for(const [i,p] of [...way.slice(0,-1).reverse(),[2,159]].entries())await walkTo(page,evidence,p,'a33-foothill-back-'+i,.55);
@@ -398,6 +411,7 @@ try{
   await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-2,p.north-159)<1);
   await picture(page,evidence,'a33-foothill-return');
   report.traversal={start,top,returned,topWire:wire};report.entry={scope:'ordinary crater destination UI, full native footway to N526 and return',waypoints:way.length};
+  }
  }else if(segment==='night-r3-bare-west'){
   assert.ok(bare);
   const start=await readPose(page);
