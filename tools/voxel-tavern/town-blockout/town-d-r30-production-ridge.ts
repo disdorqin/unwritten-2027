@@ -1,4 +1,4 @@
-import type {Object3D} from 'three';
+import {Group,type Object3D} from 'three';
 import type {createTerrainGrid} from './terrain';
 import {createAR30RidgeOwnership} from './town-a-r30-ridge-ownership';
 import {buildFrontRidgeR30Field,frontRidgeR30Bounds,mountFrontRidgeR30} from './town-d-r30-front-ridge';
@@ -11,9 +11,12 @@ import {mountRidgeRetainingBanks} from './town-d-r30-retaining-banks';
 import {mountNorthRidgeMiddleStation} from './north-ridge-middle-station';
 import {mountRidgeCableFacilities,auditRidgeCableSweep,surveyRidgeCableSpans} from './town-d-r30-cable-facilities';
 import {mountRidgeCloudTerrace,auditProductionCloudSeam} from './town-d-r30-cloud-terrace';
-import {prepareC2FrontCable,type C2CableAuthority} from './town-night-c2-front-cable-host';
+import type {C2CableAuthority} from './town-night-c2-front-cable-host';
+import {installA32FrontOperation} from './town-a32-front-operation';
+import {createA32FrontWalkAuthority} from './town-a32-front-walk-authority';
+import type {NightBAuditSliceOptions} from './town-night-b-audit-slices';
 type Foot={east:number;north:number;height:number};
-type C2FrontInstall=ReturnType<typeof prepareC2FrontCable>;
+type C2FrontInstall=Awaited<ReturnType<typeof installA32FrontOperation>>;
 type C2FrontRepair=Extract<C2FrontInstall,{ready:true}>['frontRepair'];
 type C2FrontOperation=Extract<C2FrontInstall,{ready:true}>['frontOperation'];
 /** Repair anchors measured by B on this exact production front field
@@ -112,8 +115,9 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
  let frontOperation:C2FrontOperation|undefined;
  let frontRepair:C2FrontRepair|undefined;
  let transport=false;
- let prepareReason:string|undefined;
- const surfaceAt=(e:number,n:number)=>heightAt(e,n);
+ let prepareReason:string|undefined,preparing=false,disposed=false,routeAudit:unknown;
+ let cableSlices:number[]=[];
+ const cableAbort=new AbortController();
  /** Everything the host actually owns except the facility being replaced, so
   * the installer never counts its own parked cars as an external obstacle. */
  function externalObstacles(e:number,n:number,h:number,r=.27,body=1.8){
@@ -129,18 +133,23 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
   /** A's `preparePublicFrontCable`: real B installer, real host obstacles,
    * real walking certification. Rejection keeps the closed instance and
    * never grants transportReady. */
-  async preparePublicFrontCable(authority:C2CableAuthority){
+  async preparePublicFrontCable(authority:C2CableAuthority,walkGroups?:readonly Group[],auditOptions:NightBAuditSliceOptions={}){
    if(transport)return true;
    if(!activeFacilities||!stationReady||!serviceExit){prepareReason='host-not-ready';return false;}
-   if(frontOperation)return false;
+   if(frontOperation||preparing||disposed)return false;
    const closed=activeFacilities;
-   const result=prepareC2FrontCable({owner,field,closed,groundMeshes:[model.group],authority,
+   const groups=walkGroups??owner.children.filter((c):c is Group=>c instanceof Group&&c!==closed.group);
+   const walk=createA32FrontWalkAuthority(groups,grid.heightAt);
+   preparing=true;cableSlices=[];
+   try{
+   const result=await installA32FrontOperation({owner,field,closed,groundMeshes:[model.group],authority,
     authorized:cableAudit.groundHits===0&&cableAudit.minMoving>=.25,
-    supportAt:surfaceAt,
-    blocked:(e:number,n:number,h:number,r:number,body:number)=>externalObstacles(e,n,h,r,body),
-    repairAnchors:c2FrontRepairAnchors,
-    // Only the graded roads this host actually built can certify a walk.
-    roads:roads.map(road=>road.route.map(p=>({east:p.east,north:p.north,height:p.height})))});
+    supportAt:walk.supportAt,groundAt:grid.heightAt,allowsUphill,
+    blocked:(e:number,n:number,h:number,r:number,body:number)=>externalObstacles(e,n,h,r,body)||!!terrace?.physicalBlocked(e,n,h,r)||walk.blocked(e,n,h,r,body),
+    repairAnchors:c2FrontRepairAnchors,roads:roads.map(road=>road.route)},
+    {...auditOptions,signal:auditOptions.signal??cableAbort.signal,valid:()=>!disposed&&activeFacilities===closed&&auditOptions.valid?.()!==false,
+     onSlice:ms=>{cableSlices.push(ms);auditOptions.onSlice?.(ms);}});
+   routeAudit=result.routeAudit;
    if(!result.ready){prepareReason=result.reason;return false;}
    // Same parent, one facility: the closed instance is already disposed by
    // the installer, so every consumer must now read the new one.
@@ -150,7 +159,10 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
    transport=true;
    prepareReason=undefined;
    return true;
+   }finally{preparing=false;}
   },
+  get frontRouteAudit(){return routeAudit;},
+  get frontAuditSlices(){return cableSlices.length?{count:cableSlices.length,max:Math.max(...cableSlices),median:[...cableSlices].sort((a,b)=>a-b)[Math.floor(cableSlices.length/2)]}:undefined;},
   certifyPublicSeam(rear:(e:number,n:number)=>number|undefined){seamCertified=terrace?.certifySeam(rear)===true;return seamCertified;},
   get facilities(){return activeFacilities;},
   get frontOperation(){return frontOperation;},
@@ -162,6 +174,6 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
   blocked(e:number,n:number,h:number,r=.27){return forest.blocked(e,n,h,r)||!!station?.blocked(e,n,h,r)||!!activeFacilities?.blocked(e,n,h,r)||!!terrace?.blocked(e,n,h,r)||furniture.some(f=>f.blocked(e,n,h,r))||banks.some(b=>b.blocked(e,n,h,r))},
   setNight(night:boolean){station?.setNight(night);activeFacilities?.setNight(night);terrace?.setNight(night);furniture.forEach(f=>f.setNight(night))},
   updateView(e:number,n:number,allowDistant=true){model.updateView(e,n,allowDistant);forest.updateView(e,n);banks.forEach(b=>b.updateView(e,n));activeFacilities?.updateView(e,n)},
-  dispose(){activeFacilities?.dispose();activeFacilities=undefined;frontRepair=undefined;transport=false;},
+  dispose(){disposed=true;cableAbort.abort();activeFacilities?.dispose();activeFacilities=undefined;frontRepair=undefined;transport=false;},
  };
 }

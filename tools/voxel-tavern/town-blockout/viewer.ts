@@ -611,7 +611,7 @@ function preparePublicTransport(foot:{east:number;north:number;height:number}){
   const start=performance.now();
   try{
    if(productionRidge){
-    const accepted=await productionRidge.preparePublicFrontCable(nightBProductionAuthority(presence,1));
+    const accepted=await productionRidge.preparePublicFrontCable(nightBProductionAuthority(presence,1),[...architecture.values(),railway.group,railExtension.group]);
     if(!accepted)frontPreparationError=productionRidge.frontCablePrepareResult??'front-owner-refused';
    }
   }catch(error){frontPreparationError=error instanceof Error?error.message:String(error);}
@@ -4625,7 +4625,7 @@ renderer.setAnimationLoop(now => {
         weatherCycle:southWeatherProfile(skyFrame,outdoorWeather,weather,regionalWeather?.weather),
         fogNear: weatherFog.near, fogFar: weatherFog.far, points: renderer.info.render.points,
         craterPerf:{exteriorCertified:craterExteriorCertified,undergroundVisible:undergroundRenderParent?.visible},
-        summitProduction:{...cloudRoute.state(),farDraws:summitSkylineDraws,frontPreparationMs,frontPreparationError,publicTransportBound},
+        summitProduction:{...cloudRoute.state(),farDraws:summitSkylineDraws,frontPreparationMs,frontPreparationError,frontAuditSlices:productionRidge?.frontAuditSlices,frontRouteAudit:productionRidge?.frontRouteAudit,publicTransportBound},
       terrainPreload:townTerrainPreloadStats(),
         ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],heading:yaw,...(previewOptions.has('mRoadSurvey')?{roadGuide:productionRidge.baseToMiddleGuide,rearConnected:productionRidge.rearConnected,moveReject:ridgeMoveReject}:{}),surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities,cableInstances:productionRidge.facilities?.visibleInstances(),terraceMounted:!!productionRidge.terrace,cloudSeam:productionRidge.cloudSeam},
         ...(skylinePeak ? { summitSkyline: { draws: summitSkylineDraws, peakNdc: skylinePeak.toArray(),

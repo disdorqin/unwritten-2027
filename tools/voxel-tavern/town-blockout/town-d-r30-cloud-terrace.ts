@@ -83,11 +83,12 @@ export function mountRidgeCloudTerrace(owner:Object3D,field:FrontRidgeR30Field,e
   tmp.position.set(e,y,-n);tmp.rotation.set(0,0,0);tmp.scale.set(w,h,d);tmp.updateMatrix();(light?cores:parts).push({matrix:tmp.matrix.clone(),shade});
   if(solid)solids.push({e,n,y,w,d,h});
  };
- const blocked=(e:number,n:number,y:number,r=.27)=>{
+ const physicalBlocked=(e:number,n:number,y:number,r=.27)=>{
   const stampBlocked=registration.colliders.some(b=>y+1.8>b.min[1]&&y<b.max[1]&&Math.hypot(Math.max(b.min[0]-e,e-b.max[0],0),Math.max(b.min[2]+n,-n-b.max[2],0))<r);
-  return stampBlocked||!!seam?.blocked(e,n,y,r)||extraBlocked(e,n,y,r)||art.blocked(e-summitAssemblyAnchor.east,n-summitAssemblyAnchor.north,y,r,1.8)||
+  return stampBlocked||!!seam?.blocked(e,n,y,r)||art.blocked(e-summitAssemblyAnchor.east,n-summitAssemblyAnchor.north,y,r,1.8)||
    starport.blocked({east:e,north:n,height:y},r,1.8)||solids.some(s=>y+1.8>s.y-s.h/2&&y<s.y+s.h/2&&Math.hypot(Math.max(0,Math.abs(e-s.e)-s.w/2),Math.max(0,Math.abs(n-s.n)-s.d/2))<r);
  };
+ const blocked=(e:number,n:number,y:number,r=.27)=>physicalBlocked(e,n,y,r)||extraBlocked(e,n,y,r);
  const flat=(e:number,n:number)=>Math.abs((field.heightAt(e,n)??0)-347)<.025;
  const stone=['#858b82','#96978a','#6f7979','#a3a090','#78837e'];
  // Real terrace snow remains the physical support. Thin paving gives
@@ -198,7 +199,7 @@ export function mountRidgeCloudTerrace(owner:Object3D,field:FrontRidgeR30Field,e
    accepted=true;return true;
   }finally{if(!accepted)seam.close();if(closedSign)closedSign.visible=!accepted;}
  }
- return {group,art,starport,paving,blocked,action,seam,certifySeam,
+ return {group,art,starport,paving,blocked,physicalBlocked,action,seam,certifySeam,
   footAt:(e:number,n:number,r=.27)=>ridgeCloudFootAt(field,e,n,r),
   survey:(a:TerraceFoot,b:TerraceFoot,reach=.65)=>surveyCloudFootpath(field,a,b,blocked,reach),
   setNight(night:boolean){art.setNight(night);glow.emissive.set(night?'#f6cb8a':'#000000');glow.emissiveIntensity=night?.7:0;lights.forEach(l=>l.intensity=night?5:0)},
