@@ -611,6 +611,10 @@ function preparePublicTransport(foot:{east:number;north:number;height:number}){
   const start=performance.now();
   try{
    if(productionRidge){
+    const station=extensionPlots.find(plot=>plot.id==='railway-station');
+    if(!station)throw Error('Actual railway station plot missing');
+    await loadExtensionLandmark(station);
+    if(!architecture.has(station.id))throw Error('Actual railway station not mounted');
     const accepted=await productionRidge.preparePublicFrontCable(nightBProductionAuthority(presence,1),[...architecture.values(),railway.group,railExtension.group]);
     if(!accepted)frontPreparationError=productionRidge.frontCablePrepareResult??'front-owner-refused';
    }
@@ -1278,14 +1282,14 @@ const extensionBuilders: Record<string, () => Promise<Group>> = {
   'ice-castle': () => import('./landmark-ice-castle').then(module => module.buildIceCastle()),
 };
 const requestedPlots = new Set<string>();
-function prepareLandmarks(east: number, north: number) {
-  const plot = extensionPlots.find(({ id, origin }) => !requestedPlots.has(id) &&
-    Math.hypot(east - origin[0], north - origin[1]) < 148);
-  if (!plot) return;
+const landmarkLoads = new Map<string,Promise<void>>();
+function loadExtensionLandmark(plot:typeof extensionPlots[number]):Promise<void>{
+  if(architecture.has(plot.id))return Promise.resolve();
+  const pending=landmarkLoads.get(plot.id);if(pending)return pending;
   requestedPlots.add(plot.id);
   const palaceModule = plot.id === 'ice-castle'
     ? Promise.all([import('./ice-palace-landmark-activity'), import('./ice-palace-slide')]) : undefined;
-  Promise.all([extensionBuilders[plot.id](), palaceModule]).then(([group, palace]) => {
+  const task=Promise.all([extensionBuilders[plot.id](), palaceModule]).then(([group, palace]) => {
     place(plot, group);
     walkGeometry = geometry();
     registerLandmarkActivities(plot.id, group);
@@ -1293,7 +1297,14 @@ function prepareLandmarks(east: number, north: number) {
   }).catch(error => {
     requestedPlots.delete(plot.id);
     console.error(`Loading ${plot.id}`, error);
-  });
+    throw error;
+  }).finally(()=>landmarkLoads.delete(plot.id));
+  landmarkLoads.set(plot.id,task);return task;
+}
+function prepareLandmarks(east: number, north: number) {
+  const plot = extensionPlots.find(({ id, origin }) => !requestedPlots.has(id) && !architecture.has(id) &&
+    Math.hypot(east - origin[0], north - origin[1]) < 148);
+  if(plot)void loadExtensionLandmark(plot).catch(()=>{});
 }
 async function loadBuildings() {
   const response = await fetch(new URL('index.json', assetBase));
