@@ -1,6 +1,7 @@
 import {BufferGeometry,Color,Float32BufferAttribute,Group,Mesh,MeshLambertMaterial} from 'three';
 import {makeFrontRidgePixelTexture,frontRidgeSurfaceColorAt} from './town-front-ridge-surface';
 import type {SouthGround} from './town-night-a-summit-landform';
+import {a33WestFoothillDelta,a33WestTrailWear} from './town-a33-west-foothill';
 import {westNorthConnectorBounds} from './town-a-r30-north-connector';
 type Bounds={west:number;east:number;south:number;north:number};
 type EN=Readonly<{east:number;north:number}>;
@@ -26,9 +27,10 @@ export function mountWestMountainGround(base:SouthGround,bounds:Bounds,protected
  const strip=westNorthConnectorBounds;
  const group=new Group();group.name='night-a-west-mountain-real-ground';
  const texture=makeFrontRidgePixelTexture(),material=new MeshLambertMaterial({vertexColors:true,map:texture});
- group.userData={owner:'A33-1-west-mountain-ground',revision:2,bounds:{...bounds},static:true};
+ group.userData={owner:'A33-1-west-mountain-ground',revision:3,bounds:{...bounds},static:true};
  const width=east-west+1,depth=north-south+1,heights=new Float32Array(width*depth);
  const id=(e:number,n:number)=>(n-south)*width+e-west;
+ let changedFoothillVertices=0,minFoothillDelta=0,maxFoothillDelta=0;
  const ownsCell=(e:number,n:number)=>e>=west&&e<east&&n>=south&&n<north&&!(e>=strip.west&&n<strip.north);
  function ownedVertex(e:number,n:number){
   return e>west&&e<east&&n>south&&n<north&&!(e>=strip.west&&n<=strip.north);
@@ -41,9 +43,18 @@ export function mountWestMountainGround(base:SouthGround,bounds:Bounds,protected
   const broad=5.2*Math.exp(-(((e+165)/74)**2)-(((n-470)/95)**2))+3.6*Math.exp(-(((e+104)/68)**2)-(((n-664)/113)**2));
   const ravine=-1.9*Math.exp(-(((e+115-18*Math.sin(n*.014))/24)**2));
   const roll=1.1*Math.sin(e*.083+n*.028)*Math.cos(n*.046);
-  heights[id(e,n)]=h+mask*(broad+ravine+roll);
+  // Feather the new relief outside the protected track corridor, not only
+  // at its last vertex. Old height / seam remains bit-identical there.
+  let extra=0;
+  if(mask>0&&n>350&&n<560){
+   let railWeight=1;
+   for(const radius of [4,8,12]){if([[1,0],[-1,0],[0,1],[0,-1],[.707,.707],[-.707,.707],[.707,-.707],[-.707,-.707]].some(([x,z])=>protectedAt(e+radius*x!,n+radius*z!))){railWeight=smooth((radius-4)/12);break;}}
+   extra=mask*railWeight*a33WestFoothillDelta(e,n);
+   if(Math.abs(extra)>.001){changedFoothillVertices++;minFoothillDelta=Math.min(minFoothillDelta,extra);maxFoothillDelta=Math.max(maxFoothillDelta,extra);}
+  }
+  heights[id(e,n)]=h+mask*(broad+ravine+roll)+extra;
  }
- const snow=new Color('#c5d2dc'),rock=new Color('#777f80'),tint=new Color();
+ const snow=new Color('#c5d2dc'),rock=new Color('#777f80'),tint=new Color(),packed=new Color('#969b99'),ochre=new Color('#977a59');
  let cells=0;
  for(let n0=south;n0<north;n0+=64)for(let e0=west;e0<east;e0+=64){
   const n1=Math.min(north,n0+64),e1=Math.min(east,e0+64),cols=e1-e0+1;
@@ -59,9 +70,9 @@ export function mountWestMountainGround(base:SouthGround,bounds:Bounds,protected
    const slope=Math.hypot(dx,dz)*.5;
    const edge=Math.min(e-west,east-e,n-south,north-n,Math.hypot(Math.max(strip.west-e,0),Math.max(n-strip.north,0)));
    const blend=smooth(edge/24)*(protectedAt(e,n)?.12:1),bed=.5+.5*Math.sin(h*.64+n*.11+e*.043+Math.sin(e*.08)*1.7);
-   const rockTint=frontRidgeSurfaceColorAt(e,n,h,1-inv);rockTint.lerp(new Color('#977a59'),smooth((slope-.14)/.4)*bed*.48);
+   const rockTint=frontRidgeSurfaceColorAt(e,n,h,1-inv);rockTint.lerp(ochre,smooth((slope-.14)/.4)*bed*.48);
    const frost=smooth((.6-slope)/.52)*(.24+.52*smooth((Math.sin(e*.052+n*.024)+Math.cos(n*.065-e*.037)+1)/3));
-   rockTint.lerp(snow,frost);tint.copy(snow).lerp(rock,Math.min(.56,slope*.75)).lerp(rockTint,blend).multiplyScalar(.96+.04*Math.sin(e*.27+n*.19));colors.push(tint.r,tint.g,tint.b);uv.push((e+h*.11)/2,(n*.72+h*.69)/2);
+   rockTint.lerp(snow,frost);tint.copy(snow).lerp(rock,Math.min(.56,slope*.75)).lerp(rockTint,blend).multiplyScalar(.96+.04*Math.sin(e*.27+n*.19));tint.lerp(packed,a33WestTrailWear(e,n)*.76*blend);colors.push(tint.r,tint.g,tint.b);uv.push((e+h*.11)/2,(n*.72+h*.69)/2);
    if(e===e1||n===n1||!ownsCell(e,n))continue;
    const a=(n-n0)*cols+e-e0,b=a+1,c=a+cols,d=c+1;indices.push(a,b,c,b,d,c);cells++;
   }
@@ -77,5 +88,5 @@ export function mountWestMountainGround(base:SouthGround,bounds:Bounds,protected
   return u+v<=1?a+(b-a)*u+(c-a)*v:d+(c-d)*(1-u)+(b-d)*(1-v);
  }
  let disposed=false;
- return {group,readyAt,heightAt,ownsCell,stats:{cells,triangles:cells*2,chunks:group.children.length},dispose(){if(disposed)return;disposed=true;group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});material.dispose();texture.dispose();group.clear();}};
+ return {group,readyAt,heightAt,ownsCell,stats:{cells,triangles:cells*2,chunks:group.children.length,changedFoothillVertices,minFoothillDelta,maxFoothillDelta},dispose(){if(disposed)return;disposed=true;group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});material.dispose();texture.dispose();group.clear();}};
 }

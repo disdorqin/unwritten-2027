@@ -6,6 +6,7 @@ import {buildCraterRailExtension} from '../tools/voxel-tavern/town-blockout/town
 import {buildTownRailRoute} from '../tools/voxel-tavern/town-blockout/town-railway';
 import {readWalkGeometry} from '../tools/voxel-tavern/town-blockout/landmark-kit';
 import {mountWestMountainGround,westMountainTrackProtection} from '../tools/voxel-tavern/town-blockout/town-night-a-summit-west-ground';
+import {a33WestFoothillRoute} from '../tools/voxel-tavern/town-blockout/town-a33-west-foothill';
 import {mountWestMountainFootway,westMountainFootway} from '../tools/voxel-tavern/town-blockout/town-night-a-summit-west-footway';
 test('physical west detour has clear body envelope in both directions, including the original tree base',()=>{
  const grid=createTerrainGrid(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
@@ -13,11 +14,13 @@ test('physical west detour has clear body envelope in both directions, including
  const west=mountWestMountainGround(road.heightAt,{west:-240,east:0,south:336,north:worldBounds.depth},westMountainTrackProtection([rail.samples,rail.narrowSamples,rail.sidingSamples]));
  const ground=(e:number,n:number)=>west.heightAt(e,n)??road.heightAt(e,n);
  const foot=mountWestMountainFootway(ground);
- const boxes=[road.group,rail.group].flatMap(q=>{const g=readWalkGeometry(q);return [...g.colliders,...g.floors]}).filter(b=>b.max[0]!>-100&&b.min[0]!<-80&&b.min[2]!<-260&&b.max[2]!>-355);
+ const boxes=[road.group,rail.group].flatMap(q=>{const g=readWalkGeometry(q);return [...g.colliders,...g.floors]}).filter(b=>b.max[0]!>-115&&b.min[0]!<-77&&b.min[2]!<-260&&b.max[2]!>-535);
+ const all=[...westMountainFootway,...a33WestFoothillRoute.slice(1)];
+ assert.ok(west.stats.changedFoothillVertices>8000&&west.stats.maxFoothillDelta>8);
  let min=Infinity,steps=0,grade=0;
  try{
   for(const direction of [1,-1]){
-   const path=direction===1?westMountainFootway:[...westMountainFootway].reverse();let prev:{e:number;n:number;h:number}|undefined;
+   const path=direction===1?all:[...all].reverse();let prev:{e:number;n:number;h:number}|undefined;
    for(let i=1;i<path.length;i++){
     const a=path[i-1]!,b=path[i]!,dx=b[0]-a[0],dn=b[1]-a[1],d=Math.hypot(dx,dn),count=Math.ceil(d/.08);
     for(let j=0;j<=count;j++){
@@ -33,6 +36,6 @@ test('physical west detour has clear body envelope in both directions, including
    }
   }
   assert.ok(grade<.85);assert.ok(foot.triangles>0);
-  console.log(JSON.stringify({steps,min,grade,triangles:foot.triangles}));
+  console.log(JSON.stringify({steps,min,grade,triangles:foot.triangles,foothill:west.stats}));
  }finally{west.dispose();foot.dispose();}
 });
