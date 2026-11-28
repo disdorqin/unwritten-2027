@@ -264,6 +264,7 @@ const westGroundAt=(e:number,n:number)=>westMountainGround?.heightAt(e,n)??ensur
 // Declared here, beside westCraterRoad: ensureWestCraterRoad() is called
 // during module initialisation, long before the geometry() section below.
 let westWalkGeometry: Map<string, WalkGeometry> | undefined;
+const westGeometryOwners=new WeakMap<Box,string>();
 const westCellKey = (east: number, north: number) =>
   `${Math.floor(east / collisionCellSize)},${Math.floor(north / collisionCellSize)}`;
 // Collision constants live up here too (moved from the geometry() section):
@@ -1246,7 +1247,7 @@ let walkGeometry = geometry();
 // runs during module init, before this point in the file is reached).
 function buildWestGeometry(...groups: Group[]) {
   const cells = new Map<string, WalkGeometry>();
-  const parts=groups.map(readWalkGeometry);
+  const parts=groups.map(group=>{const part=readWalkGeometry(group);if(previewOptions.has('mRoadSurvey'))for(const box of [...part.colliders,...part.floors,...part.ramps])westGeometryOwners.set(box,group.userData.owner||group.name||group.children[0]?.name||group.type);return part;});
   const colliders=parts.flatMap(p=>p.colliders),floors=parts.flatMap(p=>p.floors),ramps=parts.flatMap(p=>p.ramps);
   function index<T extends Box>(boxes: T[], append: (cell: WalkGeometry, box: T) => void) {
     for (const box of boxes) {
@@ -3601,7 +3602,7 @@ function a33MovementGround(e:number,n:number,h:number){
 }
 function a33Reject(reason:string,e:number,nn:number,extra:Record<string,unknown>={}){
  if(!profileTown||!previewOptions.has('mRoadSurvey'))return;
- ridgeMoveReject={reason,from:[x,n,ground],target:[e,nn],foot:a33MovementGround(x,n,ground),targetGround:a33MovementGround(e,nn,ground),...extra};
+ ridgeMoveReject={reason,rejectedAt:performance.now(),from:[x,n,ground],target:[e,nn],foot:a33MovementGround(x,n,ground),targetGround:a33MovementGround(e,nn,ground),...extra};
 }
 function tryMove(nextX: number, nextN: number) {
   if(pendingGateStep)return false;
@@ -3636,7 +3637,7 @@ function tryMove(nextX: number, nextN: number) {
   const nextHeight = airHeight === undefined ? floor : feet;
   if (floor > limit || obstructed(nextX, nextN, nextHeight,localGeometry)) {
     if(profileTown&&previewOptions.has('mRoadSurvey'))a33Reject(floor>limit?'floor':'obstructed',nextX,nextN,{floor,limit,ridge:productionRidge?.blocked(nextX,nextN,nextHeight),rail:railway.vehicleBlocks(nextX,nextN,nextHeight,bodyHeight,bodyRadius),
-     boxes:[...localGeometry.colliders,...localGeometry.floors].filter(box=>nextHeight+surfaceEpsilon<box.max[1]&&nextHeight+bodyHeight-surfaceEpsilon>box.min[1]&&overlapsBody(nextX,nextN,box)).map(box=>({...box,owner:ridgeGeometryOwners.get(box)}))});
+     boxes:[...localGeometry.colliders,...localGeometry.floors].filter(box=>nextHeight+surfaceEpsilon<box.max[1]&&nextHeight+bodyHeight-surfaceEpsilon>box.min[1]&&overlapsBody(nextX,nextN,box)).map(box=>({...box,owner:westGeometryOwners.get(box)??ridgeGeometryOwners.get(box)}))});
     return false;
   }
   if(!homeReturn&&!cloudRoute.active()&&airHeight===undefined&&productionRidge&&
@@ -3652,6 +3653,8 @@ function tryMove(nextX: number, nextN: number) {
     pendingGateStep={from:gateFrom,to:gateTo,entering:!cloudRoute.active()};return true;
   }
   [x, n] = [nextX, nextN];
+  // Historical rejections do not describe a current wall after successful movement.
+  ridgeMoveReject=undefined;
   if (airHeight === undefined) {
     if (ground - nextHeight > stepHeight) {
       landingFeedback.begin(ground);
