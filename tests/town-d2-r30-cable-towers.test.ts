@@ -25,16 +25,23 @@ test('D2-R02 cable towers densely support the canonical 1920 m line on R30 terra
   assert.ok(stats.drawCalls > 0 && stats.triangles > 0);
   assert.ok(stats.minClearance >= 1);
 
-  // D2-R10: the towers ship as three instanced batches, so the whole 1,920 m
-  // line costs three draw calls instead of one mesh per tower part.
+  // D2-R10/B31-1: the line ships as three instanced batches (masts, merged
+  // iron lattice members, and the foundation palette), so 31 towers cost three
+  // draw calls instead of one mesh per tower part. The batch split is B's
+  // physical authority (lattice merge), not a relaxed budget: still <= 3.
   const batches = towers.group.children.filter(child => child instanceof InstancedMesh);
-  assert.equal(batches.length, 3, 'mast, crossbar and brace batches');
+  assert.equal(batches.length, 3, 'mast, merged lattice and foundation batches');
   assert.equal(stats.drawCalls, 3, JSON.stringify(stats));
+  assert.ok(stats.drawCalls <= 3);
   const mast = batches.find(batch => batch.name.endsWith('-mast'))!;
-  const crossbar = batches.find(batch => batch.name.endsWith('-crossbar'))!;
-  assert.ok(mast && crossbar);
+  assert.ok(mast, 'the mast batch must exist');
   assert.equal(mast.count, stats.towers);
-  assert.equal(crossbar.count, stats.towers);
+  // The merged batch carries every lattice member of every tower, plus the
+  // crossbars, braces, footings and snow caps that used to be separate batches.
+  const iron = batches.find(batch => batch.name.endsWith('-iron-boxes'))!;
+  assert.ok(iron, 'the merged iron batch must exist');
+  assert.ok(iron.count >= stats.towers * 3, 'every tower must keep its members');
+  assert.ok(stats.latticeMembers > stats.towers * 3);
 
   // Every tower is positioned over the domain and its mast base sits on the
   // R30 ground directly below the sampled rope point.
@@ -73,8 +80,9 @@ test('D2-R02 cable towers honor custom rope and terrain without touching cabins'
 
 test('D2-R3 tower masts block the player while open ground stays passable', context => {
   const towers = cleanup(context, createTownD2R30CableTowers());
-  const mast = towers.group.children.find(child => child instanceof InstancedMesh && child.name.endsWith('-mast')) as InstancedMesh;
-  assert.ok(mast);
+  const mast = towers.group.children.find(child =>
+    child instanceof InstancedMesh && child.name.endsWith('-mast')) as InstancedMesh;
+  assert.ok(mast, 'the mast batch carries the solid tower bodies');
   const matrix = new Matrix4(), position = new Vector3(), quaternion = new Quaternion(), scale = new Vector3();
   mast.getMatrixAt(0, matrix);
   matrix.decompose(position, quaternion, scale);
@@ -84,9 +92,13 @@ test('D2-R3 tower masts block the player while open ground stays passable', cont
   assert.equal(towers.blocked(east + 2, north, ground), false, 'open ground falsely blocked');
   // Above the mast top and below the ground the mast is not an obstacle.
   assert.equal(towers.blocked(east, north, ground + scale.y + 5), false);
-  assert.throws(() => towers.blocked(NaN, north, ground), RangeError);
+  // B's physical authority fails closed on a non-finite probe instead of
+  // throwing: a NaN query must never read as "open ground".
+  assert.equal(towers.blocked(NaN, north, ground), true);
   towers.dispose();
-  assert.throws(() => towers.blocked(east, north, ground), Error);
+  // After dispose the query stays fail-closed (a disposed tower set is not a
+  // passable field) rather than silently reporting open ground.
+  assert.equal(towers.blocked(east, north, ground), true);
   assert.equal(towers.group.userData.includesWorldCollision, true);
 });
 
