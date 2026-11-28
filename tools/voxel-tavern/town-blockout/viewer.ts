@@ -34,7 +34,7 @@ import {mountWestMountainFootway} from './town-night-a-summit-west-footway';
 import { createTerrainSupportContract } from './town-a-r30-terrain-contract';
 import { supportFootprintOverlaps } from './town-a-r30-oriented-support';
 import { mainSummitLayout, mainSummitSpec } from './main-summit-block';
-import { buildR30TownSkyline } from './town-d2-r30-skyline';
+import { buildR31PublicSkyline } from './town-r31-public-skyline';
 import {createA31PublicSummitRoute} from './town-a31-public-summit';
 import {createNightBProductionController,nightBProductionAuthority} from './town-night-b-production-controller';
 import {readA31FrontCable,type A31CableBindings} from './town-a31-cable-binding';
@@ -508,7 +508,7 @@ let summitSkylineDraws = 0;
 const summitSkylineDayMaterial = new MeshLambertMaterial({fog:true,vertexColors:true});
 const summitSkylineNightMaterial = new MeshLambertMaterial({fog:true,vertexColors:true});
 const summitSkylineMesh: Mesh<BufferGeometry, MeshLambertMaterial | MeshBasicMaterial> =
-  new Mesh(buildR30TownSkyline(),summitSkylineDayMaterial);
+  new Mesh(buildR31PublicSkyline(worldBounds.depth),summitSkylineDayMaterial);
 const {summitHeight}=mainSummitSpec;
 const summitSkyline = new Group();
 summitSkyline.name = 'main-summit-world-skyline';
@@ -520,7 +520,7 @@ scene.add(summitSkyline);
 {
   const plume = new Group();
   plume.name = 'summit-banner-cloud';
-  const plumeMaterial = new MeshLambertMaterial({ color: '#eef2f5', fog: false });
+  const plumeMaterial = new MeshLambertMaterial({ color: '#eef2f5', fog: true });
   for (let i = 0; i < 11; i++) {
     const t = i / 10;
     const segment = new Mesh(new BoxGeometry(68, 30 * (1 - t * .55), 92 * (1 - t * .4)), plumeMaterial);
@@ -529,32 +529,9 @@ scene.add(summitSkyline);
   }
   summitSkyline.add(plume);
 }
-// Summit hut window light (§3.9 hard metric): the one warm point visible
-// from town on a clear night. Toggled by setNight with the skyline shell.
-const summitHutLight = new Mesh(new PlaneGeometry(7, 9),
-  new MeshBasicMaterial({ color: '#ffb45c', fog: false }));
-summitHutLight.name = 'summit-hut-window-light';
-summitHutLight.position.set(62, mainSummitSpec.summitHeight - 14, -1012);
-summitSkyline.add(summitHutLight);
-
-// Icefall (追令二): chaotic crystal-cyan ice towers at the col foot,
-// where the front wall meets the main peak.
-{
-  const icefall = new Group();
-  icefall.name = 'summit-icefall';
-  const iceMaterials = [new MeshLambertMaterial({ color: '#dff3f0', fog: false }),
-    new MeshLambertMaterial({ color: '#7fd4c8', fog: false })];
-  let seed = 7;
-  const rand = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
-  for (let i = 0; i < 16; i++) {
-    const size = 12 + rand() * 20;
-    const block = new Mesh(new BoxGeometry(size, size * (1.1 + rand()), size), iceMaterials[i % 2]!);
-    block.position.set(-140 + (rand() - .5) * 150, 205 + rand() * 115, -640 + (rand() - .5) * 80);
-    block.rotation.set(rand() * .5 - .25, rand() * Math.PI, rand() * .5 - .25);
-    icefall.add(block);
-  }
-  summitSkyline.add(icefall);
-}
+// Do not attach the former free-floating icefall boxes or ungrounded hut
+// window plane to the distant landscape. The real D2 icefall and summit
+// hut remain owned by the production massif and render on arrival.
 // M1: mount the new ridge after both real rail alignments exist (below).
 // No old proxy or floating switchback geometry/support is constructed.
 // Batch-67 cloud layer (A share): five designed drift clusters plus the
@@ -998,7 +975,6 @@ function applyNightSide(skyFrame:TownNightWeatherSkyFrame){
 function setNight(night: boolean) {
   nightMode = night;
   summitSkylineMesh.material = night ? summitSkylineNightMaterial : summitSkylineDayMaterial;
-  summitHutLight.visible = night;
   cloudRoute.setNight(night);
   // Background, light colour/intensity and fog are owned by the continuous sky rig.
   timeOfDay.textContent = night ? '雪夜' : '白昼';
