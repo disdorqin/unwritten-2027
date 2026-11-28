@@ -38,6 +38,7 @@ import { buildR30TownSkyline } from './town-d2-r30-skyline';
 import {createA31PublicSummitRoute} from './town-a31-public-summit';
 import {createNightBProductionController} from './town-night-b-production-controller';
 import {createA31CableInput} from './town-a31-cable-input';
+import {syncA31OutdoorRoom} from './town-a31-outdoor-presence';
 import type {CableRideFrame} from './town-night-b-summit-ride-host';
 import { mountZa29GuardPost, type Za29GuardPostKind } from './town-za29-guard-scenes';
 import { createZa29GuardDuty, za29GuardDutyForPhase } from './town-za29-guard-duty';
@@ -4194,13 +4195,19 @@ renderer.setAnimationLoop(now => {
       transition:dreamControlsLocked||dreamTripActive||dreamActiveTripId!==undefined,
       coverOpen:dreamChain?.coverOpen()??true});
   }
-  presence.setWestDomain(walking && !homeReturn && x < 0);
-  presence.sample(walking,
-    boardingGround ? camera.position.x : seated?.x ?? x,
-    boardingGround ? -camera.position.z : seated?.n ?? n,
-    boardingGround ? camera.position.y - eye : palaceSlideGround ?? (throneSeat ? throneSeat.eyeY - .98 : airHeight ?? ground),
+  const presenceFoot={
+    east:boardingGround ? camera.position.x : seated?.x ?? x,
+    north:boardingGround ? -camera.position.z : seated?.n ?? n,
+    height:boardingGround ? camera.position.y - eye : palaceSlideGround ?? (throneSeat ? throneSeat.eyeY - .98 : airHeight ?? ground),
+  };
+  const ordinaryOutdoor=walking&&!homeReturn&&!dreamInMine()&&!dreamControlsLocked&&!dreamTripActive&&skyCityViewKind==='ground';
+  // Never publish a clamped 655.35m town pose while on the north apron.
+  // The same actual walking/seat foot selects and enters its valid room.
+  const roomReady=!ordinaryOutdoor||syncA31OutdoorRoom(presenceFoot,presence);
+  if(!ordinaryOutdoor)presence.setWestDomain(walking && !homeReturn && x < 0);
+  presence.sample(walking&&roomReady,presenceFoot.east,presenceFoot.north,presenceFoot.height,
     boardingGround ? Math.atan2(lookAhead.x, -lookAhead.z) + rideYawOffset : seated?.yaw ?? playerBodyYaw(),
-    walking && !museumOverlay(),
+    walking && roomReady && !museumOverlay(),
   );
   presence.update(dt);
   icePalaceCrown.render(icePalaceSelfCrowned ? 'self' : presence.remoteCrown() ?? null, camera);
