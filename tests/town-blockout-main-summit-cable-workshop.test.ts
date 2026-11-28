@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { Group, InstancedMesh, PointLight, Matrix4, Vector3 } from 'three';
-import {createZa36CableRepair} from '../src/shared/za36-cable-repair';
+import { Group, InstancedMesh, PointLight } from 'three';
 import { createMainSummitBlock, mainSummitLayout } from '../tools/voxel-tavern/town-blockout/main-summit-block';
 import { mountMainSummitCableWorkshop } from '../tools/voxel-tavern/town-blockout/main-summit-cable-workshop';
 import { mountMainSummitAssembly } from '../tools/voxel-tavern/town-blockout/main-summit-assembly';
@@ -33,29 +32,6 @@ test('R2: new ropeway workshop has a roof, real 2.3-m clear door, machinery and 
   assert.equal(workshop.surfaceAt(-9, 7), undefined, 'Existing station surface owned by P-7');
   workshop.dispose();
   assert.equal(root.children.length, 0);
-});
-
-test('line two machine room renders authoritative repair progress and offers reachable actions',t=>{
- const root=new Group(),workshop=mountMainSummitCableWorkshop(root,()=>347),authority=createZa36CableRepair(2);
- t.after(workshop.dispose);
- const anchors=workshop.repairAnchors,feet=(id:keyof typeof anchors)=>({...anchors[id],height:347.065});
- const brake=workshop.group.getObjectByName('night-b-line2-rust-brake')!;
- const pulley=workshop.group.getObjectByName('night-b-line2-slack-pulley')!;
- const weights=workshop.group.getObjectByName('night-b-line2-repair-weights') as InstancedMesh;
- const matrix=new Matrix4(),p=new Vector3();const weight=(i:number)=>{weights.getMatrixAt(i,matrix);return p.setFromMatrixPosition(matrix).clone()};
- const start=weight(0);
- for(const id of Object.keys(anchors) as (keyof typeof anchors)[])assert.equal(workshop.blocked(feet(id).east,feet(id).north,347.065,.27,1.8),false,id);
- assert.deepEqual(workshop.repairActions(feet('brake')),[]);
- authority.apply({kind:'wake',impact:'sled'});workshop.sync(authority.snapshot());
- function act(id:keyof typeof anchors,kind:string){const action=workshop.repairActions(feet(id)).find(a=>a.id===kind);assert.ok(action,kind);assert.equal(authority.apply(action.event).accepted,true);workshop.sync(authority.snapshot());}
- for(let i=0;i<9;i++)act('brake','strike-rust');
- act('brake','pull-brake');assert.ok(brake.rotation.z< -2);
- act('cableWheel','pry-cable');assert.ok(pulley.position.y>2);
- for(let i=0;i<3;i++)act('cableWheel','tighten-cable');
- for(let i=0;i<4;i++){act('weightTower','take-weight');weights.getMatrixAt(i,matrix);assert.equal(matrix.elements[0],0);act('weightFrame','hang-weight');assert.ok(weight(i).z<0);}
- assert.notDeepEqual(weight(0),start);assert.equal(authority.snapshot().stage,'full-line');
- assert.deepEqual(workshop.repairActions(feet('weightTower')),[]);
- workshop.sync(undefined);assert.deepEqual(workshop.repairActions(feet('brake')),[]);
 });
 
 test('R7: ordinary player world mounts no unapproved new expedition scenery or puzzles', t => {

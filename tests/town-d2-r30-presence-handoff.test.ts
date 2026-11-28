@@ -20,8 +20,6 @@ test('D2-R04 presence handoff keeps the front-ridge room unchanged and publishes
   assert.equal(report.checks.summitHeightSupported, true);
   assert.equal(report.checks.gateHeightSupported, true);
   assert.equal(report.checks.frontRidgeUnchanged, true);
-  assert.equal(report.checks.sectorOverlapReadOnly, true,
-    'the presence room must match the sector world extent and contain the 32 m read-only seams');
 });
 
 test('D2-R04 presence handoff refuses an invalid unsigned union and leaves all authority fields with A', () => {

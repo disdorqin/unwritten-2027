@@ -1,4 +1,5 @@
 import {BufferGeometry,Color,Float32BufferAttribute,Group,Mesh,MeshLambertMaterial} from 'three';
+import {finishNightBAudit} from './town-night-b-audit-slices';
 import {southGullyNorth,type SouthGround,type SouthProtection} from './town-night-a-summit-landform';
 import {createSouthSnowAppearance,type SouthSnowVisualSample} from './town-night-a-summit-snow-appearance';
 type Point={e:number;n:number};
@@ -7,13 +8,14 @@ const distance=(p:Point)=>Math.abs(p.n-southGullyNorth(p.e))-width(p.e);
 /** Clip 2m triangles (subdivisions of the canonical 8m triangles) against
  * the meandering banks. Every new vertex is evaluated on the real terrain;
  * no artificial flat water plane, jagged full-cell teeth or support layer. */
-export function mountSouthGully(heightAt:SouthGround,protectedAt:SouthProtection){
+export function* southGullySteps(heightAt:SouthGround,protectedAt:SouthProtection){
  const group=new Group();group.name='night-a-south-frozen-gully';
  const mat=new MeshLambertMaterial({vertexColors:true});
  const bins=new Map<number,{p:number[];c:number[]}>();
  const snowAppearance:ReturnType<typeof createSouthSnowAppearance>[]=[];
  const ice=new Color('#7897aa'),shale=new Color('#576970'),snow=new Color('#bbcbd1'),tint=new Color(),deepIce=new Color('#486b83'),frost=new Color('#dce7eb');
- let triangles=0;
+ let triangles=0,accepted=false;
+ try{
  function clip(poly:Point[],sign:number){
   const result:Point[]=[];
   const f=(p:Point)=>sign*(p.n-southGullyNorth(p.e))-width(p.e)-3.0;
@@ -26,6 +28,7 @@ export function mountSouthGully(heightAt:SouthGround,protectedAt:SouthProtection
  }
  // N starts at -10 + 24*8, E at -1100 + 60*8.
  for(let e=-620;e<124;e+=2){
+  yield;
   const mid=southGullyNorth(e),n0=Math.max(182,-10+Math.floor((mid-18+10)/2)*2),n1=Math.min(446,mid+18);
   for(let n=n0;n<n1;n+=2){
    const a={e,n},b={e:e+2,n},c={e,n:n+2},d={e:e+2,n:n+2};
@@ -61,6 +64,7 @@ export function mountSouthGully(heightAt:SouthGround,protectedAt:SouthProtection
  // They share the bed's six spatial batches and add no blocking layer.
  let shelfCount=0;
  for(let e=-610;e<=116;e+=7){
+  yield;
   for(const side of [-1,1]){
    const n=southGullyNorth(e)+side*(width(e)-1.5);
    const angle=.35*Math.sin(e*.23+side),rx=1.1+.45*Math.cos(e*.17),rn=.55+.15*Math.sin(e*.31);
@@ -84,6 +88,7 @@ export function mountSouthGully(heightAt:SouthGround,protectedAt:SouthProtection
   }
  }
  for(const [k,{p,c}] of bins){if(!p.length)continue;
+  yield;
   const geo=new BufferGeometry();geo.setAttribute('position',new Float32BufferAttribute(p,3));geo.setAttribute('color',new Float32BufferAttribute(c,3));geo.computeVertexNormals();geo.computeBoundingSphere();
   const m=new Mesh(geo,mat);m.name='south-gully-bed:'+k;group.add(m);
   const rgb=geo.getAttribute('color'),pos=geo.getAttribute('position');
@@ -99,6 +104,9 @@ export function mountSouthGully(heightAt:SouthGround,protectedAt:SouthProtection
    rgb.needsUpdate=true;
   }));
  }
+ accepted=true;
  let disposed=false;
  return {group,triangles,shelfCount,updateSnow(dt:number,sample:SouthSnowVisualSample){if(!disposed)for(const appearance of snowAppearance)appearance.update(dt,sample);},dispose(){if(disposed)return;disposed=true;group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});mat.dispose();snowAppearance.length=0;group.clear();}};
+ }finally{if(!accepted){group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});mat.dispose();snowAppearance.length=0;group.clear();}}
 }
+export function mountSouthGully(heightAt:SouthGround,protectedAt:SouthProtection){return finishNightBAudit(southGullySteps(heightAt,protectedAt));}

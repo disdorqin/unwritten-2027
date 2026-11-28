@@ -44,9 +44,9 @@ test('front service uses surveyed dual cabins, actual repair authority and termi
  const first=createNightBFrontService({...input,state:()=>partial.snapshot(),now:()=>t,firstRun:{wokeAt:()=>wake,openedAt:()=>opened,dawnEpoch:()=>epoch}});
  t=epoch+1000;const initial=first.present();assert.ok(initial.every(c=>c.station==='summit'));assert.equal(first.board(initial[0]!.feet,0),undefined);
  wake=t;partial.apply({kind:'wake',impact:'sled'});
- const firstRide=first.board(initial[0]!.feet,0);assert.ok(firstRide);assert.equal(first.board(initial[1]!.feet,1),undefined);
- t=wake+first.firstMs/2;assert.equal(first.ridePose(firstRide)?.station,null);assert.equal(first.exit(firstRide),undefined);
- t=wake+first.firstMs;assert.equal(first.ridePose(firstRide)?.station,'middle');assert.ok(first.exit(firstRide));assert.equal(first.board(first.ridePose(firstRide)!.feet,0),undefined);
+ assert.equal(first.board(initial[0]!.feet,0),undefined);assert.equal(first.board(initial[1]!.feet,1),undefined);
+ t=wake+first.firstMs/2;assert.equal(first.present()[0]!.station,null);assert.equal(first.board(first.present()[0]!.feet,0),undefined);
+ t=wake+first.firstMs;assert.equal(first.present()[0]!.station,'middle');assert.equal(first.board(first.present()[0]!.feet,0),undefined);
  for(let i=0;i<9;i++)partial.apply({kind:'strike-rust'});
  partial.apply({kind:'pull-brake'});partial.apply({kind:'pry-cable',effort:1});for(let i=0;i<3;i++)partial.apply({kind:'tighten-cable'});
  for(let i=0;i<4;i++){partial.apply({kind:'take-weight',index:i});partial.apply({kind:'hang-weight',index:i});}

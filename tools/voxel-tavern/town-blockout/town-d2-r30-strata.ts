@@ -10,6 +10,7 @@ import {
 export type TownD2R30StrataOptions = Readonly<{
   heightAt?: typeof sampleTownD2R30Height;
   arrivalHeight?: number;
+  trailPoints?:readonly Point[];
 }>;
 
 type Point = Readonly<{ east: number; north: number }>;
@@ -81,14 +82,14 @@ function pointSegmentDistance(east: number, north: number, segment: RoadSegment)
 }
 
 /** Cache only the immutable road survey; its temporary block geometry is disposed immediately. */
-function roadSurvey(arrivalHeight: number): RoadSurvey {
-  const cached = roadSurveys.get(arrivalHeight);
-  if (cached) return cached;
-  const block = createMainSummitBlock(mainSummitLayout, arrivalHeight, 512);
-  try {
-    const trail = createMainSummitTrail(block.heightAt, arrivalHeight);
-    const segments = trail.points.slice(1).map((point, index) => ({
-      a: { east: trail.points[index]!.east, north: trail.points[index]!.north },
+function roadSurvey(arrivalHeight:number,supplied?:readonly Point[]):RoadSurvey {
+  const cached=!supplied&&roadSurveys.get(arrivalHeight);
+  if(cached)return cached;
+  const block=supplied?undefined:createMainSummitBlock(mainSummitLayout,arrivalHeight,512);
+  try{
+    const points=supplied??createMainSummitTrail(block!.heightAt,arrivalHeight).points;
+    const segments=points.slice(1).map((point,index)=>({
+      a: {east:points[index]!.east,north:points[index]!.north},
       b: { east: point.east, north: point.north },
     }));
     const buckets = new Map<string, RoadSegment[]>();
@@ -107,10 +108,10 @@ function roadSurvey(arrivalHeight: number): RoadSurvey {
       }
     }
     const survey: RoadSurvey = { segments, cells: buckets };
-    roadSurveys.set(arrivalHeight, survey);
+    if(!supplied)roadSurveys.set(arrivalHeight,survey);
     return survey;
   } finally {
-    block.dispose();
+    block?.dispose();
   }
 }
 
@@ -402,7 +403,7 @@ export function createTownD2R30Strata(options: TownD2R30StrataOptions = {}) {
   };
   // The road reserve is the existing canonical survey, not a second invented route.
   const surveyArrivalHeight = arrivalHeight >= 347 && arrivalHeight <= 350 ? arrivalHeight : 347;
-  const survey = roadSurvey(surveyArrivalHeight);
+  const survey = roadSurvey(surveyArrivalHeight,surveyArrivalHeight===arrivalHeight?options.trailPoints:undefined);
   const facilities = protectedFacilities(mainSummitSpec.arrivalPlaza[1]);
   const contours = buildContours(groundAt);
   const glaciers = townD2R30Anchors.valleys.map((valley, index) =>

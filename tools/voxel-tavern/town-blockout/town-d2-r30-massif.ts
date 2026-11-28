@@ -1,5 +1,6 @@
 import { BufferGeometry, Color, Float32BufferAttribute, Group, Mesh, MeshLambertMaterial } from 'three';
 import type { Material } from 'three';
+import {unpackCutGeometry,type CutWire} from './town-a32-cut-wire';
 import {
   sampleTownD2R30Height, sampleTownD2R30Normal, townD2R30ChunkList, townD2R30GridAxis,
   townD2R30Spec, townD2R30SurfaceBand,
@@ -70,16 +71,34 @@ function surfaceColor(east: number, north: number, arrivalHeight: number, target
   const band = townD2R30SurfaceBand(east, north, arrivalHeight);
   const slope = 1 - normal[1];
   target.copy(palette[band]);
+  // Ridge/gully relief mask: mirrors the height field's ridge term so colour
+  // shading follows the actual carved ridge spine and gully channels rather
+  // than an independent pattern. Brightens crests, sinks gullies.
+  const ridgePhase = Math.sin(east * .006 + north * .0035) * Math.sin(north * .004 - east * .0015);
+  const ridgeMask = clamp01(.5 + ridgePhase * .5);
   if (band === 'alpine-rock') {
     // Strata read as layered rock bands that follow the relief, not a uniform
     // sine stripe: fractal noise at two scales breaks repetition along the ridge.
     const belt = smoothstep(415, 445, height) * (1 - smoothstep(525, 565, height)) *
       (1 - smoothstep(.38, .72, slope));
     target.lerp(ochre, belt * .82);
+    // Dark fissure lines: a high-frequency noise threshold cuts cracks through
+    // the rock strata so the ridge reads as fractured stone, not solid block.
+    const fissure = Math.pow(Math.max(0, fractalNoise(east * .12, north * .09) - .68), 2.5);
+    target.multiplyScalar(1 - fissure * .16);
     const strata = .88 + .12 * (fractalNoise(east * .04, north * .03) - .5) * 2;
     target.multiplyScalar(strata);
   } else if (band === 'glacier') {
-    // M08: read ice as layered, slope-facing surfaces rather than a flat fill.
+    // Flow striations: stripes aligned to the downhill gradient so the ice
+    // tongue reads as flowing along its own valley, not a flat fill. The
+    // cross-flow axis is perpendicular to the gradient derived from the
+    // surface normal (z = -north, so north = -z).
+    const gradLen = Math.hypot(normal[0], normal[2]);
+    const flowEast = gradLen > 1e-4 ? normal[0] / gradLen : 0;
+    const flowNorth = gradLen > 1e-4 ? -normal[2] / gradLen : 1;
+    const acrossFlow = east * -flowNorth + north * flowEast;
+    const striation = Math.sin(acrossFlow * .08 + fractalNoise(east * .03, north * .02) * 4);
+    target.multiplyScalar(1 - smoothstep(.3, .7, striation) * .08);
     // Crevasses cut dark lines along the flow; shallow shelves catch a cold
     // blue highlight. Fractal noise makes the ice follow the terrain, not repeat.
     const flow = fractalNoise(east * .05, north * .035);
@@ -97,7 +116,14 @@ function surfaceColor(east: number, north: number, arrivalHeight: number, target
     const windward = clamp01(.5 + .5 * Math.sin(east * .012 - north * .009)) * (.7 + .3 * aspect);
     const exposure = smoothstep(.12, .42, slope) * windward;
     target.lerp(palette['alpine-rock'], exposure * .26);
+    // Patchy rock outcrops: a high-frequency noise threshold reveals rock
+    // through the snow in irregular patches, so the cap reads as snow draped
+    // over rock, not a uniform white dome.
+    const outcrop = Math.pow(Math.max(0, fractalNoise(east * .09, north * .07) - .72), 2.0);
+    target.lerp(palette['alpine-rock'], outcrop * .3 * (1 - exposure));
   }
+  // Ridge/gully shading across every band: crests catch light, gullies sink.
+  target.multiplyScalar(1 + (ridgeMask - .5) * .06);
   // Fine grain: fractal noise at two scales so the surface never reads as a
   // flat repeated tint, with slope-based darkening for relief shading.
   const grain = .94 + .06 * (fractalNoise(east * .17, north * .11) - .5) * 2;
@@ -197,7 +223,8 @@ function buildFloorGeometry(ring: readonly (readonly [number, number])[]) {
   return finishGeometry(geometry, 'town-d2-r30-floor');
 }
 
-export type TownD2R30MassifOptions = Readonly<{ arrivalHeight?: number; spacing?: number }>;
+export type D2MassifWire=Readonly<{name:string;wire:CutWire}>;
+export type TownD2R30MassifOptions = Readonly<{ arrivalHeight?: number; spacing?: number;prepared?:readonly D2MassifWire[] }>;
 export type TownD2R30MassifStats = Readonly<{
   spacing: number;
   vertices: number; triangles: number; meshes: number; draws: number;
@@ -215,28 +242,33 @@ export function createTownD2R30Massif(options: TownD2R30MassifOptions = {}) {
   group.name = 'town-d2-r30-massif';
   const material = new MeshLambertMaterial({ color: dayColor.clone(), vertexColors: true });
   let vertices = 0, triangles = 0, minHeight = Infinity, maxHeight = -Infinity, minTopHeight = Infinity;
-  const addMesh = (geometry: BufferGeometry) => {
+  const topTiles: Mesh[] = [];
+  const addMesh = (geometry: BufferGeometry, isTopTile = false) => {
     const mesh = new Mesh(geometry, material);
     mesh.name = geometry.name;
     group.add(mesh);
+    if (isTopTile) topTiles.push(mesh);
     vertices += geometry.getAttribute('position').count;
     triangles += (geometry.getIndex()?.count ?? 0) / 3;
     geometry.computeBoundingBox();
     minHeight = Math.min(minHeight, geometry.boundingBox!.min.y);
     maxHeight = Math.max(maxHeight, geometry.boundingBox!.max.y);
   };
-  for (const chunk of townD2R30ChunkList) {
-    const geometry = buildTownD2R30ChunkGeometry(chunk, spacing, arrivalHeight);
+  const prepared=options.prepared;
+  if(prepared&&(prepared.length!==townD2R30ChunkList.length+2||!townD2R30ChunkList.every((chunk,i)=>prepared[i]?.name==='town-d2-r30-top-'+chunk.key)||prepared.at(-2)?.name!=='town-d2-r30-closed-perimeter'||prepared.at(-1)?.name!=='town-d2-r30-floor'))throw Error('Prepared massif tile identities changed');
+  const restore=(entry:D2MassifWire)=>{const g=unpackCutGeometry(entry.wire);g.name=entry.name;return g;};
+  for (const [i,chunk] of townD2R30ChunkList.entries()) {
+    const geometry = prepared?restore(prepared[i]!):buildTownD2R30ChunkGeometry(chunk, spacing, arrivalHeight);
     geometry.computeBoundingBox();
     minTopHeight = Math.min(minTopHeight, geometry.boundingBox!.min.y);
-    addMesh(geometry);
+    addMesh(geometry, true);
   }
   const perimeter = massifPerimeter(
     townD2R30GridAxis(-townD2R30Spec.width / 2, townD2R30Spec.width / 2, spacing),
     townD2R30GridAxis(-10, townD2R30Spec.depth - 10, spacing),
   );
-  addMesh(buildSkirtGeometry(perimeter, arrivalHeight));
-  addMesh(buildFloorGeometry(perimeter));
+  addMesh(prepared?restore(prepared.at(-2)!):buildSkirtGeometry(perimeter, arrivalHeight));
+  addMesh(prepared?restore(prepared.at(-1)!):buildFloorGeometry(perimeter));
   const stats: TownD2R30MassifStats = Object.freeze({
     spacing,
     vertices, triangles, meshes: group.children.length, draws: group.children.length,
@@ -245,6 +277,10 @@ export function createTownD2R30Massif(options: TownD2R30MassifOptions = {}) {
   let disposed = false;
   return {
     group,
+    /** The canonical near TOP tiles only (no skirt, no floor cap). A sector
+     * installer may replace their geometry in place; the host keeps ownership
+     * and restores them on uninstall. */
+    tiles: topTiles as readonly Mesh[],
     heightAt: (east: number, north: number) => sampleTownD2R30Height(east, north, arrivalHeight),
     stats: () => stats,
     setNight(night: number) {

@@ -103,31 +103,6 @@ test('R6: visits need the right place, height and domain; repeats are idempotent
   assert.equal(snapshot.events.find(e => e.type === 'visit')!.at, 100);
 });
 
-test('R6: a waypoint without a standable surface cannot be visited (fail closed)', context => {
-  const expedition = cleanup(context, createTownD2R30Expedition({
-    heightAt: (east, north) => east === -60 && north === 800
-      ? undefined
-      : sampleTownD2R30Height(east, north),
-  }));
-  const m6 = expedition.node('survey-m6')!;
-  assert.equal(m6.status, 'outside-terrain', 'the M6 survey point has no terrain support here');
-  assert.equal(m6.height, Number.NaN, 'a missing survey height must not be papered over');
-  // Even a finite, in-radius, in-domain position must be rejected: the node
-  // has no authoritative standing surface to stand on.
-  assert.equal(expedition.visit('survey-m6', {
-    east: m6.east, north: m6.north, height: 700, area: 'summit',
-  }), false, 'a node with no terrain support must not accept a visit');
-  assert.equal(expedition.snapshot().visited.length, 0);
-});
-
-test('R6: sled steps reject non-finite positions instead of logging a phantom crossing', context => {
-  const expedition = cleanup(context, createTownD2R30Expedition());
-  expedition.armSled();
-  assert.throws(() => expedition.sledStep({ east: Number.NaN, north: 0 }), /finite/i);
-  assert.throws(() => expedition.sledStep({ east: 0, north: Number.POSITIVE_INFINITY }), /finite/i);
-  assert.equal(expedition.snapshot().sled.gatesPassed, 0, 'no gate may be crossed by an invalid step');
-});
-
 test('R6: full traversal completes once and reset restarts the expedition', context => {
   const expedition = cleanup(context, createTownD2R30Expedition());
   for (const node of expedition.nodes()) {

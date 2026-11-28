@@ -3,15 +3,17 @@ import type {MainSummitTrailPoint as Point} from './main-summit-trail';
 import type {SouthGround} from './town-night-a-summit-landform';
 
 type Tri=readonly [Point,Point,Point];
-const cell=24,half=1.5,lift=.055;
+const cell=4,half=1.5,lift=.055;
+// Conservative bucket padding covers the existing barycentric tolerance.
+const bucketEpsilon=.00001;
 const area=(a:Point,b:Point,c:Point)=>(b.east-a.east)*(c.north-a.north)-(b.north-a.north)*(c.east-a.east);
 /** A bounded earthwork on C2's accepted centreline/profile. Supply the
  * identical canonical terrain to this builder and D2's terrain cutter.
  * The returned indexed cutTread describes the entire walking strip;
  * do not mount the old tread or admit walking before cut is installed.
  * This module deliberately does not replace a shared height authority. */
-export function mountSouthEarthworks(points:readonly Point[],first:number,last:number,groundAt:SouthGround,cap=5){
- if(first<1||last>=points.length-1||first>=last||!Number.isFinite(cap)||cap<=0)throw Error('Invalid southern earthwork range');
+export function mountSouthEarthworks(points:readonly Point[],first:number,last:number,groundAt:SouthGround,cap=5,northLimit=448){
+ if(first<1||last>=points.length-1||first>=last||!Number.isFinite(cap)||cap<=0||!Number.isFinite(northLimit)||northLimit<448||northLimit>480)throw Error('Invalid southern earthwork range');
  const group=new Group();group.name='night-a-south-road-earthworks';
  const treadMat=new MeshLambertMaterial({vertexColors:true}),stoneMat=new MeshLambertMaterial({vertexColors:true,side:DoubleSide});
  const chunks=new Map<string,{road:number[];roadColor:number[];walls:number[];wallColor:number[]}>();
@@ -27,13 +29,13 @@ export function mountSouthEarthworks(points:readonly Point[],first:number,last:n
   if(road&&Math.abs(area(a,b,c))<1e-9)return;
   const bin=get(a),p=road?bin.road:bin.walls,colors=road?bin.roadColor:bin.wallColor;
   for(const q of [a,b,c]){p.push(q.east,q.height,-q.north);colors.push(color.r,color.g,color.b);}
-  if(road){idx.push(put(a),put(b),put(c));const t=[a,b,c] as const;for(const k of keys(Math.min(a.east,b.east,c.east),Math.max(a.east,b.east,c.east),Math.min(a.north,b.north,c.north),Math.max(a.north,b.north,c.north))){const list=triangleCells.get(k)??[];list.push(t);triangleCells.set(k,list);}}
+  if(road){idx.push(put(a),put(b),put(c));const t=[a,b,c] as const;for(const k of keys(Math.min(a.east,b.east,c.east)-bucketEpsilon,Math.max(a.east,b.east,c.east)+bucketEpsilon,Math.min(a.north,b.north,c.north)-bucketEpsilon,Math.max(a.north,b.north,c.north)+bucketEpsilon)){const list=triangleCells.get(k)??[];list.push(t);triangleCells.set(k,list);}}
  }
  const quad=(a:Point,b:Point,c:Point,d:Point,road:boolean,color:Color)=>{emit(a,b,c,road,color);emit(c,b,d,road,color);};
  function ground(p:Point){const h=groundAt(p.east,p.north);if(h===undefined||!Number.isFinite(h))throw Error('Missing earthwork ground');return h;}
  const sections=points.slice(first,last+1).map((p,j)=>{
   const i=first+j,a=points[i-1]!,b=points[i+1]!,dx=b.east-a.east,dn=b.north-a.north,l=Math.hypot(dx,dn);
-  if(![p.east,p.north,p.height,l].every(Number.isFinite)||l<1e-8||p.north<0||p.north>=448||Math.abs(p.east)>=1068)throw Error('Road outside south construction core');
+  if(![p.east,p.north,p.height,l].every(Number.isFinite)||l<1e-8||p.north<0||p.north>=northLimit||Math.abs(p.east)>=1068)throw Error('Road outside south construction core');
   const at=(t:number,h=p.height+lift)=>point(p.east-dn/l*t,p.north+dx/l*t,h);
   return {p,at};
  });

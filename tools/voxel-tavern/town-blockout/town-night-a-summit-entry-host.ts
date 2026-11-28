@@ -2,7 +2,7 @@ import type {Object3D} from 'three';
 import type {mountMainSummitAssembly} from './main-summit-assembly';
 import {mountSouthEntry} from './town-night-a-summit-entry';
 import type {SouthSnowVisualSample} from './town-night-a-summit-snow-appearance';
-type Assembly=ReturnType<typeof mountMainSummitAssembly>;
+type Assembly=Pick<ReturnType<typeof mountMainSummitAssembly>,'group'|'r30'>;
 /** Actual ZA22 assembly lifecycle adapter. No forced mount or transfer,
  * and no independent terrain. D2 may supersede this narrow entry mount
  * with its full sector assembly; never draw the entrance twice. */

@@ -31,14 +31,6 @@
 - 许可：仓库 MIT（Original-WebAudio）。
 - 边界：复用 FR-07 的首次手势启动、试听/停止、循环、主音量、静音与停止全部架构；不重复旧风铃/火炉/脚步，不接公共音频、C 域音场、HUD、存档或多人权威。
 
-## Night-F3 区域风雪音效（2026-11-27 夜间冲刺）
-
-- 交付：`tools/voxel-tavern/town-blockout/town-friend3-weather-audio.ts`、`friend3-weather-audio-preview.ts/.html/.css`、`friend3-vite.weather-audio-preview.config.ts`、`friend3-verify-weather-audio.mjs`、`tests/town-friend3-weather-audio.test.ts`。
-- 设计：固定 4 个区域循环层（小镇轻风、山地强风、坑区恶劣、高山风雪）+ 1 个雪粒层，共用 2 秒噪声缓冲与一个 AudioContext；权重、室内、风、雪只改目标增益，不重复创建音源。点缀音限速且最多 3 个并发。
-- 音色语汇复用 FR-07 风铃/风/火炉与 FR-14 轨轮/滑轮/冰裂，不加载外部采样；许可为仓库 MIT。
-- 接口：`createFriend3WeatherAudio()`，Friend1 在手势后调用 `start()`，每轮天气更新调用 `updateFromField({ region, severity, windStrength, snowIntensityScale })` 或 `setRegionWeights/setIndoor/setWeatherIntensity`；不再使用时 `dispose()`。
-- 边界：不修改公共天气、地形、玩法、服务器入口或全局音频；独立预览端口 5219。
-
 ## 独立验收入口
 
 - FR-05：`friend3-vite.fr05-preview.config.ts`（dist-fr05 / 5205）

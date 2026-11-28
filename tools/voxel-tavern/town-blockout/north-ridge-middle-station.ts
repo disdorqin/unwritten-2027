@@ -37,9 +37,10 @@ export function mountNorthRidgeMiddleStation(parent:Object3D){
   }
   // Same dark iron, wood and brass family as the existing cable terminal.
   // Keep both cable lanes and the T5 centreline unobstructed.
-  add('stone',0,0,-.22,12,8,.44);
+  // Finish planks share the exact 140m walk/boarding datum.
+  add('stone',0,0,-.236,12,8,.408);
   for(let e=-5.5;e<=5.6;e+=.8)for(let n=-3.4;n<=3.5;n+=1.7){
-    add(Math.round((e+6)*10+(n+4)*10)%3?'timber':'woodLight',e,n,.016,.77,1.65,.032);
+    add(Math.round((e+6)*10+(n+4)*10)%3?'timber':'woodLight',e,n,-.016,.77,1.65,.032);
     if(Math.abs(e)>4.7&&Math.round((e+6)*10+(n+4)*10)%4===0)add('snowShadow',e,n,.043,.51,.74,.019);
   }
   // Layered exposed stone foundation and timber edge beam, as in ref-m28.

@@ -6,7 +6,7 @@ type Foot={east:number;north:number;height:number};
 type Cabin=0|1;
 type Front=ReturnType<typeof createNightBFrontService>;
 type Upper=ReturnType<typeof createNightBLine2Service>;
-export type CableRideFrame=Readonly<{line:1|2;cabin:Cabin;feet:Foot;whiteout:boolean;station:string|null;synchronized:boolean}>;
+export type CableRideFrame=Readonly<{line:1|2;cabin:Cabin;feet:Foot;whiteout:boolean;station:string|null;synchronized:boolean;phase?:'station'|'departure'|'enter-cloud'|'whiteout'|'arrival';elapsedMs?:number;direction?:'up'|'down'}>;
 type Ride={line:1|2;cabin:Cabin};
 type Input={
  front?:Front;frontFacilities?:ReturnType<typeof mountRidgeCableFacilities>;
@@ -30,35 +30,37 @@ export function createNightBCableRideHost(input:Input){
  // A parked facility has immutable static car colliders: the caller MUST
  // supply a certified open variant, not move the closed production model.
  const frontGroups=input.frontFacilities&&[-1,1].map(side=>input.frontFacilities!.group.getObjectByName('d-r30-cable-cabin-'+side));
- const frontBound=!!input.front?.physical&&!!frontGroups?.every(g=>g?.parent===input.frontFacilities!.group&&!g.getObjectByName('ridge-cable-parked-car-batch'));
+ const upperBound=!!input.upper?.physical&&!!input.upperRopeway&&input.upper.ropeway===input.upperRopeway;
+ const frontBound=!!input.front?.physical&&input.front.survey===input.frontFacilities?.survey&&!!frontGroups?.every(g=>g?.parent===input.frontFacilities!.group&&!g.getObjectByName('ridge-cable-parked-car-batch'));
  function updateVisuals(skipUpper=false){
-  if(frontBound&&input.front){const states=input.front.present();states.forEach((s,i)=>{const g=frontGroups![i]!;g.position.set(s.feet.east,s.feet.height,-s.feet.north)});}
-  if(!skipUpper&&input.upper?.physical&&input.upperRopeway)input.upper.present();
+  if(frontBound&&input.front)input.frontFacilities!.presentOperational(input.front.present());
+  if(!skipUpper&&upperBound)input.upper!.present();
  }
  function pose():CableRideFrame|undefined{
   if(!ride)return;
-  if(ride.line===1){const p=input.front?.ridePose({cabin:ride.cabin});if(p)last={line:1,cabin:ride.cabin,feet:{...p.feet},whiteout:false,station:p.station,synchronized:true};}
-  else {const p=input.upper?.ridePose({cabinIndex:ride.cabin});if(p)last={line:2,cabin:ride.cabin,feet:world(p.feet),whiteout:p.whiteout,station:p.station,synchronized:true};}
+  if(input.domain()!==(ride.line===1?'town':'summit'))return last&&{...last,feet:{...last.feet},synchronized:false};
+  const p=ride.line===1?input.front?.ridePose({cabin:ride.cabin}):input.upper?.ridePose({cabinIndex:ride.cabin});
+  if(p)last={line:ride.line,cabin:ride.cabin,feet:ride.line===1?{...p.feet}:world(p.feet),whiteout:'whiteout'in p&&p.whiteout,station:p.station,synchronized:true,direction:p.direction,...('phase'in p?{phase:p.phase,elapsedMs:p.elapsedMs}:{})};
   // During a network gap, keep the last valid location and lock walking.
   // No local wall-clock extrapolation and no teleport to a station.
-  const current=ride.line===1?input.front?.cabinStates():input.upper?.cabinStates();
-  return last&&{...last,feet:{...last.feet},synchronized:!!current};
+  return last&&{...last,feet:{...last.feet},synchronized:!!p};
  }
  function boardCandidate(feet:Foot,line:1|2,cabin:Cabin){
   if(ride||!finite(feet)||(cabin!==0&&cabin!==1))return false;
   if(line===1)return input.domain()==='town'&&frontBound&&!!input.front?.board(feet,cabin);
-  return input.domain()==='summit'&&!!input.upperRopeway&&!!input.upper?.board(local(feet),cabin);
+  return input.domain()==='summit'&&upperBound&&!!input.upper?.board(local(feet),cabin);
  }
  function board(feet:Foot,line:1|2,cabin:Cabin){
   if(!boardCandidate(feet,line,cabin))return false;
   ride={line,cabin};last=undefined;const p=pose();if(!p?.synchronized){ride=undefined;last=undefined;return false;}return true;
  }
- function exit(){
+ function exitCandidate(){
   if(!ride)return;const p=pose();if(!p?.synchronized||!p.station)return;
   const candidate=ride.line===1?input.front?.exit({cabin:ride.cabin}):input.upper?.exit({cabinIndex:ride.cabin});
   if(!candidate)return;const foot=ride.line===1?candidate:world(candidate);
   if(!finite(foot)||!input.acceptLanding(ride.line,foot,p.station))return;
-  ride=undefined;last=undefined;return foot;
+  return foot;
  }
- return {updateVisuals,pose,boardCandidate,board,exit,riding:()=>!!ride,frontBound,upperBound:!!input.upper?.physical&&!!input.upperRopeway};
+ function exit(){const foot=exitCandidate();if(!foot)return;ride=undefined;last=undefined;return foot;}
+ return {updateVisuals,pose,boardCandidate,board,exitCandidate,exit,riding:()=>!!ride,frontBound,upperBound};
 }

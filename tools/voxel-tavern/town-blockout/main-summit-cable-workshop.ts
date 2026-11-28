@@ -195,11 +195,11 @@ export function mountMainSummitCableWorkshop(owner: Group, groundAt: GroundAt, a
   const global=(x:number,z:number)=>({east:anchor.east+z,north:anchor.north+x});
   const repairAnchors:RepairAnchors=anchor===mainSummitR30CableWorkshopAnchor?r30WorkshopRepairAnchors:Object.freeze({brake:global(-1.25,-2.28),cableWheel:global(-1.25,1.25),weightTower:global(1.25,2.2),weightFrame:global(.8,-2.8)});
   const repair=createCableRepairHost(2,repairAnchors);
-  let state:Za36CableRepairState|undefined;
+  let state:Za36CableRepairState|undefined,initialized=false;
   function sync(next:Za36CableRepairState|undefined){
     if(next?.line!==2)next=undefined;
-    if(state&&next&&next.version<state.version)return;
-    state=next;if(next)repair.sync(next);
+    if(initialized&&(!state&&!next||state&&next&&next.version<=state.version))return;
+    initialized=true;state=next;if(next)repair.sync(next);
     brake.rotation.z=-(next?.impacts??0)*.12-(next?.brakePulled?1.15:0);
     faultMaterial.color.set(next?.brakePulled?'#b8a077':'#a56e41');
     pulley.position.y=1.65+.58*(next?.cableHeight??0);
@@ -216,13 +216,16 @@ export function mountMainSummitCableWorkshop(owner: Group, groundAt: GroundAt, a
     // Workshop yaw=PI/2, so +local Z is east and +local X is north.
     return { x: north - anchor.north, z: east - anchor.east };
   }
+  function repairFootClear(feet:{east:number;north:number;height:number}){
+    if(![feet.east,feet.north,feet.height].every(Number.isFinite)||Math.abs(feet.height-anchor.floor)>.43)return false;
+    const {x,z}=coordinates(feet.east,feet.north);
+    return Math.abs(x)<=4.85&&Math.abs(z)<=4.1&&!solids.some(w=>Math.abs(x-w.x)<w.w/2+.27&&Math.abs(z-w.z)<w.d/2+.27&&w.low<1.8&&w.high>.065);
+  }
   let disposed = false;
   return {
-    group, lights, repairAnchors, sync, anchor,
+    group, lights, repairAnchors, repairFootClear, sync, anchor,
     repairActions(feet:{east:number;north:number;height:number}){
-      if(!state||!Number.isFinite(feet.height)||Math.abs(feet.height-anchor.floor)>.43)return [];
-      const {x,z}=coordinates(feet.east,feet.north);
-      if(Math.abs(x)>4.85||Math.abs(z)>4.1||solids.some(w=>Math.abs(x-w.x)<w.w/2+.27&&Math.abs(z-w.z)<w.d/2+.27&&w.low<1.8&&w.high>.065))return [];
+      if(!state||!repairFootClear(feet))return [];
       return repair.actions(state,feet);
     },
     pieceCount: Object.values(buckets).reduce((sum, v) => sum + v.length, 0),

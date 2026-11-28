@@ -1,5 +1,9 @@
 import { createPresenceServer } from './server.js';
 import { createCableLineAuthority } from './cable-line-authority.js';
+import {createSummitPassportGuestAuthority} from './summit-passport-guest.js';
+import {createSummitPassportFileStore} from './summit-passport-store.js';
+import {access,stat} from 'node:fs/promises';
+import {constants} from 'node:fs';
 import type { RequestListener } from 'node:http';
 import { mountainPresenceBounds } from '../shared/za22-mountain-domain.js';
 import { summitPresenceBounds,isSummitCableReleaseRecord } from '../shared/za22-summit-presence-domain.js';
@@ -38,8 +42,19 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
   const townWeather = readTownWeatherOptions(townNight!.dawnEpoch!,
     process.env.TOWN_WEATHER_WARNING_RECEIPT || join(tmpdir(), 'unwritten-town-weather-warning-receipt.json'));
   const cableLineAuthority = createCableLineAuthority();
+  // Explicit total-control opt-in to location-gated guest passports.
+  // No implicit identity from nickname, temporary storage, or client claims.
+  let passport:ReturnType<typeof createSummitPassportGuestAuthority>|undefined;
+  if(process.env.PRESENCE_SUMMIT_PASSPORT==='on'){
+    const secret=process.env.PRESENCE_SUMMIT_PASSPORT_SECRET,dir=process.env.PRESENCE_SUMMIT_PASSPORT_DIR;
+    if(!secret||!/^([0-9a-fA-F]{64})$/.test(secret)||!dir||!process.env.PRESENCE_SUMMIT_PORT)throw Error('Passport needs persistent 32-byte secret, durable directory and summit room');
+    if(!(await stat(dir)).isDirectory())throw Error('Passport storage must be a provisioned directory');
+    await access(dir,constants.R_OK|constants.W_OK);
+    passport=createSummitPassportGuestAuthority(Buffer.from(secret,'hex'),createSummitPassportFileStore(dir));
+  }
   const server = await createPresenceServer({
     cableLineAuthority,
+    ...(passport?{summitPassportGuest:{authority:passport,room:'town' as const}}:{}),
     requireSummitCableRelease:true,
     authorizeCableRepair:authorizeOutdoorCableRepair,
     host,
@@ -68,6 +83,8 @@ export async function startPresence(requestListener?: RequestListener, ceremonyS
       if (port) separateRooms.push(await createPresenceServer({
         host, port: Number(port), ...bounds, ceremonyStartAt: 0, townNightFeed: server.townNightFeed,
         townOutdoorWeatherFeed: server.townOutdoorWeatherFeed,
+        ...(passport&&bounds===mountainPresenceBounds?{summitPassportGuest:{authority:passport,room:'mountain' as const}}:{}),
+        ...(passport&&bounds===summitPresenceBounds?{summitPassportGuest:{authority:passport,room:'summit' as const}}:{}),
         // The mountain has the same repair state as the outdoor town. Other
         // isolated gameplay rooms retain their previous independent behavior.
         ...(bounds === mountainPresenceBounds || bounds === westPresenceBounds ? { cableLineAuthority, requireSummitCableRelease:true,authorizeCableRepair:authorizeOutdoorCableRepair } : {}),

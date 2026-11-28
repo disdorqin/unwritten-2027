@@ -21,6 +21,17 @@ export const pollSampleIntervalSeconds = POLL_INTERVAL_MS / 1000;
 export const pollEventQueueLimit = 128;
 
 export type PollWireMessage = { t: 'text'; d: string } | { t: 'bin'; d: string };
+/** Six missed 2Hz poll intervals invalidate the ride clock; explicit
+ * transport errors invalidate immediately. */
+export function createCableTransportLease(now:()=>number=()=>performance.now()){
+ let last:number|undefined;
+ return {renew(){last=now();},invalidate(){last=undefined;},fresh(){const t=now();return last!==undefined&&Number.isFinite(t)&&t>=last&&t-last<=6*pollIntervalMs;}};
+}
+/** A lost HTTP response can follow server acceptance. Never replay
+ * non-idempotent cable actions automatically after an ambiguous failure. */
+export function retryablePollEvents(events:readonly (string|Uint8Array)[]){
+ return events.filter(e=>{if(typeof e!=='string')return true;try{const m=JSON.parse(e);return !(m?.type==='event'&&(m.kind==='cable-repair'||m.kind==='cable-release-summit'));}catch{return true;}});
+}
 
 export function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';

@@ -93,6 +93,10 @@ export type TownD2R30SummitFacilitiesOptions = Readonly<{
   heightAt?: (east: number, north: number, arrivalHeight?: number) => number | undefined;
   /** Include the hut interior + registration landmarks (default true). */
   includeHut?: boolean;
+  /** Reuse the host's exact P-3 survey instead of generating a duplicate block. */
+  trailPoints?:ReturnType<typeof createMainSummitTrail>['points'];
+  /** B owns the operating workshop in production; legacy preview keeps this room. */
+  includeLegacyMachineRoom?:boolean;
   /** Include the icefall and rock towers (default true). */
   includeGeology?: boolean;
   /** Include trail markers, bell posts, paint and survey stations (default true). */
@@ -168,10 +172,14 @@ function makePolishBatches(group: Group, disposers: (() => void)[], name: string
   const ice = new MeshLambertMaterial({ color: '#cfeef5' });
   const snow = new MeshLambertMaterial({ color: '#e5eaeb' });
   const stone = new MeshLambertMaterial({ color: '#83817d' });
+  const darkStone = new MeshLambertMaterial({ color: '#4f5255' });
+  const carved = new MeshLambertMaterial({ color: '#b7b8b5' });
   const timber = new MeshLambertMaterial({ color: '#694e39' });
+  const plank = new MeshLambertMaterial({ color: '#57402d' });
+  const brass = new MeshLambertMaterial({ color: '#bf9b63' });
   const flagMat = new MeshLambertMaterial({ color: '#b86a4c', side: DoubleSide });
   const lampMat = new MeshLambertMaterial({ color: '#3a3230', emissive: '#ffb45c', emissiveIntensity: 1 });
-  for (const material of [ice, snow, stone, timber, flagMat, lampMat]) {
+  for (const material of [ice, snow, stone, darkStone, carved, timber, plank, brass, flagMat, lampMat]) {
     disposers.push(() => material.dispose());
   }
   const batches: InstancedMesh[] = [];
@@ -202,7 +210,7 @@ function makePolishBatches(group: Group, disposers: (() => void)[], name: string
     }
   }
   return { batches, matrix, pose, tint, batch, place, finish,
-    materials: { ice, snow, stone, timber, flagMat, lampMat } };
+    materials: { ice, snow, stone, darkStone, carved, timber, plank, brass, flagMat, lampMat } };
 }
 
 /** Hut + monument polish: eave icicles, roof snow, door steps, roof flag, monument flagpole. */
@@ -254,15 +262,103 @@ function buildHutMonumentPolish(anchors: {
   const doorLamp = b.batch('door-lamp', b.materials.lampMat, 1);
   b.place(doorLamp, 0, hutMidEast, hut.height + 1.5, hut.south - 0.18, 0.22, 0.26, 0.22);
 
+  // R5 deepening: wall plinth and cap. The reference hut reads as a stacked
+  // wood-and-stone shell; the canonical walls stay untouched, so this overlay
+  // adds a stone plinth band at the wall base and a timber cap under the
+  // eaves to give the shell its readable course-by-course stack.
+  const plinthCount = 18;
+  const wallPlinth = b.batch('hut-wall-plinth', b.materials.stone, plinthCount);
+  {
+    let index = 0;
+    for (const east of [56.4, 58.84, 61.28, 63.72, 66.16]) {
+      b.place(wallPlinth, index++, east + 1.22, hut.height + 0.25, hut.south - 0.19, 2.44, 0.5, 0.22);
+      b.place(wallPlinth, index++, east + 1.22, hut.height + 0.25, hut.north + 0.19, 2.44, 0.5, 0.22);
+    }
+    for (const north of [1007.4, 1010.2, 1013.0, 1015.8]) {
+      b.place(wallPlinth, index++, hut.west - 0.19, hut.height + 0.25, north + 1.4, 0.22, 0.5, 2.8);
+      b.place(wallPlinth, index++, hut.east + 0.19, hut.height + 0.25, north + 1.4, 0.22, 0.5, 2.8);
+    }
+  }
+  const capCount = 18;
+  const wallCap = b.batch('hut-wall-cap', b.materials.plank, capCount);
+  {
+    let index = 0;
+    for (const east of [56.4, 58.84, 61.28, 63.72, 66.16]) {
+      b.place(wallCap, index++, east + 1.22, soffit - 0.09, hut.south - 0.19, 2.44, 0.18, 0.16);
+      b.place(wallCap, index++, east + 1.22, soffit - 0.09, hut.north + 0.19, 2.44, 0.18, 0.16);
+    }
+    for (const north of [1007.4, 1010.2, 1013.0, 1015.8]) {
+      b.place(wallCap, index++, hut.west - 0.19, soffit - 0.09, north + 1.4, 0.16, 0.18, 2.8);
+      b.place(wallCap, index++, hut.east + 0.19, soffit - 0.09, north + 1.4, 0.16, 0.18, 2.8);
+    }
+  }
+  // Stone chimney: rises through the roof on the back-west shoulder, with a
+  // dark cap block so the stack reads as a real appliance, not a flat box.
+  const chimneyCount = 5;
+  const chimney = b.batch('hut-chimney', b.materials.stone, chimneyCount);
+  const chimneyEast = 59;
+  const chimneyNorth = 1017;
+  for (let i = 0; i < 4; i++) {
+    b.place(chimney, i, chimneyEast, hut.height + 4.5 + i * 0.5, chimneyNorth, 0.7, 0.5, 0.7);
+  }
+  b.place(chimney, 4, chimneyEast, hut.height + 6.5, chimneyNorth, 0.8, 0.1, 0.8);
+  // West-wall warm window: the reference hut carries a second warm pane on the
+  // cross wall; the canonical south pane stays, this adds the west pane with
+  // its own frame and sill so both cross walls read as lit at night.
+  const westWindow = b.batch('hut-west-window', b.materials.lampMat, 1);
+  b.place(westWindow, 0, hut.west - 0.02, hut.height + 1.95, hutMidNorth, 0.06, 1.0, 0.8);
+  const westWindowFrame = b.batch('hut-west-window-frame', b.materials.timber, 2);
+  b.place(westWindowFrame, 0, hut.west - 0.01, hut.height + 2.5, hutMidNorth, 0.1, 0.09, 0.9);
+  b.place(westWindowFrame, 1, hut.west - 0.01, hut.height + 1.38, hutMidNorth, 0.1, 0.09, 0.9);
+  // Door canopy: a short timber shelter over the south door, keeping the
+  // doorway dry and giving the front face a readable landing.
+  const doorCanopy = b.batch('hut-door-canopy', b.materials.plank, 1);
+  b.place(doorCanopy, 0, hutMidEast, hut.height + 3.45, hut.south - 0.5, 2.0, 0.12, 0.6);
+
   // The reference pairs the carved stone with a red-orange flag on a slim
   // pole; the canonical monument keeps its slab, this overlay adds the pole.
-  const monPole = b.batch('monument-flagpole', b.materials.timber, 10);
-  const monFlag = b.batch('monument-flag', b.materials.flagMat, 1);
   const monBase = monument.height;
+  // Stone flag-pole base: a stepped stone collar at the monument top so the
+  // mast reads as planted hardware instead of a bare stick.
+  const monPoleBase = b.batch('monument-flagpole-base', b.materials.stone, 3);
+  for (let i = 0; i < 3; i++) {
+    b.place(monPoleBase, i, monument.east, monBase + 0.12 + i * 0.08, monument.north,
+      0.9 - i * 0.22, 0.14, 0.9 - i * 0.22);
+  }
+  const monPole = b.batch('monument-flagpole', b.materials.timber, 10);
+  const monFlag = b.batch('monument-flag', b.materials.flagMat, 4);
   for (let i = 0; i < 10; i++) {
     b.place(monPole, i, monument.east, monBase + 0.2 + i * 0.55, monument.north, 0.09, 0.55, 0.09);
   }
-  b.place(monFlag, 0, monument.east + 0.45, monBase + 5.5, monument.north, 0.8, 0.48, 0.04);
+  // Flag top finial: a brass ball on the mast head so the banner reads as a
+  // fitted, ceremonial pole rather than a cut stick.
+  const monFinial = b.batch('monument-flag-finial', b.materials.brass, 1);
+  b.place(monFinial, 0, monument.east, monBase + 5.75, monument.north, 0.16, 0.16, 0.16);
+  // Banner folds: three segmented cloth bands stacked along the mast, each
+  // slightly offset, reading as a real draped flag rather than one flat quad.
+  for (let i = 0; i < 4; i++) {
+    b.place(monFlag, i, monument.east + 0.42 + i * 0.16, monBase + 5.0 + i * 0.45, monument.north,
+      0.5, 0.42, 0.04);
+  }
+  // Slab carved grooves: vertical dark incisions down the monument face,
+  // echoing the chiseled lettering the reference shows on the carved stone.
+  const monGrooves = b.batch('monument-slab-grooves', b.materials.darkStone, 5);
+  for (let i = 0; i < 5; i++) {
+    b.place(monGrooves, i, monument.east, monBase + 1.3 + i * 0.42, monument.north - 0.32,
+      0.05, 0.5, 0.05);
+  }
+  // Bronze inscription plate: a warm metal plaque pinned to the slab face,
+  // giving the monument a readable dedication surface in the reference's
+  // bronze-on-stone palette.
+  const monPlate = b.batch('monument-inscription-plate', b.materials.brass, 1);
+  b.place(monPlate, 0, monument.east, monBase + 2.4, monument.north - 0.34, 0.8, 0.5, 0.05);
+  // Plinth steps: two stone courses in front of the monument base, so the
+  // carved slab reads as standing on a built plinth, not a bare mound.
+  const monSteps = b.batch('monument-plinth-steps', b.materials.stone, 2);
+  for (let i = 0; i < 2; i++) {
+    b.place(monSteps, i, monument.east, monBase + 0.05 + i * 0.1, monument.north - 1.3 - i * 0.3,
+      2.4, 0.1, 0.5);
+  }
   // Ice teeth on the monument plinth edge.
   const monIcicles = b.batch('monument-plinth-icicles', b.materials.ice, 4);
   for (let i = 0; i < 4; i++) {
@@ -284,7 +380,7 @@ function buildHutMonumentPolish(anchors: {
   };
 }
 
-/** Terrace polish: chipped stone balustrade and a short viewing pennant string. */
+/** Terrace polish: chipped stone balustrade, viewing pennants, rail posts and a glide launch marker. */
 function buildTerracePolish(terrace: PolishAnchor) {
   const group = new Group();
   group.name = 'summit-terrace-polish';
@@ -297,6 +393,19 @@ function buildTerracePolish(terrace: PolishAnchor) {
     const east = terrace.east - 8.4 + i * (16.8 / (railCount - 1));
     b.place(rail, i, east, terrace.height + 0.55, railNorth, 0.7, 0.5, 0.5);
   }
+  // R5 deepening: rail posts. Each balustrade block stands on a stone post
+  // that drops to the platform, so the railing reads as a built fence rather
+  // than a floating bar.
+  const railPosts = b.batch('terrace-rail-posts', b.materials.stone, railCount);
+  for (let i = 0; i < railCount; i++) {
+    const east = terrace.east - 8.4 + i * (16.8 / (railCount - 1));
+    b.place(railPosts, i, east, terrace.height + 0.22, railNorth, 0.22, 0.6, 0.22);
+  }
+  // R5 deepening: end posts. The two termini rise higher than the mid rail,
+  // giving the gallery a readable gate post at each end.
+  const endPosts = b.batch('terrace-end-posts', b.materials.stone, 2);
+  b.place(endPosts, 0, terrace.east - 8.4, terrace.height + 0.9, railNorth, 0.3, 1.2, 0.3);
+  b.place(endPosts, 1, terrace.east + 8.4, terrace.height + 0.9, railNorth, 0.3, 1.2, 0.3);
   // Pennant poles along the rail, each with a cloth flag in the reference's
   // warm palette; instance colours keep one draw for the whole string.
   const pennantPoles = b.batch('pennant-poles', b.materials.timber, 15);
@@ -309,6 +418,21 @@ function buildTerracePolish(terrace: PolishAnchor) {
     }
     b.place(pennants, i, east + 0.28, terrace.height + 2.6, railNorth, 0.5, 0.3, 0.04, 0, pennantColors[i]!);
   }
+  // R5 deepening: glide launch marker. A brass-capped stone ring on the
+  // platform's north lip marks the takeoff point, so the glide course reads
+  // as a marked launch pad rather than an undifferentiated deck.
+  const launchRing = b.batch('terrace-glide-launch-ring', b.materials.stone, 8);
+  const launchRingNorth = terrace.north + 4.5;
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2;
+    b.place(launchRing, i,
+      terrace.east + Math.cos(angle) * 1.1,
+      terrace.height + 0.12,
+      launchRingNorth + Math.sin(angle) * 1.1,
+      0.3, 0.12, 0.3);
+  }
+  const launchCap = b.batch('terrace-glide-launch-cap', b.materials.brass, 1);
+  b.place(launchCap, 0, terrace.east, terrace.height + 0.3, launchRingNorth, 0.5, 0.12, 0.5);
   b.finish();
   let disposed = false;
   return {
@@ -401,18 +525,18 @@ export function createTownD2R30SummitFacilities(
   // The canonical P-3 walkway is surveyed against the P-1 reference field.
   // Route props that hang off the walkway keep that survey, but every body
   // samples the R30 ground so nothing floats above the new massif.
-  const block = createMainSummitBlock(mainSummitLayout, arrivalHeight, 100);
-  let trailPoints: ReturnType<typeof createMainSummitTrail>['points'] = [];
-  try {
-    trailPoints = createMainSummitTrail(block.heightAt, arrivalHeight).points;
-  } finally {
-    block.dispose();
+  let trailPoints=options.trailPoints;
+  if(!trailPoints){
+    const block=createMainSummitBlock(mainSummitLayout,arrivalHeight,100);
+    try{trailPoints=createMainSummitTrail(block.heightAt,arrivalHeight).points;}finally{block.dispose();}
   }
+  if(trailPoints.length<2)throw Error('Missing summit trail survey');
 
   if (includeHut) {
     const landmarks = createMainSummitRegistrationLandmarks(arrivalHeight);
     const summit = landmarks.summit;
     const registration = mountMainSummitRegistration(group, landmarks, 'summit');
+    registration.group.userData.colliders=registration.colliders;
     disposers.push(() => registration.dispose());
     record('registration-hut', 'building', summit.hut.east + (summit.hut.east - summit.hut.west) / 2,
       summit.hut.north + (summit.hut.north - summit.hut.south) / 2, summit.hut.height);
@@ -424,10 +548,12 @@ export function createTownD2R30SummitFacilities(
       summit.interior.height);
 
     // The line-2 lower station machine room stands on the arrival terrace.
-    const machineRoom = createMainSummitMachineRoom(arrivalHeight);
-    group.add(machineRoom.group);
-    disposers.push(() => machineRoom.dispose());
-    record('machine-room', 'building', -15.5, 6, arrivalHeight);
+    if(options.includeLegacyMachineRoom!==false){
+      const machineRoom = createMainSummitMachineRoom(arrivalHeight);
+      group.add(machineRoom.group);
+      disposers.push(() => machineRoom.dispose());
+      record('machine-room', 'building', -15.5, 6, arrivalHeight);
+    }
 
     // R4/R5: the hut and monument polish overlay. The canonical hut and
     // carved slab keep their surveyed datum; this only adds the stacked

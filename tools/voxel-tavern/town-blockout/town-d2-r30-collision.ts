@@ -5,6 +5,7 @@ export type TownD2R30CollisionOptions = Readonly<{
   spacing?: number;
   arrivalHeight?: number;
   heightAt?: (east: number, north: number) => number | undefined;
+  preparedHeights?:Float32Array;
 }>;
 
 export type TownD2R30CollisionPoint = Readonly<{ east: number; north: number; height: number }>;
@@ -68,6 +69,13 @@ function axisLocation(axis: readonly number[], value: number) {
   return { cell, fraction: (value - start) / (end - start), vertex: -1 };
 }
 
+export function sampleD2CanonicalCollision(arrivalHeight=347){
+ const e=townD2R30GridAxis(mainSummitBounds.west,mainSummitBounds.east,townD2R30Spec.collisionSpacing),n=townD2R30GridAxis(mainSummitBounds.south,mainSummitBounds.north,townD2R30Spec.collisionSpacing);
+ const heights=new Float32Array(e.length*n.length);
+ for(let j=0;j<n.length;j++)for(let i=0;i<e.length;i++)heights[j*e.length+i]=sampleTownD2R30Height(e[i]!,n[j]!,arrivalHeight)??NaN;
+ return heights;
+}
+
 /** Cached height-field collision using the same two triangles per cell as the massif mesh. */
 export function createTownD2R30Collision(options: TownD2R30CollisionOptions = {}): TownD2R30Collision {
   const spacing = options.spacing ?? townD2R30Spec.collisionSpacing;
@@ -84,9 +92,10 @@ export function createTownD2R30Collision(options: TownD2R30CollisionOptions = {}
   const triangleCount = (eastVertices - 1) * (northVertices - 1) * 2;
   // Match the visible mesh's Float32 positions exactly. Collision therefore
   // interpolates the rendered triangles, not a separate higher-frequency field.
-  const heights = new Float32Array(vertexCount);
-  let heightSamples = 0;
-  for (let row = 0; row < northVertices; row++) {
+  const heights = options.preparedHeights??new Float32Array(vertexCount);
+  if(heights.length!==vertexCount)throw Error('Prepared collision grid dimensions changed');
+  let heightSamples = options.preparedHeights?vertexCount:0;
+  if(!options.preparedHeights)for (let row = 0; row < northVertices; row++) {
     for (let column = 0; column < eastVertices; column++) {
       const value = heightAt(eastAxis[column]!, northAxis[row]!);
       heights[row * eastVertices + column] = typeof value === 'number' && Number.isFinite(value) ? value : NaN;

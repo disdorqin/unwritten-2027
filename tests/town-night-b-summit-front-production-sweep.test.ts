@@ -16,10 +16,11 @@ import {auditNightBFrontOpenFacilities} from '../tools/voxel-tavern/town-blockou
 import {createNightBProductionController,nightBProductionAuthority} from '../tools/voxel-tavern/town-blockout/town-night-b-production-controller';
 import {createZa36CableRepair,type Za36CableRepairEvent} from '../src/shared/za36-cable-repair';
 import {installNightBFrontOperation} from '../tools/voxel-tavern/town-blockout/town-night-b-summit-front-install';
-test('front production field and actual rail, station, forest, roads, banks and terrace audit',()=>{
+for(const rearConnectorCandidate of [false,true])test(`front production field and actual external sweep (${rearConnectorCandidate?'default four-road':'legacy three-road'} candidate)`,()=>{
  const grid=createTerrainGrid(),root=new Group(),west=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
  const rail=createTownRailway(grid,()=>0),branch=buildCraterRailExtension(grid,west,rail.route.points);
- const ridge=mountProductionRidge(root,grid,{loop:rail.route.points,branch:branch.samples});
+ const ridge=mountProductionRidge(root,grid,{loop:rail.route.points,branch:branch.samples,rearConnectorCandidate});
+ assert.equal(ridge.roads.length,rearConnectorCandidate?4:3);
  assert.ok(ridge.facilities&&ridge.stationReady&&ridge.serviceExit);assert.equal(ridge.transportReady,false);
  const owner=new Group(),field=ridge.field,allowed=(e:number,n:number)=>ridge.ownership.distance(e,n)>0;
  const facility=mountRidgeCableFacilities(owner,field,true,false,true),station=mountNorthRidgeMiddleStation(owner);
@@ -29,7 +30,7 @@ test('front production field and actual rail, station, forest, roads, banks and 
  const hall=buildRailwayStation(),boxes=[...(hall.userData.colliders??[]),...(hall.userData.floors??[])].map(q=>({min:[q.min[0]+526,q.min[1]+26,q.min[2]-329],max:[q.max[0]+526,q.max[1]+26,q.max[2]-329]}));
  const all=[...boxes,...rail.group.userData.colliders,...rail.group.userData.floors,...branch.group.userData.colliders,...branch.group.userData.floors];
  const matrix=new Matrix4(),pos=new Vector3(),scale=new Vector3(),stationBoxes:{east:number;north:number;height:number;w:number;d:number;h:number}[]=[];
- for(const mesh of station.group.children){if(!(mesh instanceof InstancedMesh))continue;for(let i=0;i<mesh.count;i++){mesh.getMatrixAt(i,matrix);pos.setFromMatrixPosition(matrix);scale.setFromMatrixScale(matrix);if(pos.y+scale.y/2>140.10)stationBoxes.push({east:pos.x,north:-pos.z,height:pos.y,w:scale.x,d:scale.z,h:scale.y});}}
+ for(const child of station.group.children){const mesh=child as InstancedMesh;if(!mesh.isInstancedMesh)continue;for(let i=0;i<mesh.count;i++){mesh.getMatrixAt(i,matrix);pos.setFromMatrixPosition(matrix);scale.setFromMatrixScale(matrix);if(pos.y+scale.y/2>140.10)stationBoxes.push({east:pos.x,north:-pos.z,height:pos.y,w:scale.x,d:scale.z,h:scale.y});}}
  const hits:Record<string,number>={},first:Record<string,unknown>={};
  const mark=(kind:string,p:unknown)=>{hits[kind]=(hits[kind]??0)+1;first[kind]??=p;};
  const externalBlocked:NonNullable<Parameters<typeof auditNightBFrontOpenFacilities>[2]>=(p,w,d,top)=>{
@@ -79,23 +80,57 @@ test('front production field and actual rail, station, forest, roads, banks and 
   const gate=d.station==='base'?{east:d.approach.east,north:346,height:26}:d.station==='middle'?{east:d.approach.east,north:517,height:140}:{east:d.approach.east,north:636,height:347};
   return checkPath(gate,d.approach)&&checkPath(d.approach,d.board);
  })});
- assert.ok(accepted.ready,JSON.stringify(accepted.ready?{}:{reason:accepted.reason,docks:accepted.docks}));assert.equal(closed.group.parent,null);assert.equal(accepted.facilities.group.parent,originalParent);assert.equal(accepted.service.serviceOpen(),false);
- let domain:'town'|'mountain'|'summit'='town';
- const controller=createNightBProductionController({presence,front:accepted,upperOrigin:{east:300,north:676},domain:()=>domain,acceptLanding:(_l,p,s)=>dockClear(s,p),frontRepair:{anchors:{brake:accepted.docks[0]!.approach,cableWheel:accepted.docks[2]!.approach,weightTower:accepted.docks[3]!.approach,weightFrame:accepted.docks[2]!.approach},surfaceAt:(e,n)=>externalCableDockSupport(e,n)??station.surfaceAt(e,n)??field.heightAt(e,n),clear:p=>dockClear('',p)}});
+ assert.ok(accepted.ready,JSON.stringify(accepted.ready?{}:{reason:accepted.reason,docks:accepted.docks}));
+ // Newly installed dormant cars must already be at the upper station
+ // before the first viewer tick, and legacy frame writers cannot move them.
+ for(const side of [-1,1]){
+  const car:import('three').Object3D=accepted.facilities.group.getObjectByName('d-r30-cable-cabin-'+side)!;
+  const batch=car.children[0] as InstancedMesh;
+  assert.equal(car.children.length,1);assert.ok(batch.isInstancedMesh&&batch.count>20);
+  assert.equal(car.position.y,347);
+ }
+ const beforeLegacy=accepted.facilities.update(18000);
+ assert.ok(beforeLegacy.every(c=>c.station==='summit'&&c.height===347));
+ accepted.facilities.setNight(true);
+ accepted.facilities.group.traverse(o=>{if('isPointLight'in o)assert.equal((o as any).intensity,0);});
+assert.equal(closed.group.parent,null);assert.equal(accepted.facilities.group.parent,originalParent);assert.equal(accepted.service.serviceOpen(),false);
+ let domain:'town'|'mountain'|'summit'='town',inputClock=0;
+ const controller=createNightBProductionController({presence,inputNow:()=>inputClock,front:accepted,upperOrigin:{east:300,north:676},domain:()=>domain,acceptLanding:(_l,p,s)=>dockClear(s,p),frontRepair:{anchors:{brake:accepted.docks[0]!.approach,cableWheel:accepted.docks[2]!.approach,weightTower:accepted.docks[3]!.approach,weightFrame:accepted.docks[2]!.approach},surfaceAt:(e,n)=>externalCableDockSupport(e,n)??station.surfaceAt(e,n)??field.heightAt(e,n),clear:p=>dockClear('',p)}});
  const summit=accepted.docks.find(d=>d.station==='summit'&&d.cabin===0)!.approach;
  assert.equal(controller.action('board-0',summit).accepted,false);
- assert.equal(controller.reportFrontImpact('snowball'),false);
- assert.equal(controller.reportFrontImpact('sled'),true);
- domain='mountain';assert.equal(controller.action('board-0',summit).accepted,true);
- const firstRideFrame=controller.tick(0)!;assert.ok(firstRideFrame.synchronized&&reported===1);
- now=wokeAt!+20000;assert.equal(controller.tick(0)?.station,null);
- assert.equal(controller.action('exit',summit).accepted,false);
- const held=controller.pose()!.feet;now=undefined;assert.deepEqual(controller.tick(0)?.feet,held);assert.equal(controller.pose()?.synchronized,false);
- now=wokeAt!+accepted.service.firstMs;const arrived=controller.action('exit',summit);assert.ok(arrived.accepted&&arrived.landing);assert.equal(activity,0);
+ assert.equal(controller.reportFrontImpact('snowball',summit),false);
+ assert.equal(controller.reportFrontImpact('sled',{...summit,height:999}),false);
+ assert.equal(controller.reportFrontImpact('sled',{east:0,north:0,height:26}),false);
+ assert.equal(controller.reportFrontImpact('sled',summit),true);
+ domain='mountain';assert.equal(controller.action('board-0',summit).accepted,false);
+ now=wokeAt!+20000;assert.equal(controller.tick(0),undefined);assert.equal(accepted.service.present()[0]!.station,null);
+ now=wokeAt!+accepted.service.firstMs;assert.equal(accepted.service.present()[0]!.station,'middle');
  domain='town';
  assert.equal(controller.action('strike-rust',{...accepted.docks[0]!.approach,height:999}).accepted,false);
- assert.equal(controller.action('strike-rust',accepted.docks[0]!.approach).accepted,true);
- assert.equal(authority.snapshot().impacts,1);
+ const act=(id:string,at:number)=>{controller.tick(0);assert.equal(controller.action(id,accepted.docks[at]!.approach).accepted,true,id);};
+ for(let i=0;i<9;i++)act('strike-rust',0);
+ act('pull-brake',0);
+ const wheel=accepted.docks[2]!.approach;
+ const holdFrames=(n:number)=>{for(let i=0;i<n;i++){inputClock+=100;controller.updateRepairHold(true,wheel);}};
+ act('pry-cable',2);assert.equal(authority.snapshot().cableHeight,0);
+ holdFrames(6);assert.equal(authority.snapshot().cableHeight,.25);
+ controller.updateRepairHold(false,wheel);assert.equal(authority.snapshot().cableHeight,.125);
+ assert.equal(controller.repairHolding(),false);
+ act('pry-cable',2);holdFrames(30);assert.equal(authority.snapshot().cableAligned,true);
+ controller.updateRepairHold(false,wheel);
+ for(let i=0;i<3;i++)act('tighten-cable',2);
+ for(let i=0;i<4;i++){act('take-weight',3);act('hang-weight',2);}
+ assert.equal(authority.snapshot().stage,'full-line');
+ now=openedAt!+accepted.service.repositionMs;controller.tick(0);
+ const base=accepted.docks[0]!.approach;
+ assert.equal(controller.action('board-0',base).accepted,true);
+ const firstRideFrame=controller.tick(0)!;assert.ok(firstRideFrame.synchronized&&reported===1);
+ now+=20000;assert.equal(controller.tick(0)?.station,null);
+ const actual=controller.pose()!.feet;const legacy=accepted.facilities.update(0)[0]!;assert.deepEqual({east:legacy.east,north:legacy.north,height:legacy.height},actual);
+ assert.equal(controller.action('exit',base).accepted,false);assert.deepEqual(controller.actions(base),[]);
+ const sameDomainFeet=controller.pose()!.feet;domain='summit';assert.equal(controller.pose()?.synchronized,false);assert.deepEqual(controller.pose()?.feet,sameDomainFeet);assert.deepEqual(controller.actions(base),[]);domain='town';
+ const held=controller.pose()!.feet;now=undefined;assert.deepEqual(controller.tick(0)?.feet,held);assert.equal(controller.pose()?.synchronized,false);
+ now=openedAt!+accepted.service.repositionMs+accepted.service.clock.oneWayMs;const arrived=controller.action('exit',base);assert.ok(arrived.accepted&&arrived.landing);assert.equal(activity,0);
  console.log('six local approach links certified; production controller uses authoritative E and repair events, holds last foot during reconnect');
  accepted.facilities.dispose();facility.dispose();station.dispose();terrace.dispose();
 });

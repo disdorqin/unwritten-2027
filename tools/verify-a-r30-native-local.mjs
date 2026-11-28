@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const [segment, evidencePath] = process.argv.slice(2);
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','west-mountain','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review','night-r3-entry','night-r3-bare-weather','night-r3-bare-west'].includes(segment) && evidencePath,
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','west-mountain','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review','night-r3-entry','night-r3-bare-weather','night-r3-bare-west','a31-bare-crater-return','a31-front-north','a32-stream'].includes(segment) && evidencePath,
   'Usage: node tools/verify-a-r30-native-local.mjs <segment> <evidence directory>');
 const run = promisify(execFile);
 const repo = fileURLToPath(new URL('../', import.meta.url));
@@ -97,6 +97,8 @@ async function freePort() {
 
 function routePresence(url, ports) {
   const pathname = new URL(url, 'http://127.0.0.1').pathname;
+  if (pathname === '/presence-summit' || pathname.startsWith('/presence-summit/'))
+    return { hostname: host, port: ports.summit, path: url.replace(/^\/presence-summit/, '/presence') };
   if (pathname === '/presence-mountain' || pathname.startsWith('/presence-mountain/'))
     return { hostname: host, port: ports.mountain, path: url.replace(/^\/presence-mountain/, '/presence') };
   if (pathname === '/presence-west' || pathname.startsWith('/presence-west/'))
@@ -180,14 +182,15 @@ try {
   // Presence now has a separate start.ts: compile the complete NodeNext graph,
   // not just index.ts, whose JS-suffixed dependency is otherwise left un-emitted.
   await finish(startNode([tsc, '-p', 'tsconfig.server.json', '--outDir', compiled], {}));
-  const ports = { town: await freePort(), mountain: await freePort(), west: await freePort(), sky: await freePort() };
+  const ports = { town: await freePort(), mountain: await freePort(), west: await freePort(), sky: await freePort(), summit: await freePort() };
   frontend = servePreview(ports, commit);
   const port = await usePort(frontend);
   const base = `http://${host}:${port}`;
   presence = startNode([join(compiled, 'presence', 'index.js')], {
     NODE_ENV: 'production', PRESENCE_HOST: host, PRESENCE_PORT: String(ports.town),
     PRESENCE_MOUNTAIN_PORT: String(ports.mountain), PRESENCE_WEST_PORT: String(ports.west),
-    PRESENCE_SKY_PORT: String(ports.sky),
+    PRESENCE_SKY_PORT: String(ports.sky), PRESENCE_SUMMIT_PORT: String(ports.summit),
+    PRESENCE_SUMMIT_RELEASE: 'off',
     TOWN_NIGHT_SCHEDULE: JSON.stringify({
       dawnEpoch: Date.now() - 390_000, beaconOffsetsAfterDusk: Array(12).fill(60_000), cueFreshnessMs: 2_000,
     }),
