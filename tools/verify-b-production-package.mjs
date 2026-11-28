@@ -1,0 +1,70 @@
+import assert from 'node:assert/strict';
+import {spawn,execFileSync} from 'node:child_process';
+import {once} from 'node:events';
+import {createServer} from 'node:http';
+import {createRequire} from 'node:module';
+import {copyFile,mkdir,writeFile,readFile} from 'node:fs/promises';
+import {existsSync} from 'node:fs';
+import path from 'node:path';
+import {fileURLToPath,pathToFileURL} from 'node:url';
+const repo=fileURLToPath(new URL('../',import.meta.url)),out=path.resolve(process.argv[2]??'');
+assert.ok(process.argv[2]&&out.startsWith(path.join(repo,'.evidence')+path.sep),'Use this worktree evidence directory');
+const web=path.join(out,'web'),compiled=path.join(out,'server'),viewer=path.join(repo,'tools','voxel-tavern');
+assert.ok(existsSync(path.join(web,'town-blockout.html'))&&existsSync(path.join(compiled,'presence','index.js')));
+const require=createRequire(path.join(repo,'package.json')),viewerRequire=createRequire(path.join(viewer,'package.json'));
+const {WebSocket}=require('ws'),{chromium}=require('playwright'),{preview}=await import(pathToFileURL(viewerRequire.resolve('vite')).href);
+const free=async()=>{const s=createServer();s.listen(0,'127.0.0.1');await once(s,'listening');const port=s.address().port;await new Promise(r=>s.close(r));return port;};
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const sha=execFileSync('git',['rev-parse','HEAD'],{cwd:repo,encoding:'utf8'}).trim();
+const report={scope:'B branch normal production build, not merged four-sector normal ride; actual compiled startPresence and local equivalent proxy, not Docker/Caddy or public deployment',sha,vite:viewerRequire('vite/package.json').version,three:JSON.parse(await readFile(path.join(viewer,'node_modules','three','package.json'),'utf8')).version,errors:[],rooms:[],entry:[],complete:false};
+let child,server,browser;const sockets=[];let failure;
+async function join(base,route,name,frame){
+ const s=new WebSocket(base.replace('http:','ws:')+route),frames=[];sockets.push(s);
+ s.on('message',(data,binary)=>{if(!binary)frames.push(JSON.parse(data.toString()));});
+ await once(s,'open');s.send(JSON.stringify({type:'join',name,...(frame?{presenceFrame:frame}:{})}));
+ for(let i=0;i<120;i++){const j=frames.find(f=>f.type==='join'&&f.self);if(j&&frames.filter(f=>f.type==='cable-line').length>=2)return {s,j,frames};await sleep(50);}throw Error('room join timeout: '+route);
+}
+try{
+ await mkdir(path.join(web,'models'),{recursive:true});
+ for(const f of ['post-office.glb','clocktower.glb','tavern.glb'])await copyFile(path.join(repo,'public','models',f),path.join(web,'models',f));
+ const town=await free(),summit=await free(),front=await free();
+ child=spawn(process.execPath,[path.join(compiled,'presence','index.js')],{cwd:repo,windowsHide:true,env:{...process.env,NODE_ENV:'production',PRESENCE_HOST:'127.0.0.1',PRESENCE_PORT:String(town),PRESENCE_SUMMIT_PORT:String(summit),PRESENCE_SUMMIT_RELEASE:'off',PRESENCE_MOUNTAIN_PORT:'',PRESENCE_WEST_PORT:'',PRESENCE_SKY_PORT:'',PRESENCE_MINE_PORT:'',PRESENCE_MINE2_PORT:'',TOWN_NIGHT_SCHEDULE:'',TOWN_NIGHT_BEACON_RECEIPT:path.join(out,'night-receipt.json'),TOWN_WEATHER_WARNING_RECEIPT:path.join(out,'weather-receipt.json')},stdio:['ignore','pipe','pipe']});
+ let logs='';child.stdout.on('data',d=>logs+=d.toString());child.stderr.on('data',d=>logs+=d.toString());
+ for(let i=0;i<120&&!logs.includes('Town presence listening');i++){if(child.exitCode!==null)throw Error(logs);await sleep(100);}
+ assert.match(logs,/Town presence listening/);
+ const target=port=>'http://127.0.0.1:'+port;
+ server=await preview({root:viewer,configFile:false,build:{outDir:web},plugins:[{name:'production-root-equivalent',configurePreviewServer(s){s.middlewares.use((req,res,next)=>{const pathname=new URL(req.url??'/','http://127.0.0.1').pathname;if(pathname==='/healthz'){res.setHeader('Cache-Control','no-store');res.end('town-preview '+sha.slice(0,8));return;}if(pathname==='/favicon.ico'){res.writeHead(204).end();return;}if(pathname==='/')req.url='/town-blockout.html'+(req.url??'/').slice(1);next();});}}],preview:{host:'127.0.0.1',port:front,strictPort:true,proxy:{'^/presence-summit(?:/|$)':{target:target(summit),ws:true,rewrite:p=>p.replace('/presence-summit','/presence')},'^/presence(?:/|$)':{target:target(town),ws:true}}}});
+ const base=target(front);
+ const a=await join(base,'/presence','B打包甲'),b=await join(base,'/presence-summit','B打包乙','summit-v1');
+ assert.equal(a.j.presenceFrame,undefined);assert.equal(b.j.presenceFrame,'summit-v1');
+ const bytes=Buffer.alloc(12);bytes.writeUInt16LE(Math.round((326.772724+800)*25),2);bytes.writeUInt16LE(Math.round((1669.45455-630)*25),4);bytes.writeUInt16LE(34000,6);bytes.writeUInt16LE(1,10);
+ b.s.send(bytes);b.s.send(JSON.stringify({type:'event',kind:'cable-release-summit'}));await sleep(180);
+ assert.ok(!b.frames.some(f=>f.type==='cable-line'&&f.stage!=='dormant'));
+ const poll=await fetch(base+'/presence-summit/poll/join',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:'B轮询丙',presenceFrame:'summit-v1'})});
+ assert.equal(poll.status,200);const pj=await poll.json();assert.ok(pj.messages.some(m=>m.t==='text'&&JSON.parse(m.d).presenceFrame==='summit-v1'));
+ await fetch(base+'/presence-summit/poll/leave',{method:'POST',headers:{'content-type':'application/json','x-presence-session':pj.session},body:'{}'});
+ report.rooms=[{path:'/presence',frame:'legacy',joined:true},{path:'/presence-summit',frame:'summit-v1',joined:true,releaseDefaultOff:true,poll:true}];
+ a.s.close();b.s.close();
+ const chrome=['C:/Program Files/Google/Chrome/Application/chrome.exe','C:/Program Files (x86)/Google/Chrome/Application/chrome.exe'].find(existsSync);
+ browser=await chromium.launch({headless:true,executablePath:chrome,args:['--use-gl=angle','--use-angle=d3d11']});
+ const ctx=await browser.newContext({viewport:{width:960,height:540},deviceScaleFactor:.8,locale:'zh-CN'});
+ const page=await ctx.newPage();let sent=0,joined=false;
+ page.on('pageerror',e=>report.errors.push('page:'+e.message));page.on('console',m=>{if(m.type()==='error')report.errors.push('console:'+m.text()+':'+m.location().url);});page.on('response',r=>{if(r.status()>=400)report.errors.push('http:'+r.status()+':'+r.url());});
+ page.on('websocket',s=>{if(!s.url().includes('/presence'))return;s.on('framereceived',({payload})=>{if(typeof payload==='string'){const f=JSON.parse(payload);if(f.type==='join'&&f.self)joined=true;}});s.on('framesent',({payload})=>{if(Buffer.isBuffer(payload)&&payload.length===12)sent++;});});
+ await page.addInitScript(()=>{Object.defineProperty(Element.prototype,'requestPointerLock',{value:undefined});localStorage.setItem('unwritten.quality.tier.v1','smooth');localStorage.setItem('unwritten.presence.name.v1','B生产冒烟');});
+ const response=await page.goto(base+'/',{waitUntil:'domcontentloaded',timeout:60000});assert.equal(response.status(),200);
+ await page.waitForFunction(()=>document.querySelector('#town-entry')?.hidden===true||document.querySelector('#town-entry-continue')?.hidden===false||document.querySelector('#town-entry-error')?.hidden===false,{timeout:60000});
+ assert.notEqual(await page.locator('#town-entry-error').evaluate(x=>x.hidden),false);
+ if(await page.locator('#town-entry-continue').isVisible())await page.locator('#town-entry-continue').click();
+ await page.locator('#scene canvas').waitFor({state:'visible',timeout:60000});
+ for(let i=0;i<100&&!joined;i++)await sleep(100);
+ assert.ok(joined,'Actual normal-entry Presence join missing');
+ const before=await page.locator('#position').textContent();
+ await page.keyboard.down('w');await sleep(1500);await page.keyboard.up('w');await sleep(200);
+ const after=await page.locator('#position').textContent();assert.ok(sent>0);assert.notEqual(before,after);
+ await page.screenshot({path:path.join(out,'normal-entry.jpg'),type:'jpeg',quality:85});
+ report.entry=[{path:'/',before,after,joined,sent,viewport:960+'x'+540,dpr:.8}];
+ assert.equal(report.errors.length,0,JSON.stringify(report.errors));report.complete=true;
+}catch(e){failure=e.stack??String(e);report.failure=failure;}
+finally{await browser?.close();for(const s of sockets)s.terminate();if(server)await new Promise(r=>{server.httpServer.close(r);server.httpServer.closeAllConnections?.()});if(child&&child.exitCode===null){child.kill();await Promise.race([once(child,'exit'),sleep(1500)]);}await writeFile(path.join(out,'package-smoke.json'),JSON.stringify(report,null,2));}
+console.log(JSON.stringify(report));if(failure)throw Error(failure);

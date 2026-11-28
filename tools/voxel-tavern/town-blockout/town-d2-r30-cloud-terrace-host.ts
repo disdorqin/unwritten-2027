@@ -125,17 +125,26 @@ function addColoredBox(positions: number[], colors: number[], tint: Color,
   }
 }
 
-/** One six-block pine prototype; every tree is one instance of this shared geometry. */
+/** One seven-block pine prototype; every tree is one instance of this shared geometry.
+ *  R4 refinement: a two-segment trunk and a four-layer canopy give the lowland forest
+ *  the voxel-tavern block read the reference asks for, while the prototype keeps
+ *  its [-0.5, 0.5] vertical footprint so instance grounding stays exact. */
 function createPineGeometry() {
   const positions: number[] = [], colors: number[] = [];
   const box = (tint: string, centre: readonly [number, number, number], size: readonly [number, number, number]) =>
     addColoredBox(positions, colors, new Color(tint), centre, size);
-  box('#654a32', [0, -.22, 0], [.16, .56, .16]);
-  box('#314c3b', [0, -.18, 0], [.9, .2, .9]);
-  box('#3d5b43', [0, -.02, 0], [.74, .22, .74]);
-  box('#49684a', [0, .15, 0], [.56, .22, .56]);
-  box('#36533f', [0, .35, 0], [.34, .3, .34]);
-  box('#dce6e8', [0, .465, 0], [.37, .07, .37]);
+  // Lower trunk: wider and darker, anchored so the prototype bottom sits at -0.5.
+  box('#5a3d2a', [0, -.3, 0], [.2, .4, .2]);
+  // Upper trunk: thinner, lighter bark.
+  box('#654a32', [0, -.1, 0], [.14, .28, .14]);
+  // Canopy layers stack from a broad dark base to a compact pale crown, each
+  // offset up and inset so the silhouette reads as a real pine, not a cuboid.
+  box('#2f4a38', [0, -.08, 0], [.96, .24, .96]);
+  box('#3a5b43', [0, .05, 0], [.78, .24, .78]);
+  box('#49684a', [0, .19, 0], [.58, .22, .58]);
+  box('#36533f', [0, .32, 0], [.38, .28, .38]);
+  // Snow cap on the highest layer, keeping the top at +0.5.
+  box('#dce6e8', [0, .46, 0], [.36, .08, .36]);
   const geometry = new BufferGeometry();
   geometry.name = 'd2-r30-lowland-pine-prototype';
   geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));

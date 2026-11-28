@@ -48,6 +48,7 @@ export function createTownChat(send: (scope: TownChatScope, text: string) => boo
     input?.blur();
     if (input) input.value = '';
     log?.replaceChildren();
+    const unread=document.getElementById('town-chat-unread');if(unread)unread.hidden=true;
     bubbles.clear();
     window.clearTimeout(ownTimer);
     if (ownBubble) ownBubble.hidden = true;
@@ -128,7 +129,11 @@ export function createTownChat(send: (scope: TownChatScope, text: string) => boo
     const target = event.target;
     if (target instanceof HTMLElement && target.closest('button,input,select,textarea,a,[contenteditable]')) return;
     event.preventDefault();
-    input.focus();
+    // Enter remains a quick chat shortcut, but opens the same corner menu.
+    const menu=document.querySelector<HTMLDialogElement>('#town-settings');
+    if(menu&&!menu.open)document.getElementById('town-panel-toggle')?.click();
+    if(panel?.classList.contains('town-chat-collapsed'))document.getElementById('town-chat-toggle')?.click();
+    if(menu?.open)input.focus();
   });
 
   return {

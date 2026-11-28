@@ -204,12 +204,14 @@ export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Fiel
     box(stone,e,n,h+.14,.88,.88,.6,true);
     box(iron,e,n,(h+top)/2,.32,.32,top-h,true);
     box(iron,e,n,top-.12,.62,.62,.24);
-    if(!(closed&&serviceExit&&sign===-1&&n===356)){
+    // Both the closed waiting deck and the certified moving variant
+    // share the same west pedestrian seam. Never put a post in the swept exit.
+    if(!(serviceExit&&sign===-1&&n===356)){
      box(wood,e,n,p.height+.50,.15,.15,1.0,true);
      box(brass,e,n,p.height+1.03,.23,.23,.12);
     }
    }
-   for(const n of [351.5,354.5])if(!(closed&&serviceExit&&sign===-1&&n===354.5))for(const dh of [.45,.96])box(wood,e,n,p.height+dh,.13,3,.13,true);
+   for(const n of [351.5,354.5])if(!(serviceExit&&sign===-1&&n===354.5))for(const dh of [.45,.96])box(wood,e,n,p.height+dh,.13,3,.13,true);
   }
   for(const n of [350,353,356])box(iron,p.east,n,p.height-.24,7.1,.28,.24);
   // Actual platform slab is registered in the host's existing floor

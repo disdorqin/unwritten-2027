@@ -27,6 +27,10 @@ import { buildVillageLandmark, villageHousePortals } from './landmark-village';
 
 import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, worldBounds } from './terrain';
 import { addTerrainMeshes } from './terrain-mesh';
+import {mountWestMountainGround,westMountainTrackProtection} from './town-night-a-summit-west-ground';
+import {westPresenceBounds} from '../../../src/shared/za22-west-domain';
+import {createSouthEntryHost} from './town-night-a-summit-entry-host';
+import {mountWestMountainFootway} from './town-night-a-summit-west-footway';
 import { createTerrainSupportContract } from './town-a-r30-terrain-contract';
 import { supportFootprintOverlaps } from './town-a-r30-oriented-support';
 import { mainSummitLayout, mainSummitSpec } from './main-summit-block';
@@ -75,7 +79,7 @@ import { createTownFireworksActivity } from './town-fireworks-activity';
 import { createTownPersonalFireworks, firecrackerStand } from './personal-firework-activity';
 import { personalFireworkRestricted } from '../../../src/presence/personal-fireworks';
 import {
-  ceremonyEveYear, ceremonyMidnight, createCeremonyDirector, createCeremonyOverlay, type CeremonyCue,
+  ceremonyEveYear, ceremonyMidnight, ceremonyStateAt, dimLevelAt, createCeremonyDirector, createCeremonyOverlay, type CeremonyCue,
 } from './town-ceremony';
 import { loadRehearsalClock } from './town-rehearsal-clock';
 import { ceremonyArrivalAt, ceremonyLateWindowMs, townCeremonyMidnight, type CeremonyArrival } from '../../../src/presence/ceremony-arrival';
@@ -179,7 +183,12 @@ import { approachTownSnowScale } from './town-snow-cover';
 import { createTownSnowField } from './town-snow-field';
 import { createPlazaInformationActivity } from './plaza-information-activity';
 import { createPlazaSnowSupply, type PlazaSnowSupplySite } from './plaza-snow-supply';
-import { advanceWeatherCover, townSnowWeatherForFrame } from './town-weather';
+import { advanceWeatherCover, townSnowWeatherAt, townSnowWeatherForFrame } from './town-weather';
+import { sampleSouthRegionalWeather, applySouthWeatherPresentation, createSouthWeatherVisual, southWeatherWalkingScale } from './town-night-a-summit-weather-field';
+import { southWeatherStatus, southWeatherProfile } from './town-night-a-summit-weather-status';
+import { createTownNightWeatherSky, type TownNightWeatherSkyFrame } from './town-night-weather-sky';
+import { createSouthSummitWeatherHost } from './town-night-a-summit-weather-host';
+import { townNightWeatherDayMs, townNightWeatherDefaultDawnEpoch } from '../../../src/shared/town-night-weather-cycle';
 import { createSledRide, createSledWallCollider } from './sled-ride';
 import { createTownSledVisuals } from './sled-visuals';
 import { resolveTownSledRacks } from './town-sled-racks';
@@ -226,6 +235,9 @@ const snowCover = createTownSnowField(grid);
 let visualSnowCover = 0;
 const scene = new Scene();
 let westCraterRoad: ReturnType<typeof mountWestCraterRoad> | undefined;
+let westMountainGround:ReturnType<typeof mountWestMountainGround>|undefined;
+const westGroundReady=(e:number,n:number)=>ensureWestCraterRoad().terrainReadyAt(e,n)||!!westMountainGround?.readyAt(e,n);
+const westGroundAt=(e:number,n:number)=>westMountainGround?.heightAt(e,n)??ensureWestCraterRoad().heightAt(e,n);
 // S-1 (分支窗 A): the west (crater) domain gets its OWN walk-geometry index.
 // The town chunk key (chunkAtCell) collides for negative east — a west cell
 // block and a town-east cell block can share chunk id AND subcell, which
@@ -481,8 +493,8 @@ const summitSkylinePeak = new Vector3(mainSummitLayout.summit.east, mainSummitSp
   -mainSummitLayout.summit.north).add(summitSkylineOrigin);
 const summitSkylinePeakNdc = new Vector3();
 let summitSkylineDraws = 0;
-const summitSkylineDayMaterial = new MeshLambertMaterial({side:DoubleSide,fog:false,vertexColors:true});
-const summitSkylineNightMaterial = new MeshBasicMaterial({side:DoubleSide,fog:false,vertexColors:true});
+const summitSkylineDayMaterial = new MeshLambertMaterial({fog:true,vertexColors:true});
+const summitSkylineNightMaterial = new MeshLambertMaterial({fog:true,vertexColors:true});
 const summitSkylineMesh: Mesh<BufferGeometry, MeshLambertMaterial | MeshBasicMaterial> =
   new Mesh(buildR30TownSkyline(),summitSkylineDayMaterial);
 const {summitHeight}=mainSummitSpec;
@@ -552,7 +564,7 @@ if (reportSummitSkyline) {
   };
 }
 const presence = createTownPresence(scene, camera, announceActivity, resetMovement,
-  (east, north) => east < 0 ? ensureWestCraterRoad().heightAt(east, north) ?? grid.heightAt(east, north)
+  (east, north) => east < 0 ? westGroundAt(east, north) ?? grid.heightAt(east, north)
     : grid.heightAt(east, north));
 // ZD-05 sky-city domain prep (zone-1 wiring plan, ruling 304c2e38):
 // the island lives in its own scene, hosted at the surveyed approach
@@ -596,6 +608,7 @@ const cloudRoute = createZa22CloudRoute({
   enterOrExit: transferCloudTerminal,
   view: (title, message) => { activityContext.open(title, message); },
 });
+const southEntryHost=createSouthEntryHost();
 // 缆车修缮一线宿主 (B2): the host holds no repair state — actions are
 // derived per frame from the server-authored state in town-presence.
 // Anchors follow the repair spec's three fault points: the rust brake
@@ -834,8 +847,16 @@ function stationViewCamera() {
 scene.add(railway.group);
 const railExtension = buildCraterRailExtension(grid, ensureWestCraterRoad(),railway.route.points);
 scene.add(railExtension.group);
+// Real missing west carrier; never cover the existing crater/rail strip.
+// Preserve the complete three-track reservation outside old rendering.
+westMountainGround=mountWestMountainGround(ensureWestCraterRoad().heightAt,{west:craterWestSurvey.west,east:0,south:ensureWestCraterRoad().terrainBoundary.renderNorth,north:worldBounds.depth},westMountainTrackProtection([railExtension.samples,railExtension.narrowSamples,railExtension.sidingSamples]));
+scene.add(westMountainGround.group);
+scene.add(mountWestMountainFootway(westGroundAt).group);
 productionRidge=mountProductionRidge(scene,grid,{loop:railway.route.points,branch:railExtension.samples,
-  rearConnectorCandidate:previewOptions.has('mRearConnector')&&['127.0.0.1','localhost'].includes(location.hostname)});
+  // The normal candidate entry now attempts the independently audited four-road
+  // field. mountProductionRidge retains the original three roads if its
+  // protected-vertex / grade / cable audit rejects the connector.
+  rearConnectorCandidate:!(previewOptions.has('mRearConnectorOff')&&['127.0.0.1','localhost'].includes(location.hostname))});
 if(westSurfacePort){
   westSurfaceAssembly=westSurfacePort.attach(ensureWestCraterRoad(),railExtension);
   try{assertAR30SurfaceAttachment(ensureWestCraterRoad(),railExtension);}
@@ -888,30 +909,46 @@ const forest = addForestDensity(landscape, grid,
     streetscape.occupied(east, north, radius) || pineCamp.keepClear(east, north, radius),
   (east, north, radius) => extensionRoadClearance(east, north, radius) || railway.keepClear(east, north, radius) || extensionStreetClearance(east, north, radius));
 const snowfall = createSnowfall(scene);
+const summitSnowfall = createSnowfall(cloudRoute.scene);
+const townWeatherVisual=createSouthWeatherVisual(snowfall,particleDensityScale);
+const summitWeatherVisual=createSouthWeatherVisual(summitSnowfall,particleDensityScale);
 const snowButton = element<HTMLButtonElement>('snow');
 snowButton.onclick = () => {
   snowfall.setEnabled(!snowfall.enabled());
+  summitSnowfall.setEnabled(snowfall.enabled());
   snowButton.setAttribute('aria-pressed', String(snowfall.enabled()));
 };
 const timeOfDay = element<HTMLButtonElement>('lighting');
 let nightMode = true;
-let clockNightApplied: boolean | null = null;
 let ceremonyDim = 1;
-function applyCeremonyLighting() {
-  ambient.intensity = (nightMode ? .96 : 1.35) * ceremonyDim;
-  sun.intensity = (nightMode ? 1.23 : 1.7) * ceremonyDim;
+const nightSky = createTownNightWeatherSky({scene,ambient,sun,fog:weatherFog});
+const summitNightSky = createSouthSummitWeatherHost(cloudRoute.scene);
+// Keep the last authoritative calendar origin through reconnects. No second
+// clock: all samples still come from the existing Presence server clock.
+let weatherDawnEpoch = presence.getTownWeatherDawnEpoch() ?? townNightWeatherDefaultDawnEpoch;
+const localLightingReview = previewOptions.has('profile') && ['127.0.0.1','localhost'].includes(location.hostname);
+let reviewNight: boolean | undefined;
+function updateNightSky(dim=ceremonyDim) {
+  weatherDawnEpoch = presence.getTownWeatherDawnEpoch() ?? weatherDawnEpoch;
+  const now = localLightingReview && reviewNight !== undefined
+    ? weatherDawnEpoch + (reviewNight ? .78 : .30) * townNightWeatherDayMs
+    : presence.serverNow();
+  return cloudRoute.active() ? summitNightSky.update(now,weatherDawnEpoch,dim)
+    : nightSky.update(now,weatherDawnEpoch,{dim});
+}
+function applyNightSide(skyFrame:TownNightWeatherSkyFrame){
+  // Preserve the existing night-window authority for discrete gameplay.
+  const nightWindowState=presence.getTownNightWindow();
+  const clockNight=localLightingReview&&reviewNight!==undefined?skyFrame.nightSide
+    :nightWindowState?nightWindowState.phase!=='day':skyFrame.nightSide;
+  if(clockNight!==nightMode)setNight(clockNight);
 }
 function setNight(night: boolean) {
   nightMode = night;
   summitSkylineMesh.material = night ? summitSkylineNightMaterial : summitSkylineDayMaterial;
   summitHutLight.visible = night;
   cloudRoute.setNight(night);
-  const sky = night ? '#182642' : '#acc2dd';
-  (scene.background as Color).set(sky);
-  scene.fog!.color.set(sky);
-  ambient.color.set(night ? '#83a9e7' : '#e4edff');
-  sun.color.set(night ? '#a6c0fd' : '#ffe6c5');
-  applyCeremonyLighting();
+  // Background, light colour/intensity and fog are owned by the continuous sky rig.
   timeOfDay.textContent = night ? '雪夜' : '白昼';
   timeOfDay.setAttribute('aria-pressed', String(night));
   scenery.setNight(night);
@@ -919,8 +956,11 @@ function setNight(night: boolean) {
   productionRidge?.setNight(night);
   frontRidgeCloudBand.setNight(night);
 }
-setNight(true);
-timeOfDay.onclick = () => setNight(timeOfDay.getAttribute('aria-pressed') !== 'true');
+setNight(updateNightSky().nightSide);
+timeOfDay.disabled = !localLightingReview;
+if(!localLightingReview)timeOfDay.setAttribute('aria-label','当前服务器昼夜状态');
+timeOfDay.title = localLightingReview ? '本地验收：昼夜机位切换' : '昼夜随服务器时钟连续变化';
+if(localLightingReview)timeOfDay.onclick = () => {reviewNight=!nightMode;setNight(updateNightSky().nightSide);};
 
 const prepareTerrain = addTerrainMeshes(scene, grid, productionRidge.ownsCell);
 
@@ -1308,7 +1348,9 @@ const landingSnow = createLandingSnow(scene);
 // 'balanced' (the default) reproduces the pre-tier values exactly.
 function applyQualityTier() {
   renderer.setPixelRatio(Math.min(devicePixelRatio, qualityPixelRatioCap()));
+  townWeatherVisual.reset();summitWeatherVisual.reset();
   snowfall.setDensityScale(particleDensityScale());
+  summitSnowfall.setDensityScale(particleDensityScale());
   landingSnow.setDensityScale(particleDensityScale());
 }
 applyQualityTier();
@@ -1392,9 +1434,11 @@ museumVisit.dialog.addEventListener('close', () => {
 function museumPosition() {
   return { x: (x - museumEast) / museumHorizontalScale, y: ground - museumHeight, z: (museumNorth - n) / museumHorizontalScale };
 }
-museumMapButton.onclick = () => museumVisit.openMap(museumPosition());
+museumMapButton.onclick = () => {if(townSettings.open)townSettings.close();museumVisit.openMap(museumPosition());};
 
 function openPlace(title: string, description: string) {
+  // The corner menu is a launcher, not a second modal behind an activity.
+  if(townSettings.open)townSettings.close();
   pauseForPanel();
   element('place-title').textContent = title;
   element('place-text').textContent = description;
@@ -1469,11 +1513,26 @@ const activityContext: Omit<TownActivityContext, 'announce'> = {
   },
 };
 const tavernDrinkEffects = createTavernDrinkEffects();
-tavernDrinkEffects.mountSettings(element('town-panel-controls'));
+tavernDrinkEffects.mountSettings(element('town-advanced-controls'));
 const townBgm = createTownBgm(festival.getAudioContext);
 const townSettings = element<HTMLDialogElement>('town-settings');
+const regionalWeatherStatus=document.createElement('output');
+regionalWeatherStatus.id='town-regional-weather';
+regionalWeatherStatus.setAttribute('aria-label','当前区域天气');
+regionalWeatherStatus.setAttribute('aria-live','off');
+regionalWeatherStatus.style.display='block';
+regionalWeatherStatus.style.color='#c6d3e5';
+element('position').after(regionalWeatherStatus);
+function showRegionalWeather(text:string){
+ if(regionalWeatherStatus.textContent===text)return;
+ regionalWeatherStatus.hidden=!text;
+ regionalWeatherStatus.style.display=text?'block':'none';
+ regionalWeatherStatus.textContent=text;
+}
 element('town-panel-toggle').addEventListener('click', cancelSledBrake);
-townBgm.mountControls(element('town-panel-controls'), element<HTMLButtonElement>('town-music-toggle'));
+townBgm.mountControls(element('town-advanced-controls'), element<HTMLButtonElement>('town-music-toggle'));
+townSettings.addEventListener('town-menu-opening',pauseForPanel);
+townSettings.addEventListener('close',()=>{if(!placeCard.open&&!museumVisit.dialog.open)renderer.domElement.focus({preventScroll:true});});
 let nextBgmRoomCheck = 0;
 const hotSpringSoak = createHotSpringSoak(
   { sit: activityContext.sit, announce: announceActivity }, tavernDrinkEffects.setSoaking,
@@ -1490,7 +1549,8 @@ let towerDusk = false;
 function setTowerDusk(enabled: boolean) {
   if (towerDusk === enabled) return;
   towerDusk = enabled;
-  townLights.setDusk(enabled);
+  // The clocktower keeps its wall-clock cues; automatic street lamps now
+  // follow the single game-day lighting rig instead.
   setClocktowerDuskLighting(tower, enabled);
 }
 const mascotFrustum = new Frustum();
@@ -1906,6 +1966,8 @@ const riddleActivity = createRiddleActivity({ open: activityContext.open, announ
 activitySpots.push(...riddleActivity.spots);
 const snowballControls = element('snowball-controls');
 const snowballScore = element('snowball-score');
+const menuSnowInventory=element('town-snow-inventory');
+const snowfightMaterial=element('snowfight-material');
 const snowballMeter = element<HTMLProgressElement>('snowball-action-meter');
 function ensureTownInputButton(id: string, label: string, after: HTMLElement): HTMLButtonElement {
   const existing = document.getElementById(id);
@@ -1941,8 +2003,8 @@ const ceremonyFrost = createCeremonyFrost(element('ceremony-frost'), {
   scene: element('scene'),
   announce: announceActivity,
 });
-ceremonyFrost.mountSettings(element('town-panel-controls'));
-festival.mountAudioSettings(element('town-panel-controls'));
+ceremonyFrost.mountSettings(element('town-advanced-controls'));
+festival.mountAudioSettings(element('town-advanced-controls'));
 const ceremonyClock = (import.meta.env.MODE === 'town-rehearsal' ? await loadRehearsalClock() : undefined)
   ?? { now: presence.serverNow, utcOffsetMinutes: 8 * 60 };
 const railOvernightBroadcast = createRailOvernightBroadcast();
@@ -1963,7 +2025,6 @@ const ceremony = createCeremonyDirector(ceremonyClock, {
   onSnowIntensity: snowCover.setIntensity,
   onDim(level) {
     ceremonyDim = level;
-    applyCeremonyLighting();
     townLights.setCeremonyDim(level);
   },
 });
@@ -2098,6 +2159,7 @@ function showSnowballScore({ ammo, hits, combo }: SnowballState) {
   const depth = snowCover.depth();
   const text = `雪团 ${ammo}/${snowResourceLimit} · ${depth.label} · 命中 ${hits}${combo > 1 ? ` · 连中 ${combo}` : ''}${snowOnHead ? ` · 顶雪 ${snowOnHead}/3` : ''}`;
   if (snowballScore.textContent !== text) snowballScore.textContent = text;
+  if(menuSnowInventory.textContent!==text)menuSnowInventory.textContent=text;
 }
 function showSnowGatherProgress() {
   const progress = snowControls.gatherProgress();
@@ -2452,9 +2514,13 @@ function updateSnowFight(dt: number) {
   if (snowHatTime > 0 && (snowHatTime -= dt) <= 0) snowOnHead = 0;
   if (snowStaggerTime > 0 && (snowStaggerTime -= dt) <= 0) snowballWalkFactor = 1;
   snowballPhysicsMs = snowballs.update(dt);
-  showSnowballScore(snowballs.getState());
+  const snowState=snowballs.getState();
+  showSnowballScore(snowState);
   showSnowGatherProgress();
-  snowballControls.hidden = !active;
+  // No persistent empty snow-inventory overlay during ordinary exploration.
+  // Preserve every live play affordance: gathering, ammo, practice, team
+  // fight/free building and head-snow feedback. Full inventory stays in menu.
+  snowballControls.hidden = !active||!(snowState.ammo>0||!snowballMeter.hidden||!practiceStatus.hidden||teamFight.active()||!snowfightMaterial.hidden||snowOnHead>0);
 
 }
 renderer.domElement.addEventListener('pointerdown', event => {
@@ -2977,7 +3043,9 @@ function visitSelectedDestination() {
   return true;
 }
 rehearse.onclick = () => {
-  if (!festival.active() && festival.start()) setNight(true);
+  if (!festival.active() && festival.start() && localLightingReview) {
+    reviewNight=true;setNight(updateNightSky().nightSide);
+  }
   if (townSettings.open) townSettings.close();
   renderer.domElement.focus({ preventScroll: true });
 };
@@ -3160,15 +3228,13 @@ function walkable(x: number, n: number) {
 }
 function outdoorWalkable(x: number, n: number) {
   if (x < 0) {
-    const road=ensureWestCraterRoad();
-    // The north rail strip is narrower than the crater carrier. Require
-    // support around the footprint, including at their L-shaped boundary;
-    // the E0 crossing itself is shared with the existing town lattice.
-    return n>=1 && n<=worldBounds.depth-1 && road.terrainReadyAt(x,n)
-      && road.terrainReadyAt(x-bodyRadius,n)
-      && road.terrainReadyAt(Math.min(0,x+bodyRadius),n)
-      && road.terrainReadyAt(x,n-bodyRadius)
-      && road.terrainReadyAt(x,n+bodyRadius);
+    // All five footprint probes consume the original carrier or the
+    // newly constructed single-owner northern extension.
+    return n>=1 && n<=Math.min(worldBounds.depth-1,westPresenceBounds.depth-bodyRadius) && westGroundReady(x,n)
+      && westGroundReady(x-bodyRadius,n)
+      && westGroundReady(Math.min(0,x+bodyRadius),n)
+      && westGroundReady(x,n-bodyRadius)
+      && westGroundReady(x,n+bodyRadius);
   }
   // E0 is a supported mesh seam. The legacy 1 m world-edge margin is open only here.
   const westSeam = x < 1 && n >= 1 && n <= worldBounds.depth - 1 && !isWater(x, n);
@@ -3189,8 +3255,8 @@ function surfaceAt(east: number, north: number, hintHeight?: number) {
 function outdoorSurfaceAt(east: number, north: number, hintHeight?: number) {
   outdoorTerrainContract??=createTerrainSupportContract({
     town:grid.heightAt,townReady:grid.terrainReadyAt,
-    west:(e,n)=>ensureWestCraterRoad().heightAt(e,n),
-    westReady:(e,n)=>ensureWestCraterRoad().terrainReadyAt(e,n),
+    west:westGroundAt,
+    westReady:westGroundReady,
     westId:(e,n)=>Math.hypot(e-craterWestSurvey.east,n-craterWestSurvey.north)<ensureWestCraterRoad().terrainBoundary.apronRadius?'crater-road':'west-ground',
     water:(e,n)=>townWater.at(e,n)?.ground,
     ridgeGround:(e,n)=>townWater.at(e,n)?undefined:productionRidge?.heightAt(e,n),
@@ -3311,7 +3377,7 @@ function supportAt(
 }
 
 function obstructed(east: number, north: number, feet: number, { colliders, floors } = geometryAt(east, north)) {
-  if (cloudRoute.active()) return cloudRoute.blocked(east, north, feet, bodyRadius, bodyHeight);
+  if (cloudRoute.active()) return cloudRoute.blocked(east, north, feet, bodyRadius, bodyHeight)||southEntryHost.blocked(east,north,feet,bodyRadius,bodyHeight);
   if (!homeReturn && east < 0) {
     if (!outdoorWalkable(east, north)) return true;
     if (ensureWestCraterRoad().fenceBlocks(east, north, feet, bodyRadius)) return true;
@@ -3777,8 +3843,10 @@ function updateSledPresentation(visuals: SledRackVisuals, dt: number) {
     : sledRide.recovering() ? '翻橇了，缓一缓' : '';
 }
 
-function renderCloudRoute(frameSeconds: number) {
+function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame) {
   const cabin = cloudRoute.ridePoint();
+  const weatherState=presence.getTownOutdoorWeather();
+  const ceremonyState=ceremonyStateAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes);
   if (cabin) {
     cloudRoute.updateView(cabin);
     faceFrom(cabin.east, cabin.north, cabin.height + eye, yaw, pitch);
@@ -3794,7 +3862,10 @@ function renderCloudRoute(frameSeconds: number) {
       if (moveAllowed()) {
         if (sledRide.active()) stepMountedSled(forward, right);
         else {
-          const nextX = x + east * townPhysicsDelta, nextN = n + north * townPhysicsDelta;
+          const roof=southEntryHost.sheltered(x,n,ground);
+          const windScale=airHeight===undefined?southWeatherWalkingScale(weatherState,x,n,east,north,true,ceremonyState.phase==='ordinary',roof):1;
+          const frostScale=airHeight===undefined?ceremonyFrost.walkingScale():1;
+          const nextX = x + east * windScale * frostScale * townPhysicsDelta, nextN = n + north * windScale * frostScale * townPhysicsDelta;
           if ((east || north) && !tryMove(nextX, nextN) && !tryMove(nextX, n)) tryMove(x, nextN);
           stepJump(townPhysicsDelta);
         }
@@ -3816,12 +3887,44 @@ function renderCloudRoute(frameSeconds: number) {
   crosshair.hidden = !lookAllowed();
   touchJump.disabled = !canJump();
   museumMapButton.hidden = true;
+  snowballControls.hidden=true;
   refreshPlayerControls();
+  const local=weatherState&&ceremonyState.phase==='ordinary'
+    ?sampleSouthRegionalWeather(weatherState,camera.position.x,-camera.position.z,camera.position.y-eye,true):undefined;
+  const weather=local?.weather??(ceremonyState.phase==='ordinary'?townSnowWeatherAt(ceremonyState.now,'light'):townSnowWeatherForFrame(ceremonyState));
+  summitWeatherVisual.update(weather,local?.weather,local?.exposure??1,Math.min(.25,frameSeconds),performance.now());
+  const summitDt=Math.min(.25,frameSeconds);
+  // Visual accumulation uses fixed, surveyed asset positions. One update
+  // per second; never recolor the whole massif from the player's camera.
+  southEntryHost.updateSnow(summitDt,(e,n,h)=>weatherState&&ceremonyState.phase==='ordinary'
+   ?sampleSouthRegionalWeather(weatherState,e,n,h,true).weather:weather);
+  const roof=southEntryHost.sheltered(x,n,ground);
+  summitSnowfall.update(camera,summitDt,!cabin&&walking,roof);
+  // Reuse the single existing player frost tracker in the early-return
+  // mountain branch. Snow depth is read only at a real supported foot,
+  // never inferred from the camera altitude or a preview mesh.
+  ceremonyFrost.setBaseline(ceremonyState.frostBaseline);
+  ceremonyFrost.setWarmth('interior',roof||!!cabin);
+  ceremonyFrost.setWarmth('onsen',false);
+  ceremonyFrost.setWarmth('fire-source',false);
+  if(warmDrinkUntil&&performance.now()>=warmDrinkUntil){warmDrinkUntil=0;ceremonyFrost.setWarmth('hot-drink',false);}
+  const mountainAssembly=cloudRoute.assembly();
+  const support=cloudRoute.walkingSurfaceAt(x,n,bodyRadius);
+  const actualSnow=mountainAssembly&&!roof&&!cabin&&walking&&airHeight===undefined&&support!==undefined&&Math.abs(support-ground)<.18
+    ?mountainAssembly.summitSnowAt(x-mountainAssembly.group.position.x,n+mountainAssembly.group.position.z):undefined;
+  const coldDepth=actualSnow!==undefined&&Number.isFinite(actualSnow)?Math.max(0,Math.min(1,actualSnow)):0;
+  ceremonyFrost.setExposure(weather.intensity,coldDepth,coldDepth>=.25?'dark-snow':'none',hasFrostCeremonyRelief(ceremonyState),1,sledRide.active());
+  ceremonyFrost.update(summitDt);
+  const fog=cloudRoute.scene.fog as Fog;
+  applySouthWeatherPresentation(cloudRoute.scene,fog,weather,skyFrame,particleDensityScale(),local?.weather);
+  showRegionalWeather(southWeatherStatus(skyFrame,weatherState,local?.weather,ceremonyState.phase!=='ordinary',!!cabin,roof));
   renderer.render(cloudRoute.scene, camera);
   if (profileTown) {
     renderer.domElement.dispatchEvent(new CustomEvent('town-frame-profile', { detail: {
       frameMs: frameSeconds * 1000, calls: renderer.info.render.calls,
       triangles: renderer.info.render.triangles, cameraY: camera.position.y,
+      weatherCycle:southWeatherProfile(skyFrame,weatherState,weather,local?.weather),
+      fogNear:fog.near,fogFar:fog.far,points:renderer.info.render.points,mountainSheltered:roof,mountainSnowDepth:coldDepth,
     } }));
   }
 }
@@ -3831,9 +3934,14 @@ renderer.setAnimationLoop(now => {
   const dt = Math.min(.25, frameSeconds);
   previous = now;
   cloudRoute.update({ east: x, north: n, height: ground }, !!productionRidge?.transportReady && !sledRide.active());
+  // The mountain branch returns before the ordinary town weather block.
+  // Apply the same authoritative cycle here, before its scene is rendered.
+  const summitSkyFrame=cloudRoute.active()?updateNightSky(dimLevelAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes)):undefined;
+  if(summitSkyFrame)applyNightSide(summitSkyFrame);
+  southEntryHost.sync(cloudRoute.assembly(),nightMode);
   updateGuardPosts();
-  if (cloudRoute.active()) {
-    renderCloudRoute(frameSeconds);
+  if (summitSkyFrame) {
+    renderCloudRoute(frameSeconds,summitSkyFrame);
     return;
   }
   practiceTarget.updateRound();
@@ -3910,6 +4018,8 @@ renderer.setAnimationLoop(now => {
     if (moveAllowed()) {
       const chillEnabled = ceremonyFrost.enabled();
       const chillTarget = ceremonyFrost.walkingScale();
+      const footWeather=presence.getTownOutdoorWeather();
+      const footOrdinary=ceremonyStateAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes).phase==='ordinary';
       const speed = (sprint ? 11.3 : 7.5) * snowballWalkFactor * landingFeedback.walkingScale() /
         Math.max(1, Math.hypot(forward, right));
       const east = (Math.sin(yaw) * forward + Math.cos(yaw) * right) * speed;
@@ -3953,7 +4063,8 @@ renderer.setAnimationLoop(now => {
               const target = snowCover.movementScale(x, n, ground, snowCleared, sprint);
               snowMoveScale = approachTownSnowScale(snowMoveScale, target, townPhysicsDelta);
               chillMoveScale = chillEnabled ? approachTownSnowScale(chillMoveScale, chillTarget, townPhysicsDelta) : 1;
-              moveScale = snowMoveScale * chillMoveScale;
+              const footShelter=Boolean(homeReturn)||roofed(x,n,ground)||inTavernWarmShed(tavernPlot,x,n,ground);
+              moveScale = snowMoveScale * chillMoveScale * southWeatherWalkingScale(footWeather,x,n,east,north,false,footOrdinary,footShelter);
             }
             const nx = x + east * moveScale * townPhysicsDelta;
             const nn = n + north * moveScale * townPhysicsDelta;
@@ -4193,27 +4304,22 @@ renderer.setAnimationLoop(now => {
   const duckMusic = ceremonyElapsed !== undefined && ceremonyElapsed >= -10 && ceremonyElapsed < 30;
   festival.update(dt, { listener: camera.position, ceremonyElapsed, musicLevel: townBgm.setDuck(duckMusic ? .3 : 1) });
   const weatherStartedAt = profileTown ? performance.now() : 0;
-  // Day/night visuals follow the server night-window clock (one game day = 10
-  // minutes: 6 daylight, 4 night). phase 'day' is the only daylight phase;
-  // 'awaiting-beacon' and 'night-window' are night. Applied on phase change
-  // only, so the ceremony can still force night within a phase. The lighting
-  // button remains a manual override until the next phase change.
-  const nightWindowState = presence.getTownNightWindow();
-  if (nightWindowState) {
-    const clockNight = nightWindowState.phase !== 'day';
-    if (clockNight !== clockNightApplied) {
-      clockNightApplied = clockNight;
-      setNight(clockNight);
-    }
-  }
-  const weather = townSnowWeatherForFrame(ceremonyState);
+  const skyFrame = updateNightSky();
+  applyNightSide(skyFrame);
+  // Do not attenuate scripted ceremony lamp bands by the ordinary day cycle.
+  townLights.setDusk(ordinaryBellHours && skyFrame.lampLevel>0);
+  townLights.setNightLevel(ordinaryBellHours ? Math.round(skyFrame.lampLevel*255)/255 : 1);
+  const outdoorWeather = presence.getTownOutdoorWeather();
+  const regionalWeather=outdoorWeather&&ordinaryBellHours?sampleSouthRegionalWeather(outdoorWeather,shedEast,shedNorth,shedFeet,false):undefined;
+  // Before the authoritative snapshot arrives use a fixed clear-snow baseline,
+  // not the old independent 64-slot client schedule.
+  const weather = regionalWeather?.weather ?? (ordinaryBellHours?townSnowWeatherAt(ceremonyState.now,'light'):townSnowWeatherForFrame(ceremonyState));
   const effectiveSnowIntensity = weather.intensity;
   const roofSheltered = walking && !boardingGround && !homeReturn && !sheltered && !shedSheltered &&
     roofed(shedEast, shedNorth, shedFeet);
-  snowfall.setIntensity(effectiveSnowIntensity);
+  townWeatherVisual.update(weather,regionalWeather?.weather,regionalWeather?.exposure??1,dt,now);
   snowfall.update(camera, dt, walking, sheltered || shedSheltered || roofSheltered || Boolean(homeReturn));
-  weatherFog.near = weather.fogNear;
-  weatherFog.far = weather.fogFar;
+  applySouthWeatherPresentation(scene,weatherFog,weather,skyFrame,particleDensityScale(),regionalWeather?.weather);
   // Weather changes the snow tint and cold exposure. The movement and gathering cover
   // still follows the existing ceremony intensity and night mode.
   visualSnowCover = ceremonyState.phase === 'ordinary'
@@ -4223,12 +4329,11 @@ renderer.setAnimationLoop(now => {
   snowCover.setWeather(weather);
   // Batch-67: clouds hang off the same single authoritative weather state
   // (ZB-20 / G-09 presence weather) — never a second weather source.
-  skyClouds.update(ceremonyState.now, { weather: presence.getTownOutdoorWeather(), night: nightMode });
+  skyClouds.update(ceremonyState.now, { weather: presence.getTownOutdoorWeather(), night: nightMode,sky:skyFrame.sample });
   // Batch-103 ruling: the cloud band reads the same ZB-20 single
   // weather state (no second weather source); forward every frame once
   // the presence weather has joined (until then the band keeps its
   // shipped defaults, same as the pre-wiring behaviour).
-  const outdoorWeather = presence.getTownOutdoorWeather();
   if (outdoorWeather) frontRidgeCloudBand.applyOutdoorWeather(outdoorWeather);
   frontRidgeCloudBand.update(dt);
   const weatherMs = profileTown ? performance.now() - weatherStartedAt : 0;
@@ -4238,6 +4343,7 @@ renderer.setAnimationLoop(now => {
   if (railNotice) announceActivity(railNotice);
   ceremonyOverlay.apply(ceremonyState);
   const indoors = sheltered || Boolean(homeReturn) || shedSheltered || roofSheltered;
+  showRegionalWeather(southWeatherStatus(skyFrame,outdoorWeather,regionalWeather?.weather,!ordinaryBellHours,!!boardingGround,indoors));
   ceremonyFrost.setWarmth('interior', indoors);
   ceremonyFrost.setWarmth('onsen', hotSpringSoak.active());
   ceremonyFrost.setWarmth('fire-source', homeReturn
@@ -4297,7 +4403,7 @@ renderer.setAnimationLoop(now => {
   touchWalk.setAllowed(moveAllowed());
   crosshair.hidden = !lookAllowed();
   touchJump.disabled = !canJump();
-  museumMapButton.hidden = !canControl || museumOverlay() || Math.abs(local.x) > 29 || Math.abs(local.z) > 19;
+  museumMapButton.hidden = !walking || placeCard.open || museumVisit.dialog.open || museumOverlay() || Math.abs(local.x) > 29 || Math.abs(local.z) > 19;
   refreshPlayerControls();
   const groupPhotoFrame = plazaPhoto.update({
     east: x, north: n, height: ground,
@@ -4377,6 +4483,7 @@ renderer.setAnimationLoop(now => {
         movementMs: movementStepMs, snowballMs: snowballPhysicsMs,
         calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, cameraY: camera.position.y, detailMs,
         weatherMs, weatherTier: weather.tier, snowIntensity: effectiveSnowIntensity, snowCover: visualSnowCover,
+        weatherCycle:southWeatherProfile(skyFrame,outdoorWeather,weather,regionalWeather?.weather),
         fogNear: weatherFog.near, fogFar: weatherFog.far, points: renderer.info.render.points,
         craterPerf:{exteriorCertified:craterExteriorCertified,undergroundVisible:undergroundRenderParent?.visible},
         ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],heading:yaw,...(previewOptions.has('mRoadSurvey')?{roadGuide:productionRidge.baseToMiddleGuide,rearConnected:productionRidge.rearConnected,moveReject:ridgeMoveReject}:{}),surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities,cableInstances:productionRidge.facilities?.visibleInstances(),terraceMounted:!!productionRidge.terrace,cloudSeam:productionRidge.cloudSeam},

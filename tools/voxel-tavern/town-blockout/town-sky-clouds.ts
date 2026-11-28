@@ -200,13 +200,13 @@ export function createTownSkyClouds() {
   let lastNow: number | undefined;
   let disposed = false;
 
-  function targets(weather: TownOutdoorWeatherState | undefined, night: boolean) {
+  function targets(weather: TownOutdoorWeatherState | undefined, darkness: number) {
     const kind: WeatherKind = weather === undefined ? 'fallback'
       : weather.weather === 'clear-snow' ? 'clear' : weather.weather;
-    const table = night ? townSkyCloudSpec.coverTargets.night : townSkyCloudSpec.coverTargets.day;
+    const {day,night}=townSkyCloudSpec.coverTargets;
     return {
       kind,
-      cover: table[kind],
+      cover: day[kind]+(night[kind]-day[kind])*darkness,
       altitudeScale: kind === 'whiteout' ? townSkyCloudSpec.whiteoutAltitudeScale : 1,
       driftFactor: kind === 'wind' ? 1 + 1.6 * (weather?.windStrength ?? 0)
         : kind === 'whiteout' ? 1.25 : 1,
@@ -233,16 +233,17 @@ export function createTownSkyClouds() {
     mesh.instanceMatrix.needsUpdate = true;
   }
 
-  function update(nowMs: number, input: { weather?: TownOutdoorWeatherState; night: boolean }) {
+  function update(nowMs: number, input: { weather?: TownOutdoorWeatherState; night: boolean; sky?: { cloudColor:number; lampLevel:number } }) {
     if (disposed) throw new Error('The town sky cloud layer is disposed.');
     if (!Number.isFinite(nowMs)) throw new RangeError('Cloud time must be finite.');
     const dt = lastNow === undefined ? 0 : Math.max(0, Math.min(5_000, nowMs - lastNow));
     lastNow = nowMs;
-    const goal = targets(input.weather, input.night);
+    const darkness=input.sky&&Number.isFinite(input.sky.lampLevel)?Math.max(0,Math.min(1,input.sky.lampLevel)):input.night?1:0;
+    const goal = targets(input.weather, darkness);
     const blend = 1 - Math.exp(-dt / townSkyCloudSpec.smoothingMs);
     cover += (goal.cover - cover) * blend;
     altitudeScale += (goal.altitudeScale - altitudeScale) * blend;
-    nightBlend += ((input.night ? 1 : 0) - nightBlend) * blend;
+    nightBlend += (darkness - nightBlend) * blend;
     driftPhase += (dt / 1000) * goal.driftFactor;
 
     const seconds = nowMs / 1000;
@@ -255,7 +256,8 @@ export function createTownSkyClouds() {
     place(smoke, smokePuffs, seconds, 1, { east: windLeash.east * .4, north: windLeash.north * .4 }, true);
 
     whiteUniforms.cloudCover.value = cover;
-    whiteUniforms.cloudTint.value.copy(dayTint).lerp(nightTint, nightBlend);
+    if(input.sky&&Number.isFinite(input.sky.cloudColor))whiteUniforms.cloudTint.value.setHex(input.sky.cloudColor);
+    else whiteUniforms.cloudTint.value.copy(dayTint).lerp(nightTint, nightBlend);
     // The smoke signature never fully vanishes: industry keeps breathing
     // under any sky, thickening somewhat with the weather cover.
     smokeUniforms.cloudCover.value = Math.min(1, .55 + cover * .45);

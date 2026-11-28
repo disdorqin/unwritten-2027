@@ -9,6 +9,7 @@ import { sampleTownD2R30Height, townD2R30Spec } from './town-d2-r30-domain';
 import { createTownD2R30FacilityFoundations } from './town-d2-r30-facility-foundations';
 import { createTownD2R30Massif } from './town-d2-r30-massif';
 import { createTownD2R30NightLights } from './town-d2-r30-night-lights';
+import { createTownD2R30NorthWall } from './town-d2-r30-north-wall';
 import { createTownD2R30Ropeway } from './town-d2-r30-ropeway';
 import { createTownD2R30SledGateSupport } from './town-d2-r30-sled-gate-support';
 import { createTownD2R30SnowRockHost } from './town-d2-r30-snow-rock-host';
@@ -50,6 +51,8 @@ export type TownD2R30AssemblyOptions = Readonly<{
   includeRopeway?: boolean;
   /** Epoch used by the canonical ropeway clock when includeRopeway is true. */
   ropewayEpochMs?: number;
+  /** D2-R2: include the north-wall via-ferrata, monument, great flag and lookout (default false). */
+  includeNorthWall?: boolean;
 }>;
 
 export type TownD2R30Assembly = Readonly<{
@@ -57,6 +60,10 @@ export type TownD2R30Assembly = Readonly<{
   heightAt(east: number, north: number): number | undefined;
   collision: ReturnType<typeof createTownD2R30Collision>;
   ropeway: ReturnType<typeof createTownD2R30Ropeway> | undefined;
+  /** North-wall climb + landmark bodies, exposed so the production host can block them. */
+  northWall: ReturnType<typeof createTownD2R30NorthWall> | undefined;
+  /** Cable tower masts, exposed so the production host can block solid masts. */
+  cableTowers: ReturnType<typeof createTownD2R30CableTowers> | undefined;
   /** Advance streaming LOD around a LOCAL observer point; no-op in static mode. */
   update(east: number, north: number, nowMs?: number): void;
   setNight(value: boolean): void;
@@ -82,9 +89,10 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   const includeNightLights = options.includeNightLights ?? false;
   const includeRopeway = options.includeRopeway ?? false;
   const ropewayEpochMs = options.ropewayEpochMs ?? 0;
+  const includeNorthWall = options.includeNorthWall ?? false;
   if ([includeSnowRock, includeStrata, includeCloudTerrace, includeTrailSupport, includeCableTowers,
     includeFacilityFoundations, includeSledGateSupport, includeSummitFacilities, includeNightLights,
-    includeRopeway]
+    includeRopeway, includeNorthWall]
     .some(value => typeof value !== 'boolean')) {
     throw new TypeError('D2-R30 inclusion flags must be booleans.');
   }
@@ -127,6 +135,8 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   let updateLod: ((east: number, north: number) => void) | undefined;
   let updateRopeway: ((nowMs: number) => void) | undefined;
   let ropeway: ReturnType<typeof createTownD2R30Ropeway> | undefined;
+  let northWall: ReturnType<typeof createTownD2R30NorthWall> | undefined;
+  let cableTowers: ReturnType<typeof createTownD2R30CableTowers> | undefined;
   if (terrainMode === 'static') {
     const massif = createTownD2R30Massif({ arrivalHeight });
     terrainStats = () => massif.stats();
@@ -177,6 +187,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
 
   if (includeCableTowers) {
     const towers = createTownD2R30CableTowers({ heightAt, arrivalHeight });
+    cableTowers = towers;
     children.push(towers.group);
     disposers.push(() => towers.dispose());
     nightHooks.push(value => towers.setNight(value));
@@ -229,6 +240,17 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
     updateRopeway = nowMs => nextRopeway.update(nowMs);
   }
 
+  if (includeNorthWall) {
+    // D2-R2: the central-sector climb + four summit landmarks, on the same
+    // height field as the massif; canonical hut/icefall/glide are the R07
+    // package's job and are deliberately not duplicated here.
+    const wall = createTownD2R30NorthWall({ heightAt, arrivalHeight });
+    northWall = wall;
+    children.push(wall.group);
+    disposers.push(() => wall.dispose());
+    nightHooks.push(value => wall.setNight(value));
+  }
+
   for (const child of children) group.add(child);
 
   const measure = (root: Group) => {
@@ -276,6 +298,8 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
     heightAt,
     collision,
     ropeway,
+    northWall,
+    cableTowers,
     update(east: number, north: number, nowMs?: number) {
       if (disposed) return;
       if (!Number.isFinite(east) || !Number.isFinite(north)) {

@@ -40,6 +40,7 @@ import { isGrandPrixResult, type GrandPrixResult } from './town-grand-prix';
 import {
   readSummitPassportReply, type SummitPassportAction, type SummitPassportReply,
 } from '../../../src/shared/summit-passport';
+import {summitPresenceEndpoint,summitPresenceFrame,toSummitPresencePose,fromSummitPresencePose} from '../../../src/shared/za22-summit-presence-domain';
 import {
   isMountainPresenceFoot, mountainPresenceNorthOrigin, mountainPresencePath,
 } from '../../../src/shared/za22-mountain-domain';
@@ -151,6 +152,9 @@ export function createTownPresence(
   let iceThroneSupported = false;
   let cableLineSupported = false;
   const cableLineStates = new Map<Za36CableRepairLine, Za36CableRepairState>();
+  const cableOpenedAt = new Map<Za36CableRepairLine,number>();
+  const cableWokeAt = new Map<Za36CableRepairLine,number>();
+  function clearCableFrames(){cableLineStates.clear();cableOpenedAt.clear();cableWokeAt.clear();cableLineFlags={cableLine1Open:false,cableLine2Open:false};}
   let cableLineFlags: CableLineFlags = { cableLine1Open: false, cableLine2Open: false };
   let icePalaceSupported = false;
   const icePalaceRiteClosed: IcePalaceRiteState = { frozen: false, leverAvailable: false, harvestAvailable: false, solsticeRite: 'closed' };
@@ -205,16 +209,18 @@ export function createTownPresence(
   let retryAt: number | undefined;
   let retryIndex = 0;
   let inTown = false;
-  let domain: 'town' | 'mountain' | 'west' | 'sky' | 'mine' = 'town';
+  let domain: 'town' | 'mountain' | 'summit' | 'west' | 'sky' | 'mine' = 'town';
   function presencePath(path: string) {
     if (domain === 'town') return path;
     if (domain === 'sky') return skyCityPresenceEndpoint(path);
+    if (domain === 'summit') return summitPresenceEndpoint(path);
     if (domain === 'mine') return minePresenceEndpoint(path);
     const room = domain === 'mountain' ? mountainPresencePath : westPresencePath;
     return room + path.slice('/presence'.length);
   }
   let show = false;
   let haveId = false;
+  let cableClockReady=false;
   let insideSharedHome = false;
   let epoch = 0;
   let seq = 0;
@@ -315,7 +321,7 @@ export function createTownPresence(
     try {
       const response = await fetch(presencePath(POLL_JOIN_URL), {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: getName() }),
+        body: JSON.stringify({ name: getName(), ...(domain==='summit'?{presenceFrame:summitPresenceFrame}:{}) }),
       });
       if (!response.ok) return false;
       const data = await response.json() as { session?: unknown };
@@ -357,6 +363,7 @@ export function createTownPresence(
         // 会话已被服务端回收（超时/重启）：事件未被处理，塞回队列并重新入镇。
         requeuePollEvents(channel.outEvents, events);
         channel.session = '';
+        haveId=false;cableClockReady=false;cableLineSupported=false;clearCableFrames();
         townNight.disconnect();
         townWeather.disconnect();
         if (!await pollJoin(channel) && poll === channel) {
@@ -398,6 +405,8 @@ export function createTownPresence(
     socket = undefined;
     socketJoined = false;
     haveId = false;
+    cableClockReady=false;
+    cableLineSupported=false;clearCableFrames();
     townNight.disconnect();
     townWeather.disconnect();
     resetOwnerSession();
@@ -482,7 +491,7 @@ export function createTownPresence(
         kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown; plazaPhoto?: boolean; sentAt?: number; reason?: string;
         fireworks?: boolean; firecrackers?: boolean; bell?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number; totalMs?: unknown; at?: unknown;
         nonce?: string; accepted?: boolean; iceThrone?: boolean; crowned?: boolean; summitPassport?: boolean;
-        cableLine?: boolean; line?: unknown; flags?: unknown;
+        cableLine?: boolean; line?: unknown; flags?: unknown; openedAt?: unknown; wokeAt?: unknown; presenceFrame?:unknown;
         icePalaceRites?: boolean; present?: unknown; requestId?: unknown;
         townNightWindow?: unknown; townOutdoorWeather?: unknown; townOutdoorWeatherDawnEpoch?: unknown; state?: unknown;
         undergroundWater?: unknown;
@@ -507,11 +516,17 @@ export function createTownPresence(
         return;
       }
       if (message.type === 'cable-line') {
+        if(!haveId||!cableLineSupported||(receivingFrom==='ws'?!socketJoined:socketJoined))return;
         const line = message.line === 1 || message.line === 2 ? message.line : undefined;
         const state = message.state as Za36CableRepairState | undefined;
         if (line && state && typeof state === 'object' && state.line === line &&
-          typeof state.version === 'number' && typeof state.stage === 'string') {
+          Number.isSafeInteger(state.version) && state.version>=0 && ['dormant','one-station','full-line'].includes(state.stage)) {
+          if(state.version<(cableLineStates.get(line)?.version??-1))return;
           cableLineStates.set(line, state);
+          if(state.stage==='full-line'&&typeof message.openedAt==='number'&&Number.isSafeInteger(message.openedAt)&&message.openedAt>=0)cableOpenedAt.set(line,message.openedAt);
+          else cableOpenedAt.delete(line);
+          if(state.stage!=='dormant'&&typeof message.wokeAt==='number'&&Number.isSafeInteger(message.wokeAt)&&message.wokeAt>=0)cableWokeAt.set(line,message.wokeAt);
+          else cableWokeAt.delete(line);
           const flags = message.flags as CableLineFlags | undefined;
           if (flags && typeof flags.cableLine1Open === 'boolean' && typeof flags.cableLine2Open === 'boolean') {
             cableLineFlags = { cableLine1Open: flags.cableLine1Open, cableLine2Open: flags.cableLine2Open };
@@ -653,6 +668,7 @@ export function createTownPresence(
       const id = message.id!;
       if (message.type === 'join' && typeof message.name === 'string') {
         if (message.self) {
+          if((domain==='summit')!==(message.presenceFrame===summitPresenceFrame)){connectionLost();return;}
           if (receivingFrom === 'ws') {
             socketJoined = true;
             if (poll) promoteFromPoll();
@@ -663,7 +679,8 @@ export function createTownPresence(
           }
           iceThroneSupported = message.iceThrone === true;
           cableLineSupported = message.cableLine === true;
-          if (!cableLineSupported) { cableLineStates.clear(); cableLineFlags = { cableLine1Open: false, cableLine2Open: false }; }
+          // A reconnect may be a restarted server; never reuse its prior opening epoch.
+          clearCableFrames();
           icePalaceSupported = message.icePalaceRites === true;
           if (!icePalaceSupported) {
             icePalaceRiteState = icePalaceRiteClosed;
@@ -671,6 +688,7 @@ export function createTownPresence(
             for (const settle of [...icePalacePending.values()]) settle(false);
           }
           haveId = true;
+          cableClockReady=Number.isSafeInteger(message.epochMs)&&message.epochMs!>0;
           link.joined(roster.size + 1);
           joinedId = id;
           fireworksSupported = message.fireworks === true;
@@ -753,6 +771,8 @@ export function createTownPresence(
     const valid = visitPresenceSnapshot(data, (id, localEast, localNorth, localHeight, yaw, sequence) => {
       const received = domain === 'sky'
         ? fromSkyCityPresencePose({ east: localEast, north: localNorth, height: localHeight })
+        : domain === 'summit'
+          ? fromSummitPresencePose({east:localEast,north:localNorth,height:localHeight})
         : domain === 'mine'
           ? fromMinePresencePose({ east: localEast, north: localNorth, height: localHeight })
           : { east: localEast + (domain === 'west' ? westPresenceEastOrigin : 0),
@@ -795,7 +815,7 @@ export function createTownPresence(
       ws.onopen = () => {
         if (socket === ws) {
           link.socketOpened();
-          try { ws.send(JSON.stringify({ type: 'join', name: getName() })); }
+          try { ws.send(JSON.stringify({ type: 'join', name: getName(), ...(domain==='summit'?{presenceFrame:summitPresenceFrame}:{}) })); }
           catch { connectionLost(); }
         }
       };
@@ -815,6 +835,9 @@ export function createTownPresence(
     if (domain === 'mountain') {
       if (!isMountainPresenceFoot(local.east, local.north, local.height)) return;
       writePresencePose({ ...local, north: local.north - mountainPresenceNorthOrigin }, seq, outgoing);
+    } else if (domain === 'summit') {
+      const safe=toSummitPresencePose(local);if(!safe)return;
+      writePresencePose(safe,seq,outgoing);
     } else if (domain === 'west') {
       if (!isWestPresenceFoot(local.east, local.north, local.height)) return;
       writePresencePose({
@@ -972,16 +995,48 @@ export function createTownPresence(
     disconnect(true);
   });
 
+  function sampleLocal(active: boolean, east: number, north: number, height: number, yaw: number, visible = active) {
+      show = visible;
+      if (active) {
+        local.east = east;
+        local.north = north;
+        local.height = height;
+        local.yaw = yaw;
+        const indoors = isSharedHomePosition(east, north, height);
+        if (insideSharedHome !== indoors) {
+          insideSharedHome = indoors;
+          actors.clear();
+          renderList.length = 0;
+          avatars?.clear();
+          remaining = 0;
+        }
+      }
+      if (inTown === active) return;
+      inTown = active;
+      if (active) {
+        link.enterTown();
+        scheduleConnection();
+      } else {
+        link.leaveTown();
+        resetRetry();
+        disconnect(true);
+      }
+  }
+
   return {
     serverNow: clock.now,
+    cableServerNow:()=>haveId&&cableLineSupported&&cableClockReady?clock.now():undefined,
     /** Latest server-authored cable repair state for a line, or undefined
      * when the room predates the cable authority or no frame arrived yet. */
-    getCableLineState: (line: Za36CableRepairLine) => cableLineSupported ? cableLineStates.get(line) : undefined,
-    getCableLineFlags: (): CableLineFlags => cableLineFlags,
+    getCableLineState: (line: Za36CableRepairLine) => haveId&&cableLineSupported ? cableLineStates.get(line) : undefined,
+    getCableLineOpenedAt: (line:Za36CableRepairLine)=>haveId&&cableLineSupported?cableOpenedAt.get(line):undefined,
+    getCableLineWokeAt: (line:Za36CableRepairLine)=>haveId&&cableLineSupported?cableWokeAt.get(line):undefined,
+    getCableLineFlags: (): CableLineFlags => haveId&&cableLineSupported?cableLineFlags:{cableLine1Open:false,cableLine2Open:false},
     /** Submit one repair event; the authority's broadcast frame is the
      * only state change a client ever applies. Returns false offline. */
     sendCableRepair: (line: Za36CableRepairLine, event: Za36CableRepairEvent) =>
-      cableLineSupported && sendEvent(JSON.stringify({ type: 'event', kind: 'cable-repair', line, event })),
+      haveId && cableLineSupported && sendEvent(JSON.stringify({ type: 'event', kind: 'cable-repair', line, event })),
+    sendSummitCableRelease:()=>domain==='summit'&&haveId&&cableLineSupported&&sendEvent(JSON.stringify({type:'event',kind:'cable-release-summit'})),
     /** Latest per-peer ice-palace rite snapshot from the room authority;
      * every rite reads unavailable until its policy store exists. */
     getIcePalaceRiteState: (): IcePalaceRiteState => icePalaceRiteState,
@@ -1005,9 +1060,23 @@ export function createTownPresence(
     setMountainDomain(enabled: boolean, mountainScene?: Scene) {
       if (enabled) switchDomain('mountain', mountainScene);
       else if (domain === 'mountain') switchDomain('town');
+      else if(domain==='town'){avatarScene=scene;avatars?.setScene(avatarScene);}
+    },
+    /** The full surveyed front ride fits the legacy town wire frame.
+     * Before returning from the cloud terminal, use the town room with the
+     * ACTUAL cabin scene; otherwise N<540 would disappear from mountain room.
+     * Preserve the ride host across this authenticated reconnect. */
+    setFrontCableRideDomain(cabinScene:Scene){
+      if(domain==='mountain')switchDomain('town',cabinScene);
+      else if(domain==='town'){avatarScene=cabinScene;avatars?.setScene(avatarScene);}
+      return domain==='town';
+    },
+    setSummitDomain(enabled:boolean,summitScene?:Scene){
+      if(enabled&&summitScene)switchDomain('summit',summitScene);
+      else if(!enabled&&domain==='summit')switchDomain('town');
     },
     setWestDomain(enabled: boolean) {
-      if (enabled && domain !== 'mountain' && domain !== 'sky' && domain !== 'mine') switchDomain('west');
+      if (enabled && domain !== 'mountain' && domain !== 'summit' && domain !== 'sky' && domain !== 'mine') switchDomain('west');
       else if (!enabled && domain === 'west') switchDomain('town');
     },
     /** Only the dream-chain transition may call this, at the descent blackout / return landing. */
@@ -1033,7 +1102,7 @@ export function createTownPresence(
     ownerFollowsMascot: () => ownerVerified && !!ownerFollow?.checked,
     sendMascot(pose: PresencePose) {
       const time = performance.now();
-      if (!ownerVerified || !ownerFollow?.checked || time < nextMascotSample) return;
+      if (domain==='summit'||!ownerVerified || !ownerFollow?.checked || time < nextMascotSample) return;
       writePresencePose(pose, mascotSeq, mascotWire);
       mascotWire.setUint16(0, MASCOT_ACTOR_ID, true);
       if (sendEvent(new Uint8Array(mascotWire.buffer))) {
@@ -1060,6 +1129,8 @@ export function createTownPresence(
     leavePlazaPhoto(id: number) {
       if (photoSupported) sendEvent(JSON.stringify({ type: 'event', kind: 'plaza-photo-opt-out', id }));
     },
+    /** Current room's actual visible actors, without the plaza-only photograph filter. */
+    nearbyPlayerPoses(){return haveId&&joinedId!==null?[{id:joinedId,east:local.east,north:local.north,height:local.height},...Array.from(actors.values(),a=>({id:a.id,east:a.east,north:a.north,height:a.height}))]:[];},
     nearbyPhotoPeople() {
       return plazaPhotoLineup([{ id: joinedId ?? 1, name: joinedName ?? getName(), east: local.east, north: local.north, height: local.height }, ...actors.values()]);
     },
@@ -1129,32 +1200,19 @@ export function createTownPresence(
       bellHolderId = id;
       avatars?.setHighlight(id);
     },
-    sample(active: boolean, east: number, north: number, height: number, yaw: number, visible = active) {
-      show = visible;
-      if (active) {
-        local.east = east;
-        local.north = north;
-        local.height = height;
-        local.yaw = yaw;
-        const indoors = isSharedHomePosition(east, north, height);
-        if (insideSharedHome !== indoors) {
-          insideSharedHome = indoors;
-          actors.clear();
-          renderList.length = 0;
-          avatars?.clear();
-          remaining = 0;
-        }
-      }
-      if (inTown === active) return;
-      inTown = active;
-      if (active) {
-        link.enterTown();
-        scheduleConnection();
-      } else {
-        link.leaveTown();
-        resetRetry();
-        disconnect(true);
-      }
+    sample:sampleLocal,
+    /** Keep the connection and publish the physical cabin's foot position.
+     * Host selects the actual scene/room on its validated transfer; never
+     * silently clamp or change rooms while the player is aboard. */
+    sampleCableRide(frame:{line:1|2;feet:{east:number;north:number;height:number};synchronized:boolean},yaw:number){
+      const p=frame.feet;
+      if(![p.east,p.north,p.height,yaw].every(Number.isFinite))return false;
+      if(frame.line===2?(domain!=='summit'||!toSummitPresencePose(p)):
+        domain==='mountain'?!isMountainPresenceFoot(p.east,p.north,p.height):
+        domain!=='town'||p.east<0||p.east>640||p.north<0||p.north>655.35||p.height<0||p.height>655.35)return false;
+      activityPose=5;
+      sampleLocal(true,p.east,p.north,p.height,yaw,true);
+      return true;
     },
     update(dt: number) {
       if (!socket && !poll) return;

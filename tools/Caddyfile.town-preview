@@ -28,6 +28,11 @@
         uri replace /presence-mine-2 /presence
         reverse_proxy presence:8095
     }
+    @rearSummit path /presence-summit /presence-summit/*
+    handle @rearSummit {
+        uri replace /presence-summit /presence
+        reverse_proxy presence:8096
+    }
     @townPresence path /presence /presence/*
     reverse_proxy @townPresence presence:8090
     @entry path / /town-blockout.html

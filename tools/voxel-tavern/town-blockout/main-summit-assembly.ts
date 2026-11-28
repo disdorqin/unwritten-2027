@@ -196,6 +196,7 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number,
     includeSummitFacilities: true,
     includeNightLights: true,
     includeRopeway: true,
+    includeNorthWall: true,
     ropewayEpochMs: epochMs,
   });
   let activeCable = cable;
@@ -259,6 +260,18 @@ export function mountMainSummitAssembly(owner: Group, epochMs: number,
         (candidate?.workshop.blocked(east, north, feet, radius, bodyHeight) ?? false) ||
         (candidate?.cloudBells.blocked(east, north, feet, radius, bodyHeight) ?? false)
       )) return true;
+      // D2-R3 production gate: the R30 massif is the one canonical height
+      // authority. Reject feet on a centre slope steeper than the same
+      // 55 deg walkable threshold the R30 collision uses, and reject the new
+      // north-wall landmark bodies (obelisk / mast / lookout rails) so the
+      // player cannot walk through them. The climb rungs are deliberately
+      // left non-solid so the ascent itself stays traversable.
+      if (r30 && !front) {
+        const slope = r30.collision.slopeAt(east, north);
+        if (slope !== undefined && slope > (r30.northWall?.maxFootSlope ?? 55 * Math.PI / 180)) return true;
+        if (r30.northWall?.blocked(east, north, feet, radius, bodyHeight)) return true;
+        if (r30.cableTowers?.blocked(east, north, feet, radius, bodyHeight)) return true;
+      }
       const position = front ? summitWorldPoint(east, north, feet) : { east, north, height: feet };
       const boxes = front ? cloudRegistration.colliders : cabin.colliders;
       return boxes.some(({ min, max }) => {
