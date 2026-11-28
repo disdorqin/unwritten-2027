@@ -1,3 +1,4 @@
+import {finishNightBAudit} from './town-night-b-audit-slices';
 type Foot=Readonly<{east:number;north:number;height:number}>;
 type Point=Readonly<{east:number;north:number}>;
 type Bounds=Readonly<{west:number;east:number;south:number;north:number}>;
@@ -9,7 +10,7 @@ type Input={start:Foot;goals:readonly Goal[];bounds:Bounds;supportAt:Ground;bloc
  * assumption, fake height or jump. Every edge samples its midpoint and
  * exact endpoints with the player footprint. The returned paths can be
  * replayed in the actual viewer; this is geometric evidence, not a browser walk. */
-export function auditNightBCableWalkRoutes(input:Input){
+export function* nightBCableWalkRouteSteps(input:Input){
  const step=input.step??.25,grade=input.maxGrade??.85,drift=input.maxHeightDrift??.15,r=.27,body=1.8;
  if(!Number.isFinite(step)||step<.1||step>.5||!Number.isFinite(grade)||grade<=0||!Number.isFinite(drift)||drift<0)throw Error('Invalid cable walking survey');
  const b=input.bounds,cols=Math.floor((b.east-b.west)/step)+1,rows=Math.floor((b.north-b.south)/step)+1;
@@ -51,6 +52,7 @@ export function auditNightBCableWalkRoutes(input:Input){
  if(start&&Math.abs(start.height-input.start.height)<=.08)for(const k of near(start)){const p=sample(k);if(p&&edge(start,p)){parent.set(k,-1);q.push(k);}}
  const targets=input.goals.map(g=>{if(g.reach!==undefined&&(!Number.isFinite(g.reach)||g.reach<=0||g.reach>2.2))throw Error('Invalid repair reach');return {g,foot:g.reach===undefined?feet(g.foot):undefined,ids:g.reach===undefined?near(g.foot):[],end:undefined as number|undefined};});
  for(let i=0;i<q.length;i++){
+  if(i%16===0)yield;
   const k=q[i]!,a=sample(k)!;
   for(const target of targets){
    if(target.end!==undefined)continue;
@@ -75,3 +77,4 @@ export function auditNightBCableWalkRoutes(input:Input){
  });
  return {ready:routes.length>0&&routes.every(p=>p.reachable),start:input.start,visited:parent.size,samples,reasons,routes};
 }
+export function auditNightBCableWalkRoutes(input:Input){return finishNightBAudit(nightBCableWalkRouteSteps(input));}

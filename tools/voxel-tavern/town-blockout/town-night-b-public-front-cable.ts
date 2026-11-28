@@ -1,6 +1,6 @@
 import type {Object3D} from 'three';
 import {externalCableDockSupport} from './town-d-r30-cable-facilities';
-import {finishNightBAudit,finishNightBAuditAsync,type NightBAuditSliceOptions} from './town-night-b-audit-slices';
+import {finishNightBAudit,finishNightBAuditAsync,type NightBAuditCertificate,type NightBAuditSliceOptions} from './town-night-b-audit-slices';
 import {installNightBFrontOperation,frontOperationSteps} from './town-night-b-summit-front-install';
 import {nightBMountedClearanceSteps} from './town-night-b-mounted-clearance';
 import type {nightBProductionAuthority} from './town-night-b-production-controller';
@@ -17,7 +17,7 @@ type Input={
  /** Real host external obstacle query, excludes only obsolete closed facility. */
  blocked:(e:number,n:number,h:number,r:number,body:number)=>boolean;
  repairAnchors:RepairAnchors;
- certifyRoutes:(docks:Parameters<Installer['certifyApproaches']>[0],repair:RepairAnchors,walkClear:(foot:Foot)=>boolean)=>boolean;
+ certifyRoutes:(docks:Parameters<Installer['certifyApproaches']>[0],repair:RepairAnchors,walkClear:(foot:Foot)=>boolean)=>NightBAuditCertificate;
 };
 /** C2 invokes from the existing production-ridge closure, not a preview.
  * On success replace its facilities reference with result.facilities,

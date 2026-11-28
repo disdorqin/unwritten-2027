@@ -10,7 +10,7 @@ import { createTownD2R30CableTowers } from './town-d2-r30-cable-towers';
 import { createTownD2R30Ropeway } from './town-d2-r30-ropeway';
 import { mainSummitR30CableWorkshopAnchor, mountMainSummitCableWorkshop } from './main-summit-cable-workshop';
 import { mountNightBPublicRearCableAsync } from './town-night-b-public-rear-cable';
-import {auditNightBRearCableAccess} from './town-night-b-rear-cable-access';
+import {nightBRearCableAccessSteps} from './town-night-b-rear-cable-access';
 import type {NightBAuditSliceOptions} from './town-night-b-audit-slices';
 import { createTownD2R30SummitPlay, type TownD2R30SummitPlay } from './town-d2-r30-summit-play';
 import { certifyRoadJoint, surveyRoadConnector } from './town-d2-r30-road-joint';
@@ -762,8 +762,8 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
         owner:group,groundAt:surfaceAt,supportAt,blocked,groundMeshes:tiles,
         authority:authority as Parameters<typeof mountNightBPublicRearCableAsync>[0]['authority'],
         authorized:sectorLiveCheck().ready,
-        certifyRoutes:(docks,repair,supportAt,blocked,repairFootClear,dispatcherFoot)=>{
-          const routes=auditNightBRearCableAccess({docks,repair,supportAt,blocked,repairFootClear,dispatcherFoot,
+        *certifyRoutes(docks,repair,supportAt,blocked,repairFootClear,dispatcherFoot){
+          const routes=yield* nightBRearCableAccessSteps({docks,repair,supportAt,blocked,repairFootClear,dispatcherFoot,
             gate:{east:0,north:-8,height:347},summitLanding:trail.at(-1)!});
           return routes.ready;
         }

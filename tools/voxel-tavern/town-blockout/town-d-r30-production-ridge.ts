@@ -82,7 +82,7 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
  const facilities=stationReady&&cableAudit.groundHits===0&&cableAudit.minMoving>=.25
   ?mountRidgeCableFacilities(owner,field,true,true,serviceExit):undefined;
  const seamAudit=auditProductionCloudSeam(field);let seamCertified=false;
- const cloudSeam={...seamAudit,get domainReady(){return seamCertified;},get failure(){return terrace?.seamFailure;}};
+ const cloudSeam={...seamAudit,get domainReady(){return seamCertified;},get failure():string|undefined{return terrace?.seamFailure;}};
  let activeFacilities=facilities;
  // The terrace routes its own cloud paths, so it must keep seeing the cable
  // facility (otherwise it draws a path straight through the station). The
