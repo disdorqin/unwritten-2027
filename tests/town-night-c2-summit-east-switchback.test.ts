@@ -58,17 +58,27 @@ test('visible instances and collider share the same boxes, bottom and height', (
   const asset = mountC2EastSwitchback(heightAt);
   try {
     assert.equal(asset.mesh.count, asset.pieces.length);
-    assert.equal(asset.colliders.length, asset.pieces.length);
+    // C33-2: colliders cover only upright rail bodies. Thin paving / snow
+    // lip / ditch / apron are floor, not walls, and must never block a walker
+    // standing on the road. They remain fully visible instances.
+    const solid = asset.pieces.filter(p => p.family === 'rail' && p.h >= 1);
+    assert.equal(asset.colliders.length, solid.length);
     const m = asset.mesh.instanceMatrix.array;
     asset.pieces.forEach((p, i) => {
       const o = i * 16;
       assert.ok(Math.abs(m[o + 12] - p.east) < 1e-4);
       assert.ok(Math.abs(m[o + 13] - (p.y + p.h / 2)) < 1e-4, 'box origin must be the authored bottom');
       assert.ok(Math.abs(m[o + 14] + p.north) < 1e-4);
-      assert.ok(Math.abs(asset.colliders[i]!.bottom - p.y) < 1e-9);
-      assert.ok(Math.abs(asset.colliders[i]!.top - (p.y + p.h)) < 1e-9);
+    });
+    asset.colliders.forEach((c, i) => {
+      const p = solid[i]!;
+      assert.ok(Math.abs(c.bottom - p.y) < 1e-9);
+      assert.ok(Math.abs(c.top - (p.y + p.h)) < 1e-9);
       assert.equal(asset.blocked(p.east, p.north, p.y + Math.min(.05, p.h / 2), .01, .05), true);
     });
+    const floor = asset.pieces.find(p => p.family === 'paving')!;
+    assert.equal(asset.blocked(floor.east, floor.north, floor.y + .05, .27, 1.8), false,
+      'standing on the road must not report the road itself as a blocker');
     assert.equal(asset.blocked(0, 0, 0), false, 'nothing may be built outside the east sector');
   } finally { asset.dispose(); }
 });

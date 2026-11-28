@@ -1,5 +1,6 @@
 import {BoxGeometry,Color,DataTexture,Group,InstancedMesh,Matrix4,MeshLambertMaterial,NearestFilter,Object3D,RGBAFormat,StaticDrawUsage} from 'three';
 import { middleEastNorthControls } from './town-d-r30-upper-roadbed.js';
+import { c2BlocksTrail } from './town-night-c2-trail-corridor.js';
 
 /**
  * C2 east sector, third-round switchback trail refinement (2026-11-27
@@ -109,6 +110,9 @@ export function planC2EastSwitchback(heightAt: SwitchbackHeightAt): readonly Swi
   ) => {
     if (!inSector(e, n) || boundaryWeight(e, n) < .999) return;
     if (reservedDistance(e, n) < 2) return;
+    // C33-2: rails/ditches are solid bodies. Never place one across the
+    // canonical 5.59 km walking lane (41 measured blockages in the audit).
+    if (family === 'rail' && c2BlocksTrail(e, n, s.halfWidth)) return;
     const ground = heightAt(e, n);
     if (ground === undefined || !Number.isFinite(ground)) return;
     const y = ground + yOffset;
@@ -233,8 +237,12 @@ export function mountC2EastSwitchback(
   mesh.computeBoundingSphere();
   group.add(mesh);
 
-  // Collider is generated from the same pieces and the same bottom semantics.
-  const colliders = pieces.map(p => ({
+  // Colliders from the same pieces and bottom semantics, but ONLY bodies a
+  // walker can actually hit. C33-2 audit: the old `pieces.map` made the thin
+  // paving slab and snow lip (0.18-0.5 m high) into blockers, so a player
+  // standing on the road was told the road itself blocked him (10 stations).
+  // Paving/apron/ditch are floor, not walls; only the rail is a solid body.
+  const colliders = pieces.filter(p => p.family === 'rail' && p.h >= 1).map(p => ({
     west: p.east - Math.max(p.w, p.d) / 2, east: p.east + Math.max(p.w, p.d) / 2,
     south: p.north - Math.max(p.w, p.d) / 2, north: p.north + Math.max(p.w, p.d) / 2,
     bottom: p.y, top: p.y + p.h,

@@ -1,4 +1,5 @@
 import {BoxGeometry,Color,DataTexture,Group,InstancedMesh,Matrix4,MeshLambertMaterial,NearestFilter,Object3D,RGBAFormat,StaticDrawUsage} from 'three';
+import { c2BlocksTrail } from './town-night-c2-trail-corridor.js';
 
 /**
  * C2 east sector, first-round landform (2026-11-27 four-sector sprint).
@@ -73,6 +74,10 @@ export function planC2EastLandform(heightAt: EastHeightAt): readonly EastLandfor
     w: number, h: number, d: number, yaw: number, shade: number,
   ) => {
     if (!inSector(e, n) || boundaryWeight(e, n) < .999) return;
+    // C33-2: the gully banks and rock benches are solid bodies. A 1692-station
+    // walk audit found 31 of them standing across the canonical trail lane;
+    // refuse new bodies there while leaving the actual tread and scenery alone.
+    if (family !== 'stair' && c2BlocksTrail(e, n)) return;
     const ground = heightAt(e, n);
     if (ground === undefined || !Number.isFinite(ground) || reservedDistance(e, n) < 3) return;
     out.push({ family, east: e, north: n, y: ground, w, h, d, yaw, shade });
