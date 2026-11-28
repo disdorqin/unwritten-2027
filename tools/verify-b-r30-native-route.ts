@@ -30,5 +30,5 @@ export function buildBR30NativeRoute(){
   if(height===undefined||Math.abs(height-(a.rimHeight-meteorCraterDepth))>.12)throw Error('Actual bottom datum mismatch');
   const floor={east,north,height};
   const view=road.midgroundS5.crystalViews.find(v=>v.cluster==='r30-crystal-4-1')?.view;
-  return {approach,anchor:a,lip:points[0],points,floor,floorYaw:Math.atan2(east-a.east,north-a.north),view};
+  return {approach,anchor:a,lip:points[0],points,floor,floorYaw:Math.atan2(a.east-east,a.north-north),floorExitYaw:Math.atan2(east-a.east,north-a.north),view};
 }

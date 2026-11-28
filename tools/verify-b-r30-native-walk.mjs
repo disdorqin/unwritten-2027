@@ -368,7 +368,9 @@ try{
   assert.ok(Math.abs(result.floor.height-route.floor.height)<.65,'Not on actual floor');
   await waitForWire(page,evidence,p=>p?.area==='west'&&Math.hypot(p.east-route.floor.east,p.north-route.floor.north)<.7);
   await face(page,evidence,route.floorYaw);
-  await snapshot(page,evidence,'floor-night');await save();
+  await snapshot(page,evidence,'floor-inward');await save();
+  await face(page,evidence,route.floorExitYaw);
+  await snapshot(page,evidence,'floor-return-direction');await save();
   if(segment==='roundtrip'){
     await traverse([...route.points].reverse(),'up');
     await walkTo(page,evidence,[-67,159],'return-outside');
