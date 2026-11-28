@@ -605,6 +605,8 @@ try{
   assert.ok(assembled.summitProduction.frontAuditSlices?.count>1&&assembled.summitProduction.cable.slices?.count>1);
   assert.ok(assembled.summitProduction.hiking?.ready,JSON.stringify(assembled.summitProduction.hiking));
   assert.ok(assembled.summitProduction.hiking.markers>240&&assembled.summitProduction.hiking.maxGrade<=.70);
+  assert.deepEqual(assembled.summitProduction.registrationRoutes.map(r=>r.id),['fromTrail','fromCable']);
+  assert.ok(assembled.summitProduction.registrationRoutes.every(r=>r.ready&&r.samples>200&&r.markers>0),JSON.stringify(assembled.summitProduction.registrationRoutes));
   assert.equal(assembled.summitProduction.southRoad.intervalComplete,true);
   assert.deepEqual(assembled.summitProduction.southRoad.boundaryExits.map(r=>Math.round(r.length)),[36,55]);
   assert.ok(assembled.ridge.frontRoadHandoffs.length===4&&assembled.ridge.frontRoadHandoffs.every(r=>r.domain==='front'&&r.installed&&r.surface.maxGrade<=.120001));
