@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   base64ToArrayBuffer, base64ToBytes, buildPollBody, bytesToBase64, encodePollEvent,
-  parsePollMessages, pollSampleIntervalSeconds, pushPollEvent, requeuePollEvents,createCableTransportLease,retryablePollEvents,
+  parsePollMessages, pollSampleIntervalSeconds, pushPollEvent, requeuePollEvents,createCableTransportLease,retryablePollEvents,fetchPollJson,parsePollJoinPayload,
 } from '../tools/voxel-tavern/town-blockout/town-presence-poll.ts';
 
 test('cable authority expires after six missed poll intervals and fails closed on error',()=>{
@@ -17,6 +17,23 @@ test('ambiguous poll failures cannot replay cable repair or release commands',()
  const release=JSON.stringify({type:'event',kind:'cable-release-summit'});
  const chat=JSON.stringify({type:'chat',text:'hello'}),bin=new Uint8Array([1,2]);
  assert.deepEqual(retryablePollEvents([repair,chat,release,bin]),[chat,bin]);
+});
+test('poll HTTP deadline also covers response body on browsers without AbortSignal.timeout',async()=>{
+ const fake:typeof fetch=async(_input,init)=>{
+  const signal=init?.signal;assert.ok(signal);
+  return {ok:true,status:200,json:()=>new Promise((_,reject)=>signal.addEventListener('abort',()=>reject(Error('body aborted')),{once:true}))} as Response;
+ };
+ await assert.rejects(fetchPollJson('/test',{},20,fake),/body aborted/);
+ const good:typeof fetch=async()=>new Response('{"messages":[]}',{status:200});
+ assert.deepEqual(await fetchPollJson('/test',{},100,good),{status:200,ok:true,payload:{messages:[]}});
+});
+test('poll join requires exactly one matching fresh self frame',()=>{
+ const self={t:'text',d:JSON.stringify({type:'join',self:true,id:17,name:'测试'})};
+ assert.ok(parsePollJoinPayload({session:'session',id:17,messages:[self]}));
+ assert.equal(parsePollJoinPayload({session:'session',id:17,messages:[]}),undefined);
+ assert.equal(parsePollJoinPayload({session:'session',id:18,messages:[self]}),undefined);
+ assert.equal(parsePollJoinPayload({session:'session',id:17,messages:[self,self]}),undefined);
+ assert.equal(parsePollJoinPayload({session:'session',id:17,messages:[{t:'text',d:'broken'}]}),undefined);
 });
 test('poll fallback reports state at 2 Hz (0.5 s sample interval)', () => {
   assert.equal(pollSampleIntervalSeconds, 0.5);

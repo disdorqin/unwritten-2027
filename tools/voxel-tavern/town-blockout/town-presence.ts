@@ -28,7 +28,7 @@ import { isTownAvatarPose, type TownAvatarPose } from './town-presence-pose';
 import { createPresenceLinkStatus } from './town-presence-status';
 import {
   POLL_JOIN_URL, POLL_LEAVE_URL, POLL_URL, base64ToArrayBuffer, buildPollBody, parsePollMessages,
-  pollIntervalMs, pollSampleIntervalSeconds, pushPollEvent, requeuePollEvents,createCableTransportLease,retryablePollEvents,
+  pollIntervalMs, pollSampleIntervalSeconds, pushPollEvent, requeuePollEvents,createCableTransportLease,retryablePollEvents,fetchPollJson,parsePollJoinPayload,
 } from './town-presence-poll';
 import { readBellEvent, type BellEvent } from '../../../src/presence/bell-game';
 import type {
@@ -230,7 +230,7 @@ export function createTownPresence(
   let haveId = false;
   let cableClockReady=false;
   const cableLease=createCableTransportLease();
-  const cableReady=()=>haveId&&cableLineSupported&&cableClockReady&&cableLease.fresh()&&(socketJoined||poll?.needsCableResync===false);
+  const cableReady=()=>haveId&&cableLineSupported&&cableClockReady&&cableLineStates.has(1)&&cableLineStates.has(2)&&cableLease.fresh()&&(socketJoined||poll?.needsCableResync===false);
   let insideSharedHome = false;
   let epoch = 0;
   let seq = 0;
@@ -334,18 +334,28 @@ export function createTownPresence(
 
   async function pollJoin(channel: PollChannel): Promise<boolean> {
     try {
-      const response = await fetch(presencePath(POLL_JOIN_URL), {
+      const response = await fetchPollJson(presencePath(POLL_JOIN_URL), {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: getName(), ...passportJoin(), ...(domain==='summit'?{presenceFrame:summitPresenceFrame}:{}) }),signal:AbortSignal.timeout(4000),
+        body: JSON.stringify({ name: getName(), ...passportJoin(), ...(domain==='summit'?{presenceFrame:summitPresenceFrame}:{}) }),
       });
-      if (!response.ok) return false;
-      const data = await response.json() as { session?: unknown };
-      if (typeof data.session !== 'string' || poll !== channel) return false;
-      channel.session = data.session;
-      if(!feedPollMessages(data))return false;
-      link.useFallback(roster.size + (haveId ? 1 : 0));
-      return haveId;
+      if (!response.ok || poll !== channel) return false;
+      const data=response.payload as {session?:unknown}|undefined;
+      if(typeof data?.session==='string')channel.session=data.session;
+      const joined=parsePollJoinPayload(response.payload);
+      if(!joined)return false;
+      if(!feedPollMessages(joined)||!haveId||joinedId!==joined.id)return false;
+      link.useFallback(roster.size + 1);
+      return true;
     } catch { return false; }
+  }
+
+  function rejectPollJoin(channel:PollChannel){
+    if(poll!==channel||socketJoined)return;
+    stopPoll(true);
+    haveId=false;joinedId=null;cableClockReady=false;cableLineSupported=false;
+    cableLease.invalidate();clearCableFrames();
+    townNight.disconnect();townWeather.disconnect();chat.setConnected(false);
+    link.failed();retryPollLater();
   }
 
   async function startPoll() {
@@ -353,8 +363,7 @@ export function createTownPresence(
     const channel: PollChannel = { session: '', timer: 0, inFlight: false, outEvents: [],needsCableResync:true };
     poll = channel;
     if (!await pollJoin(channel) || poll !== channel) {
-      if (poll === channel) poll = undefined;
-      retryPollLater();
+      rejectPollJoin(channel);
       return;
     }
     channel.timer = window.setInterval(() => { void flushPoll(channel); }, pollIntervalMs);
@@ -368,10 +377,10 @@ export function createTownPresence(
     const events = channel.outEvents;
     channel.outEvents = [];
     try {
-      const response = await fetch(presencePath(POLL_URL), {
+      const response = await fetchPollJson(presencePath(POLL_URL), {
         method: 'POST',
         headers: { 'content-type': 'application/json', 'x-presence-session': channel.session },
-        body: buildPollBody(state, events,channel.needsCableResync),signal:AbortSignal.timeout(4000),
+        body: buildPollBody(state, events,channel.needsCableResync),
       });
       if (poll !== channel) return;
       if (response.status === 401 || response.status === 410) {
@@ -384,15 +393,11 @@ export function createTownPresence(
         haveId=false;cableClockReady=false;cableLease.invalidate();cableLineSupported=false;clearCableFrames();
         townNight.disconnect();
         townWeather.disconnect();
-        if (!await pollJoin(channel) && poll === channel) {
-          stopPoll(false);
-          retryPollLater();
-        }
+        if (!await pollJoin(channel))rejectPollJoin(channel);
         return;
       }
       if (!response.ok) throw new Error('poll failed');
-      const payload: unknown = await response.json();
-      if (poll === channel&&!feedPollMessages(payload))throw new Error('invalid poll messages');
+      if (poll === channel&&!feedPollMessages(response.payload))throw new Error('invalid poll messages');
     } catch {
       // 往返失败：事件塞回队首下轮重发；状态帧只保最新，旧帧直接丢弃。
       if (poll === channel){

@@ -33,6 +33,35 @@ export function retryablePollEvents(events:readonly (string|Uint8Array)[]){
  return events.filter(e=>{if(typeof e!=='string')return true;try{const m=JSON.parse(e);return !(m?.type==='event'&&(m.kind==='cable-repair'||m.kind==='cable-release-summit'));}catch{return true;}});
 }
 
+/** Use the widely supported AbortController, including older mobile
+ * Safari. Keep the deadline until the JSON body has been consumed. */
+export async function fetchPollJson(url:string,init:RequestInit,timeoutMs=4000,request:typeof fetch=fetch){
+ if(!Number.isFinite(timeoutMs)||timeoutMs<=0)throw RangeError('Invalid poll deadline');
+ const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),timeoutMs);
+ try{
+  const response=await request(url,{...init,signal:controller.signal});
+  return {status:response.status,ok:response.ok,payload:response.ok?await response.json() as unknown:undefined};
+ }finally{clearTimeout(timer);}
+}
+
+/** A session token without a matching fresh self-join frame cannot
+ * promote an old connection or renew cable authority. */
+export function parsePollJoinPayload(payload:unknown){
+ if(!payload||typeof payload!=='object')return;
+ const {session,id}=payload as {session?:unknown;id?:unknown};
+ if(typeof session!=='string'||!session||typeof id!=='number'||!Number.isInteger(id)||id<1||id>65535)return;
+ const messages=parsePollMessages(payload);if(!messages)return;
+ let self=0;
+ for(const frame of messages)if(frame.t==='text'){
+  try{
+   const m=JSON.parse(frame.d);
+   if(m?.type==='join'&&m.self===true){if(m.id!==id||typeof m.name!=='string')return;self++;}
+  }catch{return;}
+ }
+ if(self!==1)return;
+ return {session,id,messages};
+}
+
 export function bytesToBase64(bytes: Uint8Array): string {
   let binary = '';
   const chunk = 0x8000;
