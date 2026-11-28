@@ -6,7 +6,7 @@ import {
   createC2EastCanonicalGround, inC2EastSector,
 } from '../tools/voxel-tavern/town-blockout/town-night-c2-summit-canonical.ts';
 import {
-  c2EastProductionModules, createC2EastProduction,
+  c2EastNpcPosts, c2EastProductionModules, createC2EastProduction,
 } from '../tools/voxel-tavern/town-blockout/town-night-c2-summit-east-production.ts';
 import { createMainSummitBlock, mainSummitLayout } from '../tools/voxel-tavern/town-blockout/main-summit-block.ts';
 
@@ -170,5 +170,29 @@ test('a partial install rolls back instead of leaving half a sector', () => {
     assert.ok(only.stats().pieces > 100);
   } finally {
     only.dispose();
+  }
+});
+
+test('the two east NPC posts are derived from the built assets, not invented', () => {
+  const grounded = createC2EastCanonicalGround();
+  try {
+    const posts = c2EastNpcPosts((east, north) => grounded.heightAt(east, north));
+    assert.equal(posts.length, 2, 'camp keeper and pavilion keeper');
+    const camp = posts.find(post => post.id === 'camp-keeper')!;
+    const pavilion = posts.find(post => post.id === 'pavilion-keeper')!;
+    for (const post of posts) {
+      const face = grounded.heightAt(post.east, post.north);
+      assert.equal(face !== undefined, true, `${post.id} has no ground`);
+      assert.ok(Math.abs(post.height - face!) < 1e-9, `${post.id} must stand on the rendered face`);
+      assert.ok(post.east >= c2EastSector.west && post.north >= c2EastSector.south, `${post.id} outside the sector`);
+      assert.ok(Number.isFinite(post.facing));
+    }
+    // The camp sits near (742, 802) and the pavilion approach near (773, 739).
+    assert.ok(Math.hypot(camp.east - 742, camp.north - 802) < 30, 'camp keeper belongs to the camp');
+    assert.ok(Math.hypot(pavilion.east - 773, pavilion.north - 739) < 40, 'pavilion keeper belongs to the approach');
+    assert.equal(camp.source, 'E02-camp');
+    assert.equal(pavilion.source, 'E14-pavilion-approach');
+  } finally {
+    grounded.dispose();
   }
 });
