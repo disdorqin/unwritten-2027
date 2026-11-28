@@ -31,7 +31,9 @@ test('the crater camp, warm markers and cut faces use surveyed ground and stay o
     assert.ok(Math.hypot(site.east - craterWestSurvey.east, site.north - craterWestSurvey.north) - site.radius >= 8, site.id);
     const clear = Math.min(...trail.map(p => Math.hypot(site.east - p.east, site.north - p.north))) - site.radius;
     assert.ok(clear > 2.2, `${site.id}: ${clear} m clearance`);
-    if (site.kind === 'camp') assert.equal(site.height, rimHeight - meteorCraterDepth);
+    // The unified triangulated floor includes sub-millimetre mound blend.
+    // Exact equality to the actual road sampler remains asserted above.
+    if (site.kind === 'camp') assert.ok(Math.abs(site.height-(rimHeight-meteorCraterDepth))<.001);
   }
   for (const [i, a] of placements.entries()) {
     for (const b of placements.slice(i + 1)) {

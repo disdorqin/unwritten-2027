@@ -32,6 +32,8 @@ export type CraterCampPlacement = Readonly<{
   north: number;
   height: number;
   radius: number;
+  /** Exact mounted piece envelopes; legacy survey fixtures may omit these. */
+  colliders?: readonly Box[];
 }>;
 
 export type CraterMidgroundPlacement = Readonly<{
@@ -104,6 +106,7 @@ export function buildCraterColliders(sources: Readonly<{
   // Muster point （集结地） structures, sized by kind from the module's own
   // placement radii — envelopes of the built pieces, not their clearances.
   for (const site of sources.camp) {
+    if(site.colliders){boxes.push(...site.colliders);continue;}
     if (site.kind === 'lamp') {
       boxes.push(box(site.east, site.north, site.height, .32, 1.3, .32));
     } else if (site.kind === 'strata') {

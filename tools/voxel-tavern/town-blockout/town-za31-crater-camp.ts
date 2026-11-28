@@ -6,9 +6,10 @@ import {
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { createMeteorCrater, meteorCraterFixturePlan } from './meteor-crater';
 import type { mountWestCraterRoad } from './town-za22-crater-road';
+import {orientedSupportBox,type OrientedSupportBox} from './town-a-r30-oriented-support';
 
 type CraterRoad = Pick<ReturnType<typeof mountWestCraterRoad>, 'anchor' | 'heightAt'>;
-type Site = { east: number; north: number; height: number; radius: number };
+type Site = { east: number; north: number; height: number; radius: number; colliders:OrientedSupportBox[] };
 type Placement = Site & { kind: 'camp' | 'lamp' | 'strata'; id: string };
 
 const palette = {
@@ -70,7 +71,7 @@ export function mountZa31CraterCamp(road: CraterRoad) {
     if (height === undefined || Math.hypot(localE, localN) < 8 + radius) return;
     const overlapsTrail = trailSamples.some(p => Math.hypot(p.east - localE, p.north - localN) < 2.25 + radius);
     if (overlapsTrail) return;
-    const site = { kind, id, east, north, height, radius };
+    const site = { kind, id, east, north, height, radius,colliders:[] as OrientedSupportBox[] };
     placements.push(site);
     return site;
   }
@@ -84,6 +85,32 @@ export function mountZa31CraterCamp(road: CraterRoad) {
     const geometry = source.index ? source.toNonIndexed() : source;
     geometry.rotateX(rotations[0]).rotateZ(rotations[2]).rotateY(rotations[1]);
     geometry.translate(site.east + offset[0], site.height + offset[1], -site.north + offset[2]);
+    // Physical registration follows the very same pre-merge pieces.
+    // Do not turn snow dust, ember sprites or low plates into walls.
+    geometry.computeBoundingBox();
+    const bounds=geometry.boundingBox!;
+    if(material!==snow&&material!==embers&&bounds.max.y>site.height+.12&&bounds.max.y-bounds.min.y>.045){
+      if(source instanceof BoxGeometry&&rotations[0]===0&&rotations[2]===0){
+        const {width,depth}=source.parameters;
+        site.colliders.push(orientedSupportBox(site.east+offset[0],site.north-offset[2],rotations[1],width,depth,bounds.min.y,bounds.max.y));
+      }else{
+        // Sloped tent canvas and rock strata have narrower upper slices.
+        // Clip the actual triangles into horizontal bands before computing
+        // envelopes, rather than a single clearance-radius cube.
+        const p=geometry.getAttribute('position'),bands=Math.min(4,Math.max(1,Math.ceil((bounds.max.y-bounds.min.y)/.40)));
+        for(let band=0;band<bands;band++){
+          const lo=bounds.min.y+(bounds.max.y-bounds.min.y)*band/bands,hi=bounds.min.y+(bounds.max.y-bounds.min.y)*(band+1)/bands;
+          let x0=Infinity,x1=-Infinity,z0=Infinity,z1=-Infinity;
+          const sample=(x:number,z:number)=>{x0=Math.min(x0,x);x1=Math.max(x1,x);z0=Math.min(z0,z);z1=Math.max(z1,z);};
+          for(let i=0;i<p.count;i+=3)for(let k=0;k<3;k++){
+            const a=i+k,b=i+(k+1)%3,ay=p.getY(a),by=p.getY(b),ax=p.getX(a),az=p.getZ(a);
+            if(ay>=lo&&ay<=hi)sample(ax,az);
+            if(ay!==by)for(const y of [lo,hi]){const t=(y-ay)/(by-ay);if(t>0&&t<1)sample(ax+(p.getX(b)-ax)*t,az+(p.getZ(b)-az)*t);}
+          }
+          if(x1-x0>.005&&z1-z0>.005)site.colliders.push({min:[x0,lo,z0],max:[x1,hi,z1]});
+        }
+      }
+    }
     const batch = batches.get(material) ?? [];
     batch.push(geometry);
     batches.set(material, batch);
@@ -229,6 +256,7 @@ export function mountZa31CraterCamp(road: CraterRoad) {
     for (const part of parts) part.dispose();
     if (!geometry) continue;
     const mesh = new Mesh(geometry, material);
+    mesh.userData.static=material!==embers;
     if (material === embers) {
       // A visible ember batch updates its local lights without a global scene tick.
       mesh.onBeforeRender = () => update(performance.now() / 1000);
@@ -236,5 +264,6 @@ export function mountZa31CraterCamp(road: CraterRoad) {
     group.add(mesh);
   }
 
+  group.userData.owner='B';group.userData.revision='B33-camp-parts';group.userData.placements=placements;
   return { group, placements, update };
 }
