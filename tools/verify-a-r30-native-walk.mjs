@@ -10,7 +10,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','west-mountain','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review','night-r3-entry','night-r3-bare-weather','night-r3-bare-west'].includes(segment), segment);
+assert.ok(['gate','north','west','supply','instrument','smelter','kengkou','gatehouse','wall','northwalk','west-mountain','supplyinterior','freight','shankou','outcrop','outerclusters','ore-yard','transfer-dock','ore-yard-dock','guard-shed','assembly-registration','cold-furnace','water-tower','western-clusters','eastern-cluster','western-shoulders','industrial-ruins','salvage-pipes','rail-valley','rail-buffer','inscription-access','joint-historic','mobile-review','night-r3-entry','night-r3-bare-weather','night-r3-bare-west','a31-bare-crater-return'].includes(segment), segment);
 
 const spawn = [223, 180];
 const station = [
@@ -252,7 +252,7 @@ async function walkTo(page, evidence, target, label, precision=.46) {
     if (distance <= precision) {
       const checkpoint={ label, target, ...from, wire: evidence.poses.at(-1) };
       evidence.checkpoints.push(checkpoint);
-      if(['joint-historic','west-mountain','night-r3-bare-west'].includes(segment))await appendFile(join(output,'native-checkpoints.ndjson'),JSON.stringify(checkpoint)+'\n');
+      if(['joint-historic','west-mountain','night-r3-bare-west','a31-bare-crater-return'].includes(segment))await appendFile(join(output,'native-checkpoints.ndjson'),JSON.stringify(checkpoint)+'\n');
       console.log(JSON.stringify({ phase: label, east: from.east, north: from.north, y: from.height }));
       return;
     }
@@ -356,7 +356,16 @@ const approach={
 try{
  browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:graphicsArgs});
  const {page,evidence,westWindow}=await openTown(segment);
- if(segment==='night-r3-bare-west'){
+ if(segment==='a31-bare-crater-return'){
+  assert.ok(bare);const start=await readPose(page);
+  const path=[...westShore,[2,159],[-12,159],[-40,159]];
+  for(const [i,p] of path.entries())await walkTo(page,evidence,p,'crater-out-'+i,.65);
+  const mouth=await readPose(page);await waitForWire(page,evidence,p=>p?.area==='west'&&Math.hypot(p.east+40,p.north-159)<1);
+  await picture(page,evidence,'crater-mouth');
+  for(const [i,p] of [...path.slice(0,-1).reverse(),spawn].entries())await walkTo(page,evidence,p,'crater-return-'+i,.65);
+  const returned=await readPose(page);await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-223,p.north-180)<1);
+  await picture(page,evidence,'town-returned');report.traversal={start,mouth,top:mouth,returned};
+ }else if(segment==='night-r3-bare-west'){
   assert.ok(bare);
   const start=await readPose(page);
   const path=[...westShore,[2,159]];
