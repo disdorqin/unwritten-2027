@@ -31,6 +31,7 @@ import {mountWestMountainGround,westMountainTrackProtection} from './town-night-
 import {westPresenceBounds} from '../../../src/shared/za22-west-domain';
 import {createSouthEntryHost} from './town-night-a-summit-entry-host';
 import {mountWestMountainFootway} from './town-night-a-summit-west-footway';
+import {createA33ExactGroundCoverage} from './town-a33-pit-ridge-ground';
 import { createTerrainSupportContract } from './town-a-r30-terrain-contract';
 import { supportFootprintOverlaps } from './town-a-r30-oriented-support';
 import { mainSummitLayout, mainSummitSpec } from './main-summit-block';
@@ -1007,7 +1008,7 @@ if(!localLightingReview)timeOfDay.setAttribute('aria-label','当前服务器昼�
 timeOfDay.title = localLightingReview ? '本地验收：昼夜机位切换' : '昼夜随服务器时钟连续变化';
 if(localLightingReview)timeOfDay.onclick = () => {reviewNight=!nightMode;setNight(updateNightSky().nightSide);};
 
-const prepareTerrain = addTerrainMeshes(scene, grid, productionRidge.ownsCell,previewOptions.has('profile')&&previewOptions.has('mTurnCacheWide'));
+const prepareTerrain = addTerrainMeshes(scene, grid, productionRidge.ownsCell,previewOptions.has('profile')&&previewOptions.has('mTurnCacheWide'),createA33ExactGroundCoverage([railway.route.points.map(p=>({east:p.x,north:-p.z})),railExtension.samples,railExtension.narrowSamples,railExtension.sidingSamples]));
 
 const stone = new MeshLambertMaterial({ color: '#647382' });
 const timber = new MeshLambertMaterial({ color: '#865f46' });

@@ -11,7 +11,7 @@ type TerrainSpan = { start: number; count: number; bounds: Box3 };
 type WalkingChunk={mesh:Mesh;first:number;count:number;spans:TerrainSpan[];bounds:Box3;index?:BufferAttribute;selection?:TerrainSpan[]};
 const palette = ['#d8e1ef', '#9a887c', '#bcac97', '#c7b795', '#78b8d9'].map(value => new Color(value));
 
-export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof createTerrainGrid>, ridgeOwnsCell?: (east:number,north:number)=>boolean, wideTurnCache=false) {
+export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof createTerrainGrid>, ridgeOwnsCell?: (east:number,north:number)=>boolean, wideTurnCache=false, exactGroundAt?:(east:number,north:number,eastEnd:number,northEnd:number)=>boolean) {
   const angleCache=wideTurnCache?.13:.065,planePad=wideTurnCache?.18:.11;
   const { elevation, surfaces, gridWidth, gridDepth } = grid;
   const cellWidth = gridWidth - 1;
@@ -195,7 +195,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
 
   for (let north = 0; north < cellDepth; north += terrainChunkCells) {
     for (let east = 0; east < cellWidth; east += terrainChunkCells) {
-      if (east * gridStep < layout.width && north * gridStep < layout.depth) addChunk(east, north);
+      if ((east * gridStep < layout.width && north * gridStep < layout.depth)||exactGroundAt?.(east*gridStep,north*gridStep,Math.min(east+terrainChunkCells,cellWidth)*gridStep,Math.min(north+terrainChunkCells,cellDepth)*gridStep)) addChunk(east, north);
       else pending.push({ east, north, fallback:createResident(east,north) });
     }
   }

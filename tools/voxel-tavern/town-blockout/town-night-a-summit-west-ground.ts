@@ -1,4 +1,5 @@
 import {BufferGeometry,Color,Float32BufferAttribute,Group,Mesh,MeshLambertMaterial} from 'three';
+import {makeFrontRidgePixelTexture,frontRidgeSurfaceColorAt} from './town-front-ridge-surface';
 import type {SouthGround} from './town-night-a-summit-landform';
 import {westNorthConnectorBounds} from './town-a-r30-north-connector';
 type Bounds={west:number;east:number;south:number;north:number};
@@ -24,7 +25,8 @@ export function mountWestMountainGround(base:SouthGround,bounds:Bounds,protected
  if(![west,east,south,north].every(Number.isInteger)||east!==0||south!==westNorthConnectorBounds.south||north<=south||west>=westNorthConnectorBounds.west)throw Error('Invalid surveyed west terrain bounds');
  const strip=westNorthConnectorBounds;
  const group=new Group();group.name='night-a-west-mountain-real-ground';
- const material=new MeshLambertMaterial({vertexColors:true});
+ const texture=makeFrontRidgePixelTexture(),material=new MeshLambertMaterial({vertexColors:true,map:texture});
+ group.userData={owner:'A33-1-west-mountain-ground',revision:2,bounds:{...bounds},static:true};
  const width=east-west+1,depth=north-south+1,heights=new Float32Array(width*depth);
  const id=(e:number,n:number)=>(n-south)*width+e-west;
  const ownsCell=(e:number,n:number)=>e>=west&&e<east&&n>=south&&n<north&&!(e>=strip.west&&n<strip.north);
@@ -45,7 +47,7 @@ export function mountWestMountainGround(base:SouthGround,bounds:Bounds,protected
  let cells=0;
  for(let n0=south;n0<north;n0+=64)for(let e0=west;e0<east;e0+=64){
   const n1=Math.min(north,n0+64),e1=Math.min(east,e0+64),cols=e1-e0+1;
-  const positions:number[]=[],colors:number[]=[],normals:number[]=[],indices:number[]=[];
+  const positions:number[]=[],colors:number[]=[],normals:number[]=[],indices:number[]=[],uv:number[]=[];
   for(let n=n0;n<=n1;n++)for(let e=e0;e<=e1;e++){
    const h=heights[id(e,n)]!;positions.push(e,h,-n);
    const em=Math.max(west,e-1),ep=Math.min(east,e+1),nm=Math.max(south,n-1),np=Math.min(north,n+1);
@@ -55,12 +57,16 @@ export function mountWestMountainGround(base:SouthGround,bounds:Bounds,protected
    // duplicated border vertices now have the same upward normal.
    const inv=1/Math.hypot(de,1,dn);normals.push(-de*inv,inv,dn*inv);
    const slope=Math.hypot(dx,dz)*.5;
-   tint.copy(snow).lerp(rock,Math.min(.56,slope*.75)).multiplyScalar(.96+.04*Math.sin(e*.27+n*.19));colors.push(tint.r,tint.g,tint.b);
+   const edge=Math.min(e-west,east-e,n-south,north-n,Math.hypot(Math.max(strip.west-e,0),Math.max(n-strip.north,0)));
+   const blend=smooth(edge/24)*(protectedAt(e,n)?.12:1),bed=.5+.5*Math.sin(h*.64+n*.11+e*.043+Math.sin(e*.08)*1.7);
+   const rockTint=frontRidgeSurfaceColorAt(e,n,h,1-inv);rockTint.lerp(new Color('#977a59'),smooth((slope-.14)/.4)*bed*.48);
+   const frost=smooth((.6-slope)/.52)*(.24+.52*smooth((Math.sin(e*.052+n*.024)+Math.cos(n*.065-e*.037)+1)/3));
+   rockTint.lerp(snow,frost);tint.copy(snow).lerp(rock,Math.min(.56,slope*.75)).lerp(rockTint,blend).multiplyScalar(.96+.04*Math.sin(e*.27+n*.19));colors.push(tint.r,tint.g,tint.b);uv.push((e+h*.11)/2,(n*.72+h*.69)/2);
    if(e===e1||n===n1||!ownsCell(e,n))continue;
    const a=(n-n0)*cols+e-e0,b=a+1,c=a+cols,d=c+1;indices.push(a,b,c,b,d,c);cells++;
   }
   if(!indices.length)continue;
-  const geo=new BufferGeometry();geo.setAttribute('position',new Float32BufferAttribute(positions,3));geo.setAttribute('color',new Float32BufferAttribute(colors,3));geo.setAttribute('normal',new Float32BufferAttribute(normals,3));geo.setIndex(indices);geo.computeBoundingSphere();
+  const geo=new BufferGeometry();geo.setAttribute('position',new Float32BufferAttribute(positions,3));geo.setAttribute('color',new Float32BufferAttribute(colors,3));geo.setAttribute('normal',new Float32BufferAttribute(normals,3));geo.setAttribute('uv',new Float32BufferAttribute(uv,2));geo.setIndex(indices);geo.computeBoundingSphere();
   const mesh=new Mesh(geo,material);mesh.name='west-mountain-ground:'+e0+','+n0;group.add(mesh);
  }
  const readyAt=(e:number,n:number)=>Number.isFinite(e)&&Number.isFinite(n)&&e>=west&&e<=east&&n>=south&&n<=north&&(e<=strip.west||n>=strip.north);
@@ -71,5 +77,5 @@ export function mountWestMountainGround(base:SouthGround,bounds:Bounds,protected
   return u+v<=1?a+(b-a)*u+(c-a)*v:d+(c-d)*(1-u)+(b-d)*(1-v);
  }
  let disposed=false;
- return {group,readyAt,heightAt,ownsCell,stats:{cells,triangles:cells*2,chunks:group.children.length},dispose(){if(disposed)return;disposed=true;group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});material.dispose();group.clear();}};
+ return {group,readyAt,heightAt,ownsCell,stats:{cells,triangles:cells*2,chunks:group.children.length},dispose(){if(disposed)return;disposed=true;group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});material.dispose();texture.dispose();group.clear();}};
 }
