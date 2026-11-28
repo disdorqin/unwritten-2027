@@ -6,11 +6,12 @@ import {rimPublicAccessFootway} from './voxel-tavern/town-blockout/town-a-r30-we
 import {createTerrainGrid,worldBounds} from './voxel-tavern/town-blockout/terrain';
 import {mountWestCraterRoad} from './voxel-tavern/town-blockout/town-za22-crater-road';
 import {createMeteorCrater,meteorCraterFixturePlan,meteorCraterFloorRadius,meteorCraterDepth} from './voxel-tavern/town-blockout/meteor-crater';
+import {auditBR32CraterCampAccess} from './voxel-tavern/town-blockout/town-b-r32-crater-camp-access';
 
 /** Read current final rendered/walk surface, not an old fixed-height fixture.
  * The survey is only used to aim actual keyboard/mouse movement; no pose
  * writes or authority bypass. Dense entry knots retain the tight turn. */
-export function buildBR30NativeRoute(){
+export function buildBR30NativeRoute(includeCamp=false){
   const grid=createTerrainGrid(),port=ar30SurfacePort(),road=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n),{unifiedStory:port.story});
   const rail=buildCraterRailExtension(grid,road,buildTownRailRoute(grid).points);
   const assembly=port.attach(road,rail);
@@ -30,5 +31,7 @@ export function buildBR30NativeRoute(){
   if(height===undefined||Math.abs(height-(a.rimHeight-meteorCraterDepth))>.12)throw Error('Actual bottom datum mismatch');
   const floor={east,north,height};
   const view=road.midgroundS5.crystalViews.find(v=>v.cluster==='r30-crystal-4-1')?.view;
-  return {approach,anchor:a,lip:points[0],points,floor,floorYaw:Math.atan2(a.east-east,a.north-north),floorExitYaw:Math.atan2(east-a.east,north-a.north),view};
+  const camp=includeCamp?auditBR32CraterCampAccess(road,rail).routes.find(r=>r.id==='fire-ring'&&r.reachable):undefined;
+  if(includeCamp&&(!camp?.reachable||!camp.knots))throw Error('No certified native camp route');
+  return {approach,anchor:a,lip:points[0],points,floor,camp:camp?.reachable?{target:camp.target,knots:camp.knots}:undefined,floorYaw:Math.atan2(a.east-east,a.north-north),floorExitYaw:Math.atan2(east-a.east,north-a.north),view};
 }

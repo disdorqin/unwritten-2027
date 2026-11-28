@@ -9,7 +9,7 @@ const bare = process.env.ZA22_BARE === '1';
 const url = new URL(bare ? '/' : '/?profile', origin);
 assert.equal(url.protocol, 'http:');
 assert.equal(url.hostname, '127.0.0.1');
-assert.ok(['descent','roundtrip','rim-return'].includes(segment), segment);
+assert.ok(['descent','roundtrip','rim-return','descent-camp'].includes(segment), segment);
 
 const spawn = [223, 180];
 const [width, height] = (process.env.ZA22_VIEWPORT ?? '960x540').split('x').map(Number);
@@ -289,7 +289,7 @@ try{
   browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_PATH||undefined,args:graphicsArgs});
   report.browser=browser.version();
   const {buildBR30NativeRoute}=await import('./verify-b-r30-native-route.ts');
-  const route=buildBR30NativeRoute();
+  const route=buildBR30NativeRoute(segment==='descent-camp');
   const {page,evidence,westWindow}=await openTown('b-r30-'+segment);
   const result={scope:'normal entry and in-game location chooser; actual W/S/Shift and mouse, not full spawn walk or underground entry',down:0,up:0,complete:false,legalWindow:null,route};
   report.bR30=result;
@@ -371,6 +371,26 @@ try{
   await snapshot(page,evidence,'floor-inward');await save();
   await face(page,evidence,route.floorExitYaw);
   await snapshot(page,evidence,'floor-return-direction');await save();
+  if(segment==='descent-camp'){
+    const camp=route.camp;assert.ok(camp?.knots?.length);
+    result.scope+='; actual floor to camp fire ring and return, no full pit return';
+    await page.evaluate(()=>{window.__za22Stage='camp';});
+    for(const [i,p] of camp.knots.entries()){
+      await walkTo(page,evidence,[p.east,p.north],'camp-out-'+i,true);
+      const actual=await readPose(page);assert.ok(Math.abs(actual.height-p.height)<.65,'Camp height divergence');
+      result.campOut=i+1;await save();
+    }
+    const here=await readPose(page);
+    await face(page,evidence,Math.atan2(camp.target.east-here.east,camp.target.north-here.north));
+    await snapshot(page,evidence,'camp-physical-fire');
+    result.camp=here;await save();
+    for(const [i,p] of [...camp.knots].reverse().entries()){
+      await walkTo(page,evidence,[p.east,p.north],'camp-return-'+i,true);
+      const actual=await readPose(page);assert.ok(Math.abs(actual.height-p.height)<.65,'Camp return height divergence');
+      result.campBack=i+1;await save();
+    }
+    await snapshot(page,evidence,'camp-returned-to-floor');
+  }
   if(segment==='roundtrip'){
     await traverse([...route.points].reverse(),'up');
     await walkTo(page,evidence,[-67,159],'return-outside');

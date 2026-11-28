@@ -10,7 +10,7 @@ import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 
 const [segment, evidencePath] = process.argv.slice(2);
-assert.ok(['descent','roundtrip','rim-return','perf'].includes(segment)&&evidencePath,'Usage: node tools/verify-b-r30-native-local.mjs <descent|roundtrip|rim-return> <fresh evidence directory>');
+assert.ok(['descent','roundtrip','rim-return','descent-camp','perf'].includes(segment)&&evidencePath,'Usage: node tools/verify-b-r30-native-local.mjs <descent|roundtrip|rim-return> <fresh evidence directory>');
 const run = promisify(execFile);
 const repo = fileURLToPath(new URL('../', import.meta.url));
 const viewer = join(repo, 'tools', 'voxel-tavern');
