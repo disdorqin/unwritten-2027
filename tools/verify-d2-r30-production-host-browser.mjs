@@ -20,7 +20,7 @@ await mkdir(out, { recursive: true });
 
 let server, browser, page;
 const errors = [];
-const views = ['south', 'west', 'summit', 'north'];
+const views = ['south', 'west', 'summit', 'north', 'east'];
 const results = [];
 
 try {
@@ -73,17 +73,17 @@ try {
     assert.ok(state.draws > 0, `${view} must render at least one draw call`);
     assert.ok(state.triangles > 0, `${view} must render triangles`);
     // The real host, not a report: both sectors are mounted with cut tiles.
-    assert.deepEqual(state.host.installed, ['A', 'B'], `${view} lost a sector`);
+    assert.deepEqual(state.host.installed, ['A', 'B', 'C2'], `${view} lost a sector`);
     assert.ok(state.host.tiles.cut > 0, `${view} shows no excavated canonical tile`);
     assert.deepEqual(state.host.duplicates, [], `${view} mounted a sector twice`);
     const live = new Map(state.live.sectors.map(sector => [sector.sector, sector]));
-    for (const key of ['A', 'B', 'D2']) {
+    for (const key of ['A', 'B', 'C2', 'D2']) {
       const sector = live.get(key);
       assert.ok(sector.installed, `${view} reports ${key} not installed`);
       assert.equal(sector.unsupported, 0, `${view} has unsupported ${key} ground`);
       assert.equal(sector.floatingDeck, 0, `${view} has a floating ${key} deck`);
     }
-    assert.equal(live.get('C2').installed, false, 'C2 must not be claimed before it delivers');
+    assert.equal(state.live.ready, true, `${view} four-sector live check is not ready`);
     console.log('D2-host', view, JSON.stringify({
       draws: state.draws, triangles: state.triangles, cut: state.host.tiles.cut,
       sectors: state.live.sectors.map(sector => sector.sector + ':' + sector.samples),

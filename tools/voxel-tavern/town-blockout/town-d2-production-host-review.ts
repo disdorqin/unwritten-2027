@@ -2,7 +2,9 @@ import {
   AmbientLight, Color, DirectionalLight, Fog, Group, PerspectiveCamera, Scene, WebGLRenderer,
 } from 'three';
 import { createTownD2R30ProductionHost } from './town-d2-r30-production-host';
-import { createSouthSectorInstaller, createWestSectorInstaller } from './town-d2-r30-sector-installers';
+import {
+  createEastSectorInstaller, createSouthSectorInstaller, createWestSectorInstaller,
+} from './town-d2-r30-sector-installers';
 
 /**
  * Independent review page for the D31 host: one owner group carrying the D2
@@ -29,9 +31,13 @@ scene.add(world);
 const host = createTownD2R30ProductionHost();
 world.add(host.group);
 
-const settlements = [host.install('A', createSouthSectorInstaller()), host.install('B', createWestSectorInstaller())];
+const settlements = [
+  host.install('A', createSouthSectorInstaller()),
+  host.install('B', createWestSectorInstaller()),
+  host.install('C2', createEastSectorInstaller()),
+];
 
-type View = 'south' | 'west' | 'summit' | 'north';
+type View = 'south' | 'west' | 'summit' | 'north' | 'east';
 /** Survey coordinates (east, height, north); the renderer flips north to -z. */
 const views: Record<View, Readonly<{
   position: readonly [number, number, number];
@@ -45,6 +51,8 @@ const views: Record<View, Readonly<{
   summit: { position: [300, 910, 780], target: [50, 800, 1_000] },
   // The central north wall and the climb route from the north side.
   north: { position: [260, 760, 1_180], target: [30, 620, 1_520] },
+  // C2's east sector: switchbacks, camp and cliff walkway on the east flank.
+  east: { position: [520, 700, 900], target: [900, 560, 1_150] },
 };
 
 let view: View = 'south';
@@ -52,7 +60,7 @@ let night = false;
 
 const position = document.querySelector<HTMLOutputElement>('#position')!;
 const status = document.querySelector<HTMLElement>('#status')!;
-const buttons = Object.fromEntries((['south', 'west', 'summit', 'north'] as View[]).map(name => [
+const buttons = Object.fromEntries((['south', 'west', 'summit', 'north', 'east'] as View[]).map(name => [
   name, document.querySelector<HTMLButtonElement>(`#view-${name}`)!,
 ]));
 const nightButton = document.querySelector<HTMLButtonElement>('#night')!;
@@ -116,6 +124,6 @@ function getState() {
 
 select('south');
 resize();
-status.textContent = '四区宿主已装配：D2 中央 + A 南区 + B 西区。';
+status.textContent = '四区宿主已装配：D2 中央 + A 南区 + B 西区 + C2 东区。';
 Object.defineProperty(window, '__d2HostReview', { value: Object.freeze({ getState, select }) });
 requestAnimationFrame(animate);

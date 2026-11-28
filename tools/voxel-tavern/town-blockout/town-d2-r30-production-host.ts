@@ -48,6 +48,14 @@ export type TownD2SectorPackage = Readonly<{
   group: Group;
   /** Ground after this sector's excavation; undefined outside its own area. */
   groundAt?(east: number, north: number): number | undefined;
+  /** Exact excavation coverage, when the sector publishes one (A31/1c1822b5).
+   * Inside coverage the cut face IS the ground, even when it sits below the
+   * original raster: taking a max would restore an invisible uncut layer. */
+  coversCut?(east: number, north: number): boolean;
+  /** The cut face inside `coversCut`; undefined there means a hole. */
+  cutGroundAt?(east: number, north: number): number | undefined;
+  /** Standable deck above the ground (road tread), without the ground fallback. */
+  deckAt?(east: number, north: number): number | undefined;
   supportAt?(east: number, north: number, radius?: number): number | undefined;
   blocked?(east: number, north: number, height: number, radius?: number, bodyHeight?: number): boolean;
   updateView?(east: number, north: number): void;
@@ -57,6 +65,27 @@ export type TownD2SectorPackage = Readonly<{
 }>;
 
 export type TownD2SectorInstaller = (port: TownD2SectorHostPort) => TownD2SectorPackage;
+
+/** The one cable line authority. B owns the towers, the rope, the stations,
+ * the repair order and the ride controller; D2 only carries the slot. A line
+ * may only be boarded when its installer declares itself certified — an
+ * uncertified candidate is refused and the line stays closed. */
+export type TownD2CablePackage = Readonly<{
+  /** True only when the owner has certified station support, deck clearance
+   * and the external obstruction sweep for this exact build. */
+  certified: boolean;
+  group: Group;
+  /** Ride boarding is gated on this; a closed line must leave it false. */
+  boardable: boolean;
+  stations?: readonly unknown[];
+  supportAt?(east: number, north: number, radius?: number): number | undefined;
+  blocked?(east: number, north: number, height: number, radius?: number, bodyHeight?: number): boolean;
+  update?(nowMs: number): void;
+  setNight?(night: boolean): void;
+  dispose(): void;
+}>;
+
+export type TownD2CableInstaller = (port: TownD2SectorHostPort) => TownD2CablePackage;
 
 export type TownD2SectorSettlement = Readonly<{
   sector: TownD2SectorKey;
@@ -143,15 +172,34 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
 
   const heightAt = (east: number, north: number) => sampleTownD2R30Height(east, north, arrivalHeight);
 
-  /** Canonical walking surface plus every installed excavation, resident for
-   * the whole session: cuts never leave the CPU index when a camera moves. */
+  /** A sector may only speak for its own quadrant (plus the shared 32 m seam).
+   * Without this, a neighbour's ground fallback leaks into another sector's
+   * surface — that is exactly how B's canonical ground put 1.762 m of phantom
+   * support under A's road. */
+  function ownsPoint(sector: TownD2SectorKey, east: number, north: number) {
+    const own = townD2SectorBounds[sector];
+    return east >= own.west - SECTOR_TOLERANCE && east <= own.east + SECTOR_TOLERANCE &&
+      north >= own.south - SECTOR_TOLERANCE && north <= own.north + SECTOR_TOLERANCE;
+  }
+
+  /** The one final ground authority, resident for the whole session.
+   *
+   * Inside a published cut, the excavated face IS the ground — never the max
+   * of the cut and the original raster (that resurrects an invisible uncut
+   * collision layer and put 204 of 832 southern road samples up to 1.762 m
+   * high). A hole inside coverage fails closed instead of falling back.
+   * Outside cuts the sector's own ground is authoritative where it has one. */
   function surfaceAt(east: number, north: number) {
     if (disposed) return;
     let height = collision.surfaceAt(east, north);
     for (const pkg of installed.values()) {
-      const cut = pkg.groundAt?.(east, north);
-      if (cut === undefined) continue;
-      height = height === undefined ? cut : Math.max(height, cut);
+      if (!ownsPoint(pkg.sector, east, north)) continue;
+      if (pkg.coversCut) {
+        if (!pkg.coversCut(east, north)) continue;
+        return pkg.cutGroundAt ? pkg.cutGroundAt(east, north) : undefined;
+      }
+      const ground = pkg.groundAt?.(east, north);
+      if (ground !== undefined) height = ground;
     }
     return height;
   }
@@ -160,7 +208,11 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     if (disposed) return;
     let height = surfaceAt(east, north);
     for (const pkg of installed.values()) {
-      const deck = pkg.supportAt?.(east, north, radius);
+      if (!ownsPoint(pkg.sector, east, north)) continue;
+      // Prefer the published deck (A31/1c1822b5). A package's own support may
+      // carry a ground fallback; the ground is this host's job, not a second
+      // opinion, so the deck is what may raise the feet.
+      const deck = pkg.deckAt ? pkg.deckAt(east, north) : pkg.supportAt?.(east, north, radius);
       if (deck === undefined) continue;
       height = height === undefined ? deck : Math.max(height, deck);
     }
@@ -270,6 +322,11 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     if (typeof installer !== 'function') throw new TypeError('A sector installer must be a function.');
     const before = group.children.length;
     const prior = Object.freeze([...installed.values()]);
+    // Snapshot what THIS install starts from — including the cuts the already
+    // installed sectors made. Rolling back to the pristine originals would
+    // silently undo A's and B's excavation when C2 fails.
+    const tileSnapshot = new Map<Mesh, BufferGeometry>();
+    for (const tile of tiles) tileSnapshot.set(tile, tile.geometry as BufferGeometry);
     let pkg: TownD2SectorPackage | undefined;
     try {
       pkg = installer(createPort(prior));
@@ -279,11 +336,12 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
       return settlement;
     } catch (error) {
       try { pkg?.dispose(); } catch { /* the original failure is the one to report */ }
-      // Roll back anything the broken installer left behind: no residue.
+      // Roll back exactly this install: detach what it added and restore the
+      // geometry that was live before it ran, leaving other sectors untouched.
       for (const child of [...group.children].slice(before)) child.removeFromParent();
       for (const tile of tiles) {
-        const original = originals.get(tile)!;
-        if (tile.geometry !== original) tile.geometry = original;
+        const snapshot = tileSnapshot.get(tile);
+        if (snapshot !== undefined && tile.geometry !== snapshot) tile.geometry = snapshot;
       }
       failures.set(sector, error instanceof Error ? error.message : String(error));
       throw error;
@@ -302,6 +360,50 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     for (const child of [...group.children]) if (child.name === node) child.removeFromParent();
     const residue = tiles.filter(tile => tile.geometry !== originals.get(tile)).length;
     return Object.freeze({ sector, node, cutTilesRestored: residue === 0, residue });
+  }
+
+  let cable: TownD2CablePackage | undefined;
+  let cableRefusal: string | undefined;
+
+  /** Install the single cable line. An uncertified package is refused and the
+   * line stays closed: the host never marks an unverified ride as boardable. */
+  function installCable(installer: TownD2CableInstaller) {
+    if (disposed) throw new Error('The production host is disposed.');
+    if (cable) throw new Error('A cable line is already installed.');
+    if (typeof installer !== 'function') throw new TypeError('A cable installer must be a function.');
+    const before = group.children.length;
+    const tileSnapshot = new Map<Mesh, BufferGeometry>();
+    for (const tile of tiles) tileSnapshot.set(tile, tile.geometry as BufferGeometry);
+    let pkg: TownD2CablePackage | undefined;
+    try {
+      pkg = installer(createPort(Object.freeze([...installed.values()])));
+      if (pkg.certified !== true) throw new Error('Cable line is not certified; it stays closed.');
+      if (!pkg.group || pkg.group.parent !== group) throw new Error('Cable line was not mounted into the host owner.');
+      if (pkg.boardable !== true) throw new Error('Cable line is installed but not boardable.');
+      cable = pkg;
+      cableRefusal = undefined;
+      return Object.freeze({ installed: true as const, certified: true, group: pkg.group.name });
+    } catch (error) {
+      try { pkg?.dispose(); } catch { /* report the refusal, not the cleanup */ }
+      for (const child of [...group.children].slice(before)) child.removeFromParent();
+      for (const tile of tiles) {
+        const snapshot = tileSnapshot.get(tile);
+        if (snapshot !== undefined && tile.geometry !== snapshot) tile.geometry = snapshot;
+      }
+      cable = undefined;
+      cableRefusal = error instanceof Error ? error.message : String(error);
+      throw error;
+    }
+  }
+
+  /** What A may consume: a closed line reports installed:false and boardable:false. */
+  function cableState() {
+    return Object.freeze({
+      installed: cable !== undefined,
+      boardable: cable?.boardable === true && cable?.certified === true,
+      certified: cable?.certified === true,
+      refusal: cableRefusal,
+    });
   }
 
   /** Per-sector live check on the mounted host: real support and collision over
@@ -386,6 +488,8 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     port: createPort(Object.freeze([])),
     createPort,
     sectorLiveCheck,
+    installCable,
+    cableState,
     install,
     uninstall,
     installed: () => Object.freeze([...installed.keys()]),

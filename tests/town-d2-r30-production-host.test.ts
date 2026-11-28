@@ -5,7 +5,7 @@ import {
   createTownD2R30ProductionHost, townD2SectorBounds,
 } from '../tools/voxel-tavern/town-blockout/town-d2-r30-production-host';
 import {
-  createSouthSectorInstaller, createWestSectorInstaller,
+  createEastSectorInstaller, createSouthSectorInstaller, createWestSectorInstaller,
 } from '../tools/voxel-tavern/town-blockout/town-d2-r30-sector-installers';
 
 test('D31-1 the host owns one canonical terrain, one collision grid and the near tiles', () => {
@@ -165,6 +165,96 @@ test('D31-3 the live check reports what is really mounted, and refuses to claim 
     // Not installed means not ready: the host must not round up.
     assert.equal(check.ready, false);
     assert.ok(Object.isFrozen(check));
+  } finally {
+    host.dispose();
+  }
+});
+
+test('A31 joint: the host support is the road deck, never the original raster', () => {
+  const host = createTownD2R30ProductionHost();
+  try {
+    host.install('A', createSouthSectorInstaller());
+    host.install('B', createWestSectorInstaller());
+    host.install('C2', createEastSectorInstaller());
+    const south = host.package('A')!;
+    const live = host.sectorLiveCheck();
+    assert.equal(live.ready, true, 'all four sectors must report live');
+    assert.deepEqual(host.installed(), ['A', 'B', 'C2']);
+    // The exact A31 gate: every accepted walkway station's host support must
+    // equal the excavated road deck, so a cut face below the original raster
+    // is never overruled by a max() with the uncut terrain.
+    const stations = host.trail.slice(2, 834);
+    assert.equal(stations.length, 832);
+    let worst = 0, wrong = 0;
+    for (const point of stations) {
+      const deck = south.deckAt!(point.east, point.north);
+      const actual = host.supportAt(point.east, point.north);
+      if (deck === undefined || actual === undefined) { wrong++; continue; }
+      const error = Math.abs(actual - deck);
+      if (error > .001) { wrong++; worst = Math.max(worst, error); }
+    }
+    assert.equal(wrong, 0, `${wrong} road stations differ from the deck, worst ${worst.toFixed(3)} m`);
+    // No neighbour may raise another sector's ground: A's road sits in the
+    // south, so B's canonical ground must not leak under it.
+    for (const point of stations) {
+      const surface = host.surfaceAt(point.east, point.north);
+      const cutFace = south.cutGroundAt!(point.east, point.north);
+      assert.notEqual(surface, undefined, `no surface at E${point.east.toFixed(1)}/N${point.north.toFixed(1)}`);
+      assert.ok(Math.abs(surface! - cutFace!) <= .001,
+        `surface drifted off the excavated face at E${point.east.toFixed(1)}/N${point.north.toFixed(1)}`);
+    }
+  } finally {
+    host.dispose();
+  }
+});
+
+test('A31 joint: a rejected C2 install must not undo A and B cut tiles', () => {
+  const host = createTownD2R30ProductionHost();
+  try {
+    host.install('A', createSouthSectorInstaller());
+    host.install('B', createWestSectorInstaller());
+    const snapshot = host.tiles.map(tile => tile.geometry);
+    assert.ok(host.stats().tiles.cut > 0, 'A and B must have excavated real tiles');
+    assert.throws(() => host.install('C2', () => { throw new Error('intentional installer refusal'); }),
+      /intentional installer refusal/);
+    const changed = host.tiles.filter((tile, index) => tile.geometry !== snapshot[index]).length;
+    assert.equal(changed, 0, `${changed} tiles were rolled back past the installed sectors`);
+    assert.deepEqual(host.installed(), ['A', 'B']);
+    assert.equal(host.stats().failures.C2 !== undefined, true);
+    // The slot is still open and a real C2 lands afterwards.
+    const east = host.install('C2', createEastSectorInstaller());
+    assert.equal(east.node, 'town-night-c2-summit-east-production');
+    assert.equal(host.sectorLiveCheck().ready, true);
+  } finally {
+    host.dispose();
+  }
+});
+
+test('A31 joint: an uncertified cable line is refused and stays closed', () => {
+  const host = createTownD2R30ProductionHost();
+  try {
+    assert.deepEqual({ ...host.cableState(), refusal: undefined },
+      { installed: false, boardable: false, certified: false, refusal: undefined });
+    assert.throws(() => host.installCable(port => {
+      const group = new Group();
+      group.name = 'b6-cable-line';
+      port.owner.add(group);
+      return { certified: false, boardable: false, group, dispose() { group.removeFromParent(); } };
+    }), /not certified/);
+    assert.equal(host.cableState().installed, false);
+    assert.equal(host.cableState().boardable, false);
+    assert.equal(host.group.getObjectByName('b6-cable-line'), undefined, 'a refused line must not stay mounted');
+    assert.match(host.cableState().refusal ?? '', /not certified/);
+
+    const accepted = host.installCable(port => {
+      const group = new Group();
+      group.name = 'b6-cable-line';
+      port.owner.add(group);
+      return { certified: true, boardable: true, group, dispose() { group.removeFromParent(); } };
+    });
+    assert.equal(accepted.certified, true);
+    assert.equal(host.cableState().boardable, true);
+    assert.throws(() => host.installCable(() => { throw new Error('second line'); }), /already installed/);
   } finally {
     host.dispose();
   }

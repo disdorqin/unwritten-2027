@@ -1,4 +1,5 @@
 import { createMainSummitCable } from './main-summit-cable';
+import { createC2EastProduction } from './town-night-c2-summit-east-production';
 import type { TownD2SectorInstaller, TownD2SectorPackage } from './town-d2-r30-production-host';
 import { mountSouthProduction } from './town-night-a-summit-production';
 import { createSouthReservation } from './town-night-a-summit-reservation';
@@ -65,6 +66,12 @@ export function createSouthSectorInstaller(
       sector: 'A',
       group: south.group,
       groundAt: (east, north) => south.groundAt(east, north),
+      // A31/1c1822b5: the exact cut coverage and cut face. The host needs both
+      // to make the excavated surface the ground instead of a max with the
+      // original raster.
+      coversCut: (east, north) => south.coversCut(east, north),
+      cutGroundAt: (east, north) => south.cutGroundAt(east, north),
+      deckAt: (east, north) => south.deckAt(east, north),
       supportAt: (east, north) => south.supportAt(east, north),
       blocked: (east, north, height, radius, bodyHeight) =>
         south.blocked(east, north, height, radius ?? .27, bodyHeight ?? 1.8),
@@ -72,6 +79,36 @@ export function createSouthSectorInstaller(
       setNight: value => south.setNight(value),
       updateSnow: settleSnow(south.updateSnow),
       dispose: () => south.dispose(),
+    };
+  };
+}
+
+/** C2 / east: the delivered east aggregate (C2 `da87cc44`), seated on the
+ * host's live ground. C2 owns the bodies, the deck tops and the colliders; D2
+ * only supplies the one ground authority and the one owner group. */
+export function createEastSectorInstaller(
+  options: Readonly<{ moduleIds?: readonly string[] }> = {},
+): TownD2SectorInstaller {
+  return (port): TownD2SectorPackage => {
+    const east = createC2EastProduction({ heightAt: port.groundAt, moduleIds: options.moduleIds });
+    try {
+      east.install(port.owner);
+    } catch (error) {
+      east.dispose();
+      throw error;
+    }
+    return {
+      sector: 'C2',
+      group: east.group,
+      // C2 publishes the highest standable surface (ground + decks/floors);
+      // its own ground is the host ground it was built on, so it adds no
+      // second terrain authority.
+      supportAt: (east_, north) => east.topAt(east_, north),
+      blocked: (eastPoint, north, height, radius, bodyHeight) =>
+        east.blocked(eastPoint, north, height, radius ?? .27, bodyHeight ?? 1.8),
+      updateView: (eastPoint, north) => east.updateView(eastPoint, north),
+      setNight: value => east.setNight(value),
+      dispose: () => east.dispose(),
     };
   };
 }
