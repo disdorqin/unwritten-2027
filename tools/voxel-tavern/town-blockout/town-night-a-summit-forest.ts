@@ -1,4 +1,5 @@
 import {BoxGeometry,Color,Group,InstancedMesh,MeshLambertMaterial,Object3D} from 'three';
+import {makeFrontRidgePixelTexture} from './town-front-ridge-surface';
 import {finishNightBAudit} from './town-night-b-audit-slices';
 import {southGullyNorth,type SouthGround,type SouthProtection} from './town-night-a-summit-landform';
 import {createSouthSnowAppearance,type SouthSnowVisualSample} from './town-night-a-summit-snow-appearance';
@@ -11,12 +12,12 @@ const size=96;
  * No overlapping legacy forest: caller must exclude its south-sector placements. */
 export function* southForestSteps(heightAt:SouthGround,reserved:SouthProtection){
  const root=new Group();root.name='night-a-south-forest';
- const geometry=new BoxGeometry(1,1,1),material=new MeshLambertMaterial({color:0xffffff}),cells=new Map<string,Cell>(),bodies:Body[]=[];
+ const geometry=new BoxGeometry(1,1,1),texture=makeFrontRidgePixelTexture(),material=new MeshLambertMaterial({color:0xffffff,map:texture}),cells=new Map<string,Cell>(),bodies:Body[]=[];
  const key=(e:number,n:number)=>Math.floor(e/size)+','+Math.floor(n/size);
  const cell=(e:number,n:number)=>{const k=key(e,n);let c=cells.get(k);if(!c){c={items:[],bodies:[],east:(Math.floor(e/size)+.5)*size,north:(Math.floor(n/size)+.5)*size};cells.set(k,c);}return c;};
  const add=(c:Cell,e:number,n:number,y:number,w:number,h:number,d:number,yaw:number,color:string,snow=false)=>c.items.push({e,n,y,w,h,d,yaw,color,snow});
  const push=(c:Cell,b:Body)=>{c.bodies.push(b);bodies.push(b);};
- root.userData={owner:'A33-2-south-forest',revision:2,bounds:{west:-1100,east:1100,south:-10,north:448},static:true};
+ root.userData={owner:'A33-2-south-forest',revision:3,bounds:{west:-1100,east:1100,south:-10,north:448},static:true};
  const palette=['#344638','#44503c','#52634a','#3d5546'],snow=['#c4d3dc','#e0e7e9','#d2dfe5'];
  let trees=0,rocks=0,excluded=0,probes=0,accepted=false;
  try{
@@ -97,13 +98,20 @@ export function* southForestSteps(heightAt:SouthGround,reserved:SouthProtection)
  let disposed=false;
  function blocked(e:number,n:number,h:number,r=.27,body=1.8){
   for(let x=Math.floor((e-r-3)/size);x<=Math.floor((e+r+3)/size);x++)for(let z=Math.floor((n-r-3)/size);z<=Math.floor((n+r+3)/size);z++)
-   if(cells.get(x+','+z)?.bodies.some(b=>h+body-.025>b.bottom&&h+.025<b.top&&Math.hypot(e-b.east,n-b.north)<r+b.radius))return true;
+   for(const p of cells.get(x+','+z)?.items??[]){
+    // Test each visible solid, rather than a cylinder around a rotated
+    // layered rock (a source of invisible side walls). Dynamic snow caps
+    // are seated on their underlying solid and do not add a second body.
+    if(p.snow||h+body-.025<=p.y-p.h/2||h+.025>=p.y+p.h/2)continue;
+    const de=e-p.e,dn=n-p.n,c=Math.cos(p.yaw),s=Math.sin(p.yaw),u=de*c+dn*s,v=-de*s+dn*c;
+    if(Math.hypot(Math.max(0,Math.abs(u)-p.w/2),Math.max(0,Math.abs(v)-p.d/2))<r)return true;
+   }
   return false;
  }
  return {group:root,bodies,stats:{trees,rocks,excluded,cells:cells.size,instances,triangles:instances*12},blocked,
  updateSnow(dt:number,sample:SouthSnowVisualSample){if(!disposed)for(const appearance of snowAppearance)appearance.update(dt,sample);},
  updateView(e:number,n:number,radius=900){for(const c of cells.values())if(c.mesh)c.mesh.visible=Math.hypot(e-c.east,n-c.north)<=radius+size*.72;},
- dispose(){if(disposed)return;disposed=true;root.removeFromParent();for(const c of cells.values())c.mesh?.dispose();root.clear();cells.clear();snowAppearance.length=0;geometry.dispose();material.dispose();}};
- }finally{if(!accepted){root.removeFromParent();for(const c of cells.values())c.mesh?.dispose();root.clear();cells.clear();geometry.dispose();material.dispose();}}
+ dispose(){if(disposed)return;disposed=true;root.removeFromParent();for(const c of cells.values())c.mesh?.dispose();root.clear();cells.clear();snowAppearance.length=0;geometry.dispose();material.dispose();texture.dispose();}};
+ }finally{if(!accepted){root.removeFromParent();for(const c of cells.values())c.mesh?.dispose();root.clear();cells.clear();geometry.dispose();material.dispose();texture.dispose();}}
 }
 export function mountSouthForest(heightAt:SouthGround,reserved:SouthProtection){return finishNightBAudit(southForestSteps(heightAt,reserved));}
