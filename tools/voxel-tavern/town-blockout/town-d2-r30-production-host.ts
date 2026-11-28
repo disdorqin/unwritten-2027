@@ -261,6 +261,54 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     return height;
   }
 
+  /**
+   * D33-2: multi-level support selection. `supportAt` still reports the highest
+   * deck (its published A31 contract), but a player standing on a lower level
+   * must not be teleported to a deck above their head. Collect every real
+   * surface at this plan position, then pick the one reachable from `feet`:
+   * the highest at most STEP_UP above, else the nearest at most STEP_DOWN
+   * below, else the lowest surface (never a body above the player).
+   */
+  function supportNearFeet(east: number, north: number, feet: number, radius = .27) {
+    if (disposed) return undefined;
+    if (!Number.isFinite(east) || !Number.isFinite(north) || !Number.isFinite(feet)) {
+      throw new RangeError('supportNearFeet needs a finite position and foot height.');
+    }
+    const STEP_UP = .45, STEP_DOWN = 1.2;
+    const surfaces: number[] = [];
+    const ground = collision.surfaceAt(east, north);
+    if (ground !== undefined) surfaces.push(ground);
+    for (const pkg of installed.values()) {
+      if (!ownsPoint(pkg.sector, east, north)) continue;
+      if (pkg.coversCut) {
+        if (!pkg.coversCut(east, north)) continue;
+        const cut = pkg.cutGroundAt?.(east, north);
+        if (cut !== undefined) surfaces.push(cut);
+        continue;
+      }
+      const groundAt = pkg.groundAt?.(east, north);
+      if (groundAt !== undefined) surfaces.push(groundAt);
+      const deck = pkg.deckAt ? pkg.deckAt(east, north) : pkg.supportAt?.(east, north, radius);
+      if (deck !== undefined) surfaces.push(deck);
+    }
+    const cableDeck = cablePackage?.supportAt(east, north, radius);
+    if (cableDeck !== undefined) surfaces.push(cableDeck);
+    if (surfaces.length === 0) return undefined;
+    surfaces.sort((a, b) => a - b);
+    // A surface is reachable only if it is within a step of the CURRENT feet
+    // on BOTH sides. Without the lower bound a player 200 m in the air would
+    // be snapped onto the highest deck — the same teleport bug in reverse.
+    for (let i = surfaces.length - 1; i >= 0; i--) {
+      const surface = surfaces[i]!;
+      if (surface <= feet + STEP_UP && surface >= feet - STEP_DOWN) return surface;
+    }
+    // No nearby surface: the closest one above would require a jump, so never
+    // snap upward. Return the closest landing below, or the lowest real one.
+    let below: number | undefined;
+    for (const surface of surfaces) if (surface <= feet) below = surface;
+    return below ?? surfaces[0];
+  }
+
   function blocked(east: number, north: number, height: number, radius = .27, bodyHeight = 1.8) {
     if (disposed) return true;
     for (const pkg of installed.values()) {
@@ -1012,6 +1060,10 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     heightAt,
     surfaceAt,
     supportAt,
+    /** D33-2: foot-aware multi-level support. Callers that know the player's
+     * current foot height should use this instead of the highest-deck
+     * `supportAt` so a lower floor never teleports up through an upper one. */
+    supportNearFeet,
     blocked,
     /** D33-1: hand A/总控 the same-source far layer that replaces the R31
      * faux apron. It is NOT auto-mounted: mounting it together with
