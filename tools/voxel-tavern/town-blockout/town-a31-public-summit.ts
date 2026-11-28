@@ -32,6 +32,7 @@ export function createA31PublicSummitRoute(input:Input){
  const sun=new DirectionalLight('#fff4df',1.7);sun.position.set(-80,120,50);scene.add(sun);
  let status:Status='idle',stage='idle',failure:string|undefined,night=false,active=false;
  let production:Production|undefined,load:Promise<boolean>|undefined;
+ let closure:ReturnType<Group['getObjectByName']>[]=[];
  const stagingAbort=new AbortController();
  let audit:ReturnType<Production['sectorLiveCheck']>|undefined;
  let visual:ReturnType<typeof retireA31LegacySectorOverlays>|undefined;
@@ -101,6 +102,7 @@ export function createA31PublicSummitRoute(input:Input){
     });
     // Retain one group identity for the future certified domain handoff.
     input.town.add(candidate.group);candidate.setNight(night);if(night)visual.afterNightChange();
+    closure=['town-d2-r30-closed-perimeter','town-d2-r30-floor'].map(name=>candidate!.group.getObjectByName(name));
     production=candidate;assembly={group:candidate.group,r30:candidate.assembly,
      summitSnowAt:(e,n)=>{const depth=host.snowAt(e,n);if(depth===undefined)return;const front=input.frontSnow?.(e+summitAssemblyAnchor.east,n+summitAssemblyAnchor.north);return front!==undefined&&Number.isFinite(front)&&n<=86?Math.max(0,Math.min(1,Math.max(front-.2,Math.min(front+.2,depth)))):depth;}};
     status='ready';stage='mounted';elapsedMs=performance.now()-started;return true;
@@ -133,9 +135,7 @@ export function createA31PublicSummitRoute(input:Input){
   production.group.visible=near;input.skyline.visible=!near&&!active;
   // The isolated domain's artificial closure is not exterior scenery.
   // Its colliders and real top tiles are unchanged.
-  const skirt=production.group.getObjectByName('town-d2-r30-closed-perimeter');
-  const floor=production.group.getObjectByName('town-d2-r30-floor');
-  if(skirt)skirt.visible=active;if(floor)floor.visible=active;
+  for(const object of closure)if(object)object.visible=active;
   if(near){
    const [e,n]=local(position.east,position.north);
    if(Math.hypot(e-detailEast,n-detailNorth)>32){production.setDetailFocus(e,n,1550);detailEast=e;detailNorth=n;}

@@ -1,4 +1,5 @@
-import {certifyHikingSteps,type HikingPoint,type HikingSurface} from './town-a32-summit-hiking';
+import {BoxGeometry,BufferGeometry,Float32BufferAttribute,Group,InstancedMesh,LineBasicMaterial,LineSegments,Matrix4,MeshLambertMaterial} from 'three';
+import {certifyHikingSteps,type HikingFoot,type HikingPoint,type HikingSurface} from './town-a32-summit-hiking';
 
 /** Offline surveyed natural-ground foot route (NOT the planned 12% road).
  * 140m middle station to 347m cloud apron. Many short traverses avoid
@@ -10,4 +11,50 @@ export const r31FrontTrailWaypoints:readonly HikingPoint[]=Object.freeze([
 ].map(([east,north])=>Object.freeze({east:east!,north:north!})));
 export function* certifyR31FrontTrail(host:HikingSurface){
  return yield* certifyHikingSteps(host,r31FrontTrailWaypoints,.80);
+}
+/** Visual-only trail studs: every turn and at most 1.5m between studs.
+ * The thin ground trace uses the same .25m sampling as the certificate.
+ * No extra walkable surface or collider is introduced.
+ */
+export function mountR31FrontTrailGuides(host:HikingSurface,path:readonly HikingFoot[]){
+ const group=new Group();group.name='r31-front-trail-guide';
+ const geometry=new BoxGeometry(.16,.30,.16);
+ const material=new MeshLambertMaterial({color:'#f6c653',emissive:'#735120',emissiveIntensity:.65});
+ const lineMaterial=new LineBasicMaterial({color:'#eebd52',depthWrite:false});
+ const bins=new Map<string,{studs:HikingFoot[];lines:number[]}>();
+ let markers=0,skipped=0,traceMetres=0;
+ const bucket=(e:number,n:number)=>{const key=Math.floor(e/64)+','+Math.floor(n/64);let b=bins.get(key);if(!b){b={studs:[],lines:[]};bins.set(key,b);}return b;};
+ const point=(e:number,n:number):HikingFoot|undefined=>{
+  const h=host.supportAt(e,n,.27);
+  if(h===undefined||!Number.isFinite(h)||host.blocked(e,n,h,.27,1.8))return;
+  return {east:e,north:n,height:h};
+ };
+ const add=(p:HikingFoot|undefined)=>{if(!p){skipped++;return;}bucket(p.east,p.north).studs.push(p);markers++;};
+ if(path.length)add(point(path[0]!.east,path[0]!.north));
+ for(let i=1;i<path.length;i++){
+  const a=path[i-1]!,b=path[i]!,d=Math.hypot(b.east-a.east,b.north-a.north);
+  if(d<=1e-8)continue;
+  const n=Math.ceil(d/1.5);
+  for(let j=1;j<=n;j++)add(point(a.east+(b.east-a.east)*j/n,a.north+(b.north-a.north)*j/n));
+  const samples=Math.ceil(d/.25);let prev=point(a.east,a.north);
+  for(let j=1;j<=samples;j++){
+   const p=point(a.east+(b.east-a.east)*j/samples,a.north+(b.north-a.north)*j/samples);
+   if(prev&&p&&Math.abs(p.height-prev.height)<=.8*d/samples+1e-6){
+    bucket(prev.east,prev.north).lines.push(prev.east,prev.height+.075,-prev.north,p.east,p.height+.075,-p.north);traceMetres+=d/samples;
+   }
+   prev=p;
+  }
+ }
+ const lineGeometries:BufferGeometry[]=[];const matrix=new Matrix4();
+ for(const [key,b] of bins){
+  if(b.studs.length){
+   const mesh=new InstancedMesh(geometry,material,b.studs.length);mesh.name='front-trail-studs:'+key;
+   b.studs.forEach((p,i)=>{mesh.setMatrixAt(i,matrix.makeTranslation(p.east,p.height+.145,-p.north));});
+   mesh.instanceMatrix.needsUpdate=true;mesh.computeBoundingSphere();group.add(mesh);
+  }
+  if(b.lines.length){const g=new BufferGeometry();g.setAttribute('position',new Float32BufferAttribute(b.lines,3));g.computeBoundingSphere();lineGeometries.push(g);const line=new LineSegments(g,lineMaterial);line.name='front-trail-trace:'+key;group.add(line);}
+ }
+ group.userData={visualOnly:true,includesWorldCollision:false,markers,skipped,traceMetres};
+ let disposed=false;
+ return {group,markers,skipped,traceMetres,dispose(){if(disposed)return;disposed=true;group.removeFromParent();geometry.dispose();material.dispose();lineMaterial.dispose();lineGeometries.forEach(g=>g.dispose());group.clear();}};
 }

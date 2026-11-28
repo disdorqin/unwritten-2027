@@ -13,9 +13,9 @@ export function a32SummitPrefetch(p:Foot,v:Velocity={east:0,north:0}){
  if(p.height>=90&&p.north>=390&&p.north<=800&&p.east<=640)return true;
  return [p,next].some(q=>q.north>=290&&q.east>=240&&distance(q.east,q.north,430,490)<=245);
 }
-/** Synchronous legacy factories cannot be interrupted mid-call. Never begin
- * one while a moving player is producing frames; bounded GPU work may still
- * continue separately. No timeout silently bypasses this admission policy. */
+/** Prefer quiet intervals for synchronous factories. Public summit staging
+ * explicitly supplies a bounded deadline so continuous movement cannot starve
+ * access indefinitely. The default remains strict for other callers. */
 export function createA32QuietGate(now:()=>number=()=>performance.now(),quietMs=250,maxWaitMs=Infinity){
  let previous:Foot|undefined,lastMotion=-Infinity;
  return {

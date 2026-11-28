@@ -39,9 +39,8 @@ import {createA31PublicSummitRoute} from './town-a31-public-summit';
 import {createNightBProductionController,nightBProductionAuthority} from './town-night-b-production-controller';
 import {readA31FrontCable,type A31CableBindings} from './town-a31-cable-binding';
 import {a32SummitPrefetch,a32YieldFrame} from './town-a32-stream-policy';
-import {certifyR31FrontTrail} from './town-r31-front-trail';
+import {certifyR31FrontTrail,mountR31FrontTrailGuides} from './town-r31-front-trail';
 import {finishNightBAuditAsync} from './town-night-b-audit-slices';
-import {mountHikingGuides} from './town-a32-summit-hiking-guides';
 import {hikingProgress,type HikingSurface} from './town-a32-summit-hiking';
 import {createA32PassportInput} from './town-a32-passport-input';
 import {takeTownTerrain,townTerrainPreloadStats} from './town-a32-terrain-preload';
@@ -585,7 +584,7 @@ let publicTransportBound=false,publicTransportPreparing=false,frontPreparationMs
 let rearSeamCertificate:ReturnType<typeof cloudRoute.seamCertificate>;
 type FrontTrailResult=ReturnType<typeof certifyR31FrontTrail> extends Generator<void,infer R,unknown>?R:never;
 let frontTrail:FrontTrailResult|undefined;
-let frontTrailGuides:ReturnType<typeof mountHikingGuides>|undefined;
+let frontTrailGuides:ReturnType<typeof mountR31FrontTrailGuides>|undefined;
 let frontTrailFailure:string|undefined;
 let frontTrailStatusAt=0;
 export const preparePublicSummit=()=>{/* Town entry is independent of the rear massif. */};
@@ -620,7 +619,7 @@ function preparePublicTransport(foot:{east:number;north:number;height:number}){
     supportAt:(e,n)=>dryTownLandingHeight(e,n,outdoorSurfaceAt(e,n),true),
     blocked:(e,n,h)=>obstructed(e,n,h,outdoorGeometryAt(e,n),true)};
    frontTrail=await finishNightBAuditAsync(certifyR31FrontTrail(host),{budgetMs:6,yieldTask:a32YieldFrame});
-   if(frontTrail.ready){frontTrailGuides=mountHikingGuides(host,frontTrail.path);scene.add(frontTrailGuides.group);}
+   if(frontTrail.ready){frontTrailGuides=mountR31FrontTrailGuides(host,frontTrail.path);scene.add(frontTrailGuides.group);}
   }catch(error){frontTrailFailure=error instanceof Error?error.message:String(error);}
  })();
 }
