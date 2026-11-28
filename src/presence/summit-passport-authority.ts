@@ -66,10 +66,9 @@ export function createSummitPassportAuthority(host: SummitPassportHost) {
     return { next: stage < target ? target : stage, result: 'ok' } as const;
   }
 
-  function atSite(peerId: number, action: SummitPassportAction) {
+  function atPosition(position: SummitPassportPosition | undefined, action: SummitPassportAction) {
     if (action === 'status') return true;
     const anchor = sites[action];
-    const position = host.resolvePosition(peerId);
     return position?.area === anchor.area && Math.abs(position.height - anchor.height) <= 0.43 &&
       Math.hypot(position.east - anchor.east, position.north - anchor.north) <= 1.1;
   }
@@ -86,35 +85,35 @@ export function createSummitPassportAuthority(host: SummitPassportHost) {
     }
   }
 
+  async function requestProfile(profileKey: string | undefined, position: SummitPassportPosition | undefined, action: SummitPassportAction): Promise<SummitPassportReply> {
+    if (!persistence || typeof profileKey !== 'string' || !profileKey.length || profileKey.length > 256) return summitPassportUnavailable(action);
+    const reached = atPosition(position, action);
+    const result = (pendingProfiles.get(profileKey) ?? Promise.resolve()).then(() => persistedResult(profileKey, action, reached));
+    const pending = result.then(() => {});
+    pendingProfiles.set(profileKey, pending);
+    try { return await result; }
+    finally { if (pendingProfiles.get(profileKey) === pending) pendingProfiles.delete(profileKey); }
+  }
+
   return {
+    /** Server-only trusted adapter; never expose these arguments as event fields. */
+    requestProfile,
     async request(peerId: number, action: SummitPassportAction): Promise<SummitPassportReply> {
-      let reached: boolean;
+      let position: SummitPassportPosition | undefined;
       let profileKey: string | undefined;
       try {
-        reached = atSite(peerId, action);
+        position = action === 'status' ? undefined : host.resolvePosition(peerId);
         profileKey = persistence?.resolveProfileKey(peerId);
       } catch {
         return summitPassportUnavailable(action);
       }
       if (!persistence) {
         const stage = stages.get(peerId) ?? 0;
-        const { next, result } = evaluate(stage, action, reached);
+        const { next, result } = evaluate(stage, action, atPosition(position, action));
         if (next !== stage) stages.set(peerId, next);
         return passportReply(action, result, next);
       }
-      if (typeof profileKey !== 'string' || !profileKey.length || profileKey.length > 256) {
-        return summitPassportUnavailable(action);
-      }
-      // Two transports may overlap while the same trusted profile is reconnecting.
-      const key = profileKey;
-      const result = (pendingProfiles.get(key) ?? Promise.resolve()).then(() => persistedResult(key, action, reached));
-      const pending = result.then(() => {});
-      pendingProfiles.set(key, pending);
-      try {
-        return await result;
-      } finally {
-        if (pendingProfiles.get(key) === pending) pendingProfiles.delete(key);
-      }
+      return requestProfile(profileKey, position, action);
     },
     forget(peerId: number) {
       stages.delete(peerId);

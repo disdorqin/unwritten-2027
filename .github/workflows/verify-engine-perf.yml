@@ -1,0 +1,31 @@
+name: Engine performance contracts
+on:
+  push:
+    branches: [lane-friend, town-blockout-integration]
+    paths:
+      - 'tools/voxel-tavern/town-blockout/engine-perf/**'
+      - 'tools/voxel-tavern/engine-perf-tsconfig.json'
+      - 'tests/town-engine-perf-*.test.ts'
+      - 'tools/check-engine-perf-*.mjs'
+      - '.github/workflows/verify-engine-perf.yml'
+  pull_request:
+    branches: [town-blockout-integration]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: node tools/check-engine-perf-boundary.mjs
+      - run: node node_modules/typescript/bin/tsc -p tools/voxel-tavern/engine-perf-tsconfig.json --noEmit
+      - run: node --import tsx --test tests/town-engine-perf-*.test.ts

@@ -1,0 +1,206 @@
+{
+  "views": [
+    {
+      "view": "gate",
+      "draws": 335,
+      "triangles": 254457,
+      "mountedParts": [
+        "P-1",
+        "P-2",
+        "P-3",
+        "P-4",
+        "P-7",
+        "P-8",
+        "P-9"
+      ],
+      "camera": {
+        "position": [
+          300,
+          348.65,
+          -662
+        ],
+        "quaternion": [
+          0,
+          0,
+          0,
+          1
+        ],
+        "aspect": 1.6285714285714286,
+        "fov": 50,
+        "far": 2400
+      },
+      "east": 0,
+      "north": -14,
+      "feet": 347
+    },
+    {
+      "view": "cluster",
+      "draws": 221,
+      "triangles": 580859,
+      "mountedParts": [
+        "P-1",
+        "P-2",
+        "P-3",
+        "P-4",
+        "P-7",
+        "P-8",
+        "P-9"
+      ],
+      "camera": {
+        "position": [
+          406,
+          834,
+          -1642
+        ],
+        "quaternion": [
+          -0.19810135111198407,
+          0.458113172750411,
+          0.10551552536320247,
+          0.8600899078279467
+        ],
+        "aspect": 1.6285714285714286,
+        "fov": 50,
+        "far": 2400
+      },
+      "east": 0,
+      "north": -14,
+      "feet": 347
+    },
+    {
+      "view": "north",
+      "draws": 399,
+      "triangles": 277749,
+      "mountedParts": [
+        "P-1",
+        "P-2",
+        "P-3",
+        "P-4",
+        "P-7",
+        "P-8",
+        "P-9"
+      ],
+      "camera": {
+        "position": [
+          350,
+          350,
+          -3276
+        ],
+        "quaternion": [
+          0,
+          0.9903354367883118,
+          -0.1386929076820569,
+          0
+        ],
+        "aspect": 1.6285714285714286,
+        "fov": 50,
+        "far": 2400
+      },
+      "east": 0,
+      "north": -14,
+      "feet": 347
+    },
+    {
+      "view": "east",
+      "draws": 465,
+      "triangles": 291107,
+      "mountedParts": [
+        "P-1",
+        "P-2",
+        "P-3",
+        "P-4",
+        "P-7",
+        "P-8",
+        "P-9"
+      ],
+      "camera": {
+        "position": [
+          1950,
+          350,
+          -1676
+        ],
+        "quaternion": [
+          0.09866128883946387,
+          0.700189938577052,
+          -0.09866128883946387,
+          0.700189938577052
+        ],
+        "aspect": 1.6285714285714286,
+        "fov": 50,
+        "far": 2400
+      },
+      "east": 0,
+      "north": -14,
+      "feet": 347
+    },
+    {
+      "view": "south",
+      "draws": 461,
+      "triangles": 285017,
+      "mountedParts": [
+        "P-1",
+        "P-2",
+        "P-3",
+        "P-4",
+        "P-7",
+        "P-8",
+        "P-9"
+      ],
+      "camera": {
+        "position": [
+          350,
+          350,
+          -76
+        ],
+        "quaternion": [
+          0.1386929076820569,
+          0,
+          0,
+          0.9903354367883118
+        ],
+        "aspect": 1.6285714285714286,
+        "fov": 50,
+        "far": 2400
+      },
+      "east": 0,
+      "north": -14,
+      "feet": 347
+    },
+    {
+      "view": "west",
+      "draws": 462,
+      "triangles": 289369,
+      "mountedParts": [
+        "P-1",
+        "P-2",
+        "P-3",
+        "P-4",
+        "P-7",
+        "P-8",
+        "P-9"
+      ],
+      "camera": {
+        "position": [
+          -1250,
+          350,
+          -1676
+        ],
+        "quaternion": [
+          0.09866128883946387,
+          -0.700189938577052,
+          0.09866128883946387,
+          0.700189938577052
+        ],
+        "aspect": 1.6285714285714286,
+        "fov": 50,
+        "far": 2400
+      },
+      "east": 0,
+      "north": -14,
+      "feet": 347
+    }
+  ],
+  "errors": [
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found) http://127.0.0.1:5173/favicon.ico"
+  ],
+  "passed": false
+}

@@ -7,7 +7,7 @@ import { createTownD2R30CloudTerraceHost } from './town-d2-r30-cloud-terrace-hos
 import { createTownD2R30Collision } from './town-d2-r30-collision';
 import { sampleTownD2R30Height, townD2R30Spec } from './town-d2-r30-domain';
 import { createTownD2R30FacilityFoundations } from './town-d2-r30-facility-foundations';
-import { createTownD2R30Massif } from './town-d2-r30-massif';
+import { createTownD2R30Massif,type D2MassifWire } from './town-d2-r30-massif';
 import { createTownD2R30NightLights } from './town-d2-r30-night-lights';
 import { createTownD2R30NorthWall } from './town-d2-r30-north-wall';
 import { createTownD2R30Ropeway } from './town-d2-r30-ropeway';
@@ -45,6 +45,7 @@ export type TownD2R30AssemblyOptions = Readonly<{
   includeSledGateSupport?: boolean;
   /** D2-R07: include the summit facility bodies (hut, icefall, props, glide course) (default false). */
   includeSummitFacilities?: boolean;
+  includeLegacyMachineRoom?:boolean;
   /** D2-R08: include the summit night lights (trail lamps, window glow) (default false). */
   includeNightLights?: boolean;
   /** D2-R09: include the canonical ropeway, cabins and station buildings (default false). */
@@ -63,6 +64,8 @@ export type TownD2R30AssemblyOptions = Readonly<{
    * mountDetails(). The ground, the collision grid and the walking surface are
    * complete either way — only the dressing waits. */
   deferDetails?: boolean;
+  preparedMassif?:readonly D2MassifWire[];
+  preparedCollision?:Float32Array;
 }>;
 
 export type TownD2R30Assembly = Readonly<{
@@ -164,7 +167,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   let northWall: ReturnType<typeof createTownD2R30NorthWall> | undefined;
   let cableTowers: ReturnType<typeof createTownD2R30CableTowers> | undefined;
   if (terrainMode === 'static') {
-    const massif = createTownD2R30Massif({ arrivalHeight });
+    const massif = createTownD2R30Massif({ arrivalHeight,prepared:options.preparedMassif });
     tiles = massif.tiles;
     terrainStats = () => massif.stats();
     children.push(massif.group);
@@ -190,7 +193,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
 
   if (includeStrata) {
     addDetail('strata', () => {
-      const strata = createTownD2R30Strata({ heightAt, arrivalHeight });
+      const strata = createTownD2R30Strata({heightAt,arrivalHeight,trailPoints});
       children.push(strata.group);
       disposers.push(() => strata.dispose());
       nightHooks.push(value => strata.setNight(value));
@@ -221,7 +224,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
 
   if (includeTrailSupport) {
     addDetail('trail-support', () => {
-      const support = createTownD2R30TrailSupport({ heightAt, arrivalHeight });
+      const support = createTownD2R30TrailSupport({ heightAt, arrivalHeight,trailPoints });
       children.push(support.group);
       disposers.push(() => support.dispose());
       nightHooks.push(value => support.setNight(value));
@@ -249,7 +252,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
 
   if (includeSledGateSupport) {
     addDetail('sled-gate-support', () => {
-      const sled = createTownD2R30SledGateSupport({ heightAt, arrivalHeight });
+      const sled = createTownD2R30SledGateSupport({heightAt,arrivalHeight,trailPoints});
       children.push(sled.group);
       disposers.push(() => sled.dispose());
       nightHooks.push(value => sled.setNight(value));
@@ -258,7 +261,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
 
   if (includeSummitFacilities) {
     addDetail('summit-facilities', () => {
-      const facilities = createTownD2R30SummitFacilities({ heightAt, arrivalHeight });
+      const facilities = createTownD2R30SummitFacilities({ heightAt, arrivalHeight,trailPoints,includeLegacyMachineRoom:options.includeLegacyMachineRoom });
       children.push(facilities.group);
       disposers.push(() => facilities.dispose());
       // The canonical facility bodies carry no night response of their own,
@@ -371,7 +374,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   if (!deferDetails) mountDetails();
 
   const collision = createTownD2R30Collision({
-    heightAt: (east, north) => heightAt(east, north),
+    heightAt: (east, north) => heightAt(east, north),preparedHeights:options.preparedCollision,
   });
   disposers.push(() => collision.dispose());
 
@@ -392,9 +395,9 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
     tiles,
     heightAt,
     collision,
-    ropeway,
-    northWall,
-    cableTowers,
+    get ropeway(){return ropeway;},
+    get northWall(){return northWall;},
+    get cableTowers(){return cableTowers;},
     mountDetails,
     pendingDetails: () => Object.freeze(pending.map(entry => entry.name)),
     update(east: number, north: number, nowMs?: number) {

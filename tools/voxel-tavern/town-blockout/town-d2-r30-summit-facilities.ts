@@ -93,6 +93,10 @@ export type TownD2R30SummitFacilitiesOptions = Readonly<{
   heightAt?: (east: number, north: number, arrivalHeight?: number) => number | undefined;
   /** Include the hut interior + registration landmarks (default true). */
   includeHut?: boolean;
+  /** Reuse the host's exact P-3 survey instead of generating a duplicate block. */
+  trailPoints?:ReturnType<typeof createMainSummitTrail>['points'];
+  /** B owns the operating workshop in production; legacy preview keeps this room. */
+  includeLegacyMachineRoom?:boolean;
   /** Include the icefall and rock towers (default true). */
   includeGeology?: boolean;
   /** Include trail markers, bell posts, paint and survey stations (default true). */
@@ -521,18 +525,18 @@ export function createTownD2R30SummitFacilities(
   // The canonical P-3 walkway is surveyed against the P-1 reference field.
   // Route props that hang off the walkway keep that survey, but every body
   // samples the R30 ground so nothing floats above the new massif.
-  const block = createMainSummitBlock(mainSummitLayout, arrivalHeight, 100);
-  let trailPoints: ReturnType<typeof createMainSummitTrail>['points'] = [];
-  try {
-    trailPoints = createMainSummitTrail(block.heightAt, arrivalHeight).points;
-  } finally {
-    block.dispose();
+  let trailPoints=options.trailPoints;
+  if(!trailPoints){
+    const block=createMainSummitBlock(mainSummitLayout,arrivalHeight,100);
+    try{trailPoints=createMainSummitTrail(block.heightAt,arrivalHeight).points;}finally{block.dispose();}
   }
+  if(trailPoints.length<2)throw Error('Missing summit trail survey');
 
   if (includeHut) {
     const landmarks = createMainSummitRegistrationLandmarks(arrivalHeight);
     const summit = landmarks.summit;
     const registration = mountMainSummitRegistration(group, landmarks, 'summit');
+    registration.group.userData.colliders=registration.colliders;
     disposers.push(() => registration.dispose());
     record('registration-hut', 'building', summit.hut.east + (summit.hut.east - summit.hut.west) / 2,
       summit.hut.north + (summit.hut.north - summit.hut.south) / 2, summit.hut.height);
@@ -544,10 +548,12 @@ export function createTownD2R30SummitFacilities(
       summit.interior.height);
 
     // The line-2 lower station machine room stands on the arrival terrace.
-    const machineRoom = createMainSummitMachineRoom(arrivalHeight);
-    group.add(machineRoom.group);
-    disposers.push(() => machineRoom.dispose());
-    record('machine-room', 'building', -15.5, 6, arrivalHeight);
+    if(options.includeLegacyMachineRoom!==false){
+      const machineRoom = createMainSummitMachineRoom(arrivalHeight);
+      group.add(machineRoom.group);
+      disposers.push(() => machineRoom.dispose());
+      record('machine-room', 'building', -15.5, 6, arrivalHeight);
+    }
 
     // R4/R5: the hut and monument polish overlay. The canonical hut and
     // carved slab keep their surveyed datum; this only adds the stacked

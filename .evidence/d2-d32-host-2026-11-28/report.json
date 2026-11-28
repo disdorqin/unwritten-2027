@@ -1,0 +1,278 @@
+{
+  "views": [
+    {
+      "view": "south",
+      "draws": 233,
+      "triangles": 292506,
+      "eyeHeight": 540,
+      "installed": [
+        "A",
+        "B",
+        "C2"
+      ],
+      "tiles": {
+        "count": 72,
+        "cut": 6
+      },
+      "live": {
+        "version": "d2-host-live-1.0",
+        "step": 96,
+        "sectors": [
+          {
+            "sector": "A",
+            "installed": true,
+            "samples": 88,
+            "unsupported": 0,
+            "floatingDeck": 0,
+            "blockedSamples": 0
+          },
+          {
+            "sector": "B",
+            "installed": true,
+            "samples": 91,
+            "unsupported": 0,
+            "floatingDeck": 0,
+            "blockedSamples": 2
+          },
+          {
+            "sector": "C2",
+            "installed": true,
+            "samples": 104,
+            "unsupported": 0,
+            "floatingDeck": 0,
+            "blockedSamples": 2
+          },
+          {
+            "sector": "D2",
+            "installed": true,
+            "samples": 65,
+            "unsupported": 0,
+            "floatingDeck": 0,
+            "blockedSamples": 0
+          }
+        ],
+        "ready": true
+      }
+    },
+    {
+      "view": "west",
+      "draws": 100,
+      "triangles": 142977,
+      "eyeHeight": 640,
+      "installed": [
+        "A",
+        "B",
+        "C2"
+      ],
+      "tiles": {
+        "count": 72,
+        "cut": 6
+      },
+      "live": {
+        "version": "d2-host-live-1.0",
+        "step": 96,
+        "sectors": [
+          {
+            "sector": "A",
+            "installed": true,
+            "samples": 88,
+            "unsupported": 0,
+            "floatingDeck": 0,
+            "blockedSamples": 0
+          },
+          {
+            "sector": "B",
+            "installed": true,
+            "samples": 91,
+            "unsupported": 0,
+            "floatingDeck": 0,
+            "blockedSamples": 2
+          },
+          {
+            "sector": "C2",
+            "installed": true,
+            "samples": 104,
+            "unsupported": 0,
+            "floatingDeck": 0,
+            "blockedSamples": 2
+          },
+          {
+            "sector": "D2",
+            "installed": true,
+            "samples": 65,
+            "unsupported": 0,
+            "floatingDeck": 0,
+            "blockedSamples": 0
+          }
+        ],
+        "ready": true
+      }
+    },
+    {
+      "view": "summit",
+      "draws": 315,
+      "triangles": 201393,
+      "eyeHeight": 910,
+      "installed": [
+        "A",
+        "B",
+        "C2"
+      ],
+      "tiles": {
+        "count": 72,
+        "cut": 6
+      },
+      "live": {
+        "version": "d2-host-live-1.0",
+        "step": 96,
+        "sectors": [
+          {
+            "sector": "A",
+            "installed": true,
+            "samples": 88,
+            "unsupported": 0,
+            "floatingDeck": 0,
+            "blockedSamples": 0
+          },
+          {
+            "sector": "B",
+            "installed": true,
+            "samples": 91,
+            "unsupported": 0,
+            "floatingDeck": 0,
+            "blockedSamples": 2
+          },
+          {
+            "sector": "C2",
+            "installed": true,
+            "samples": 104,
+            "unsupported": 0,
+            "floatingDeck": 0,
+            "blockedSamples": 2
+          },
+          {
+            "sector": "D2",
+            "installed": true,
+            "samples": 65,
+            "unsupported": 0,
+            "floatingDeck": 0,
+            "blockedSamples": 0
+          }
+        ],
+        "ready": true
+      }
+    },
+    {
+      "view": "north",
+      "draws": 65,
+      "triangles": 103761,
+      "eyeHeight": 760,
+      "installed": [
+        "A",
+        "B",
+        "C2"
+      ],
+      "tiles": {
+        "count": 72,
+        "cut": 6
+      },
+      "live": {
+        "version": "d2-host-live-1.0",
+        "step": 96,
+        "sectors": [
+          {
+            "sector": "A",
+            "installed": true,
+            "samples": 88,
+            "unsupported": 0,
+            "floatingDeck": 0,
+            "blockedSamples": 0
+          },
+          {
+            "sector": "B",
+            "installed": true,
+            "samples": 91,
+            "unsupported": 0,
+            "floatingDeck": 0,
+            "blockedSamples": 2
+          },
+          {
+            "sector": "C2",
+            "installed": true,
+            "samples": 104,
+            "unsupported": 0,
+            "floatingDeck": 0,
+            "blockedSamples": 2
+          },
+          {
+            "sector": "D2",
+            "installed": true,
+            "samples": 65,
+            "unsupported": 0,
+            "floatingDeck": 0,
+            "blockedSamples": 0
+          }
+        ],
+        "ready": true
+      }
+    },
+    {
+      "view": "east",
+      "draws": 46,
+      "triangles": 101973,
+      "eyeHeight": 700,
+      "installed": [
+        "A",
+        "B",
+        "C2"
+      ],
+      "tiles": {
+        "count": 72,
+        "cut": 6
+      },
+      "live": {
+        "version": "d2-host-live-1.0",
+        "step": 96,
+        "sectors": [
+          {
+            "sector": "A",
+            "installed": true,
+            "samples": 88,
+            "unsupported": 0,
+            "floatingDeck": 0,
+            "blockedSamples": 0
+          },
+          {
+            "sector": "B",
+            "installed": true,
+            "samples": 91,
+            "unsupported": 0,
+            "floatingDeck": 0,
+            "blockedSamples": 2
+          },
+          {
+            "sector": "C2",
+            "installed": true,
+            "samples": 104,
+            "unsupported": 0,
+            "floatingDeck": 0,
+            "blockedSamples": 2
+          },
+          {
+            "sector": "D2",
+            "installed": true,
+            "samples": 65,
+            "unsupported": 0,
+            "floatingDeck": 0,
+            "blockedSamples": 0
+          }
+        ],
+        "ready": true
+      }
+    }
+  ],
+  "errors": [
+    "console:Failed to load resource: the server responded with a status of 404 (Not Found) http://127.0.0.1:5173/favicon.ico"
+  ],
+  "passed": false
+}

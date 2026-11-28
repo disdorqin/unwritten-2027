@@ -3,6 +3,7 @@ import {
   InstancedMesh, Matrix4, MeshLambertMaterial, Object3D, StaticDrawUsage,
 } from 'three';
 import { mainSummitBounds, mainSummitLayout, mainSummitSpec } from './main-summit-block';
+import {createRidgeRoadProximity} from './town-d-r30-spatial';
 import { createTownD2CloudTerraceOuterRing, TOWN_D2_CLOUD_TERRACE_OUTER_RING_BOUNDS } from './town-d2-cloud-terrace-outer-ring';
 import { createTownD2MainSummitCloudWall, townD2MainSummitCloudSpec } from './town-d2-main-summit-cloud-wall';
 import {
@@ -205,6 +206,9 @@ function createLowlandForest(heightAt: (east: number, north: number) => number |
     valley: 0, trail: 0, terrace: 0, exclusion: 0, spacing: 0 };
   let candidates = 0, clustersAttempted = 0;
   const occupiedClusters = new Set<number>();
+  // Same strict distance predicate, with a conservative spatial broad phase.
+  const nearTrail=createRidgeRoadProximity(trail);
+  const hasSegments=trail.some((p,i)=>i>0&&(p.east!==trail[i-1]!.east||p.north!==trail[i-1]!.north));
   const { west, east, south, north } = mainSummitBounds;
 
   function place(kind: ForestKind, cluster: number, eastPos: number, northPos: number) {
@@ -256,7 +260,7 @@ function createLowlandForest(heightAt: (east: number, north: number) => number |
       rejected.valley++;
       return;
     }
-    if (distanceToTrail(trail, eastPos, northPos) - footprintRadius < TRAIL_CLEARANCE) {
+    if (!hasSegments?distanceToTrail(trail,eastPos,northPos)-footprintRadius<TRAIL_CLEARANCE:nearTrail(eastPos,northPos,TRAIL_CLEARANCE+footprintRadius,false)) {
       rejected.trail++;
       return;
     }

@@ -1,12 +1,16 @@
 import {BufferGeometry,Float32BufferAttribute} from 'three';
 import {buildMainSummitTrailCut} from './main-summit-trail-cut';
-const cell=32;
+// The palette interpolator keeps its original buckets. Cut-face collision
+// uses finer buckets so a probe near a densely tessellated tread does not
+// rescan dozens of unrelated triangles; barycentric arithmetic is unchanged.
+const cell=32,groundCell=4;
 type Vertex={x:number;z:number;r:number;g:number;b:number};
 type Triangle=readonly [Vertex,Vertex,Vertex];
 type GroundVertex={x:number;z:number;y:number};
 type GroundTriangle=readonly [GroundVertex,GroundVertex,GroundVertex];
 const groundCross=(a:GroundVertex,b:GroundVertex,x:number,z:number)=>(b.x-a.x)*(z-a.z)-(b.z-a.z)*(x-a.x);
 const key=(x:number,z:number)=>Math.floor(x/cell)+','+Math.floor(z/cell);
+const groundKey=(x:number,z:number)=>Math.floor(x/groundCell)+','+Math.floor(z/groundCell);
 const cross=(a:Vertex,b:Vertex,x:number,z:number)=>(b.x-a.x)*(z-a.z)-(b.z-a.z)*(x-a.x);
 /** Exact support from the final, indexed rendered ground triangles.
  * D2 registers only changed canonical near-ground chunks (NOT far LOD,
@@ -23,8 +27,8 @@ export function createNightBWestCutSurface(geometry:BufferGeometry){
  for(let i=0;i<index.count;i+=3){
   const tri=[vs[index.getX(i)]!,vs[index.getX(i+1)]!,vs[index.getX(i+2)]!] as const;
   const [a,b,c]=tri;if(Math.abs(groundCross(a,b,c.x,c.z))<1e-9)continue;
-  for(let x=Math.floor((Math.min(a.x,b.x,c.x)-.001)/cell);x<=Math.floor((Math.max(a.x,b.x,c.x)+.001)/cell);x++)
-   for(let z=Math.floor((Math.min(a.z,b.z,c.z)-.001)/cell);z<=Math.floor((Math.max(a.z,b.z,c.z)+.001)/cell);z++){
+  for(let x=Math.floor((Math.min(a.x,b.x,c.x)-.001)/groundCell);x<=Math.floor((Math.max(a.x,b.x,c.x)+.001)/groundCell);x++)
+   for(let z=Math.floor((Math.min(a.z,b.z,c.z)-.001)/groundCell);z<=Math.floor((Math.max(a.z,b.z,c.z)+.001)/groundCell);z++){
     const k=x+','+z,bin=bins.get(k)??[];bin.push(tri);bins.set(k,bin);
    }
  }
@@ -33,7 +37,7 @@ export function createNightBWestCutSurface(geometry:BufferGeometry){
  function surfaceAt(e:number,n:number){
   if(!covers(e,n))return;
   const z=-n;let h:number|undefined;
-  for(const [a,b,c] of bins.get(key(e,z))??[]){
+  for(const [a,b,c] of bins.get(groundKey(e,z))??[]){
    const d=groundCross(a,b,c.x,c.z),u=groundCross(b,c,e,z)/d,v=groundCross(c,a,e,z)/d,w=1-u-v;
    if(Math.min(u,v,w)<-1e-7)continue;
    const y=a.y*u+b.y*v+c.y*w;h=h===undefined?y:Math.max(h,y);

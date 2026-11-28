@@ -21,3 +21,23 @@ export function surveyA32SouthRoad(trail:readonly Point[],groundAt:SouthGround){
  if(!grade.ok)throw Error('A32 south road no longer fits: '+grade.deficit.toFixed(3)+'m');
  return {trail:[sampled[0]!,...grade.profile,sampled.at(-1)!],first:1,last:sampled.length-2,cap:5.35,grade,originalFirst:first,originalLast:last};
 }
+/** The last section of each south road meets the surveyed natural ground at
+ * the actual A north boundary rather than ending 32 m early in the overlap.
+ * The existing anchor height is pinned; the exit is the actual ground less
+ * the tread's .055m finish. No new terrain beyond A's N480 core. */
+export function surveyA32SouthBoundaryExit(trail:readonly Point[],groundAt:SouthGround,first:834|2262){
+ const last=first===834?870:2317,p=trail[last]!,h=groundAt(p.east,p.north);
+ if(h===undefined||!Number.isFinite(h))throw Error('Missing A boundary exit');
+ const pinned=trail.map((q,i)=>i===last?{...q,height:h-.055}:q);
+ const grade=proposeSouthRoadGrade(pinned,first,last,groundAt,first===834?4.9:5.65,480);
+ if(!grade.ok)throw Error('A boundary road profile refused: '+grade.deficit.toFixed(3));
+ return grade;
+}
+/** Complete the originally missing 1539..2262 interval, using one physical tread. */
+export function surveyA32SouthRoadJoint(trail:readonly Point[],groundAt:SouthGround){
+ const ext=surveyA32SouthRoad(trail,groundAt),first=1539,last=1765;
+ const prefix=proposeSouthRoadGrade(trail,first,last,groundAt,5.65);
+ if(!prefix.ok)throw Error('A32 joint road exceeds earthwork budget: '+prefix.deficit.toFixed(3)+'m');
+ const profile=[...prefix.profile,...ext.grade.profile.slice(1)];
+ return {trail:[trail[first-1]!,...profile,trail[ext.originalLast+1]!],first:1,last:profile.length,cap:5.7,grade:{...prefix,profile,length:prefix.length+ext.grade.length,maxGrade:Math.max(prefix.maxGrade,ext.grade.maxGrade),cut:Math.max(prefix.cut,ext.grade.cut),fill:Math.max(prefix.fill,ext.grade.fill)},originalFirst:first,originalLast:ext.originalLast};
+}

@@ -1,0 +1,65 @@
+{
+  "A": "5a2fab84c0c7e4ddf985a904925a98619f245985",
+  "D2": "5a2fab84c0c7e4ddf985a904925a98619f245985",
+  "C2": "5a2fab84c0c7e4ddf985a904925a98619f245985",
+  "live": {
+    "version": "d2-host-live-1.0",
+    "step": 64,
+    "sectors": [
+      {
+        "sector": "A",
+        "installed": true,
+        "samples": 238,
+        "unsupported": 0,
+        "floatingDeck": 0,
+        "blockedSamples": 2
+      },
+      {
+        "sector": "B",
+        "installed": true,
+        "samples": 220,
+        "unsupported": 0,
+        "floatingDeck": 0,
+        "blockedSamples": 1
+      },
+      {
+        "sector": "C2",
+        "installed": true,
+        "samples": 240,
+        "unsupported": 0,
+        "floatingDeck": 0,
+        "blockedSamples": 10
+      },
+      {
+        "sector": "D2",
+        "installed": true,
+        "samples": 160,
+        "unsupported": 0,
+        "floatingDeck": 0,
+        "blockedSamples": 0
+      }
+    ],
+    "ready": true
+  },
+  "southRoad": {
+    "samples": 832,
+    "incorrect": 0,
+    "max": 0
+  },
+  "rollbackChangedTiles": 0,
+  "stats": [
+    {
+      "sector": "A",
+      "node": "night-a-south-sector",
+      "meshes": 152,
+      "triangles": 192861
+    },
+    {
+      "sector": "B",
+      "node": "night-b-west-sector",
+      "meshes": 164,
+      "triangles": 187543
+    }
+  ],
+  "issues": []
+}

@@ -18,6 +18,7 @@ import { rearConnectorControls } from './town-d-r30-rear-connector.js';
 export type RoadHandoff = Readonly<{
   id: string;
   owner: 'C2';
+  domain:'front'|'summit';
   from: Readonly<{ east: number; north: number }>;
   to: Readonly<{ east: number; north: number }>;
   // Unit tangent at each end, from the authored control polyline.
@@ -45,7 +46,7 @@ function tangent(points: readonly { east: number; north: number }[], atEnd: bool
 
 function handoff(id: string, points: readonly { east: number; north: number }[]): RoadHandoff {
   return {
-    id, owner: 'C2',
+    id, owner: 'C2',domain:'front',
     from: { east: first(points).east, north: first(points).north },
     to: { east: last(points).east, north: last(points).north },
     tangentFrom: tangent(points, false),

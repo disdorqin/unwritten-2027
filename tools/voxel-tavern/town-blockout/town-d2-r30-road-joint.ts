@@ -42,6 +42,7 @@ export type RoadJointReport = Readonly<{
 export type RoadJointSummary = Readonly<{
   version: string;
   handoffs: number;
+  excludedFront:readonly string[];
   joined: readonly string[];
   open: readonly string[];
   /** Handoffs the owner of `sector` still has to build to, per sector. */
@@ -91,6 +92,7 @@ export function surveyRoadConnector(options: Readonly<{
   halfWidth?: number;
   maxGrade?: number;
 }>): ConnectorSurvey {
+  if(options.handoff.domain!=='summit')throw Error('Front-ridge road handoff must be surveyed on front ground, not rear summit');
   const anchor = townD2R30Spec.worldAnchor;
   const halfWidth = options.halfWidth ?? 1.25;
   const maxGrade = options.maxGrade ?? .12;
@@ -171,7 +173,9 @@ export function certifyRoadJoint(options: Readonly<{
   const { trail } = options;
   if (!Array.isArray(trail) || trail.length < 2) throw new RangeError('Road joint needs the canonical trail survey.');
   const anchor = townD2R30Spec.worldAnchor;
-  const handoffs = options.handoffs ?? c2EastRoadHandoffs;
+  const supplied=options.handoffs??c2EastRoadHandoffs;
+  const handoffs=supplied.filter(h=>h.domain==='summit');
+  const excludedFront=supplied.filter(h=>h.domain!=='summit').map(h=>h.id);
 
   const reports = handoffs.map(handoff => {
     // The handoff is authored in world metres; the trail lives in summit-local.
@@ -229,11 +233,12 @@ export function certifyRoadJoint(options: Readonly<{
   return Object.freeze({
     version: 'd2-road-joint-1.0',
     handoffs: reports.length,
+    excludedFront:Object.freeze(excludedFront),
     joined: Object.freeze(joined),
     open: Object.freeze(reports.filter(report => !report.joined).map(report => report.id)),
     bySector: Object.freeze(Object.fromEntries(
       Object.entries(bySector).map(([sector, ids]) => [sector, Object.freeze(ids)]))),
     reports: Object.freeze(reports),
-    allJoined: joined.length === reports.length,
+    allJoined: reports.length>0&&joined.length === reports.length,
   });
 }
