@@ -1,6 +1,7 @@
 import { mountainPresenceBounds, mountainPresenceNorthOrigin } from '../../../src/shared/za22-mountain-domain';
 import { mainSummitBounds } from './main-summit-block';
 import { townD2CloudTerraceContract } from './town-d2-cloud-terrace-transform';
+import { townD2SectorContract } from './town-d2-r30-sector-audit';
 import {
   sampleTownD2R30Height, townD2R30LocalPoint, townD2R30Spec, townD2R30WorldPoint,
 } from './town-d2-r30-domain';
@@ -64,6 +65,13 @@ export type TownD2R30PresenceReport = Readonly<{
     gateHeightSupported: boolean;
     frontRidgeUnchanged: boolean;
     directUnionWouldRequireNegativeEast: boolean;
+    /**
+     * The presence room's bounds match the sector-audit world extent exactly,
+     * and the sector-audit's 32 m read-only overlap seams (N≈splitNorth,
+     * E≈±splitEast) fall inside the room — so the room owner must treat those
+     * bands as shared read-only, never as D2-exclusive territory.
+     */
+    sectorOverlapReadOnly: boolean;
   }>;
   missingOwnerFields: readonly string[];
   productionReady: false;
@@ -91,6 +99,19 @@ export function resolveTownD2R30PresenceHandoff(): TownD2R30PresenceReport {
   const summitHeight = sampleTownD2R30Height(50, 1_000);
   const gateHeight = sampleTownD2R30Height(0, handoff.gateLine.localNorth);
   const frontNorth = frontRidge.northOrigin + frontRidge.bounds.depth;
+  // The presence room must not over-claim the sector-audit's extent, and the
+  // 32 m read-only overlap seams must sit inside the room so the owner knows
+  // to treat them as shared, not D2-exclusive.
+  const sectorWorld = townD2SectorContract.world;
+  const roomMatchesSectorWorld = localBounds.west === sectorWorld.west &&
+    localBounds.east === sectorWorld.east &&
+    localBounds.south === sectorWorld.south &&
+    localBounds.north === sectorWorld.north;
+  const overlapInsideRoom = localBounds.south <= sectorWorld.splitNorth - sectorWorld.overlapWidth &&
+    localBounds.north >= sectorWorld.splitNorth + sectorWorld.overlapWidth &&
+    localBounds.west <= -sectorWorld.splitEast - sectorWorld.overlapWidth &&
+    localBounds.east >= sectorWorld.splitEast + sectorWorld.overlapWidth;
+  const sectorOverlapReadOnly = roomMatchesSectorWorld && overlapInsideRoom;
   return Object.freeze({
     status: 'proposal',
     owner: 'A/总控',
@@ -105,6 +126,7 @@ export function resolveTownD2R30PresenceHandoff(): TownD2R30PresenceReport {
       frontRidgeUnchanged: frontRidge.unchanged && frontRidge.bounds.width === 640 &&
         frontRidge.bounds.depth === 260 && frontNorth === 800,
       directUnionWouldRequireNegativeEast: worldBounds.west < 0,
+      sectorOverlapReadOnly,
     }),
     missingOwnerFields: Object.freeze([...handoff.requiredOwnerFields]),
     productionReady: false,

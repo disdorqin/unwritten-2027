@@ -10,9 +10,9 @@ type CabinState = {
   station: CableStation | null;
 };
 
-export function createNorthRidgeCableClock(lowerMetres: number, upperMetres: number, epochMs: number) {
+export function createNorthRidgeCableClock(lowerMetres: number, upperMetres: number, epochMs: number, terminalDwellMs = 0) {
   if (!Number.isFinite(lowerMetres) || lowerMetres <= 0 ||
-      !Number.isFinite(upperMetres) || upperMetres <= 0 || !Number.isFinite(epochMs)) {
+      !Number.isFinite(upperMetres) || upperMetres <= 0 || !Number.isFinite(epochMs) || !Number.isFinite(terminalDwellMs) || terminalDwellMs < 0) {
     throw new RangeError('The cable clock requires positive measured spans and a finite shared epoch.');
   }
 
@@ -20,21 +20,24 @@ export function createNorthRidgeCableClock(lowerMetres: number, upperMetres: num
   const lowerMs = lowerMetres / metresPerMs;
   const upperMs = upperMetres / metresPerMs;
   const totalMetres = lowerMetres + upperMetres;
-  const oneWayMs = lowerMs + midStationDwellMs + upperMs;
+  const oneWayMs = terminalDwellMs + lowerMs + midStationDwellMs + upperMs;
   const cycleMs = 2 * oneWayMs;
 
   function cabinAt(phaseMs: number): CabinState {
     if (phaseMs < oneWayMs) {
+      if (phaseMs < terminalDwellMs) return { direction: 'up', distanceMetres: 0, station: 'base' };
+      phaseMs -= terminalDwellMs;
       if (phaseMs < lowerMs) {
         return { direction: 'up', distanceMetres: phaseMs * metresPerMs, station: phaseMs === 0 ? 'base' : null };
       }
       if (phaseMs <= lowerMs + midStationDwellMs) {
         return { direction: 'up', distanceMetres: lowerMetres, station: 'middle' };
       }
-      return { direction: 'up', distanceMetres: totalMetres - (oneWayMs - phaseMs) * metresPerMs, station: null };
+      return { direction: 'up', distanceMetres: totalMetres - (oneWayMs - terminalDwellMs - phaseMs) * metresPerMs, station: null };
     }
 
-    const downMs = phaseMs - oneWayMs;
+    const downMs = phaseMs - oneWayMs - terminalDwellMs;
+    if (downMs < 0) return { direction: 'down', distanceMetres: totalMetres, station: 'summit' };
     if (downMs < upperMs) {
       return { direction: 'down', distanceMetres: totalMetres - downMs * metresPerMs, station: downMs === 0 ? 'summit' : null };
     }

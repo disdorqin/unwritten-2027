@@ -3,6 +3,7 @@ import {
   InstancedMesh, Matrix4, MeshLambertMaterial, Object3D, StaticDrawUsage,
 } from 'three';
 import { mainSummitBounds, mainSummitLayout, mainSummitSpec } from './main-summit-block';
+import {createRidgeRoadProximity} from './town-d-r30-spatial';
 import { createTownD2CloudTerraceOuterRing, TOWN_D2_CLOUD_TERRACE_OUTER_RING_BOUNDS } from './town-d2-cloud-terrace-outer-ring';
 import { createTownD2MainSummitCloudWall, townD2MainSummitCloudSpec } from './town-d2-main-summit-cloud-wall';
 import {
@@ -125,17 +126,29 @@ function addColoredBox(positions: number[], colors: number[], tint: Color,
   }
 }
 
-/** One six-block pine prototype; every tree is one instance of this shared geometry. */
+/** One seven-block pine prototype; every tree is one instance of this shared geometry.
+ *  R4 refinement: a two-segment trunk and a five-layer canopy with a snow drape
+ *  give the lowland forest the voxel-tavern block read the reference asks for,
+ *  while the prototype keeps its [-0.5, 0.5] vertical footprint so instance
+ *  grounding stays exact. */
 function createPineGeometry() {
   const positions: number[] = [], colors: number[] = [];
   const box = (tint: string, centre: readonly [number, number, number], size: readonly [number, number, number]) =>
     addColoredBox(positions, colors, new Color(tint), centre, size);
-  box('#654a32', [0, -.22, 0], [.16, .56, .16]);
-  box('#314c3b', [0, -.18, 0], [.9, .2, .9]);
-  box('#3d5b43', [0, -.02, 0], [.74, .22, .74]);
-  box('#49684a', [0, .15, 0], [.56, .22, .56]);
-  box('#36533f', [0, .35, 0], [.34, .3, .34]);
-  box('#dce6e8', [0, .465, 0], [.37, .07, .37]);
+  // Lower trunk: wider and darker, anchored so the prototype bottom sits at -0.5.
+  box('#5a3d2a', [0, -.3, 0], [.2, .4, .2]);
+  // Upper trunk: thinner, lighter bark.
+  box('#654a32', [0, -.1, 0], [.14, .28, .14]);
+  // Canopy layers stack from a broad dark base to a compact pale crown, each
+  // offset up and inset so the silhouette reads as a real pine, not a cuboid.
+  box('#2f4a38', [0, -.08, 0], [.98, .24, .98]);
+  box('#3a5b43', [0, .05, 0], [.8, .24, .8]);
+  box('#425c44', [0, .15, 0], [.67, .22, .67]);
+  box('#49684a', [0, .27, 0], [.54, .22, .54]);
+  box('#36533f', [0, .36, 0], [.42, .24, .42]);
+  // Snow drape on the crown, keeping the top at +0.5.
+  box('#dce6e8', [0, .46, 0], [.38, .08, .38]);
+  box('#e8eef0', [0, .435, 0], [.24, .05, .24]);
   const geometry = new BufferGeometry();
   geometry.name = 'd2-r30-lowland-pine-prototype';
   geometry.setAttribute('position', new Float32BufferAttribute(positions, 3));
@@ -146,11 +159,16 @@ function createPineGeometry() {
   return geometry;
 }
 
-/** A faceted, asymmetric rock normalized to exactly [-.5, .5] vertically. */
+/** A faceted, asymmetric rock normalized to exactly [-.5, .5] vertically, with
+ *  R4 vertex-colour facets so each rock reads as scree rather than a flat tint. */
 function createRockGeometry() {
   const geometry = new IcosahedronGeometry(.5, 0);
   geometry.name = 'd2-r30-lowland-rock-prototype';
   const positions = geometry.getAttribute('position');
+  const colors = new Float32Array(positions.count * 3);
+  const rockA = new Color('#8a8d86');
+  const rockB = new Color('#6f7269');
+  const rockC = new Color('#9a9c92');
   let minimumY = Infinity, maximumY = -Infinity;
   for (let index = 0; index < positions.count; index++) {
     const x = positions.getX(index), y = positions.getY(index), z = positions.getZ(index);
@@ -159,11 +177,19 @@ function createRockGeometry() {
     positions.setXYZ(index, px, py, pz);
     minimumY = Math.min(minimumY, py);
     maximumY = Math.max(maximumY, py);
+    // Faceted scree shading: noise-driven rock tone so each facet reads.
+    const noise = Math.sin(x * 12.7 + y * 9.1 + z * 15.3);
+    const tint = noise > .2 ? rockC : noise < -.2 ? rockB : rockA;
+    const shade = .9 + .1 * ((noise + 1) / 2);
+    colors[index * 3] = tint.r * shade;
+    colors[index * 3 + 1] = tint.g * shade;
+    colors[index * 3 + 2] = tint.b * shade;
   }
   for (let index = 0; index < positions.count; index++) {
     positions.setY(index, -.5 + (positions.getY(index) - minimumY) / (maximumY - minimumY));
   }
   positions.needsUpdate = true;
+  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
   geometry.computeVertexNormals();
   geometry.computeBoundingBox();
   geometry.computeBoundingSphere();
@@ -180,6 +206,9 @@ function createLowlandForest(heightAt: (east: number, north: number) => number |
     valley: 0, trail: 0, terrace: 0, exclusion: 0, spacing: 0 };
   let candidates = 0, clustersAttempted = 0;
   const occupiedClusters = new Set<number>();
+  // Same strict distance predicate, with a conservative spatial broad phase.
+  const nearTrail=createRidgeRoadProximity(trail);
+  const hasSegments=trail.some((p,i)=>i>0&&(p.east!==trail[i-1]!.east||p.north!==trail[i-1]!.north));
   const { west, east, south, north } = mainSummitBounds;
 
   function place(kind: ForestKind, cluster: number, eastPos: number, northPos: number) {
@@ -231,7 +260,7 @@ function createLowlandForest(heightAt: (east: number, north: number) => number |
       rejected.valley++;
       return;
     }
-    if (distanceToTrail(trail, eastPos, northPos) - footprintRadius < TRAIL_CLEARANCE) {
+    if (!hasSegments?distanceToTrail(trail,eastPos,northPos)-footprintRadius<TRAIL_CLEARANCE:nearTrail(eastPos,northPos,TRAIL_CLEARANCE+footprintRadius,false)) {
       rejected.trail++;
       return;
     }
@@ -398,6 +427,162 @@ function createLowlandForest(heightAt: (east: number, north: number) => number |
 }
 
 /**
+ * R4 cloud-mist contour: a sparse, low band of soft mist puffs that follows
+ * the cloud band floor (the 380 m contour) across the massif slopes. It reads
+ * as the cloud layer's lower contour draping onto the mountain, visually
+ * joining the cloud wall above to the massif below without creating a second
+ * height authority, a wall or any collision. Pure visual, vertex-coloured and
+ * night-tintable like the rest of the terrace.
+ */
+const MIST_BAND_MIN = 374;
+const MIST_BAND_MAX = 390;
+const MIST_CLEARANCE_SUMMIT = 4;
+const MIST_CLEARANCE_ARRIVAL = 3;
+const MIST_CLEARANCE_TERRACE = 4;
+const MIST_SPACING = 30;
+const MIST_SEED = 0xd2f0302;
+
+function createMistPuffGeometry() {
+  const geometry = new IcosahedronGeometry(1, 0);
+  geometry.name = 'd2-r30-cloud-mist-puff';
+  const positions = geometry.getAttribute('position');
+  const colors = new Float32Array(positions.count * 3);
+  const mist = new Color('#eef4f7');
+  const shade = new Color();
+  for (let index = 0; index < positions.count; index++) {
+    const x = positions.getX(index), y = positions.getY(index), z = positions.getZ(index);
+    // Flatten vertically and billow slightly so the puff reads as soft mist,
+    // not a sphere. Every vertex stays inside the unit bounding sphere.
+    const flatY = y * .42;
+    const billow = 1 + .04 * Math.sin(x * 6 + flatY * 5 + z * 7);
+    positions.setXYZ(index, x * billow, flatY, z * billow);
+    const top = Math.max(0, flatY + .5);
+    shade.copy(mist).multiplyScalar(.86 + .14 * top);
+    colors[index * 3] = shade.r;
+    colors[index * 3 + 1] = shade.g;
+    colors[index * 3 + 2] = shade.b;
+  }
+  positions.needsUpdate = true;
+  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
+  geometry.computeVertexNormals();
+  geometry.computeBoundingBox();
+  geometry.computeBoundingSphere();
+  return geometry;
+}
+
+function createCloudMistContour(heightAt: (east: number, north: number) => number | undefined) {
+  const random = mulberry32(MIST_SEED);
+  const group = new Group();
+  group.name = 'town-d2-r30-cloud-mist-contour';
+  const geometry = createMistPuffGeometry();
+  const material = new MeshLambertMaterial({
+    name: 'd2-r30-cloud-mist-lambert', color: '#ffffff', vertexColors: true,
+    transparent: false, opacity: 1, depthWrite: true, fog: true,
+  });
+  const placements: Array<{ east: number; north: number; height: number }> = [];
+  const { west, east, south, north } = mainSummitBounds;
+  for (let northPos = south + 50; northPos < north - 50; northPos += MIST_SPACING) {
+    for (let eastPos = west + 50; eastPos < east - 50; eastPos += MIST_SPACING) {
+      if (random() < .42) continue;
+      const ground = heightAt(eastPos, northPos);
+      if (ground === undefined || !Number.isFinite(ground)) continue;
+      if (ground < MIST_BAND_MIN || ground > MIST_BAND_MAX) continue;
+      const probes = [
+        heightAt(eastPos - 4, northPos), heightAt(eastPos + 4, northPos),
+        heightAt(eastPos, northPos - 4), heightAt(eastPos, northPos + 4),
+      ];
+      if (probes.some(value => value === undefined || !Number.isFinite(value))) continue;
+      const slope = Math.hypot((probes[1]! - probes[0]!) / 8, (probes[3]! - probes[2]!) / 8);
+      if (slope > .4) continue;
+      const radius = 8;
+      if (distanceToRect(eastPos, northPos, SUMMIT_RECT) - radius < MIST_CLEARANCE_SUMMIT) continue;
+      if (distanceToRect(eastPos, northPos, ARRIVAL_RECT) - radius < MIST_CLEARANCE_ARRIVAL) continue;
+      if (distanceToRect(eastPos, northPos, TOWN_D2_CLOUD_TERRACE_OUTER_RING_BOUNDS) - radius < MIST_CLEARANCE_TERRACE) continue;
+      if (placements.some(other => Math.hypot(eastPos - other.east, northPos - other.north) < MIST_SPACING * .8)) continue;
+      placements.push({ east: eastPos, north: northPos, height: ground + 2.5 });
+    }
+  }
+  const mesh = new InstancedMesh(geometry, material, Math.max(1, placements.length));
+  mesh.name = 'town-d2-r30-cloud-mist-contour';
+  mesh.frustumCulled = false;
+  // Keep an empty, valid instanceColor for an excluded domain so night toggles
+  // remain safe when no mist placement survives the height-band filter.
+  mesh.instanceColor ??= new InstancedBufferAttribute(new Float32Array(placements.length * 3), 3);
+  mesh.instanceColor.setUsage(StaticDrawUsage);
+  const dummy = new Object3D();
+  const matrix = new Matrix4();
+  const tint = new Color();
+  const mistPalette = ['#eef4f7', '#e6eff4', '#f2f6f8', '#dde8ee'];
+  placements.forEach((placement, index) => {
+    dummy.position.set(placement.east, placement.height, -placement.north);
+    dummy.rotation.set(0, random() * Math.PI * 2, 0);
+    const size = 7 + random() * 4;
+    dummy.scale.set(size, size * .38, size * (.8 + random() * .4));
+    dummy.updateMatrix();
+    matrix.copy(dummy.matrix);
+    mesh.setMatrixAt(index, matrix);
+    mesh.setColorAt(index, tint.set(mistPalette[index % mistPalette.length]!));
+  });
+  mesh.count = placements.length;
+  mesh.instanceMatrix.setUsage(StaticDrawUsage);
+  mesh.instanceMatrix.needsUpdate = true;
+  mesh.instanceColor!.needsUpdate = true;
+  mesh.computeBoundingSphere();
+  group.add(mesh);
+  const dayColors = new Float32Array(mesh.instanceColor.array);
+  const stats = Object.freeze({
+    seed: MIST_SEED,
+    instances: placements.length,
+    meshes: 1,
+    draws: 1,
+    drawCalls: 1,
+    triangles: placements.length * geometry.getAttribute('position').count / 3,
+    band: Object.freeze({ min: MIST_BAND_MIN, max: MIST_BAND_MAX }),
+    coordinateConvention: 'x=east,y=height,z=-north',
+    visualOnly: true,
+    includesWorldCollision: false,
+    modifiesHeightAt: false,
+  });
+  group.userData = { ...stats, terrainSampler: 'host-heightAt', owner: 'D2-R01' };
+  let disposed = false, night = false;
+  const nightTint = new Color('#304868');
+  return {
+    group,
+    stats,
+    setNight(value: boolean) {
+      if (disposed) throw new Error('The D2 R30 cloud mist contour is disposed.');
+      if (typeof value !== 'boolean') throw new TypeError('setNight expects a boolean.');
+      if (night === value) return;
+      night = value;
+      if (value) {
+        for (let index = 0; index < dayColors.length; index += 3) {
+          tint.setRGB(dayColors[index]!, dayColors[index + 1]!, dayColors[index + 2]!)
+            .multiplyScalar(.42).lerp(nightTint, .38);
+          mesh.instanceColor!.setXYZ(index / 3, tint.r, tint.g, tint.b);
+        }
+      } else {
+        (mesh.instanceColor!.array as Float32Array).set(dayColors);
+      }
+      mesh.instanceColor!.needsUpdate = true;
+      material.emissive.set(value ? '#0b1626' : '#000000');
+      material.emissiveIntensity = value ? .22 : 0;
+      material.needsUpdate = true;
+      group.userData.night = value;
+    },
+    dispose() {
+      if (disposed) return;
+      disposed = true;
+      group.removeFromParent();
+      group.clear();
+      mesh.dispose();
+      geometry.dispose();
+      material.dispose();
+      group.userData.disposed = true;
+    },
+  };
+}
+
+/**
  * Composes the reviewed cloud-wall and cloud-terrace supplements with a new
  * low-altitude clustered forest. All inputs and outputs remain in local
  * (east, north, height); only Three.js positions convert north to -z.
@@ -430,6 +615,7 @@ export function createTownD2R30CloudTerraceHost(options: TownD2R30CloudTerraceHo
   });
   const outerRing = createTownD2CloudTerraceOuterRing();
   const forest = createLowlandForest(sample, trail, exclusions);
+  const mist = createCloudMistContour(sample);
   // The reviewed outer ring owns its own vertex-colored materials. Collect
   // their base colors so night tinting can cover the whole terrace, not just
   // the cloud wall and lowland forest.
@@ -443,17 +629,18 @@ export function createTownD2R30CloudTerraceHost(options: TownD2R30CloudTerraceHo
   });
   const group = new Group();
   group.name = 'town-d2-r30-cloud-terrace-host';
-  group.add(cloud.group, outerRing.group, forest.group);
+  group.add(cloud.group, outerRing.group, forest.group, mist.group);
   const stats = Object.freeze({
-    groups: Object.freeze([cloud.group.name, outerRing.group.name, forest.group.name]),
+    groups: Object.freeze([cloud.group.name, outerRing.group.name, forest.group.name, mist.group.name]),
     cloud: cloud.stats,
     outerRing: outerRing.stats,
     forest: forest.stats,
-    instances: cloud.stats.instances + outerRing.stats.instances + forest.stats.instances,
-    meshes: cloud.stats.meshes + outerRing.stats.meshes + forest.stats.meshes,
-    draws: cloud.stats.drawCalls + outerRing.stats.drawCalls + forest.stats.drawCalls,
-    drawCalls: cloud.stats.drawCalls + outerRing.stats.drawCalls + forest.stats.drawCalls,
-    triangles: cloud.stats.triangles + outerRing.stats.triangleCount + forest.stats.triangles,
+    mist: mist.stats,
+    instances: cloud.stats.instances + outerRing.stats.instances + forest.stats.instances + mist.stats.instances,
+    meshes: cloud.stats.meshes + outerRing.stats.meshes + forest.stats.meshes + mist.stats.meshes,
+    draws: cloud.stats.drawCalls + outerRing.stats.drawCalls + forest.stats.drawCalls + mist.stats.drawCalls,
+    drawCalls: cloud.stats.drawCalls + outerRing.stats.drawCalls + forest.stats.drawCalls + mist.stats.drawCalls,
+    triangles: cloud.stats.triangles + outerRing.stats.triangleCount + forest.stats.triangles + mist.stats.triangles,
     maxDraws: TOWN_D2_R30_CLOUD_TERRACE_HOST_MAX_DRAWS,
     cloudBand: Object.freeze({
       bottom: townD2MainSummitCloudSpec.bottom, top: townD2MainSummitCloudSpec.top,
@@ -476,6 +663,7 @@ export function createTownD2R30CloudTerraceHost(options: TownD2R30CloudTerraceHo
       if (typeof value !== 'boolean') throw new TypeError('setNight expects a boolean.');
       cloud.setNight(value);
       forest.setNight(value);
+      mist.setNight(value);
       // Keep the exterior ring's stone/timber/pine/snow in step with the rest
       // of the terrace; restore exact base colors on the day pass.
       for (let index = 0; index < ringMaterials.length; index++) {
@@ -490,6 +678,7 @@ export function createTownD2R30CloudTerraceHost(options: TownD2R30CloudTerraceHo
       cloud.dispose();
       outerRing.dispose();
       forest.dispose();
+      mist.dispose();
       group.removeFromParent();
       group.clear();
       group.userData.disposed = true;

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>FR-16 · 风雪空间分区 3D 验收</title>
+    <link rel="icon" href="data:," />
+    <style>
+      :root {
+        color-scheme: dark;
+        --ink: #e8f1ff;
+        --muted: #9fb0c8;
+        --line: rgba(150, 180, 220, .18);
+        --panel: rgba(13, 20, 32, .82);
+        --accent: #ffd27a;
+      }
+      * { box-sizing: border-box; }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1220; }
+      body { font-family: "Microsoft YaHei", "PingFang SC", system-ui, sans-serif; color: var(--ink); }
+      canvas { display: block; }
+      #hud {
+        position: fixed; top: 18px; left: 18px; width: 320px; max-height: calc(100vh - 36px);
+        overflow: auto; padding: 16px 18px; border: 1px solid var(--line); border-radius: 14px;
+        background: var(--panel); backdrop-filter: blur(10px); box-shadow: 0 18px 50px rgba(0, 0, 0, .35);
+      }
+      h1 { margin: 0; font-size: 17px; letter-spacing: .04em; }
+      h1 span { color: var(--accent); }
+      .sub { margin: 4px 0 14px; color: var(--muted); font-size: 11px; line-height: 1.6; }
+      .group { margin-top: 14px; }
+      .group > b { display: block; font-size: 11px; color: var(--muted); font-weight: 600; letter-spacing: .08em; margin-bottom: 7px; }
+      .buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+      button {
+        appearance: none; border: 1px solid var(--line); border-radius: 9px; background: rgba(255, 255, 255, .04);
+        color: var(--ink); font: inherit; font-size: 12px; padding: 7px 10px; cursor: pointer;
+      }
+      button:hover { border-color: rgba(255, 210, 122, .55); }
+      button.active { border-color: var(--accent); background: rgba(255, 210, 122, .14); color: #fff4d6; }
+      .readouts { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; margin-top: 14px; }
+      .readout { padding: 8px 9px; border: 1px solid var(--line); border-radius: 9px; background: rgba(255, 255, 255, .025); }
+      .readout small { display: block; color: var(--muted); font-size: 10px; margin-bottom: 3px; }
+      .readout strong { font-size: 13px; font-variant-numeric: tabular-nums; }
+      .note { margin-top: 14px; color: var(--muted); font-size: 10px; line-height: 1.65; border-top: 1px solid var(--line); padding-top: 10px; }
+      .top-right { position: fixed; top: 20px; right: 22px; text-align: right; color: var(--muted); font-size: 11px; line-height: 1.7; }
+      .top-right b { color: var(--ink); }
+      @media (max-width: 900px) {
+        #hud { width: calc(100vw - 24px); top: 12px; left: 12px; max-height: 52vh; padding: 12px 14px; }
+        .top-right { display: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <aside id="hud">
+      <h1>FR-16 <span>· 风雪空间分区 3D 验收</span></h1>
+      <p class="sub">同一 Presence 天气状态、同一时刻，切换取样点查看雪势 / 能见度 / 风 / 粒子预算如何随海拔与区域连续变化。</p>
+
+      <div class="group">
+        <b>取样点</b>
+        <div class="buttons">
+          <button data-zone="town">小镇广场</button>
+          <button data-zone="foothill">山脚</button>
+          <button data-zone="alpine">高山区</button>
+          <button data-zone="summit">主峰</button>
+          <button data-zone="crater">陨石坑</button>
+        </div>
+      </div>
+
+      <div class="group">
+        <b>权威天气</b>
+        <div class="buttons">
+          <button data-weather="clear-snow">晴雪</button>
+          <button data-weather="wind">飞雪</button>
+          <button data-weather="whiteout">暴雪</button>
+        </div>
+      </div>
+
+      <div class="readouts">
+        <div class="readout"><small>权威天气</small><strong id="weather">—</strong></div>
+        <div class="readout"><small>区域</small><strong id="zone">—</strong></div>
+        <div class="readout"><small>海拔</small><strong id="elevation">—</strong></div>
+        <div class="readout"><small>雪势倍率</small><strong id="intensity">—</strong></div>
+        <div class="readout"><small>能见度</small><strong id="visibility">—</strong></div>
+        <div class="readout"><small>风力</small><strong id="wind">—</strong></div>
+        <div class="readout"><small>粒子密度</small><strong id="density">—</strong></div>
+        <div class="readout" style="grid-column: 1 / -1"><small>雾 near–far</small><strong id="fog">—</strong></div>
+      </div>
+
+      <p class="note">生产仍以 Presence 天气状态为唯一权威；本页只把 R2 场与 R3 粒子预算接到真实 snowfall 上做目视验收。拖动旋转、滚轮缩放。</p>
+    </aside>
+
+    <div class="top-right">
+      <b>R1 连续夜空</b> · R2 空间场 · R3 粒子预算<br />
+      同一天气状态 · 五个取样点 · 实时 snowfall
+    </div>
+
+    <script type="module" src="./town-blockout/town-weather-snow-preview.ts"></script>
+  </body>
+</html>

@@ -27,12 +27,27 @@ import { buildVillageLandmark, villageHousePortals } from './landmark-village';
 
 import { bridgeAt, canEnter, createTerrainGrid, isWater, layout, waterHeight, worldBounds } from './terrain';
 import { addTerrainMeshes } from './terrain-mesh';
+import {mountWestMountainGround,westMountainTrackProtection} from './town-night-a-summit-west-ground';
+import {westPresenceBounds} from '../../../src/shared/za22-west-domain';
+import {createSouthEntryHost} from './town-night-a-summit-entry-host';
+import {mountWestMountainFootway} from './town-night-a-summit-west-footway';
 import { createTerrainSupportContract } from './town-a-r30-terrain-contract';
 import { supportFootprintOverlaps } from './town-a-r30-oriented-support';
 import { mainSummitLayout, mainSummitSpec } from './main-summit-block';
 import { buildR30TownSkyline } from './town-d2-r30-skyline';
-import { cloudTerminal, createZa22CloudRoute } from './town-za22-cloud-route';
-import { cableWakeEvent, createCableRepairHost } from './town-cable-repair-host';
+import {createA31PublicSummitRoute} from './town-a31-public-summit';
+import {createNightBProductionController,nightBProductionAuthority} from './town-night-b-production-controller';
+import {readA31FrontCable,type A31CableBindings} from './town-a31-cable-binding';
+import {a32SummitPrefetch} from './town-a32-stream-policy';
+import {createA32PassportInput} from './town-a32-passport-input';
+import {takeTownTerrain,townTerrainPreloadStats} from './town-a32-terrain-preload';
+import {warmA32SummitMeshes} from './town-a32-gpu-warmup';
+import {createNightBCablePresentation,createNightBCableAudio} from './town-night-b-cable-presentation';
+import {createFriend3TravelAudio} from './town-friend3-travel-audio';
+import {createA31CableInput} from './town-a31-cable-input';
+import {syncA31OutdoorRoom} from './town-a31-outdoor-presence';
+import {a31GateCrossing,a31GateEligible,a31GateNorth} from './town-a31-gate-handoff';
+import type {CableRideFrame} from './town-night-b-summit-ride-host';
 import { mountZa29GuardPost, type Za29GuardPostKind } from './town-za29-guard-scenes';
 import { createZa29GuardDuty, za29GuardDutyForPhase } from './town-za29-guard-duty';
 import { createTownViewBatches } from './town-view-batches';
@@ -75,7 +90,7 @@ import { createTownFireworksActivity } from './town-fireworks-activity';
 import { createTownPersonalFireworks, firecrackerStand } from './personal-firework-activity';
 import { personalFireworkRestricted } from '../../../src/presence/personal-fireworks';
 import {
-  ceremonyEveYear, ceremonyMidnight, createCeremonyDirector, createCeremonyOverlay, type CeremonyCue,
+  ceremonyEveYear, ceremonyMidnight, ceremonyStateAt, dimLevelAt, createCeremonyDirector, createCeremonyOverlay, type CeremonyCue,
 } from './town-ceremony';
 import { loadRehearsalClock } from './town-rehearsal-clock';
 import { ceremonyArrivalAt, ceremonyLateWindowMs, townCeremonyMidnight, type CeremonyArrival } from '../../../src/presence/ceremony-arrival';
@@ -179,7 +194,13 @@ import { approachTownSnowScale } from './town-snow-cover';
 import { createTownSnowField } from './town-snow-field';
 import { createPlazaInformationActivity } from './plaza-information-activity';
 import { createPlazaSnowSupply, type PlazaSnowSupplySite } from './plaza-snow-supply';
-import { advanceWeatherCover, townSnowWeatherForFrame } from './town-weather';
+import { advanceWeatherCover, townSnowWeatherAt, townSnowWeatherForFrame } from './town-weather';
+import { sampleSouthRegionalWeather, applySouthWeatherPresentation, createSouthWeatherVisual, southWeatherWalkingScale } from './town-night-a-summit-weather-field';
+import { southWeatherStatus, southWeatherProfile } from './town-night-a-summit-weather-status';
+import {createSouthWeatherAudioHost} from './town-night-a-summit-audio-host';
+import { createTownNightWeatherSky, type TownNightWeatherSkyFrame } from './town-night-weather-sky';
+import { createSouthSummitWeatherHost } from './town-night-a-summit-weather-host';
+import { townNightWeatherDayMs, townNightWeatherDefaultDawnEpoch } from '../../../src/shared/town-night-weather-cycle';
 import { createSledRide, createSledWallCollider } from './sled-ride';
 import { createTownSledVisuals } from './sled-visuals';
 import { resolveTownSledRacks } from './town-sled-racks';
@@ -220,12 +241,15 @@ function currentCraterPlay(){
   return craterPlay;
 }
 const craterPlayInput=createAR30PlayInput(currentCraterPlay);
-const grid = createTerrainGrid();
+const grid = createTerrainGrid({samples:takeTownTerrain()});
 const townWater = createTownWater(grid);
 const snowCover = createTownSnowField(grid);
 let visualSnowCover = 0;
 const scene = new Scene();
 let westCraterRoad: ReturnType<typeof mountWestCraterRoad> | undefined;
+let westMountainGround:ReturnType<typeof mountWestMountainGround>|undefined;
+const westGroundReady=(e:number,n:number)=>ensureWestCraterRoad().terrainReadyAt(e,n)||!!westMountainGround?.readyAt(e,n);
+const westGroundAt=(e:number,n:number)=>westMountainGround?.heightAt(e,n)??ensureWestCraterRoad().heightAt(e,n);
 // S-1 (分支窗 A): the west (crater) domain gets its OWN walk-geometry index.
 // The town chunk key (chunkAtCell) collides for negative east — a west cell
 // block and a town-east cell block can share chunk id AND subcell, which
@@ -481,8 +505,8 @@ const summitSkylinePeak = new Vector3(mainSummitLayout.summit.east, mainSummitSp
   -mainSummitLayout.summit.north).add(summitSkylineOrigin);
 const summitSkylinePeakNdc = new Vector3();
 let summitSkylineDraws = 0;
-const summitSkylineDayMaterial = new MeshLambertMaterial({side:DoubleSide,fog:false,vertexColors:true});
-const summitSkylineNightMaterial = new MeshBasicMaterial({side:DoubleSide,fog:false,vertexColors:true});
+const summitSkylineDayMaterial = new MeshLambertMaterial({fog:true,vertexColors:true});
+const summitSkylineNightMaterial = new MeshLambertMaterial({fog:true,vertexColors:true});
 const summitSkylineMesh: Mesh<BufferGeometry, MeshLambertMaterial | MeshBasicMaterial> =
   new Mesh(buildR30TownSkyline(),summitSkylineDayMaterial);
 const {summitHeight}=mainSummitSpec;
@@ -546,13 +570,13 @@ scene.add(skyClouds.group);
 // The new forest is mounted with the same graded ridge field.
 const frontRidgeCloudBand = createFrontRidgeCloudBand();
 scene.add(frontRidgeCloudBand.group);
-if (reportSummitSkyline) {
+if (reportSummitSkyline||previewOptions.has('profile')) {
   summitSkylineMesh.onAfterRender = (_renderer, _scene, renderedCamera) => {
     if (renderedCamera === camera) summitSkylineDraws++;
   };
 }
 const presence = createTownPresence(scene, camera, announceActivity, resetMovement,
-  (east, north) => east < 0 ? ensureWestCraterRoad().heightAt(east, north) ?? grid.heightAt(east, north)
+  (east, north) => east < 0 ? westGroundAt(east, north) ?? grid.heightAt(east, north)
     : grid.heightAt(east, north));
 // ZD-05 sky-city domain prep (zone-1 wiring plan, ruling 304c2e38):
 // the island lives in its own scene, hosted at the surveyed approach
@@ -569,59 +593,94 @@ let skyCityViewKind: 'ground' | 'summit' | 'city' = 'ground';
 function enterSkyCity() { skyCityViewKind = 'city'; }
 function exitSkyCity() { skyCityViewKind = 'ground'; }
 void enterSkyCity; void exitSkyCity; void skyCityHost;
-// 缆车进出站与「前往」星港坪共用同一条域交接：切 presence 域与场景、落到站台点。
-function transferCloudTerminal(terminal: 'base' | 'summit', at: { east: number; north: number; height: number }) {
-  skyCityViewKind = terminal === 'summit' ? 'summit' : 'ground';
-  presence.setMountainDomain(terminal === 'summit', cloudRoute.scene);
-  x = at.east;
-  n = at.north;
-  ground = at.height;
-  airHeight = undefined;
-  riseSpeed = 0;
-  stopTravel();
-  snowControls.cancel();
-  storeWalkView(walkCurrent);
-  walkPrevious.copy(walkCurrent);
-  yaw = 0;
-  pitch = 0;
+// A31 public world: one real four-sector owner and the existing far LOD.
+// Old ZA22 moving cabins and their independent mountain are review-only.
+const cloudRoute = createA31PublicSummitRoute({town:scene,skyline:summitSkyline,now:presence.serverNow,profile:previewOptions.has('profile'),cableAuthority:nightBProductionAuthority(presence,2),
+ frontSnow:(e,n)=>{const w=presence.getTownOutdoorWeather();return w?sampleSouthRegionalWeather(w,e,n,347,false).weather.targetCover:undefined;},
+ frontWind:(e,n)=>{const w=presence.getTownOutdoorWeather();return w?Math.max(0,Math.min(1,sampleSouthRegionalWeather(w,e,n,347,false).exposure)):undefined;},
+ warm:(root,yieldFrame,cancelled)=>warmA32SummitMeshes(renderer,root,yieldFrame,cancelled)});
+window.addEventListener('pagehide',event=>{if(!event.persisted)cloudRoute.dispose();});
+let publicTransportBound=false,publicTransportPreparing=false,frontPreparationMs=0,frontPreparationError:string|undefined;
+let rearSeamCertificate:ReturnType<typeof cloudRoute.seamCertificate>;
+export const preparePublicSummit=()=>{/* Town entry is independent of the rear massif. */};
+function preparePublicTransport(foot:{east:number;north:number;height:number}){
+ if(publicTransportBound||publicTransportPreparing||!a32SummitPrefetch(foot))return;
+ publicTransportPreparing=true;
+ void (async()=>{
+  const ready=await cloudRoute.prepare();
+  try{await cloudRoute.waitForQuiet();}catch{publicTransportPreparing=false;return;}
+  const start=performance.now();
+  try{
+   if(productionRidge){
+    const station=extensionPlots.find(plot=>plot.id==='railway-station');
+    if(!station)throw Error('Actual railway station plot missing');
+    await loadExtensionLandmark(station);
+    if(!architecture.has(station.id))throw Error('Actual railway station not mounted');
+    const accepted=await productionRidge.preparePublicFrontCable(nightBProductionAuthority(presence,1),[...architecture.values(),railway.group,railExtension.group]);
+    if(!accepted)frontPreparationError=productionRidge.frontCablePrepareResult??'front-owner-refused';
+   }
+  }catch(error){frontPreparationError=error instanceof Error?error.message:String(error);}
+  frontPreparationMs=performance.now()-start;
+  const front=readA31FrontCable(productionRidge),upper=ready?cloudRoute.upperOperation():undefined;
+  if(front.front)walkGeometry=geometry();
+  if(front.front||upper)cableController=makePublicCableController({...front,upper});
+  rearSeamCertificate=ready?cloudRoute.seamCertificate():undefined;
+  if(ready&&rearSeamCertificate?.open)productionRidge?.certifyPublicSeam((e,n)=>{const h=cloudRoute.surveyedSupport(e,n);return h!==undefined&&!cloudRoute.surveyedBlocked(e,n,h)?h:undefined;});
+  publicTransportBound=true;publicTransportPreparing=false;
+ })();
 }
-const cloudRoute = createZa22CloudRoute({
-  now: presence.serverNow,
-  cloudStamp: {
-    available: presence.summitPassportAvailable,
-    request() {
-      if (!presence.requestSummitPassport('cloud-stamp')) announceActivity('前山碑盖章暂不可用');
-    },
-  },
-  enterOrExit: transferCloudTerminal,
-  view: (title, message) => { activityContext.open(title, message); },
-});
-// 缆车修缮一线宿主 (B2): the host holds no repair state — actions are
-// derived per frame from the server-authored state in town-presence.
-// Anchors follow the repair spec's three fault points: the rust brake
-// at the base station brake gate, the derailed cable at the mid-line
-// tower between base and mid stations, the counterweights at the mid
-// station tower with the hanging frame beside it. Physical props are
-// D3 form work; the anchors are the host-supplied positions.
-const cableRepairHost1 = createCableRepairHost(1, {
-  brake: { east: 524.6, north: 326.6 },
-  cableWheel: { east: 483, north: 424.5 },
-  weightTower: { east: 436.8, north: 523.2 },
-  weightFrame: { east: 440.6, north: 517.4 },
-});
-const cableStationPoints = [[526, 329], [440, 520], [336, 640]] as const;
-let cableStageSeen: string | undefined;
+const southEntryHost=createSouthEntryHost();
+// B's one production controller. The current C2/D2 candidate has no
+// certified continuous dock approaches, so neither ready installer is supplied.
+function makePublicCableController(assets:A31CableBindings={}){return createNightBProductionController({
+ ...assets,presence,upperOrigin:{east:300,north:676},
+ // A31 shows the complete massif only on the high cloud apron or in the
+ // rear scene. Use a conservative larger band to wake its visuals early.
+ upperVisible:()=>cloudRoute.active()||(x>=280&&x<=360&&n>=625&&n<=680&&ground>=340),
+ domain:()=>!walking||homeReturn?undefined:cloudRoute.active()?'summit':x<0?undefined:n>=650?'mountain':'town',
+ acceptLanding:(line,foot)=>{
+  if(line===2)return cloudRoute.active()&&Math.abs((cloudRoute.surveyedSupport(foot.east,foot.north)??Infinity)-foot.height)<=.08&&!cloudRoute.surveyedBlocked(foot.east,foot.north,foot.height);
+  return !cloudRoute.active()&&Math.abs((dryTownLandingHeight(foot.east,foot.north,foot.height,true)??Infinity)-foot.height)<=.08;
+ }
+});}
+let cableController=makePublicCableController();
+let cableFrame:CableRideFrame|undefined;
+function currentCableAction(){
+ if(!walking||homeReturn||houseDoorTravel||seated||boardingGround||sledRide.active()||airHeight!==undefined||townSettings.open||placeCard.open||museumVisit.dialog.open||presence.chatFocused()||document.hidden)return;
+ return cableController.actions({east:x,north:n,height:ground})[0];
+}
+function runCableAction(id:string){
+ const result=cableController.action(id,{east:x,north:n,height:ground});
+ if(!result.accepted)return false;
+ if(result.notice)announceActivity(result.notice);
+ cableAudio.repair(id,result.accepted,weatherAudioToggle.checked&&!document.hidden);
+ if(id.startsWith('board-')){
+  resetMovement();airHeight=undefined;riseSpeed=0;
+  if(!cloudRoute.active())presence.setFrontCableRideDomain(scene);
+ }
+ if(result.landing){
+  // The read-only acceptLanding callback never moves the player.
+  // Only an accepted B exit commits this exact supported foot.
+  x=result.landing.east;n=result.landing.north;ground=result.landing.height;
+  cableFrame=undefined;airHeight=undefined;riseSpeed=0;stopTravel();
+  storeWalkView(walkCurrent);walkPrevious.copy(walkCurrent);
+ }
+ return true;
+}
+const cableInput=createA31CableInput({current:currentCableAction,invoke:runCableAction,
+ hold:held=>cableController.updateRepairHold(held,{east:x,north:n,height:ground})});
+function cableAction(){
+ const action=currentCableAction();
+ return action?{label:action.label,run(){cableInput.click();}}:undefined;
+}
 let sledWasRiding = false;
 let sledSpeedBeforeStop = 0;
 /** A hard impact on a station structure wakes line 1 (host mapping:
  * sled strikes and snow-wall collapses qualify, hand snowballs never). */
 function reportCableWake(kind: 'sled' | 'snow-wall', east: number, north: number) {
   if(!productionRidge?.transportReady)return;
-  const state = presence.getCableLineState(1);
-  if (!state || state.stage !== 'dormant') return;
-  if (!cableStationPoints.some(([e, n]) => Math.hypot(east - e, north - n) <= 15)) return;
-  const event = cableWakeEvent(kind);
-  if (event) presence.sendCableRepair(1, event);
+  const h=outdoorSurfaceAt(east,north);
+  if(Number.isFinite(h))cableController.reportFrontImpact(kind,{east,north,height:h});
 }
 function connectGuardPost(kind: Za29GuardPostKind, model: ReturnType<typeof mountZa29GuardPost>) {
   const duty = createZa29GuardDuty(kind, model.anchors, announceActivity);
@@ -632,7 +691,7 @@ let mountainGuardPost: TownGuardPost | undefined;
 let craterGuardPost: TownGuardPost | undefined;
 
 function currentGuardDuty() {
-  if (cloudRoute.riding()) return undefined;
+  if (cableController.riding()) return undefined;
   return (cloudRoute.active() ? mountainGuardPost : craterGuardPost)?.duty;
 }
 
@@ -689,7 +748,10 @@ const sledWallCollider = createSledWallCollider(
 const sledWorld: Parameters<typeof createSledRide>[0] = {
   height: sledGroundAt,
   surface(sx, nn, y) {
-    if (cloudRoute.active()) return { surface: 0, deepSnow: false };
+    if (cloudRoute.active()) {
+      const assembly=cloudRoute.assembly();const depth=assembly?.summitSnowAt(sx-(assembly?.group.position.x??0),nn+(assembly?.group.position.z??0));
+      return {surface:0,deepSnow:depth!==undefined&&depth>=.6};
+    }
     const col = Math.round(sx), row = Math.round(nn);
     const surface = col >= 0 && row >= 0 && col < grid.gridWidth && row < grid.gridDepth
       ? grid.surfaces[row * grid.gridWidth + col] : 0;
@@ -697,6 +759,9 @@ const sledWorld: Parameters<typeof createSledRide>[0] = {
   },
   blocked: obstructed,
   canTraverse(from, to) {
+    // Sleds cannot cross rooms: the certified gate transfers supported walking feet only.
+    if(cloudRoute.active()&&to.n<a31GateNorth+sledFootRadius)return false;
+    if(a31GateCrossing(cloudRoute.active(),{east:from.x,north:from.n,height:from.y},{east:to.x,north:to.n,height:to.y}))return false;
     if (cloudRoute.active() && !cloudRoute.acceptsStep(from.x, from.n, to.x, to.n, sledFootRadius)) return false;
     if(!homeReturn&&!cloudRoute.active()&&productionRidge&&
       !productionRidge.allowsUphill({east:from.x,north:from.n,height:from.y},{east:to.x,north:to.n,height:to.y}))return false;
@@ -766,7 +831,7 @@ function createSledRacks(domain: 'town' | 'summit'): SledRackState {
     }
     return dryTownLandingHeight(east, north, undefined, true);
   };
-  const racks = resolveTownSledRacks(domain, sampleFooting, domain === 'town' ? ensureWestCraterRoad().lip : undefined);
+  const racks = resolveTownSledRacks(domain, sampleFooting, domain === 'town' ? ensureWestCraterRoad().lip : undefined,domain==='summit');
   const visuals = createTownSledVisuals(domain === 'summit' ? cloudRoute.scene : scene, racks);
   const actions = racks.map(rack => {
     let ride: ReturnType<typeof createSledRide> | undefined;
@@ -834,8 +899,16 @@ function stationViewCamera() {
 scene.add(railway.group);
 const railExtension = buildCraterRailExtension(grid, ensureWestCraterRoad(),railway.route.points);
 scene.add(railExtension.group);
+// Real missing west carrier; never cover the existing crater/rail strip.
+// Preserve the complete three-track reservation outside old rendering.
+westMountainGround=mountWestMountainGround(ensureWestCraterRoad().heightAt,{west:craterWestSurvey.west,east:0,south:ensureWestCraterRoad().terrainBoundary.renderNorth,north:worldBounds.depth},westMountainTrackProtection([railExtension.samples,railExtension.narrowSamples,railExtension.sidingSamples]));
+scene.add(westMountainGround.group);
+scene.add(mountWestMountainFootway(westGroundAt).group);
 productionRidge=mountProductionRidge(scene,grid,{loop:railway.route.points,branch:railExtension.samples,
-  rearConnectorCandidate:previewOptions.has('mRearConnector')&&['127.0.0.1','localhost'].includes(location.hostname)});
+  // The normal candidate entry now attempts the independently audited four-road
+  // field. mountProductionRidge retains the original three roads if its
+  // protected-vertex / grade / cable audit rejects the connector.
+  rearConnectorCandidate:!(previewOptions.has('mRearConnectorOff')&&['127.0.0.1','localhost'].includes(location.hostname))});
 if(westSurfacePort){
   westSurfaceAssembly=westSurfacePort.attach(ensureWestCraterRoad(),railExtension);
   try{assertAR30SurfaceAttachment(ensureWestCraterRoad(),railExtension);}
@@ -888,30 +961,46 @@ const forest = addForestDensity(landscape, grid,
     streetscape.occupied(east, north, radius) || pineCamp.keepClear(east, north, radius),
   (east, north, radius) => extensionRoadClearance(east, north, radius) || railway.keepClear(east, north, radius) || extensionStreetClearance(east, north, radius));
 const snowfall = createSnowfall(scene);
+const summitSnowfall = createSnowfall(cloudRoute.scene);
+const townWeatherVisual=createSouthWeatherVisual(snowfall,particleDensityScale);
+const summitWeatherVisual=createSouthWeatherVisual(summitSnowfall,particleDensityScale);
 const snowButton = element<HTMLButtonElement>('snow');
 snowButton.onclick = () => {
   snowfall.setEnabled(!snowfall.enabled());
+  summitSnowfall.setEnabled(snowfall.enabled());
   snowButton.setAttribute('aria-pressed', String(snowfall.enabled()));
 };
 const timeOfDay = element<HTMLButtonElement>('lighting');
 let nightMode = true;
-let clockNightApplied: boolean | null = null;
 let ceremonyDim = 1;
-function applyCeremonyLighting() {
-  ambient.intensity = (nightMode ? .96 : 1.35) * ceremonyDim;
-  sun.intensity = (nightMode ? 1.23 : 1.7) * ceremonyDim;
+const nightSky = createTownNightWeatherSky({scene,ambient,sun,fog:weatherFog});
+const summitNightSky = createSouthSummitWeatherHost(cloudRoute.scene);
+// Keep the last authoritative calendar origin through reconnects. No second
+// clock: all samples still come from the existing Presence server clock.
+let weatherDawnEpoch = presence.getTownWeatherDawnEpoch() ?? townNightWeatherDefaultDawnEpoch;
+const localLightingReview = previewOptions.has('profile') && ['127.0.0.1','localhost'].includes(location.hostname);
+let reviewNight: boolean | undefined;
+function updateNightSky(dim=ceremonyDim) {
+  weatherDawnEpoch = presence.getTownWeatherDawnEpoch() ?? weatherDawnEpoch;
+  const now = localLightingReview && reviewNight !== undefined
+    ? weatherDawnEpoch + (reviewNight ? .78 : .30) * townNightWeatherDayMs
+    : presence.serverNow();
+  return cloudRoute.active() ? summitNightSky.update(now,weatherDawnEpoch,dim)
+    : nightSky.update(now,weatherDawnEpoch,{dim});
+}
+function applyNightSide(skyFrame:TownNightWeatherSkyFrame){
+  // Preserve the existing night-window authority for discrete gameplay.
+  const nightWindowState=presence.getTownNightWindow();
+  const clockNight=localLightingReview&&reviewNight!==undefined?skyFrame.nightSide
+    :nightWindowState?nightWindowState.phase!=='day':skyFrame.nightSide;
+  if(clockNight!==nightMode)setNight(clockNight);
 }
 function setNight(night: boolean) {
   nightMode = night;
   summitSkylineMesh.material = night ? summitSkylineNightMaterial : summitSkylineDayMaterial;
   summitHutLight.visible = night;
   cloudRoute.setNight(night);
-  const sky = night ? '#182642' : '#acc2dd';
-  (scene.background as Color).set(sky);
-  scene.fog!.color.set(sky);
-  ambient.color.set(night ? '#83a9e7' : '#e4edff');
-  sun.color.set(night ? '#a6c0fd' : '#ffe6c5');
-  applyCeremonyLighting();
+  // Background, light colour/intensity and fog are owned by the continuous sky rig.
   timeOfDay.textContent = night ? '雪夜' : '白昼';
   timeOfDay.setAttribute('aria-pressed', String(night));
   scenery.setNight(night);
@@ -919,8 +1008,11 @@ function setNight(night: boolean) {
   productionRidge?.setNight(night);
   frontRidgeCloudBand.setNight(night);
 }
-setNight(true);
-timeOfDay.onclick = () => setNight(timeOfDay.getAttribute('aria-pressed') !== 'true');
+setNight(updateNightSky().nightSide);
+timeOfDay.disabled = !localLightingReview;
+if(!localLightingReview)timeOfDay.setAttribute('aria-label','当前服务器昼夜状态');
+timeOfDay.title = localLightingReview ? '本地验收：昼夜机位切换' : '昼夜随服务器时钟连续变化';
+if(localLightingReview)timeOfDay.onclick = () => {reviewNight=!nightMode;setNight(updateNightSky().nightSide);};
 
 const prepareTerrain = addTerrainMeshes(scene, grid, productionRidge.ownsCell);
 
@@ -1201,14 +1293,14 @@ const extensionBuilders: Record<string, () => Promise<Group>> = {
   'ice-castle': () => import('./landmark-ice-castle').then(module => module.buildIceCastle()),
 };
 const requestedPlots = new Set<string>();
-function prepareLandmarks(east: number, north: number) {
-  const plot = extensionPlots.find(({ id, origin }) => !requestedPlots.has(id) &&
-    Math.hypot(east - origin[0], north - origin[1]) < 148);
-  if (!plot) return;
+const landmarkLoads = new Map<string,Promise<void>>();
+function loadExtensionLandmark(plot:typeof extensionPlots[number]):Promise<void>{
+  if(architecture.has(plot.id))return Promise.resolve();
+  const pending=landmarkLoads.get(plot.id);if(pending)return pending;
   requestedPlots.add(plot.id);
   const palaceModule = plot.id === 'ice-castle'
     ? Promise.all([import('./ice-palace-landmark-activity'), import('./ice-palace-slide')]) : undefined;
-  Promise.all([extensionBuilders[plot.id](), palaceModule]).then(([group, palace]) => {
+  const task=Promise.all([extensionBuilders[plot.id](), palaceModule]).then(([group, palace]) => {
     place(plot, group);
     walkGeometry = geometry();
     registerLandmarkActivities(plot.id, group);
@@ -1216,7 +1308,14 @@ function prepareLandmarks(east: number, north: number) {
   }).catch(error => {
     requestedPlots.delete(plot.id);
     console.error(`Loading ${plot.id}`, error);
-  });
+    throw error;
+  }).finally(()=>landmarkLoads.delete(plot.id));
+  landmarkLoads.set(plot.id,task);return task;
+}
+function prepareLandmarks(east: number, north: number) {
+  const plot = extensionPlots.find(({ id, origin }) => !requestedPlots.has(id) && !architecture.has(id) &&
+    Math.hypot(east - origin[0], north - origin[1]) < 148);
+  if(plot)void loadExtensionLandmark(plot).catch(()=>{});
 }
 async function loadBuildings() {
   const response = await fetch(new URL('index.json', assetBase));
@@ -1308,7 +1407,9 @@ const landingSnow = createLandingSnow(scene);
 // 'balanced' (the default) reproduces the pre-tier values exactly.
 function applyQualityTier() {
   renderer.setPixelRatio(Math.min(devicePixelRatio, qualityPixelRatioCap()));
+  townWeatherVisual.reset();summitWeatherVisual.reset();
   snowfall.setDensityScale(particleDensityScale());
+  summitSnowfall.setDensityScale(particleDensityScale());
   landingSnow.setDensityScale(particleDensityScale());
 }
 applyQualityTier();
@@ -1392,9 +1493,11 @@ museumVisit.dialog.addEventListener('close', () => {
 function museumPosition() {
   return { x: (x - museumEast) / museumHorizontalScale, y: ground - museumHeight, z: (museumNorth - n) / museumHorizontalScale };
 }
-museumMapButton.onclick = () => museumVisit.openMap(museumPosition());
+museumMapButton.onclick = () => {if(townSettings.open)townSettings.close();museumVisit.openMap(museumPosition());};
 
 function openPlace(title: string, description: string) {
+  // The corner menu is a launcher, not a second modal behind an activity.
+  if(townSettings.open)townSettings.close();
   pauseForPanel();
   element('place-title').textContent = title;
   element('place-text').textContent = description;
@@ -1469,11 +1572,80 @@ const activityContext: Omit<TownActivityContext, 'announce'> = {
   },
 };
 const tavernDrinkEffects = createTavernDrinkEffects();
-tavernDrinkEffects.mountSettings(element('town-panel-controls'));
+tavernDrinkEffects.mountSettings(element('town-advanced-controls'));
 const townBgm = createTownBgm(festival.getAudioContext);
+const regionalAudio=createSouthWeatherAudioHost(festival.getAudioContext);
+const cablePresentation=createNightBCablePresentation(),cableTravelAudio=createFriend3TravelAudio({getContext:festival.getAudioContext}),cableAudio=createNightBCableAudio(cableTravelAudio);
+window.addEventListener('pointerdown',event=>{if(event.isTrusted)cableAudio.gesture();});
+window.addEventListener('keydown',event=>{if(event.isTrusted)cableAudio.gesture();});
+window.addEventListener('pagehide',()=>{cableAudio.dispose();cablePresentation.dispose();cableTravelAudio.dispose();});
+const weatherAudioControls=document.createElement('label');
+const weatherAudioToggle=document.createElement('input');
+weatherAudioToggle.type='checkbox';weatherAudioToggle.id='town-weather-audio';weatherAudioToggle.checked=regionalAudio.settings().enabled;
+weatherAudioControls.append('区域风雪音效',weatherAudioToggle);
+const weatherVolumeControls=document.createElement('label'),weatherVolume=document.createElement('input');
+weatherVolume.type='range';weatherVolume.min='0';weatherVolume.max='100';weatherVolume.value=String(regionalAudio.settings().volume);weatherVolume.id='town-weather-volume';
+weatherVolumeControls.append('风雪音量',weatherVolume);
+element('town-advanced-controls').append(weatherAudioControls,weatherVolumeControls);
+weatherAudioToggle.addEventListener('change',()=>regionalAudio.setEnabled(weatherAudioToggle.checked));
+weatherVolume.addEventListener('input',()=>{regionalAudio.setVolume(Number(weatherVolume.value));cableTravelAudio.setVolume(Number(weatherVolume.value));});
+window.addEventListener('pointerdown',event=>{if(event.isTrusted)regionalAudio.gesture();});
+window.addEventListener('keydown',event=>{if(event.isTrusted)regionalAudio.gesture();});
+document.addEventListener('visibilitychange',()=>regionalAudio.setSuspended(document.hidden));
+window.addEventListener('pagehide',()=>regionalAudio.dispose());
 const townSettings = element<HTMLDialogElement>('town-settings');
+const regionalWeatherStatus=document.createElement('output');
+regionalWeatherStatus.id='town-regional-weather';
+regionalWeatherStatus.setAttribute('aria-label','当前区域天气');
+regionalWeatherStatus.setAttribute('aria-live','off');
+regionalWeatherStatus.style.display='block';
+regionalWeatherStatus.style.color='#c6d3e5';
+element('position').after(regionalWeatherStatus);
+const summitPassportInput=createA32PassportInput({available:presence.summitPassportAvailable,request:presence.requestSummitPassport,notice:announceActivity});
+presence.onSummitPassport(summitPassportInput.receive);
+const summitPassportStatus=document.createElement('output');summitPassportStatus.id='town-summit-passport-status';
+element('town-advanced-controls').append(summitPassportStatus);
+function summitPassportAction(){
+ if(!walking||homeReturn||seated||boardingGround||airHeight!==undefined||sledRide.active()||cableController.riding()||houseDoorTravel||dreamInMine())return;
+ const rear=cloudRoute.active(),foot={east:x-(rear?300:0),north:n-(rear?676:0),height:ground};
+ const valid=()=>walking&&!homeReturn&&!seated&&!boardingGround&&airHeight===undefined&&!sledRide.active()&&!cableController.riding()&&!houseDoorTravel&&!dreamInMine()&&rear===cloudRoute.active()&&Math.hypot(x-(rear?300:0)-foot.east,n-(rear?676:0)-foot.north)<.15&&Math.abs(ground-foot.height)<.08;
+ return summitPassportInput.action(rear?'rear':'front',foot,stamp=>{
+  const root=rear?cloudRoute.scene:scene,name=stamp==='cloud-stamp'?'cloud-deck-registration-monument':'main-summit-hut-and-registration';
+  const model=root.getObjectByName(name);if(!model)return false;
+  for(let p:typeof model|null=model;p;p=p.parent)if(!p.visible)return false;
+  const h=rear?cloudRoute.surveyedSupport(x,n):dryTownLandingHeight(x,n,ground,true);
+  return h!==undefined&&Math.abs(h-ground)<=.08&&(!rear||!cloudRoute.surveyedBlocked(x,n,ground));
+ },valid);
+}
+const summitStatus=document.createElement('output');
+summitStatus.id='town-summit-status';summitStatus.setAttribute('aria-label','后山开放状态');
+summitStatus.style.display='block';summitStatus.style.color='#c6d3e5';
+regionalWeatherStatus.after(summitStatus);
+let nextSummitStatus=0;
+function showSummitStatus(now:number){
+ if(now<nextSummitStatus)return;nextSummitStatus=now+250;
+ const s=cloudRoute.state();
+ summitPassportInput.tick(presence.currentRoom());
+ const progress=summitPassportInput.progress();
+ const passportText=progress?`主峰护照 ${Number(progress.cloudStamped)+Number(progress.summitStamped)}/2 · ${progress.summitRegistered?'已登记（雪翼领取资格）':'未登记'}`:'主峰护照 · 未连接权威';
+ if(summitPassportStatus.textContent!==passportText)summitPassportStatus.textContent=passportText;
+ summitStatus.hidden=!!cableFrame?.whiteout;
+ summitStatus.style.display=cableFrame?.whiteout?'none':'block';
+ const message=s.status==='ready'?(s.cable.boardable?'后山 · 地形与索道已就绪 · 依现场权限通行':'后山 · 四区地形已就绪 · 交通检修中'):s.status==='failed'?'后山 · 加载未完成 · 暂未开放':s.status==='idle'?'后山 · 远景常驻 · 接近后加载':'后山 · 分区预加载中 · 暂未开放';
+ const routeNote=s.hiking?.ready?' · 金色标记为陡坡徒步线（非缓坡盘山公路）'+(s.registrationRoutes.every(r=>r.ready)&&s.registrationRoutes.length===2?'，峰顶接纪念碑及登记小屋':''):'';
+ if(summitStatus.textContent!==message+routeNote)summitStatus.textContent=message+routeNote;
+ summitStatus.dataset.status=s.status;
+}
+function showRegionalWeather(text:string){
+ if(regionalWeatherStatus.textContent===text)return;
+ regionalWeatherStatus.hidden=!text;
+ regionalWeatherStatus.style.display=text?'block':'none';
+ regionalWeatherStatus.textContent=text;
+}
 element('town-panel-toggle').addEventListener('click', cancelSledBrake);
-townBgm.mountControls(element('town-panel-controls'), element<HTMLButtonElement>('town-music-toggle'));
+townBgm.mountControls(element('town-advanced-controls'), element<HTMLButtonElement>('town-music-toggle'));
+townSettings.addEventListener('town-menu-opening',pauseForPanel);
+townSettings.addEventListener('close',()=>{if(!placeCard.open&&!museumVisit.dialog.open)renderer.domElement.focus({preventScroll:true});});
 let nextBgmRoomCheck = 0;
 const hotSpringSoak = createHotSpringSoak(
   { sit: activityContext.sit, announce: announceActivity }, tavernDrinkEffects.setSoaking,
@@ -1490,7 +1662,8 @@ let towerDusk = false;
 function setTowerDusk(enabled: boolean) {
   if (towerDusk === enabled) return;
   towerDusk = enabled;
-  townLights.setDusk(enabled);
+  // The clocktower keeps its wall-clock cues; automatic street lamps now
+  // follow the single game-day lighting rig instead.
   setClocktowerDuskLighting(tower, enabled);
 }
 const mascotFrustum = new Frustum();
@@ -1906,6 +2079,8 @@ const riddleActivity = createRiddleActivity({ open: activityContext.open, announ
 activitySpots.push(...riddleActivity.spots);
 const snowballControls = element('snowball-controls');
 const snowballScore = element('snowball-score');
+const menuSnowInventory=element('town-snow-inventory');
+const snowfightMaterial=element('snowfight-material');
 const snowballMeter = element<HTMLProgressElement>('snowball-action-meter');
 function ensureTownInputButton(id: string, label: string, after: HTMLElement): HTMLButtonElement {
   const existing = document.getElementById(id);
@@ -1941,8 +2116,8 @@ const ceremonyFrost = createCeremonyFrost(element('ceremony-frost'), {
   scene: element('scene'),
   announce: announceActivity,
 });
-ceremonyFrost.mountSettings(element('town-panel-controls'));
-festival.mountAudioSettings(element('town-panel-controls'));
+ceremonyFrost.mountSettings(element('town-advanced-controls'));
+festival.mountAudioSettings(element('town-advanced-controls'));
 const ceremonyClock = (import.meta.env.MODE === 'town-rehearsal' ? await loadRehearsalClock() : undefined)
   ?? { now: presence.serverNow, utcOffsetMinutes: 8 * 60 };
 const railOvernightBroadcast = createRailOvernightBroadcast();
@@ -1963,7 +2138,6 @@ const ceremony = createCeremonyDirector(ceremonyClock, {
   onSnowIntensity: snowCover.setIntensity,
   onDim(level) {
     ceremonyDim = level;
-    applyCeremonyLighting();
     townLights.setCeremonyDim(level);
   },
 });
@@ -2098,6 +2272,7 @@ function showSnowballScore({ ammo, hits, combo }: SnowballState) {
   const depth = snowCover.depth();
   const text = `雪团 ${ammo}/${snowResourceLimit} · ${depth.label} · 命中 ${hits}${combo > 1 ? ` · 连中 ${combo}` : ''}${snowOnHead ? ` · 顶雪 ${snowOnHead}/3` : ''}`;
   if (snowballScore.textContent !== text) snowballScore.textContent = text;
+  if(menuSnowInventory.textContent!==text)menuSnowInventory.textContent=text;
 }
 function showSnowGatherProgress() {
   const progress = snowControls.gatherProgress();
@@ -2387,16 +2562,17 @@ const baseSnowControls = createTownSnowControls({
 const snowControls:typeof baseSnowControls={
   ...baseSnowControls,
   keyDown(code,repeat){
+    if(code==='KeyE'&&cableInput.down(code,repeat)){baseSnowControls.cancel();dreamEKey=false;return true;}
     if((code==='KeyE'||code==='KeyQ')&&!repeat&&craterPlayInput.down(code,code==='KeyQ'?-1:1)){baseSnowControls.cancel();dreamEKey=false;return true;}
     if((code==='KeyE'||code==='KeyQ')&&repeat&&craterPlayInput.target())return true;
     return baseSnowControls.keyDown(code,repeat);
   },
-  keyUp(code){return craterPlayInput.up(code)||baseSnowControls.keyUp(code);},
-  pressTouch(pointer){if(craterPlayInput.down('touch-'+pointer)){baseSnowControls.cancel();return true;}return baseSnowControls.pressTouch(pointer);},
-  releaseTouch(pointer){return craterPlayInput.up('touch-'+pointer)||baseSnowControls.releaseTouch(pointer);},
-  cancelTouch(pointer){craterPlayInput.cancelSource('touch-'+pointer);baseSnowControls.cancelTouch(pointer);},
-  interact(){return craterPlayInput.click()||baseSnowControls.interact();},
-  cancel(){craterPlayInput.clear();baseSnowControls.cancel();dreamEKey=false;},
+  keyUp(code){return cableInput.up(code)||craterPlayInput.up(code)||baseSnowControls.keyUp(code);},
+  pressTouch(pointer){if(cableInput.down('touch-'+pointer)||craterPlayInput.down('touch-'+pointer)){baseSnowControls.cancel();return true;}return baseSnowControls.pressTouch(pointer);},
+  releaseTouch(pointer){return cableInput.up('touch-'+pointer)||craterPlayInput.up('touch-'+pointer)||baseSnowControls.releaseTouch(pointer);},
+  cancelTouch(pointer){cableInput.up('touch-'+pointer);craterPlayInput.cancelSource('touch-'+pointer);baseSnowControls.cancelTouch(pointer);},
+  interact(){return cableInput.click()||craterPlayInput.click()||baseSnowControls.interact();},
+  cancel(){cableInput.cancel();craterPlayInput.clear();baseSnowControls.cancel();dreamEKey=false;},
   update(dt){craterPlayInput.update();baseSnowControls.update(dt);},
 };
 const mobileControls = mountTownMobileControls(snowControls, {
@@ -2452,9 +2628,13 @@ function updateSnowFight(dt: number) {
   if (snowHatTime > 0 && (snowHatTime -= dt) <= 0) snowOnHead = 0;
   if (snowStaggerTime > 0 && (snowStaggerTime -= dt) <= 0) snowballWalkFactor = 1;
   snowballPhysicsMs = snowballs.update(dt);
-  showSnowballScore(snowballs.getState());
+  const snowState=snowballs.getState();
+  showSnowballScore(snowState);
   showSnowGatherProgress();
-  snowballControls.hidden = !active;
+  // No persistent empty snow-inventory overlay during ordinary exploration.
+  // Preserve every live play affordance: gathering, ammo, practice, team
+  // fight/free building and head-snow feedback. Full inventory stays in menu.
+  snowballControls.hidden = !active||!(snowState.ammo>0||!snowballMeter.hidden||!practiceStatus.hidden||teamFight.active()||!snowfightMaterial.hidden||snowOnHead>0);
 
 }
 renderer.domElement.addEventListener('pointerdown', event => {
@@ -2768,15 +2948,12 @@ let craterTelescopeActive = false;
 let craterTelescopeSpot:{east:number;north:number;height:number;range:number}|undefined;
 function currentAction() {
   if (houseDoorTravel || !walking || placeCard.open || museumVisit.dialog.open) return undefined;
+  if(cableController.riding())return cableAction();
   if (sledRide.active()) return { label: '下橇', run: leaveSled };
   if (airHeight !== undefined) return undefined;
   const guardAction = !homeReturn && currentGuardDuty()?.action({ east: x, north: n, height: ground });
   if (guardAction) return guardAction;
-  if (cloudRoute.active()) {
-    if (cloudRoute.riding()) return undefined;
-    const cable = cloudRoute.action({ east: x, north: n, height: ground });
-    return cable ?? nearestTownActivity(summitSledRacks?.actions ?? [], x, n, ground);
-  }
+  if(cloudRoute.active())return cableAction()??summitPassportAction()??nearestTownActivity(summitSledRacks?.actions??[],x,n,ground);
   if (boardingGround) {
     if (railHorseCharm.visibleTo(camera)) return railHorseCharm.action;
     const stop = railway.currentStop;
@@ -2808,6 +2985,8 @@ function currentAction() {
       ridePitch = 0;
     } };
   }
+  const cable=cableAction();if(cable)return cable;
+  const summitStamp=summitPassportAction();if(summitStamp)return summitStamp;
   const terminalAction=!homeReturn&&productionRidge?.roadTerminalAction(x,n,ground);
   if(terminalAction)return {label:terminalAction.title,run(){announceActivity(terminalAction.message)}};
   const terraceAction=!homeReturn&&productionRidge?.terrace?.action({east:x,north:n,height:ground});
@@ -2815,17 +2994,6 @@ function currentAction() {
   if (!homeReturn && (Math.hypot(x-526,n-329)<18 || Math.hypot(x-526,n-354)<12 || Math.hypot(x-440,n-520)<12 || Math.hypot(x-336,n-640)<12) && !productionRidge?.transportReady) return {
     label:'缆车线路检修中',run(){announceActivity('新山地形已启用，缆车与上山道路正在施工，请沿现有安全地面探索。');}
   };
-  const cable = productionRidge?.transportReady ? cloudRoute.action({ east: x, north: n, height: ground }) : undefined;
-  if (cable) return cable;
-  // 缆车修缮 (B2 host): the host offers the repair action for where the
-  // player stands under the latest broadcast state; running it only
-  // submits the event — the authority's frame is what changes the world.
-  const repairState = homeReturn || !productionRidge?.transportReady ? undefined : presence.getCableLineState(1);
-  if (repairState) {
-    cableRepairHost1.sync(repairState);
-    const repair = cableRepairHost1.actions(repairState, { east: x, north: n })[0];
-    if (repair) return { label: repair.label, run() { presence.sendCableRepair(1, repair.event); } };
-  }
   // ZA-36 crater outside works: public-layer E actions only (salvage ①).
   // Routed through the existing E affordance, not a disconnected preview UI.
   const works = homeReturn ? undefined : westCraterRoad?.craterActions;
@@ -2914,10 +3082,9 @@ function landAtSelectedDestination() {
     announceActivity('星港坪暂未开放跨域交通，请从已认证入口进入。');
     return false;
   }
-  if (skyCityViewKind === 'summit') {
-    // 人在山域时选镇域目的地：先切回镇域，再按镇域落点落位。
-    skyCityViewKind = 'ground';
-    presence.setMountainDomain(false);
+  if (cableController.riding() || cloudRoute.active() || skyCityViewKind === 'summit') {
+    announceActivity('请沿已认证的后山返程路线离开，不能使用前往菜单跨域。');
+    return false;
   }
   const destination = points.get(selector.value);
   if (!destination || !settleTownLanding(destination[0], destination[1])) return false;
@@ -2977,7 +3144,9 @@ function visitSelectedDestination() {
   return true;
 }
 rehearse.onclick = () => {
-  if (!festival.active() && festival.start()) setNight(true);
+  if (!festival.active() && festival.start() && localLightingReview) {
+    reviewNight=true;setNight(updateNightSky().nightSide);
+  }
   if (townSettings.open) townSettings.close();
   renderer.domElement.focus({ preventScroll: true });
 };
@@ -2997,7 +3166,7 @@ function lookAllowed() {
   return walking && !houseDoorTravel && !presence.chatFocused() && !museumOverlay() &&
     !townSettings.open && !placeCard.open && !museumVisit.dialog.open;
 }
-function moveAllowed() { return lookAllowed() && !seated && !boardingGround && !cloudRoute.riding() && !plazaPhoto.locked() && !dreamControlsLocked && !dreamCampSeated; }
+function moveAllowed() { return lookAllowed() && !seated && !boardingGround && !cableController.riding() && !plazaPhoto.locked() && !dreamControlsLocked && !dreamCampSeated; }
 function skatesOnIce() {
   return lakeSkating.enabled() && airHeight === undefined && isLakeSkateIce(x, n) &&
     Math.abs(ground - grid.heightAt(x, n)) <= .16;
@@ -3160,15 +3329,13 @@ function walkable(x: number, n: number) {
 }
 function outdoorWalkable(x: number, n: number) {
   if (x < 0) {
-    const road=ensureWestCraterRoad();
-    // The north rail strip is narrower than the crater carrier. Require
-    // support around the footprint, including at their L-shaped boundary;
-    // the E0 crossing itself is shared with the existing town lattice.
-    return n>=1 && n<=worldBounds.depth-1 && road.terrainReadyAt(x,n)
-      && road.terrainReadyAt(x-bodyRadius,n)
-      && road.terrainReadyAt(Math.min(0,x+bodyRadius),n)
-      && road.terrainReadyAt(x,n-bodyRadius)
-      && road.terrainReadyAt(x,n+bodyRadius);
+    // All five footprint probes consume the original carrier or the
+    // newly constructed single-owner northern extension.
+    return n>=1 && n<=Math.min(worldBounds.depth-1,westPresenceBounds.depth-bodyRadius) && westGroundReady(x,n)
+      && westGroundReady(x-bodyRadius,n)
+      && westGroundReady(Math.min(0,x+bodyRadius),n)
+      && westGroundReady(x,n-bodyRadius)
+      && westGroundReady(x,n+bodyRadius);
   }
   // E0 is a supported mesh seam. The legacy 1 m world-edge margin is open only here.
   const westSeam = x < 1 && n >= 1 && n <= worldBounds.depth - 1 && !isWater(x, n);
@@ -3189,8 +3356,8 @@ function surfaceAt(east: number, north: number, hintHeight?: number) {
 function outdoorSurfaceAt(east: number, north: number, hintHeight?: number) {
   outdoorTerrainContract??=createTerrainSupportContract({
     town:grid.heightAt,townReady:grid.terrainReadyAt,
-    west:(e,n)=>ensureWestCraterRoad().heightAt(e,n),
-    westReady:(e,n)=>ensureWestCraterRoad().terrainReadyAt(e,n),
+    west:westGroundAt,
+    westReady:westGroundReady,
     westId:(e,n)=>Math.hypot(e-craterWestSurvey.east,n-craterWestSurvey.north)<ensureWestCraterRoad().terrainBoundary.apronRadius?'crater-road':'west-ground',
     water:(e,n)=>townWater.at(e,n)?.ground,
     ridgeGround:(e,n)=>townWater.at(e,n)?undefined:productionRidge?.heightAt(e,n),
@@ -3310,8 +3477,8 @@ function supportAt(
   return height;
 }
 
-function obstructed(east: number, north: number, feet: number, { colliders, floors } = geometryAt(east, north)) {
-  if (cloudRoute.active()) return cloudRoute.blocked(east, north, feet, bodyRadius, bodyHeight);
+function obstructed(east: number, north: number, feet: number, { colliders, floors } = geometryAt(east, north), outdoors=false) {
+  if (!outdoors&&cloudRoute.active()) return cloudRoute.blocked(east, north, feet, bodyRadius, bodyHeight)||southEntryHost.blocked(east,north,feet,bodyRadius,bodyHeight);
   if (!homeReturn && east < 0) {
     if (!outdoorWalkable(east, north)) return true;
     if (ensureWestCraterRoad().fenceBlocks(east, north, feet, bodyRadius)) return true;
@@ -3338,7 +3505,7 @@ function dryTownLandingHeight(east: number, north: number, heightHint?: number, 
   const geometry = outdoors ? outdoorGeometryAt(east, north) : geometryAt(east, north);
   const base = heightHint ?? surface;
   const feet = supportAt(east, north, base + stepHeight, base + surfaceEpsilon, bodyRadius, surface, geometry);
-  if (Math.abs(feet - base) > stepHeight || obstructed(east, north, feet, geometry)) return undefined;
+  if (Math.abs(feet - base) > stepHeight || obstructed(east, north, feet, geometry,outdoors)) return undefined;
   return Number.isFinite(feet) ? feet : undefined;
 }
 
@@ -3397,8 +3564,31 @@ function stepJumpInMine(dt: number) {
   airHeight = next;
 }
 
+type A31GateFoot={east:number;north:number;height:number};
+let pendingGateStep:{from:A31GateFoot;to:A31GateFoot;entering:boolean}|undefined;
+function gateRouteCertified():boolean{return Boolean(productionRidge?.cloudSeam.domainReady)&&cloudRoute.seamReady();}
+function gateStepEligible(from:A31GateFoot,to:A31GateFoot){
+ return a31GateEligible(gateRouteCertified(),from,to,
+  (e,n,h)=>dryTownLandingHeight(e,n,h,true),
+  (e,n)=>{const h=cloudRoute.surveyedSupport(e,n,bodyRadius);return h!==undefined&&!cloudRoute.surveyedBlocked(e,n,h,bodyRadius,bodyHeight)?h:undefined;});
+}
+function commitGateStep(){
+ const p=pendingGateStep;pendingGateStep=undefined;
+ if(!p||!walking||homeReturn||airHeight!==undefined||sledRide.active()||cableController.riding()||x!==p.from.east||n!==p.from.north||ground!==p.from.height||cloudRoute.active()===p.entering)return;
+ const accept=()=>gateStepEligible(p.from,p.to);
+ const moved=p.entering?cloudRoute.enterAt(p.to,accept):cloudRoute.leaveAt(p.to,accept);
+ if(!moved)return;
+ x=p.to.east;n=p.to.north;ground=p.to.height;
+ stopTravel();landingFeedback.reset();airHeight=undefined;riseSpeed=0;
+ // Reparent and select the actual room before the first new pose.
+ // No menu jump or nearest legal spawn is used.
+ presence.setSummitDomain(p.entering,p.entering?cloudRoute.scene:undefined,p.entering?undefined:scene);
+ presence.sample(true,x,n,ground,playerBodyYaw());
+ storeWalkView(walkCurrent);walkPrevious.copy(walkCurrent);
+}
 let ridgeMoveReject:unknown;
 function tryMove(nextX: number, nextN: number) {
+  if(pendingGateStep)return false;
   if (dreamInMine()) return tryMoveInMine(nextX, nextN);
   if (cloudRoute.active() && !cloudRoute.acceptsStep(x, n, nextX, nextN, bodyRadius)) return false;
   if (!walkable(nextX, nextN)) {
@@ -3425,6 +3615,13 @@ function tryMove(nextX: number, nextN: number) {
   if (!homeReturn && currentGuardDuty()?.blocksStep(
     { east: x, north: n, height: feet }, { east: nextX, north: nextN, height: nextHeight },
   )) {if(profileTown&&previewOptions.has('mRoadSurvey'))ridgeMoveReject={reason:'guard',next:[nextX,nextN,floor]};return false;}
+  const gateFrom={east:x,north:n,height:ground},gateTo={east:nextX,north:nextN,height:nextHeight};
+  if(a31GateCrossing(cloudRoute.active(),gateFrom,gateTo)){
+    if(airHeight!==undefined||sledRide.active()||sledRide.recovering()||!gateStepEligible(gateFrom,gateTo))return false;
+    // Commit at the next frame boundary, so the old scene cannot run
+    // its remaining physics/render/presence work in the new room.
+    pendingGateStep={from:gateFrom,to:gateTo,entering:!cloudRoute.active()};return true;
+  }
   [x, n] = [nextX, nextN];
   if (airHeight === undefined) {
     if (ground - nextHeight > stepHeight) {
@@ -3777,12 +3974,42 @@ function updateSledPresentation(visuals: SledRackVisuals, dt: number) {
     : sledRide.recovering() ? '翻橇了，缓一缓' : '';
 }
 
-function renderCloudRoute(frameSeconds: number) {
-  const cabin = cloudRoute.ridePoint();
+/** Line one stays in the real town scene. B owns cabin position and presence;
+ * the regular walking frame must not overwrite either while aboard. */
+function renderFrontCableFrame(frame: CableRideFrame,dt:number,now:number,frameSeconds:number){
+ const f=frame.feet;
+ const ceremony=ceremonyStateAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes);
+ const sky=updateNightSky(dimLevelAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes));applyNightSide(sky);
+ const weatherState=presence.getTownOutdoorWeather();
+ const local=weatherState&&ceremony.phase==='ordinary'?sampleSouthRegionalWeather(weatherState,f.east,f.north,f.height,false):undefined;
+ const weather=local?.weather??(ceremony.phase==='ordinary'?townSnowWeatherAt(ceremony.now,'light'):townSnowWeatherForFrame(ceremony));
+ faceFrom(f.east,f.north,f.height+eye,yaw,pitch);
+ // Riding bypasses the ordinary walking renderer; keep actual terrain LOD
+ // ahead of the moving cabin rather than freezing it at the boarding dock.
+ const detailStart=profileTown?performance.now():0;
+ snowCover.update(dt,nightMode);
+ prepareTerrain(f.east,f.north,false,false,visualSnowCover,camera,true);
+ productionRidge?.updateView(f.east,f.north,!previewOptions.has('mRidgeDistantOff'));
+ const detailMs=profileTown?performance.now()-detailStart:0;
+ element('position').textContent='缆车一线 · 前山'+(frame.synchronized?'':' · 等待同步');
+ presence.update(dt);
+ townWeatherVisual.update(weather,local?.weather,local?.exposure??1,dt,now);
+ snowfall.update(camera,dt,false,true);
+ applySouthWeatherPresentation(scene,weatherFog,weather,sky,particleDensityScale(),local?.weather);
+ regionalAudio.sync(local?.weather,true,true,ceremony.phase==='ordinary',now);
+ showRegionalWeather(southWeatherStatus(sky,weatherState,local?.weather,ceremony.phase!=='ordinary',true,true));
+ touchWalk.setAllowed(false);crosshair.hidden=!lookAllowed();touchJump.disabled=true;museumMapButton.hidden=true;snowballControls.hidden=true;
+ refreshPlayerControls();renderer.render(scene,camera);
+ if(profileTown)renderer.domElement.dispatchEvent(new CustomEvent('town-frame-profile',{detail:{frameMs:frameSeconds*1000,detailMs,calls:renderer.info.render.calls,triangles:renderer.info.render.triangles,cameraY:camera.position.y,weatherCycle:southWeatherProfile(sky,weatherState,weather,local?.weather),fogNear:weatherFog.near,fogFar:weatherFog.far,points:renderer.info.render.points,summitProduction:cloudRoute.state(),cableRide:frame,actualFoot:f}}));
+}
+function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame) {
+  const cabin = cableFrame?.feet;
+  const weatherState=presence.getTownOutdoorWeather();
+  const ceremonyState=ceremonyStateAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes);
   if (cabin) {
     cloudRoute.updateView(cabin);
     faceFrom(cabin.east, cabin.north, cabin.height + eye, yaw, pitch);
-    element('position').textContent = '缆车一线 · 前山';
+    element('position').textContent = cableFrame?.whiteout?'':'缆车二线 · 主峰';
   } else {
     summitSledRacks ??= createSledRacks('summit');
     const { forward, right, sprint } = walkingAxes();
@@ -3794,7 +4021,12 @@ function renderCloudRoute(frameSeconds: number) {
       if (moveAllowed()) {
         if (sledRide.active()) stepMountedSled(forward, right);
         else {
-          const nextX = x + east * townPhysicsDelta, nextN = n + north * townPhysicsDelta;
+          const roof=southEntryHost.sheltered(x,n,ground);
+          const baseWindScale=airHeight===undefined?southWeatherWalkingScale(weatherState,x,n,east,north,true,ceremonyState.phase==='ordinary',roof):1;
+          const localWind=cloudRoute.windAt(x,n);
+          const windScale=localWind===undefined?baseWindScale:1+(baseWindScale-1)*Math.max(0,Math.min(1,localWind));
+          const frostScale=airHeight===undefined?ceremonyFrost.walkingScale():1;
+          const nextX = x + east * windScale * frostScale * townPhysicsDelta, nextN = n + north * windScale * frostScale * townPhysicsDelta;
           if ((east || north) && !tryMove(nextX, nextN) && !tryMove(nextX, n)) tryMove(x, nextN);
           stepJump(townPhysicsDelta);
         }
@@ -3807,8 +4039,10 @@ function renderCloudRoute(frameSeconds: number) {
     element('position').textContent = `东 ${x.toFixed(1)} m · 北 ${n.toFixed(1)} m · ${place}${sledRide.active() ? ' · 雪橇' : ''}`;
     updateSledPresentation(summitSledRacks.visuals, Math.min(.25, frameSeconds));
   }
-  presence.setActivityPose(effectiveTownAvatarPose(false, false, false, false, 0, sledRide.active(), sledRide.drifting()));
-  presence.sample(!cabin && walking, x, n, airHeight ?? ground, playerBodyYaw());
+  if(!cabin){
+    presence.setActivityPose(effectiveTownAvatarPose(false, false, false, false, 0, sledRide.active(), sledRide.drifting()));
+    presence.sample(walking, x, n, airHeight ?? ground, playerBodyYaw());
+  }
   presence.update(Math.min(.25, frameSeconds));
   skyCityHost.update({ kind: skyCityViewKind }, Math.min(.25, frameSeconds));
   const enabled = moveAllowed();
@@ -3816,12 +4050,43 @@ function renderCloudRoute(frameSeconds: number) {
   crosshair.hidden = !lookAllowed();
   touchJump.disabled = !canJump();
   museumMapButton.hidden = true;
+  snowballControls.hidden=true;
   refreshPlayerControls();
+  const local=weatherState&&ceremonyState.phase==='ordinary'
+    ?sampleSouthRegionalWeather(weatherState,camera.position.x,-camera.position.z,camera.position.y-eye,true):undefined;
+  const weather=local?.weather??(ceremonyState.phase==='ordinary'?townSnowWeatherAt(ceremonyState.now,'light'):townSnowWeatherForFrame(ceremonyState));
+  summitWeatherVisual.update(weather,local?.weather,local?.exposure??1,Math.min(.25,frameSeconds),performance.now());
+  const summitDt=Math.min(.25,frameSeconds);
+  const roof=southEntryHost.sheltered(x,n,ground);
+  summitSnowfall.update(camera,summitDt,!cabin&&walking,roof);
+  // Reuse the single existing player frost tracker in the early-return
+  // mountain branch. Snow depth is read only at a real supported foot,
+  // never inferred from the camera altitude or a preview mesh.
+  ceremonyFrost.setBaseline(ceremonyState.frostBaseline);
+  ceremonyFrost.setWarmth('interior',roof||!!cabin);
+  ceremonyFrost.setWarmth('onsen',false);
+  ceremonyFrost.setWarmth('fire-source',false);
+  if(warmDrinkUntil&&performance.now()>=warmDrinkUntil){warmDrinkUntil=0;ceremonyFrost.setWarmth('hot-drink',false);}
+  const mountainAssembly=cloudRoute.assembly();
+  const support=cloudRoute.walkingSurfaceAt(x,n,bodyRadius);
+  const actualSnow=mountainAssembly&&!roof&&!cabin&&walking&&airHeight===undefined&&support!==undefined&&Math.abs(support-ground)<.18
+    ?mountainAssembly.summitSnowAt(x-mountainAssembly.group.position.x,n+mountainAssembly.group.position.z):undefined;
+  const coldDepth=actualSnow!==undefined&&Number.isFinite(actualSnow)?Math.max(0,Math.min(1,actualSnow)):0;
+  ceremonyFrost.setExposure(weather.intensity,coldDepth,coldDepth>=.25?'dark-snow':'none',hasFrostCeremonyRelief(ceremonyState),1,sledRide.active());
+  ceremonyFrost.update(summitDt);
+  const fog=cloudRoute.scene.fog as Fog;
+  applySouthWeatherPresentation(cloudRoute.scene,fog,weather,skyFrame,particleDensityScale(),local?.weather);
+  regionalAudio.sync(local?.weather,roof,!!cabin,ceremonyState.phase==='ordinary'&&!cableFrame?.whiteout,performance.now());
+  showRegionalWeather(cableFrame?.whiteout?'':southWeatherStatus(skyFrame,weatherState,local?.weather,ceremonyState.phase!=='ordinary',!!cabin,roof));
+  cablePresentation.apply(cloudRoute.scene,cableFrame);
   renderer.render(cloudRoute.scene, camera);
   if (profileTown) {
     renderer.domElement.dispatchEvent(new CustomEvent('town-frame-profile', { detail: {
       frameMs: frameSeconds * 1000, calls: renderer.info.render.calls,
       triangles: renderer.info.render.triangles, cameraY: camera.position.y,
+      weatherCycle:southWeatherProfile(skyFrame,weatherState,weather,local?.weather),
+      fogNear:fog.near,fogFar:fog.far,points:renderer.info.render.points,mountainSheltered:roof,mountainSnowDepth:coldDepth,
+      summitProduction:cloudRoute.state(),cableRide:cableFrame,actualFoot:cableFrame?.feet??{east:x,north:n,height:airHeight??ground},
     } }));
   }
 }
@@ -3830,12 +4095,32 @@ renderer.setAnimationLoop(now => {
   const frameSeconds = Math.max(0, now - previous) / 1000;
   const dt = Math.min(.25, frameSeconds);
   previous = now;
-  cloudRoute.update({ east: x, north: n, height: ground }, !!productionRidge?.transportReady && !sledRide.active());
+  // The root entry awaits the real D2 staging behind the existing loading
+  // screen. Do not render or accept movement into a half-built world.
+  if(document.body.classList.contains('town-entry-pending'))return;
+  commitGateStep();
+  cablePresentation.beginFrame();
+  cableInput.tick();cableFrame=cableController.tick(playerBodyYaw());
+  const currentFoot=cableFrame?.feet??{east:x,north:n,height:ground};
+  cloudRoute.update(currentFoot);preparePublicTransport(currentFoot);
+  cableAudio.sync(cableFrame,weatherAudioToggle.checked&&!document.hidden);
+  const summitWeatherState=presence.getTownOutdoorWeather();
+  const summitCeremony=ceremonyStateAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes);
+  cloudRoute.updateSnow(dt,(e,n,h)=>summitWeatherState&&summitCeremony.phase==='ordinary'
+    ?sampleSouthRegionalWeather(summitWeatherState,e,n,h,true).weather
+    :summitCeremony.phase==='ordinary'?townSnowWeatherAt(summitCeremony.now,'light'):townSnowWeatherForFrame(summitCeremony));
+  showSummitStatus(now);
+  // The mountain branch returns before the ordinary town weather block.
+  // Apply the same authoritative cycle here, before its scene is rendered.
+  const summitSkyFrame=cloudRoute.active()?updateNightSky(dimLevelAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes)):undefined;
+  if(summitSkyFrame)applyNightSide(summitSkyFrame);
+  southEntryHost.sync(cloudRoute.assembly(),nightMode);
   updateGuardPosts();
-  if (cloudRoute.active()) {
-    renderCloudRoute(frameSeconds);
+  if (summitSkyFrame) {
+    renderCloudRoute(frameSeconds,summitSkyFrame);
     return;
   }
+  if(cableFrame?.line===1){renderFrontCableFrame(cableFrame,dt,now,frameSeconds);return;}
   practiceTarget.updateRound();
   const startEast = x, startNorth = n;
   if (ceremonyLook) {
@@ -3910,6 +4195,8 @@ renderer.setAnimationLoop(now => {
     if (moveAllowed()) {
       const chillEnabled = ceremonyFrost.enabled();
       const chillTarget = ceremonyFrost.walkingScale();
+      const footWeather=presence.getTownOutdoorWeather();
+      const footOrdinary=ceremonyStateAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes).phase==='ordinary';
       const speed = (sprint ? 11.3 : 7.5) * snowballWalkFactor * landingFeedback.walkingScale() /
         Math.max(1, Math.hypot(forward, right));
       const east = (Math.sin(yaw) * forward + Math.cos(yaw) * right) * speed;
@@ -3953,7 +4240,8 @@ renderer.setAnimationLoop(now => {
               const target = snowCover.movementScale(x, n, ground, snowCleared, sprint);
               snowMoveScale = approachTownSnowScale(snowMoveScale, target, townPhysicsDelta);
               chillMoveScale = chillEnabled ? approachTownSnowScale(chillMoveScale, chillTarget, townPhysicsDelta) : 1;
-              moveScale = snowMoveScale * chillMoveScale;
+              const footShelter=Boolean(homeReturn)||roofed(x,n,ground)||inTavernWarmShed(tavernPlot,x,n,ground);
+              moveScale = snowMoveScale * chillMoveScale * southWeatherWalkingScale(footWeather,x,n,east,north,false,footOrdinary,footShelter);
             }
             const nx = x + east * moveScale * townPhysicsDelta;
             const nn = n + north * moveScale * townPhysicsDelta;
@@ -4039,28 +4327,21 @@ renderer.setAnimationLoop(now => {
       transition:dreamControlsLocked||dreamTripActive||dreamActiveTripId!==undefined,
       coverOpen:dreamChain?.coverOpen()??true});
   }
-  presence.setWestDomain(walking && !homeReturn && x < 0);
-  presence.sample(walking,
-    boardingGround ? camera.position.x : seated?.x ?? x,
-    boardingGround ? -camera.position.z : seated?.n ?? n,
-    boardingGround ? camera.position.y - eye : palaceSlideGround ?? (throneSeat ? throneSeat.eyeY - .98 : airHeight ?? ground),
+  const presenceFoot={
+    east:boardingGround ? camera.position.x : seated?.x ?? x,
+    north:boardingGround ? -camera.position.z : seated?.n ?? n,
+    height:boardingGround ? camera.position.y - eye : palaceSlideGround ?? (throneSeat ? throneSeat.eyeY - .98 : airHeight ?? ground),
+  };
+  const ordinaryOutdoor=walking&&!homeReturn&&!dreamInMine()&&!dreamControlsLocked&&!dreamTripActive&&skyCityViewKind==='ground';
+  // Never publish a clamped 655.35m town pose while on the north apron.
+  // The same actual walking/seat foot selects and enters its valid room.
+  const roomReady=!ordinaryOutdoor||syncA31OutdoorRoom(presenceFoot,presence);
+  if(!ordinaryOutdoor)presence.setWestDomain(walking && !homeReturn && x < 0);
+  presence.sample(walking&&roomReady,presenceFoot.east,presenceFoot.north,presenceFoot.height,
     boardingGround ? Math.atan2(lookAhead.x, -lookAhead.z) + rideYawOffset : seated?.yaw ?? playerBodyYaw(),
-    walking && !museumOverlay(),
+    walking && roomReady && !museumOverlay(),
   );
   presence.update(dt);
-  const cableState1 = presence.getCableLineState(1);
-  if (cableState1&&productionRidge?.transportReady) {
-    cableRepairHost1.sync(cableState1);
-    if (cableStageSeen !== cableState1.stage) {
-      if (cableStageSeen !== undefined && cableState1.stage === 'one-station') {
-        announceActivity('缆车被震醒了，只先动一站');
-      }
-      if (cableStageSeen !== undefined && cableState1.stage === 'full-line') {
-        announceActivity('缆车修通了，全线通车');
-      }
-      cableStageSeen = cableState1.stage;
-    }
-  }
   icePalaceCrown.render(icePalaceSelfCrowned ? 'self' : presence.remoteCrown() ?? null, camera);
   bellGame.update(dt);
   // 3.0 D2: sled presentation, field track rendering, grand prix timing/board.
@@ -4193,27 +4474,22 @@ renderer.setAnimationLoop(now => {
   const duckMusic = ceremonyElapsed !== undefined && ceremonyElapsed >= -10 && ceremonyElapsed < 30;
   festival.update(dt, { listener: camera.position, ceremonyElapsed, musicLevel: townBgm.setDuck(duckMusic ? .3 : 1) });
   const weatherStartedAt = profileTown ? performance.now() : 0;
-  // Day/night visuals follow the server night-window clock (one game day = 10
-  // minutes: 6 daylight, 4 night). phase 'day' is the only daylight phase;
-  // 'awaiting-beacon' and 'night-window' are night. Applied on phase change
-  // only, so the ceremony can still force night within a phase. The lighting
-  // button remains a manual override until the next phase change.
-  const nightWindowState = presence.getTownNightWindow();
-  if (nightWindowState) {
-    const clockNight = nightWindowState.phase !== 'day';
-    if (clockNight !== clockNightApplied) {
-      clockNightApplied = clockNight;
-      setNight(clockNight);
-    }
-  }
-  const weather = townSnowWeatherForFrame(ceremonyState);
+  const skyFrame = updateNightSky();
+  applyNightSide(skyFrame);
+  // Do not attenuate scripted ceremony lamp bands by the ordinary day cycle.
+  townLights.setDusk(ordinaryBellHours && skyFrame.lampLevel>0);
+  townLights.setNightLevel(ordinaryBellHours ? Math.round(skyFrame.lampLevel*255)/255 : 1);
+  const outdoorWeather = presence.getTownOutdoorWeather();
+  const regionalWeather=outdoorWeather&&ordinaryBellHours?sampleSouthRegionalWeather(outdoorWeather,shedEast,shedNorth,shedFeet,false):undefined;
+  // Before the authoritative snapshot arrives use a fixed clear-snow baseline,
+  // not the old independent 64-slot client schedule.
+  const weather = regionalWeather?.weather ?? (ordinaryBellHours?townSnowWeatherAt(ceremonyState.now,'light'):townSnowWeatherForFrame(ceremonyState));
   const effectiveSnowIntensity = weather.intensity;
   const roofSheltered = walking && !boardingGround && !homeReturn && !sheltered && !shedSheltered &&
     roofed(shedEast, shedNorth, shedFeet);
-  snowfall.setIntensity(effectiveSnowIntensity);
+  townWeatherVisual.update(weather,regionalWeather?.weather,regionalWeather?.exposure??1,dt,now);
   snowfall.update(camera, dt, walking, sheltered || shedSheltered || roofSheltered || Boolean(homeReturn));
-  weatherFog.near = weather.fogNear;
-  weatherFog.far = weather.fogFar;
+  applySouthWeatherPresentation(scene,weatherFog,weather,skyFrame,particleDensityScale(),regionalWeather?.weather);
   // Weather changes the snow tint and cold exposure. The movement and gathering cover
   // still follows the existing ceremony intensity and night mode.
   visualSnowCover = ceremonyState.phase === 'ordinary'
@@ -4223,12 +4499,11 @@ renderer.setAnimationLoop(now => {
   snowCover.setWeather(weather);
   // Batch-67: clouds hang off the same single authoritative weather state
   // (ZB-20 / G-09 presence weather) — never a second weather source.
-  skyClouds.update(ceremonyState.now, { weather: presence.getTownOutdoorWeather(), night: nightMode });
+  skyClouds.update(ceremonyState.now, { weather: presence.getTownOutdoorWeather(), night: nightMode,sky:skyFrame.sample });
   // Batch-103 ruling: the cloud band reads the same ZB-20 single
   // weather state (no second weather source); forward every frame once
   // the presence weather has joined (until then the band keeps its
   // shipped defaults, same as the pre-wiring behaviour).
-  const outdoorWeather = presence.getTownOutdoorWeather();
   if (outdoorWeather) frontRidgeCloudBand.applyOutdoorWeather(outdoorWeather);
   frontRidgeCloudBand.update(dt);
   const weatherMs = profileTown ? performance.now() - weatherStartedAt : 0;
@@ -4238,6 +4513,8 @@ renderer.setAnimationLoop(now => {
   if (railNotice) announceActivity(railNotice);
   ceremonyOverlay.apply(ceremonyState);
   const indoors = sheltered || Boolean(homeReturn) || shedSheltered || roofSheltered;
+  regionalAudio.sync(regionalWeather?.weather,indoors,!!boardingGround,ordinaryBellHours,now);
+  showRegionalWeather(southWeatherStatus(skyFrame,outdoorWeather,regionalWeather?.weather,!ordinaryBellHours,!!boardingGround,indoors));
   ceremonyFrost.setWarmth('interior', indoors);
   ceremonyFrost.setWarmth('onsen', hotSpringSoak.active());
   ceremonyFrost.setWarmth('fire-source', homeReturn
@@ -4297,7 +4574,7 @@ renderer.setAnimationLoop(now => {
   touchWalk.setAllowed(moveAllowed());
   crosshair.hidden = !lookAllowed();
   touchJump.disabled = !canJump();
-  museumMapButton.hidden = !canControl || museumOverlay() || Math.abs(local.x) > 29 || Math.abs(local.z) > 19;
+  museumMapButton.hidden = !walking || placeCard.open || museumVisit.dialog.open || museumOverlay() || Math.abs(local.x) > 29 || Math.abs(local.z) > 19;
   refreshPlayerControls();
   const groupPhotoFrame = plazaPhoto.update({
     east: x, north: n, height: ground,
@@ -4377,9 +4654,12 @@ renderer.setAnimationLoop(now => {
         movementMs: movementStepMs, snowballMs: snowballPhysicsMs,
         calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, cameraY: camera.position.y, detailMs,
         weatherMs, weatherTier: weather.tier, snowIntensity: effectiveSnowIntensity, snowCover: visualSnowCover,
+        weatherCycle:southWeatherProfile(skyFrame,outdoorWeather,weather,regionalWeather?.weather),
         fogNear: weatherFog.near, fogFar: weatherFog.far, points: renderer.info.render.points,
         craterPerf:{exteriorCertified:craterExteriorCertified,undergroundVisible:undergroundRenderParent?.visible},
-        ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],heading:yaw,...(previewOptions.has('mRoadSurvey')?{roadGuide:productionRidge.baseToMiddleGuide,rearConnected:productionRidge.rearConnected,moveReject:ridgeMoveReject}:{}),surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities,cableInstances:productionRidge.facilities?.visibleInstances(),terraceMounted:!!productionRidge.terrace,cloudSeam:productionRidge.cloudSeam},
+        summitProduction:{...cloudRoute.state(),farDraws:summitSkylineDraws,frontPreparationMs,frontPreparationError,frontAuditSlices:productionRidge?.frontAuditSlices,frontRouteAudit:productionRidge?.frontRouteAudit,rearSeam:rearSeamCertificate,publicTransportBound},
+      terrainPreload:townTerrainPreloadStats(),
+        ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,frontRoadHandoffs:productionRidge.frontRoadHandoffs,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],heading:yaw,...(previewOptions.has('mRoadSurvey')?{roadGuide:productionRidge.baseToMiddleGuide,rearConnected:productionRidge.rearConnected,moveReject:ridgeMoveReject}:{}),surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities,cableInstances:productionRidge.facilities?.visibleInstances(),terraceMounted:!!productionRidge.terrace,cloudSeam:productionRidge.cloudSeam},
         ...(skylinePeak ? { summitSkyline: { draws: summitSkylineDraws, peakNdc: skylinePeak.toArray(),
           camera: camera.position.toArray(), far: camera.far } } : {}),
       } }));

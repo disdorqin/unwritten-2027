@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-  <title>UNWRITTEN 2027 · 未写镇 3.0 体验版</title>
+  <title>UNWRITTEN 2027 · 未写镇 3.1 体验版</title>
   <link rel="stylesheet" href="./town-blockout/style.css">
   <link rel="stylesheet" href="./town-blockout/town-panel.css">
   <link rel="stylesheet" href="./town-blockout/town-entry.css">
@@ -29,7 +29,7 @@
 <body class="town-entry-pending">
   <section id="town-entry" aria-labelledby="town-entry-title">
     <div class="town-entry-content">
-      <h1 id="town-entry-title">进入未写镇 3.0</h1>
+      <h1 id="town-entry-title">进入未写镇 3.1</h1>
       <p id="town-entry-loading" role="status">正在加载小镇…</p>
       <p id="town-entry-guide" hidden>内置浏览器可能限制转向。请点右上角菜单，选择「在浏览器中打开」，也可以继续进入并拖动转向。</p>
       <p id="town-entry-error" role="alert" hidden>小镇没有加载成功。请重试，或在系统浏览器中打开。</p>
@@ -43,18 +43,12 @@
     </div>
   </section>
   <main id="scene" aria-label="雪镇三维场景"></main>
-  <button id="town-music-toggle" class="town-hud-button" type="button" aria-label="背景音乐" aria-pressed="false">
-    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M3 9h4l5-4v14l-5-4H3z"/>
-      <path class="speaker-waves" d="M16 9a4 4 0 0 1 0 6m3-9a8 8 0 0 1 0 12"/>
-      <path class="speaker-cross" d="m16 9 5 6m0-6-5 6"/>
-    </svg>
-  </button>
+  <!-- Nonessential HUD controls live in the corner menu, not over the scene. -->
   <dialog id="town-settings" class="panel" aria-labelledby="town-settings-title">
     <div class="town-panel-heading">
-      <h1 id="town-settings-title">小镇设置 · 3.0 体验版</h1>
+      <h1 id="town-settings-title">小镇菜单</h1>
       <output id="town-presence-status" role="status" aria-label="小镇联机状态">单人模式</output>
-      <button id="town-settings-close" type="button" autofocus>关闭</button>
+      <button id="town-settings-close" type="button" autofocus aria-label="收起小镇菜单">×</button>
     </div>
     <p id="env-banner" role="note" hidden><span id="env-banner-message">当前浏览器可能不支持鼠标视角锁定，建议复制链接到电脑上的 Chrome 或 Edge 打开。</span> <button id="env-banner-dismiss" type="button" hidden>关闭提示</button></p>
     <div id="town-panel-controls">
@@ -72,11 +66,16 @@
         <output id="town-mascot-owner-status" aria-live="polite">未验证</output>
         <label hidden><input id="town-mascot-follow" type="checkbox" checked> 小未跟随</label>
       </details>
-      <nav aria-label="场景显示">
+      <nav class="town-menu-actions" aria-label="场景显示与快捷设置">
         <button id="lighting" type="button" aria-pressed="true" aria-label="切换白昼和雪夜">雪夜</button>
         <button id="snow" type="button" aria-pressed="true">降雪</button>
+        <button id="town-music-toggle" type="button" aria-label="背景音乐" aria-pressed="false">音乐</button>
+        <button id="fullscreen-toggle" type="button" hidden aria-pressed="false">全屏</button>
+        <button id="museum-map-button" type="button" hidden>馆内地图</button>
       </nav>
       <label>前往 <select id="jump"></select></label>
+      <details id="town-advanced-settings"><summary>画质、音量与操作设置</summary>
+      <div id="town-advanced-controls">
       <label>触屏转向灵敏度 <input id="touch-look-sensitivity" type="range" min="0.5" max="2.5" step="0.1" value="1.4"></label>
       <label>画质 <select id="quality-tier">
         <option value="smooth">流畅</option>
@@ -84,25 +83,30 @@
         <option value="fine">精美</option>
       </select></label>
       <p id="help"></p>
+      </div>
+      </details>
       <output id="position"></output>
+      <output id="town-snow-inventory" aria-live="off"></output>
       <button id="rehearse" class="festival-button" type="button">跨年预演</button>
       <nav class="town-progress" aria-label="小镇进度">
         <button id="town-passport-button" type="button">纪念戳册</button>
         <button id="town-lights-button" type="button">点亮小镇</button>
         <button id="town-firecracker-bag" type="button">爆竹背包</button>
+        <button id="snowball-board" type="button">雪仗榜</button>
       </nav>
+      <section id="town-chat" aria-label="小镇聊天" hidden>
+        <button id="town-chat-toggle" type="button" aria-expanded="false">聊天<span id="town-chat-unread" aria-hidden="true" hidden></span></button>
+        <div id="town-chat-log" role="log" aria-label="最近的聊天消息"></div>
+        <form id="town-chat-form">
+          <button id="town-chat-channel" type="button" aria-label="切换频道，当前近场">近场</button>
+          <input id="town-chat-text" type="text" maxlength="200" autocomplete="off"
+            aria-label="聊天消息" placeholder="说点什么">
+          <button type="submit">发送</button>
+        </form>
+      </section>
     </div>
   </dialog>
-  <section id="town-chat" aria-label="小镇聊天" hidden>
-    <button id="town-chat-toggle" type="button" aria-expanded="true">聊天<span id="town-chat-unread" aria-hidden="true" hidden></span></button>
-    <div id="town-chat-log" role="log" aria-label="最近的聊天消息"></div>
-    <form id="town-chat-form">
-      <button id="town-chat-channel" type="button" aria-label="切换频道，当前近场">近场</button>
-      <input id="town-chat-text" type="text" maxlength="200" autocomplete="off"
-        aria-label="聊天消息" placeholder="说点什么">
-      <button type="submit">发送</button>
-    </form>
-  </section>
+
   <span id="town-chat-self" aria-hidden="true" hidden></span>
   <section id="museum-inspection" aria-labelledby="exhibit-title" hidden>
     <header>
@@ -130,13 +134,13 @@
       </div>
     </div>
   </section>
-  <button id="museum-map-button" type="button" hidden>馆内地图</button>
+
   <span id="walk-crosshair" aria-hidden="true" hidden></span>
   <button id="lock-look" type="button" hidden>点击锁定鼠标视角</button>
   <button id="touch-jump" type="button" hidden>跳跃</button>
   <button id="touch-sprint" type="button" hidden aria-pressed="false">疾跑</button>
-  <button id="fullscreen-toggle" type="button" hidden aria-pressed="false">全屏</button>
-  <button id="town-panel-toggle" class="town-hud-button" type="button" aria-label="小镇设置" aria-haspopup="dialog" aria-controls="town-settings">
+
+  <button id="town-panel-toggle" class="town-hud-button" type="button" aria-label="小镇设置" aria-haspopup="dialog" aria-expanded="false" aria-controls="town-settings" title="小镇菜单">
     <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
       <path d="M4 6h7m4 0h5M4 12h12m4 0h0M4 18h3m4 0h9M12 4v4m5 2v4M8 16v4"/>
     </svg>
@@ -149,7 +153,7 @@
     <output id="snow-practice-status" aria-label="移动靶场计时" aria-live="off" hidden></output>
     <progress id="snowball-action-meter" aria-label="雪球动作进度" value="0" max="1" hidden></progress>
     <button id="snowball-primary" type="button" hidden>投雪球</button>
-    <button id="snowball-board" type="button">雪仗榜</button>
+
     <button id="snowfight-start" type="button" hidden>团队雪仗</button>
     <button id="snowfight-build" type="button" aria-pressed="false" hidden>堆墙</button>
     <output id="snowfight-material" hidden>雪料 0</output>

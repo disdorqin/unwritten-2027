@@ -8,7 +8,7 @@ const terrainChunkCells = 64 / gridStep;
 const aerialTileCells = 4 / gridStep;
 const clipTolerance = .0001;
 type TerrainSpan = { start: number; count: number; bounds: Box3 };
-type WalkingChunk={mesh:Mesh;first:number;count:number;spans:TerrainSpan[];index?:BufferAttribute};
+type WalkingChunk={mesh:Mesh;first:number;count:number;spans:TerrainSpan[];bounds:Box3;index?:BufferAttribute};
 const palette = ['#d8e1ef', '#9a887c', '#bcac97', '#c7b795', '#78b8d9'].map(value => new Color(value));
 
 export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof createTerrainGrid>, ridgeOwnsCell?: (east:number,north:number)=>boolean) {
@@ -30,7 +30,8 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
       `);
   };
 
-  const pending: { east: number; north: number }[] = [];
+  const pending: { east: number; north: number; fallback: Mesh }[] = [];
+  const resident = new Group();resident.name='Continuous outer terrain coverage';parent.add(resident);
   const detailed = new Group();
   detailed.name = 'Walkable terrain';
   parent.add(detailed);
@@ -138,7 +139,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
     }
     const mesh = new Mesh(geometry, material);
     mesh.name = `Terrain ${east * gridStep},${north * gridStep}`;
-    if(stride===1&&offset)walkingChunks.push({mesh,first:nextVertex-offset/3,count:offset/3,spans:aerialTiles.slice(firstTile)});
+    if(stride===1&&offset){const spans=aerialTiles.slice(firstTile),bounds=new Box3();for(const span of spans)bounds.union(span.bounds);walkingChunks.push({mesh,first:nextVertex-offset/3,count:offset/3,spans,bounds});}
     return mesh;
   }
 
@@ -147,10 +148,54 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
     if(mesh.geometry.getAttribute('position').count)detailed.add(mesh);else mesh.geometry.dispose();
   }
 
+  // Keep real coverage on every pending cell. Shared metre-spaced
+  // perimeter vertices connect coarse fans to detailed terrain and ridge.
+  function createResident(east:number,north:number){
+    const eEnd=Math.min(east+terrainChunkCells,cellWidth),nEnd=Math.min(north+terrainChunkCells,cellDepth);
+    const xyz:number[]=[],rgb:number[]=[],snow:number[]=[];
+    const emit=(a:number,b:number,c:number)=>{
+      const s0=surfaces[a],s1=surfaces[b],s2=surfaces[c],s=s0===s1||s0===s2?s0:s1===s2?s1:0;
+      const col=palette[s],ret=s===0?220:s===1?49:s===2?27:s===3?18:0;
+      for(const v of [a,b,c]){
+        xyz.push((v%gridWidth)*gridStep,elevation[v],-Math.floor(v/gridWidth)*gridStep);
+        rgb.push(col.r,col.g,col.b);snow.push(elevation[v]>waterHeight+.08?ret:0);
+      }
+    };
+    const id=(e:number,n:number)=>n*gridWidth+e;
+    const tile=8;
+    for(let n=north;n<nEnd;n+=tile)for(let e=east;e<eEnd;e+=tile){
+      const r=Math.min(e+tile,eEnd),t=Math.min(n+tile,nEnd);
+      let occupied=0;
+      for(let j=n;j<t;j++)for(let i=e;i<r;i++)if(ridgeOwnsCell?.(i*gridStep,j*gridStep))occupied++;
+      if(occupied===(r-e)*(t-n))continue;
+      if(occupied||r-e<2||t-n<2){
+        for(let j=n;j<t;j++)for(let i=e;i<r;i++){
+          if(ridgeOwnsCell?.(i*gridStep,j*gridStep))continue;
+          const a=id(i,j),b=id(i+1,j),c=id(i,j+1),d=id(i+1,j+1);emit(a,b,c);emit(b,d,c);
+        }
+      }else{
+        const edge:number[]=[];
+        for(let i=e;i<r;i++)edge.push(id(i,n));
+        for(let j=n;j<t;j++)edge.push(id(r,j));
+        for(let i=r;i>e;i--)edge.push(id(i,t));
+        for(let j=t;j>n;j--)edge.push(id(e,j));
+        const center=id(Math.floor((e+r)/2),Math.floor((n+t)/2));
+        for(let i=0;i<edge.length;i++)emit(center,edge[i],edge[(i+1)%edge.length]);
+      }
+    }
+    const geo=new BufferGeometry();
+    geo.setAttribute('position',new BufferAttribute(new Float32Array(xyz),3));
+    geo.setAttribute('color',new BufferAttribute(new Float32Array(rgb),3));
+    geo.setAttribute('snowRetention',new BufferAttribute(new Uint8Array(snow),1,true));
+    geo.computeVertexNormals();if(xyz.length)geo.computeBoundingSphere();
+    const mesh=new Mesh(geo,material);mesh.name='Resident terrain '+east+','+north;
+    if(xyz.length)resident.add(mesh);return mesh;
+  }
+
   for (let north = 0; north < cellDepth; north += terrainChunkCells) {
     for (let east = 0; east < cellWidth; east += terrainChunkCells) {
       if (east * gridStep < layout.width && north * gridStep < layout.depth) addChunk(east, north);
-      else pending.push({ east, north });
+      else pending.push({ east, north, fallback:createResident(east,north) });
     }
   }
 
@@ -254,6 +299,25 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
     viewProjection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);
     frustum.setFromProjectionMatrix(viewProjection);
     for(const c of walkingChunks){
+      // Conservative coarse rejection before scanning metre-scale terrain.
+      // Use the same padded frustum as the fine spans. A parent pad is at
+      // least every child pad; a fully unpadded-inside parent guarantees
+      // all child spans were selected by the previous algorithm.
+      const {min,max}=c.bounds;
+      const distance=Math.hypot(Math.max(Math.abs(min.x-eye.x),Math.abs(max.x-eye.x)),
+        Math.max(Math.abs(min.y-eye.y),Math.abs(max.y-eye.y)),Math.max(Math.abs(min.z-eye.z),Math.abs(max.z-eye.z)));
+      const pad=4+.11*distance;
+      let outside=false,inside=true;
+      for(const p of frustum.planes){
+        const n=p.normal;
+        if(n.x*(n.x<0?min.x:max.x)+n.y*(n.y<0?min.y:max.y)+n.z*(n.z<0?min.z:max.z)+p.constant < -pad){outside=true;break;}
+        if(n.x*(n.x<0?max.x:min.x)+n.y*(n.y<0?max.y:min.y)+n.z*(n.z<0?max.z:min.z)+p.constant<0)inside=false;
+      }
+      if(outside||inside){
+        c.mesh.visible=!outside;
+        if(c.mesh.geometry.index){c.mesh.geometry.setIndex(null);c.mesh.geometry.setDrawRange(0,c.count);}
+        continue;
+      }
       let count=0;
       const selected:TerrainSpan[]=[];
       for(const tile of c.spans){
@@ -284,6 +348,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
     }
   }
 
+  let prevPrefetch:{x:number;n:number;at:number}|undefined;
   return function prepareTerrain(x: number, n: number, overview: boolean, wide: boolean, cover = 0, camera?: Camera, walkingCull=false) {
     snowCover.value = cover;
     // A masked terrain uses the exact disjoint ridge/town mesh partition;
@@ -292,6 +357,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
     if(!walkingCull||overview||wide||!camera)restoreWalking();
     detailed.visible = !wide && !(overview && camera);
     if (aerialTerrain) aerialTerrain.visible = false;
+    resident.visible=!wide;
     if (wide) {
       if (!wideTerrain) {
         wideTerrain = createChunk(0, 0, cellWidth, cellDepth, 3);
@@ -302,21 +368,33 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
       return;
     }
     if (wideTerrain) wideTerrain.visible = false;
+    const at=performance.now(),dt=prevPrefetch?(at-prevPrefetch.at)/1000:0;
+    const dx=prevPrefetch?x-prevPrefetch.x:0,dn=prevPrefetch?n-prevPrefetch.n:0,travel=Math.hypot(dx,dn);
+    const predictive=dt>.001&&dt<.5&&travel<15&&travel>0?Math.min(64/travel,3/dt):0;
+    const aheadX=x+dx*predictive,aheadN=n+dn*predictive;
+    prevPrefetch={x,n,at};
+    const buildStarted=performance.now();
     for (let count = 0; count < (overview ? 3 : 1); count++) {
+      if(count&&performance.now()-buildStarted>=4)break;
       let nearest = -1;
       let distance = overview ? Infinity : 128;
       for (let i = 0; i < pending.length; i++) {
         const { east, north } = pending[i];
         const dx = Math.max(east * gridStep - x, x - (east + terrainChunkCells) * gridStep, 0);
         const dn = Math.max(north * gridStep - n, n - (north + terrainChunkCells) * gridStep, 0);
-        const candidate = Math.hypot(dx, dn);
+        const current = Math.hypot(dx, dn);
+        const forward=Math.hypot(Math.max(east*gridStep-aheadX,aheadX-(east+terrainChunkCells)*gridStep,0),
+          Math.max(north*gridStep-aheadN,aheadN-(north+terrainChunkCells)*gridStep,0));
+        // A chunk under or immediately beside the feet always wins.
+        const candidate=current<16?current:Math.min(current,forward+16);
         if (candidate >= distance) continue;
         nearest = i;
         distance = candidate;
       }
       if (nearest < 0) break;
-      const [{ east, north }] = pending.splice(nearest, 1);
-      addChunk(east, north);
+      const {east,north,fallback}=pending[nearest];
+      addChunk(east,north); // retire coverage only after fine geometry exists
+      pending.splice(nearest,1);fallback.removeFromParent();fallback.geometry.dispose();
     }
     if (overview && camera) renderAerialTerrain(camera);
     else if(walkingCull&&camera)renderWalkingTerrain(camera);

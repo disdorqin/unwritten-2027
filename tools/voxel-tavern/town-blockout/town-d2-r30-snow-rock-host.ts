@@ -157,6 +157,26 @@ function randomSource(seed: string) {
   };
 }
 
+function hashNoise(east: number, north: number) {
+  const value = Math.sin(east * 127.1 + north * 311.7) * 43_758.5453;
+  return value - Math.floor(value);
+}
+
+function valueNoise(east: number, north: number) {
+  const x = Math.floor(east), n = Math.floor(north);
+  const tx = east - x, tn = north - n;
+  const sx = tx * tx * (3 - 2 * tx), sn = tn * tn * (3 - 2 * tn);
+  const a = hashNoise(x, n), b = hashNoise(x + 1, n), c = hashNoise(x, n + 1), d = hashNoise(x + 1, n + 1);
+  return (a + (b - a) * sx) * (1 - sn) + (c + (d - c) * sx) * sn;
+}
+
+/** Fractal noise driving low-rock cluster placement so the scatter reads as
+ *  terrain-draped rock outcrops along the massif, not a uniform grid dusting. */
+function fractalNoise(east: number, north: number) {
+  return valueNoise(east, north) * .58 + valueNoise(east * 2.07 + 17, north * 2.07 - 11) * .28 +
+    valueNoise(east * 4.13 - 23, north * 4.13 + 31) * .14;
+}
+
 function rockGeometry() {
   const geometry: BufferGeometry = new IcosahedronGeometry(1, 0);
   geometry.computeBoundingBox();
@@ -188,9 +208,14 @@ function addLowRockClusters(options: {
 
   if (maximumClusters > 0) {
     candidate: for (let row = 0; row < 18; row++) for (let column = 0; column < 20; column++) {
-      const radius = 8 + random() * 4;
-      const east = bounds.west + 42 + column * 111 + (random() - .5) * 28;
-      const north = bounds.south + 42 + row * 100 + (random() - .5) * 28;
+      // Terrain-draped candidate offsets: fractal noise clusters the scatter
+      // along massif ridges and rock bands with natural gaps, instead of a
+      // uniform grid dusting that reads as an even, repeated pattern.
+      const terrainEast = fractalNoise(column * .13 + 7, row * .11 - 3);
+      const terrainNorth = fractalNoise(column * .11 - 5, row * .13 + 9);
+      const radius = 8 + 6 * fractalNoise(column * .17 + 3, row * .15 - 7) + random() * 2;
+      const east = bounds.west + 42 + column * 111 + (terrainEast - .5) * 56 + (random() - .5) * 14;
+      const north = bounds.south + 42 + row * 100 + (terrainNorth - .5) * 48 + (random() - .5) * 12;
       if (outside(east - radius, bounds.west, bounds.east) > 0 || outside(east + radius, bounds.west, bounds.east) > 0 ||
           outside(north - radius, bounds.south, bounds.north) > 0 || outside(north + radius, bounds.south, bounds.north) > 0) {
         rejections.bounds++;
