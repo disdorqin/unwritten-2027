@@ -1,5 +1,6 @@
 import { BufferGeometry, Color, Float32BufferAttribute, Group, Mesh, MeshLambertMaterial } from 'three';
 import type { Material } from 'three';
+import {unpackCutGeometry,type CutWire} from './town-a32-cut-wire';
 import {
   sampleTownD2R30Height, sampleTownD2R30Normal, townD2R30ChunkList, townD2R30GridAxis,
   townD2R30Spec, townD2R30SurfaceBand,
@@ -222,7 +223,8 @@ function buildFloorGeometry(ring: readonly (readonly [number, number])[]) {
   return finishGeometry(geometry, 'town-d2-r30-floor');
 }
 
-export type TownD2R30MassifOptions = Readonly<{ arrivalHeight?: number; spacing?: number }>;
+export type D2MassifWire=Readonly<{name:string;wire:CutWire}>;
+export type TownD2R30MassifOptions = Readonly<{ arrivalHeight?: number; spacing?: number;prepared?:readonly D2MassifWire[] }>;
 export type TownD2R30MassifStats = Readonly<{
   spacing: number;
   vertices: number; triangles: number; meshes: number; draws: number;
@@ -252,8 +254,11 @@ export function createTownD2R30Massif(options: TownD2R30MassifOptions = {}) {
     minHeight = Math.min(minHeight, geometry.boundingBox!.min.y);
     maxHeight = Math.max(maxHeight, geometry.boundingBox!.max.y);
   };
-  for (const chunk of townD2R30ChunkList) {
-    const geometry = buildTownD2R30ChunkGeometry(chunk, spacing, arrivalHeight);
+  const prepared=options.prepared;
+  if(prepared&&(prepared.length!==townD2R30ChunkList.length+2||!townD2R30ChunkList.every((chunk,i)=>prepared[i]?.name==='town-d2-r30-top-'+chunk.key)||prepared.at(-2)?.name!=='town-d2-r30-closed-perimeter'||prepared.at(-1)?.name!=='town-d2-r30-floor'))throw Error('Prepared massif tile identities changed');
+  const restore=(entry:D2MassifWire)=>{const g=unpackCutGeometry(entry.wire);g.name=entry.name;return g;};
+  for (const [i,chunk] of townD2R30ChunkList.entries()) {
+    const geometry = prepared?restore(prepared[i]!):buildTownD2R30ChunkGeometry(chunk, spacing, arrivalHeight);
     geometry.computeBoundingBox();
     minTopHeight = Math.min(minTopHeight, geometry.boundingBox!.min.y);
     addMesh(geometry, true);
@@ -262,8 +267,8 @@ export function createTownD2R30Massif(options: TownD2R30MassifOptions = {}) {
     townD2R30GridAxis(-townD2R30Spec.width / 2, townD2R30Spec.width / 2, spacing),
     townD2R30GridAxis(-10, townD2R30Spec.depth - 10, spacing),
   );
-  addMesh(buildSkirtGeometry(perimeter, arrivalHeight));
-  addMesh(buildFloorGeometry(perimeter));
+  addMesh(prepared?restore(prepared.at(-2)!):buildSkirtGeometry(perimeter, arrivalHeight));
+  addMesh(prepared?restore(prepared.at(-1)!):buildFloorGeometry(perimeter));
   const stats: TownD2R30MassifStats = Object.freeze({
     spacing,
     vertices, triangles, meshes: group.children.length, draws: group.children.length,

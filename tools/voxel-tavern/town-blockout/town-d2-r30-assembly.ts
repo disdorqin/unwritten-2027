@@ -7,7 +7,7 @@ import { createTownD2R30CloudTerraceHost } from './town-d2-r30-cloud-terrace-hos
 import { createTownD2R30Collision } from './town-d2-r30-collision';
 import { sampleTownD2R30Height, townD2R30Spec } from './town-d2-r30-domain';
 import { createTownD2R30FacilityFoundations } from './town-d2-r30-facility-foundations';
-import { createTownD2R30Massif } from './town-d2-r30-massif';
+import { createTownD2R30Massif,type D2MassifWire } from './town-d2-r30-massif';
 import { createTownD2R30NightLights } from './town-d2-r30-night-lights';
 import { createTownD2R30NorthWall } from './town-d2-r30-north-wall';
 import { createTownD2R30Ropeway } from './town-d2-r30-ropeway';
@@ -64,6 +64,8 @@ export type TownD2R30AssemblyOptions = Readonly<{
    * mountDetails(). The ground, the collision grid and the walking surface are
    * complete either way — only the dressing waits. */
   deferDetails?: boolean;
+  preparedMassif?:readonly D2MassifWire[];
+  preparedCollision?:Float32Array;
 }>;
 
 export type TownD2R30Assembly = Readonly<{
@@ -165,7 +167,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   let northWall: ReturnType<typeof createTownD2R30NorthWall> | undefined;
   let cableTowers: ReturnType<typeof createTownD2R30CableTowers> | undefined;
   if (terrainMode === 'static') {
-    const massif = createTownD2R30Massif({ arrivalHeight });
+    const massif = createTownD2R30Massif({ arrivalHeight,prepared:options.preparedMassif });
     tiles = massif.tiles;
     terrainStats = () => massif.stats();
     children.push(massif.group);
@@ -372,7 +374,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   if (!deferDetails) mountDetails();
 
   const collision = createTownD2R30Collision({
-    heightAt: (east, north) => heightAt(east, north),
+    heightAt: (east, north) => heightAt(east, north),preparedHeights:options.preparedCollision,
   });
   disposers.push(() => collision.dispose());
 

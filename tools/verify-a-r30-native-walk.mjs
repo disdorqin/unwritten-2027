@@ -595,6 +595,7 @@ try{
   report.streaming={startup,terrainPreload:first.terrainPreload,cold:first.summitProduction,assembled:assembled.summitProduction,ridge:{roads:assembled.ridge.roads,transportReady:assembled.ridge.transportReady,cloudSeam:assembled.ridge.cloudSeam}};
   assert.equal(assembled.summitProduction.status,'ready',JSON.stringify(report.streaming));
   assert.equal(assembled.summitProduction.ready,true);
+  assert.equal(assembled.summitProduction.canonicalPreparation?.mode,'worker',JSON.stringify(assembled.summitProduction.canonicalPreparation));
   assert.equal(assembled.ridge.transportReady,true,JSON.stringify(assembled.summitProduction));
   assert.equal(assembled.ridge.cloudSeam.domainReady,true,JSON.stringify(assembled.ridge.cloudSeam));
   assert.equal(assembled.summitProduction.cable.boardable,true,JSON.stringify(assembled.summitProduction.cable));

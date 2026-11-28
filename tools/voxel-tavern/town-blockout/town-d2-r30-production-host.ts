@@ -1,3 +1,4 @@
+import type {A32CanonicalWire} from './town-a32-canonical-wire';
 import { Box3, Group, Vector3, type BufferGeometry, type Mesh } from 'three';
 import { createMainSummitBlock, mainSummitLayout } from './main-summit-block';
 import { createMainSummitTrail, type MainSummitTrailPoint } from './main-summit-trail';
@@ -128,6 +129,7 @@ export type TownD2ProductionHostOptions = Readonly<{
    * mountDetails(). Ground, collision and the walking surface are complete
    * immediately either way — only the detail packages wait. */
   deferDetails?: boolean;
+  preparedCanonical?:A32CanonicalWire;
 }>;
 
 const world = townD2SectorContract.world;
@@ -153,15 +155,15 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
   group.name = 'town-d2-r30-production';
   // One survey for the whole mount: the host owns the accepted walkway and the
   // assembly consumes it instead of surveying the same ground again.
-  const survey = createMainSummitBlock(mainSummitLayout, arrivalHeight, 100);
+  const prepared=options.preparedCanonical;
+  if(prepared&&prepared.arrivalHeight!==arrivalHeight)throw Error('Prepared canonical arrival height changed');
   let trail: readonly MainSummitTrailPoint[];
   let surveyMetrics: ReturnType<typeof createMainSummitTrail>['metrics'];
-  try {
-    const built = createMainSummitTrail(survey.heightAt, arrivalHeight);
-    trail = built.points;
-    surveyMetrics = Object.freeze({ ...built.metrics });
-  } finally {
-    survey.dispose();
+  if(prepared){trail=prepared.trail.points;surveyMetrics=Object.freeze({...prepared.trail.metrics});}
+  else{
+    const survey=createMainSummitBlock(mainSummitLayout,arrivalHeight,100);
+    try{const built=createMainSummitTrail(survey.heightAt,arrivalHeight);trail=built.points;surveyMetrics=Object.freeze({...built.metrics});}
+    finally{survey.dispose();}
   }
 
   const assembly: TownD2R30Assembly = createTownD2R30Assembly({
@@ -179,7 +181,7 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     includeNorthWall: true,
     ropewayEpochMs: epochMs,
     trail: { points: trail, metrics: surveyMetrics },
-    deferDetails,
+    deferDetails,preparedMassif:prepared?.massif,preparedCollision:prepared?.heights,
   });
   group.add(assembly.group);
 

@@ -7,6 +7,7 @@ import {a31GateFoot} from './town-a31-gate-handoff';
 import {readA31UpperCable,type A31CableAuthority} from './town-a31-cable-binding';
 import {a32SummitPrefetch,createA32StageMeter,createA32QuietGate,a32YieldFrame} from './town-a32-stream-policy';
 import type {A32WarmupStats} from './town-a32-gpu-warmup';
+import {prepareA32Canonical} from './town-a32-canonical-preload';
 
 type Foot=Readonly<{east:number;north:number;height:number}>;
 type Production=ReturnType<typeof createTownD2R30ProductionHost>;
@@ -33,6 +34,7 @@ export function createA31PublicSummitRoute(input:Input){
  let assembly:Readonly<{group:Group;r30:Production['assembly'];summitSnowAt(e:number,n:number):number|undefined}>|undefined;
  let near=false,elapsedMs=0,cutTiles=0,draws=0,snowPending=0,duplicates:readonly string[]=[];
  const yieldFrame=input.yieldFrame??a32YieldFrame,meter=createA32StageMeter(),quiet=createA32QuietGate();
+ let canonicalPreparation: {mode:string;ms?:number;elapsedMs?:number;error?:string}|undefined;
  let warmup:A32WarmupStats|undefined,cableFailure:string|undefined,previousFoot:Foot|undefined,previousAt=0,detailEast=Infinity,detailNorth=Infinity,lastViewAt=0,lastViewEast=Infinity,lastViewNorth=Infinity;
  const waitForQuiet=()=>quiet.wait(yieldFrame,()=>status==='disposed');
  const stageRun=async<T,>(name:string,task:()=>T|Promise<T>)=>{stage='queued-'+name;await waitForQuiet();stage=name;return meter.run(name,task);};
@@ -50,7 +52,9 @@ export function createA31PublicSummitRoute(input:Input){
     // Presence's slewed clock may have fractional milliseconds; the ropeway
     // construction contract requires an integer epoch. Live B authority still
     // reads the original continuously synchronized server clock.
-    candidate=await stageRun('canonical',()=>createTownD2R30ProductionHost({epochMs:Math.floor(input.now()),includeRopeway:false,deferDetails:true}));
+    const prepared=await stageRun('canonical-worker',()=>prepareA32Canonical(347,stagingAbort.signal));
+    canonicalPreparation=prepared.mode==='worker'?{mode:prepared.mode,ms:prepared.ms,elapsedMs:prepared.elapsedMs}:{mode:prepared.mode,error:prepared.error};
+    candidate=await stageRun('canonical',()=>createTownD2R30ProductionHost({epochMs:Math.floor(input.now()),includeRopeway:false,deferDetails:true,preparedCanonical:prepared.mode==='worker'?prepared.data:undefined}));
     const host=candidate;
     // No partially dressed terrain is traversable: mount each real package
     // in an independently measured frame before sector/cable certification.
@@ -160,7 +164,7 @@ export function createA31PublicSummitRoute(input:Input){
   if(night===value)return;night=value;production?.setNight(value);visual?.afterNightChange();
  }
  function state(){
-  return {status,stage,failure,cableFailure,stages:meter.records(),warmup,active,near,farVisible:input.skyline.visible,draws,elapsedMs,ready:audit?.ready===true&&status==='ready',
+  return {status,stage,failure,cableFailure,canonicalPreparation,stages:meter.records(),warmup,active,near,farVisible:input.skyline.visible,draws,elapsedMs,ready:audit?.ready===true&&status==='ready',
    installed:production?.installed()??[],cutTiles:production?cutTiles:0,
    duplicates:production?duplicates:[],sectorSamples:audit?.sectors.map(s=>s.samples)??[],
    legacyPruned:visual?{roadTriangles:visual.removedTrailTriangles,forestInstances:visual.removedForestInstances}:undefined,
