@@ -358,7 +358,9 @@ try{
  const {page,evidence,westWindow}=await openTown(segment);
  if(segment==='a31-bare-crater-return'){
   assert.ok(bare);const start=await readPose(page);
-  const path=[...westShore,[2,159],[-12,159],[-40,159]];
+  // The reverse straight chord near E67/N164 intersects an actual tree.
+  // Walk around the existing trunk on its south side, both directions.
+  const path=[...westShore.slice(0,-1),[71,161.8],[63,161],[2,159],[-12,159],[-40,159]];
   for(const [i,p] of path.entries())await walkTo(page,evidence,p,'crater-out-'+i,.65);
   const mouth=await readPose(page);await waitForWire(page,evidence,p=>p?.area==='west'&&Math.hypot(p.east+40,p.north-159)<1);
   await picture(page,evidence,'crater-mouth');
