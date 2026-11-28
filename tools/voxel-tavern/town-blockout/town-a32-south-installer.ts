@@ -15,11 +15,11 @@ function plan(port:TownD2SectorHostPort){
 }
 type Plan=ReturnType<typeof plan>;
 type PreparedRoad=ReturnType<typeof prepareSouthRoads>;
-function mount(port:TownD2SectorHostPort,p:Plan,preparedRoad?:PreparedRoad,cache?:Awaited<ReturnType<typeof prepareA32CutCache>>):TownD2SectorPackage{
+function mount(port:TownD2SectorHostPort,p:Plan,preparedRoad?:PreparedRoad,cache?:Awaited<ReturnType<typeof prepareA32CutCache>>,workerFailure?:string):TownD2SectorPackage{
  const {extension}=p,cable=createMainSummitCable(0,10000,port.arrivalHeight);
  const reserved=createSouthReservation([{points:port.trail,radius:18},{points:extension.trail,radius:18},...cable.ropes.map(rope=>({points:rope.points,radius:40}))],[{west:-42,east:42,south:-10,north:55}]);
  const south=mountSouthProduction({owner:port.owner,groundAt:port.groundAt,reserved,...p,preparedRoad,nearTiles:port.tiles,legacySouthVegetationExcluded:true,legacyTreadExcluded:true,cutTerrain:cache?.cut??cutNightBWestTerrain,createCutSurface:createNightBWestCutSurface});
- south.group.userData.a32Road={length:extension.grade.length,originalFirst:extension.originalFirst,originalLast:extension.originalLast,grade:extension.grade.maxGrade,cap:extension.cap,connected:false,cutPreparation:cache?.stats??{mode:'sync'}};
+ south.group.userData.a32Road={length:extension.grade.length,originalFirst:extension.originalFirst,originalLast:extension.originalLast,grade:extension.grade.maxGrade,cap:extension.cap,connected:false,cutPreparation:cache?.stats??{mode:'sync',workerFailure}};
  return {sector:'A',group:south.group,groundAt:south.groundAt,coversCut:south.coversCut,cutGroundAt:south.cutGroundAt,deckAt:south.deckAt,supportAt:south.supportAt,blocked:south.blocked,updateView:south.updateView,setNight:south.setNight,updateSnow:(...args:unknown[])=>(south.updateSnow as (...args:unknown[])=>void)(...args),dispose:south.dispose};
 }
 /** Synchronous path for Node tests and unsupported browsers. */
@@ -29,14 +29,14 @@ export function createA32SouthSectorInstaller():TownD2SectorInstaller{return por
  * No worker-generated alternate ground authority. */
 export async function prepareA32SouthSectorInstaller(port:TownD2SectorHostPort,signal:AbortSignal){
  const p=plan(port),road=prepareSouthRoads({...p,groundAt:port.groundAt});
- let cache:Awaited<ReturnType<typeof prepareA32CutCache>>;
+ let cache:Awaited<ReturnType<typeof prepareA32CutCache>>,workerFailure:string|undefined;
  try{cache=await prepareA32CutCache(port.tiles,road.cutTread,signal);}
- catch(error){road.dispose();throw error;}
+ catch(error){if(signal.aborted){road.dispose();throw error;}workerFailure=error instanceof Error?error.message:String(error);}
  let taken=false;
  return {install(next:TownD2SectorHostPort){
   if(taken)throw Error('Prepared southern road already consumed');
   if(signal.aborted||next.owner!==port.owner||next.trail!==port.trail||next.tiles!==port.tiles){road.dispose();throw Error('Stale south staging owner');}
   taken=true;
-  try{return mount(next,p,road,cache);}catch(error){road.dispose();throw error;}
+  try{return mount(next,p,road,cache,workerFailure);}catch(error){road.dispose();throw error;}
  },dispose(){if(!taken)road.dispose();}};
 }

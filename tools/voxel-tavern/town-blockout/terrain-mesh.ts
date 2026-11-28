@@ -8,7 +8,7 @@ const terrainChunkCells = 64 / gridStep;
 const aerialTileCells = 4 / gridStep;
 const clipTolerance = .0001;
 type TerrainSpan = { start: number; count: number; bounds: Box3 };
-type WalkingChunk={mesh:Mesh;first:number;count:number;spans:TerrainSpan[];index?:BufferAttribute};
+type WalkingChunk={mesh:Mesh;first:number;count:number;spans:TerrainSpan[];bounds:Box3;index?:BufferAttribute};
 const palette = ['#d8e1ef', '#9a887c', '#bcac97', '#c7b795', '#78b8d9'].map(value => new Color(value));
 
 export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof createTerrainGrid>, ridgeOwnsCell?: (east:number,north:number)=>boolean) {
@@ -139,7 +139,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
     }
     const mesh = new Mesh(geometry, material);
     mesh.name = `Terrain ${east * gridStep},${north * gridStep}`;
-    if(stride===1&&offset)walkingChunks.push({mesh,first:nextVertex-offset/3,count:offset/3,spans:aerialTiles.slice(firstTile)});
+    if(stride===1&&offset){const spans=aerialTiles.slice(firstTile),bounds=new Box3();for(const span of spans)bounds.union(span.bounds);walkingChunks.push({mesh,first:nextVertex-offset/3,count:offset/3,spans,bounds});}
     return mesh;
   }
 
@@ -299,6 +299,25 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
     viewProjection.multiplyMatrices(camera.projectionMatrix,camera.matrixWorldInverse);
     frustum.setFromProjectionMatrix(viewProjection);
     for(const c of walkingChunks){
+      // Conservative coarse rejection before scanning metre-scale terrain.
+      // Use the same padded frustum as the fine spans. A parent pad is at
+      // least every child pad; a fully unpadded-inside parent guarantees
+      // all child spans were selected by the previous algorithm.
+      const {min,max}=c.bounds;
+      const distance=Math.hypot(Math.max(Math.abs(min.x-eye.x),Math.abs(max.x-eye.x)),
+        Math.max(Math.abs(min.y-eye.y),Math.abs(max.y-eye.y)),Math.max(Math.abs(min.z-eye.z),Math.abs(max.z-eye.z)));
+      const pad=4+.11*distance;
+      let outside=false,inside=true;
+      for(const p of frustum.planes){
+        const n=p.normal;
+        if(n.x*(n.x<0?min.x:max.x)+n.y*(n.y<0?min.y:max.y)+n.z*(n.z<0?min.z:max.z)+p.constant < -pad){outside=true;break;}
+        if(n.x*(n.x<0?max.x:min.x)+n.y*(n.y<0?max.y:min.y)+n.z*(n.z<0?max.z:min.z)+p.constant<0)inside=false;
+      }
+      if(outside||inside){
+        c.mesh.visible=!outside;
+        if(c.mesh.geometry.index){c.mesh.geometry.setIndex(null);c.mesh.geometry.setDrawRange(0,c.count);}
+        continue;
+      }
       let count=0;
       const selected:TerrainSpan[]=[];
       for(const tile of c.spans){
@@ -329,6 +348,7 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
     }
   }
 
+  let prevPrefetch:{x:number;n:number;at:number}|undefined;
   return function prepareTerrain(x: number, n: number, overview: boolean, wide: boolean, cover = 0, camera?: Camera, walkingCull=false) {
     snowCover.value = cover;
     // A masked terrain uses the exact disjoint ridge/town mesh partition;
@@ -348,14 +368,25 @@ export function addTerrainMeshes(parent: Object3D, grid: ReturnType<typeof creat
       return;
     }
     if (wideTerrain) wideTerrain.visible = false;
+    const at=performance.now(),dt=prevPrefetch?(at-prevPrefetch.at)/1000:0;
+    const dx=prevPrefetch?x-prevPrefetch.x:0,dn=prevPrefetch?n-prevPrefetch.n:0,travel=Math.hypot(dx,dn);
+    const predictive=dt>.001&&dt<.5&&travel<15&&travel>0?Math.min(64/travel,3/dt):0;
+    const aheadX=x+dx*predictive,aheadN=n+dn*predictive;
+    prevPrefetch={x,n,at};
+    const buildStarted=performance.now();
     for (let count = 0; count < (overview ? 3 : 1); count++) {
+      if(count&&performance.now()-buildStarted>=4)break;
       let nearest = -1;
       let distance = overview ? Infinity : 128;
       for (let i = 0; i < pending.length; i++) {
         const { east, north } = pending[i];
         const dx = Math.max(east * gridStep - x, x - (east + terrainChunkCells) * gridStep, 0);
         const dn = Math.max(north * gridStep - n, n - (north + terrainChunkCells) * gridStep, 0);
-        const candidate = Math.hypot(dx, dn);
+        const current = Math.hypot(dx, dn);
+        const forward=Math.hypot(Math.max(east*gridStep-aheadX,aheadX-(east+terrainChunkCells)*gridStep,0),
+          Math.max(north*gridStep-aheadN,aheadN-(north+terrainChunkCells)*gridStep,0));
+        // A chunk under or immediately beside the feet always wins.
+        const candidate=current<16?current:Math.min(current,forward+16);
         if (candidate >= distance) continue;
         nearest = i;
         distance = candidate;
