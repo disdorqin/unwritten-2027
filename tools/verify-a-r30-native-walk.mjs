@@ -108,7 +108,12 @@ async function openTown(name) {
     Object.defineProperty(Element.prototype, 'requestPointerLock', { value: undefined });
     // This is the viewer's ordinary saved graphics setting. It does not change the world or movement.
     localStorage.setItem('unwritten.quality.tier.v1', 'smooth');
-    document.addEventListener('town-frame-profile', event => { window.__za22Frame = event.detail; }, true);
+    window.__a31LoadFrames=[];
+    document.addEventListener('town-frame-profile', event => {
+      window.__za22Frame = event.detail;
+      const s=event.detail.summitProduction;
+      if(s&&window.__a31LoadFrames.length<4000)window.__a31LoadFrames.push({ms:event.detail.frameMs,status:s.status,stage:s.stage,near:s.near,draws:s.draws});
+    }, true);
   });
   const response = await page.goto(url.href, { waitUntil: 'domcontentloaded', timeout: 90_000 });
   assert.equal(response?.status(), 200);
@@ -371,6 +376,8 @@ try{
   assert.ok(bare,'The ordinary settings verification must use the bare root');
   assert.equal(new URL(page.url()).search,'');
   const menu=page.locator('#town-settings'),toggle=page.locator('#town-panel-toggle');
+  await page.waitForFunction(()=>document.querySelector('#town-summit-status')?.dataset.status==='ready',null,{timeout:45000});
+  assert.match(await page.locator('#town-summit-status').textContent(),/四区地形已就绪.*交通检修中/);
   const activate=locator=>menuTouch?locator.tap():locator.click();
   const hiddenIds=['#town-settings','#town-music-toggle','#town-chat','#fullscreen-toggle','#museum-map-button','#snowball-board'];
   for(const id of hiddenIds)assert.equal(await page.locator(id).isVisible(),false,id+' must not obscure ordinary exploration');
@@ -483,14 +490,18 @@ try{
   report.traversal={top:moved,returned:moved};
  }else if(segment==='night-r3-entry'){
   const state=()=>page.evaluate(()=>window.__za22Frame);
-  await page.waitForFunction(()=>window.__za22Frame?.ridge?.roads===4,null,{timeout:15000});
-  const initial=await state();assert.equal(initial.ridge.transportReady,false);assert.equal(initial.ridge.cloudSeam.physicalReady,true);
+  await page.waitForFunction(()=>window.__za22Frame?.ridge?.roads===4&&window.__za22Frame?.summitProduction?.ready,null,{timeout:45000});
+  const initial=await state();
+  assert.deepEqual(initial.summitProduction.installed,['A','B','C2']);assert.equal(initial.summitProduction.cutTiles,6);
+  assert.deepEqual(initial.summitProduction.sectorSamples,[238,220,240,160]);
+  assert.equal(initial.summitProduction.sceneOwner,'town');assert.equal(initial.summitProduction.cable.boardable,false);
+  assert.equal(initial.summitProduction.near,false);assert.equal(initial.summitProduction.draws,0);assert.equal(initial.ridge.transportReady,false);assert.equal(initial.ridge.cloudSeam.physicalReady,true);
   assert.equal(initial.ridge.cloudSeam.domainReady,false);
   const snapshots=[];
   const take=async(label)=>{const f=await state();assert.equal(f.ridge.roads,4);assert.ok(f.calls>0&&f.triangles>0);
    const w=f.weatherCycle;assert.ok(w&&Number.isFinite(w.phase)&&w.phase>=0&&w.phase<1&&Number.isFinite(w.dawnEpoch));
    assert.ok(Number.isFinite(w.visibility)&&w.visibility>0&&w.snow>0&&f.fogFar>f.fogNear);
-   snapshots.push({label,foot:f.ridge.foot,calls:f.calls,triangles:f.triangles,ridge:f.ridge,weatherCycle:w,fogNear:f.fogNear,fogFar:f.fogFar,points:f.points});
+   snapshots.push({label,foot:f.ridge.foot,calls:f.calls,triangles:f.triangles,ridge:f.ridge,weatherCycle:w,fogNear:f.fogNear,fogFar:f.fogFar,points:f.points,summitProduction:f.summitProduction});
    await picture(page,evidence,label);};
   await take('normal-entry');
   await page.locator('#town-panel-toggle').click();
@@ -499,6 +510,7 @@ try{
   await page.waitForFunction(()=>{const f=window.__za22Frame?.ridge?.foot;return f&&Math.hypot(f[0]-296,f[1]-520)<1.2;},null,{timeout:20000});
   await waitForWire(page,evidence,p=>p?.area==='town'&&Math.hypot(p.east-296,p.north-520)<1.2);
   await face(page,evidence,0);
+  await page.waitForFunction(()=>{const s=window.__za22Frame?.summitProduction;return s?.ready&&s.near&&s.draws>0&&s.sceneOwner==='town';},null,{timeout:15000});
   await take('mountain-foot-north');
   await page.locator('#town-panel-toggle').click();await page.locator('#lighting').click();await page.locator('#town-settings-close').click();
   const prior=snapshots.at(-1).weatherCycle;
@@ -509,7 +521,10 @@ try{
   await walkTo(page,evidence,[296,516],'station-out',.35);
   await walkTo(page,evidence,[296,520],'station-return',.35);
   const returned=await readPose(page);await take('mountain-foot-return');
-  report.entry={scope:'normal root, actual four-road geometry and closed transport; menu station arrival then native 4m out/back',snapshots};
+  const frames=await page.evaluate(()=>window.__a31LoadFrames);
+  const loading=frames.filter(f=>f.status==='loading'||f.status==='ready').map(f=>f.ms).sort((a,b)=>a-b);
+  const loadFrames={samples:loading.length,p95:loading[Math.floor((loading.length-1)*.95)],p99:loading[Math.floor((loading.length-1)*.99)],max:loading.at(-1),stages:frames.filter(f=>f.ms>100)};
+  report.entry={scope:'public viewer with actual four-sector mount and closed access; menu station arrival then native 4m out/back, not a continuous ascent',snapshots,loadFrames};
   report.traversal={top:returned,returned};
  }else if(mobileReview){
   const cdp=await page.context().newCDPSession(page),touch=async(type,points)=>cdp.send('Input.dispatchTouchEvent',{type,touchPoints:points});
