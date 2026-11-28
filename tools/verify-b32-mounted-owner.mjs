@@ -30,9 +30,9 @@ if(scope==='rear'||scope==='rear-mount'||scope==='rear-routes'){
    const result=mountNightBPublicRearCable({owner:host.group,groundAt:host.surfaceAt,supportAt:host.supportAt,
     blocked:(e,n,h,r,b)=>host.blocked(e,n,h,r,b)||!!host.assembly.northWall?.blocked(e,n,h,r,b),
     groundMeshes:host.tiles,authorized:true,authority:{state:()=>undefined,now:()=>undefined,daylight:()=>undefined,firstRun:{wokeAt:()=>undefined,openedAt:()=>undefined,dawnEpoch:()=>undefined}},
-    certifyRoutes:(docks,repair,supportAt,blocked,repairFootClear)=>{
+    certifyRoutes:(docks,repair,supportAt,blocked,repairFootClear,dispatcherFoot)=>{
      if(scope!=='rear-routes')return false;
-     const a=auditNightBRearCableAccess({docks,repair,supportAt,blocked,repairFootClear,gate:{east:0,north:-8,height:347},summitLanding:host.trail.at(-1)}),l=a.lower,u=a.upper;
+     const a=auditNightBRearCableAccess({docks,repair,supportAt,blocked,repairFootClear,dispatcherFoot,gate:{east:0,north:-8,height:347},summitLanding:host.trail.at(-1)}),l=a.lower,u=a.upper;
      const compact=a=>({...a,routes:a.routes.map(({path,...p})=>({...p,points:path?.length,turns:path?.filter((x,i)=>i===0||i===path.length-1||i%20===0)}))});
      routeAudit={lower:compact(l),upper:compact(u)};
      return l.ready&&u.ready;
