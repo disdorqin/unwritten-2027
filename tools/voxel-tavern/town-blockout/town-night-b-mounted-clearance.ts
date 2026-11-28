@@ -1,7 +1,7 @@
 import {Box3,Matrix4,Triangle,Vector3,type Object3D,type BufferGeometry,type Mesh,type InstancedMesh} from 'three';
 type Foot={east:number;north:number;height:number};
 type Envelope={feet:Foot;heading:number;halfWidth:number;halfLength:number;bodyTop:number};
-type Entry={name:string;geometry:BufferGeometry;matrix:Matrix4;box:Box3;triangles?:Map<string,number[]>;wideTriangles?:number[]};
+type Entry={name:string;object:Object3D;geometry:BufferGeometry;matrix:Matrix4;box:Box3;triangles?:Map<string,number[]>;wideTriangles?:number[]};
 const step=32,key=(x:number,z:number)=>x+','+z;
 /** Build once from the *actual mounted* production meshes, in the host's
  * local frame. Include hidden LOD meshes (conservative); only explicit
@@ -22,7 +22,7 @@ export function createNightBMountedClearance(root:Object3D,excluded:readonly Obj
   const box=g.boundingBox.clone().applyMatrix4(mat);
   if(![...box.min.toArray(),...box.max.toArray()].every(Number.isFinite)){invalid++;return;}
   if(corridor&&!corridor.some(b=>b.intersectsBox(box)))return;
-  const e={name:o.name||o.parent?.name||o.uuid,geometry:g,matrix:mat.clone(),box};
+  const e={name:o.name||o.parent?.name||o.uuid,object:o,geometry:g,matrix:mat.clone(),box};
   const x0=Math.floor(box.min.x/step),x1=Math.floor(box.max.x/step),z0=Math.floor(box.min.z/step),z1=Math.floor(box.max.z/step);
   if((x1-x0+1)*(z1-z0+1)>64){large.push(e);return;}
   for(let x=x0;x<=x1;x++)for(let z=z0;z<=z1;z++){const k=key(x,z),b=cells.get(k)??[];b.push(e);cells.set(k,b);}
@@ -62,7 +62,8 @@ export function createNightBMountedClearance(root:Object3D,excluded:readonly Obj
   for(let x=Math.floor(b.min.x/step);x<=Math.floor(b.max.x/step);x++)for(let z=Math.floor(b.min.z/step);z<=Math.floor(b.max.z/step);z++)for(const j of a.triangles.get(key(x,z))??[])ids.add(j);
   return ids;
  }
- function firstHit(e:Envelope){
+ function firstHit(e:Envelope,collect?:(object:Object3D,triangleIndex:number)=>void){
+  let found:string|undefined;
   queries++;
   if(invalid||!Object.values(e.feet).every(Number.isFinite)||![e.heading,e.halfWidth,e.halfLength,e.bodyTop].every(Number.isFinite))return 'invalid-production-mesh-or-probe';
   const {east,north,height}=e.feet,c=Math.cos(e.heading),s=Math.sin(e.heading),w=Math.abs(c)*e.halfWidth+Math.abs(s)*e.halfLength,d=Math.abs(s)*e.halfWidth+Math.abs(c)*e.halfLength;
@@ -80,9 +81,10 @@ export function createNightBMountedClearance(root:Object3D,excluded:readonly Obj
    for(const j of triangleIds(a,broad)){
     const at=(k:number)=>ix?ix.getX(k):k;
     p0.fromBufferAttribute(pos,at(j)).applyMatrix4(localMat);p1.fromBufferAttribute(pos,at(j+1)).applyMatrix4(localMat);p2.fromBufferAttribute(pos,at(j+2)).applyMatrix4(localMat);triangleChecks++;
-    if(cab.intersectsTriangle(tri)){hits.set(a.name,(hits.get(a.name)??0)+1);return a.name;}
+    if(cab.intersectsTriangle(tri)){hits.set(a.name,(hits.get(a.name)??0)+1);if(!collect)return a.name;found??=a.name;collect(a.object,j/3);}
    }
   }
+  return found;
  }
  return {firstHit,blocked:(e:Envelope)=>firstHit(e)!==undefined,stats:()=>({meshes,instances,invalid,queries,triangleChecks,hits:Object.fromEntries(hits)})};
 }
