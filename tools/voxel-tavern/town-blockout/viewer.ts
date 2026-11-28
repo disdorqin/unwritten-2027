@@ -35,7 +35,7 @@ import { createTerrainSupportContract } from './town-a-r30-terrain-contract';
 import { supportFootprintOverlaps } from './town-a-r30-oriented-support';
 import { mainSummitLayout, mainSummitSpec } from './main-summit-block';
 import { buildR30TownSkyline } from './town-d2-r30-skyline';
-import { cloudTerminal, createZa22CloudRoute } from './town-za22-cloud-route';
+import {createA31PublicSummitRoute} from './town-a31-public-summit';
 import { cableWakeEvent, createCableRepairHost } from './town-cable-repair-host';
 import { mountZa29GuardPost, type Za29GuardPostKind } from './town-za29-guard-scenes';
 import { createZa29GuardDuty, za29GuardDutyForPhase } from './town-za29-guard-duty';
@@ -582,33 +582,10 @@ let skyCityViewKind: 'ground' | 'summit' | 'city' = 'ground';
 function enterSkyCity() { skyCityViewKind = 'city'; }
 function exitSkyCity() { skyCityViewKind = 'ground'; }
 void enterSkyCity; void exitSkyCity; void skyCityHost;
-// 缆车进出站与「前往」星港坪共用同一条域交接：切 presence 域与场景、落到站台点。
-function transferCloudTerminal(terminal: 'base' | 'summit', at: { east: number; north: number; height: number }) {
-  skyCityViewKind = terminal === 'summit' ? 'summit' : 'ground';
-  presence.setMountainDomain(terminal === 'summit', cloudRoute.scene);
-  x = at.east;
-  n = at.north;
-  ground = at.height;
-  airHeight = undefined;
-  riseSpeed = 0;
-  stopTravel();
-  snowControls.cancel();
-  storeWalkView(walkCurrent);
-  walkPrevious.copy(walkCurrent);
-  yaw = 0;
-  pitch = 0;
-}
-const cloudRoute = createZa22CloudRoute({
-  now: presence.serverNow,
-  cloudStamp: {
-    available: presence.summitPassportAvailable,
-    request() {
-      if (!presence.requestSummitPassport('cloud-stamp')) announceActivity('前山碑盖章暂不可用');
-    },
-  },
-  enterOrExit: transferCloudTerminal,
-  view: (title, message) => { activityContext.open(title, message); },
-});
+// A31 public world: one real four-sector owner and the existing far LOD.
+// Old ZA22 moving cabins and their independent mountain are review-only.
+const cloudRoute = createA31PublicSummitRoute({town:scene,skyline:summitSkyline,now:presence.serverNow,profile:previewOptions.has('profile')});
+window.addEventListener('pagehide',event=>{if(!event.persisted)cloudRoute.dispose();});
 const southEntryHost=createSouthEntryHost();
 // 缆车修缮一线宿主 (B2): the host holds no repair state — actions are
 // derived per frame from the server-authored state in town-presence.
@@ -1539,6 +1516,18 @@ regionalWeatherStatus.setAttribute('aria-live','off');
 regionalWeatherStatus.style.display='block';
 regionalWeatherStatus.style.color='#c6d3e5';
 element('position').after(regionalWeatherStatus);
+const summitStatus=document.createElement('output');
+summitStatus.id='town-summit-status';summitStatus.setAttribute('aria-label','后山开放状态');
+summitStatus.style.display='block';summitStatus.style.color='#c6d3e5';
+regionalWeatherStatus.after(summitStatus);
+let nextSummitStatus=0;
+function showSummitStatus(now:number){
+ if(now<nextSummitStatus)return;nextSummitStatus=now+250;
+ const s=cloudRoute.state();
+ const message=s.status==='ready'?'后山 · 四区地形已就绪 · 交通检修中':s.status==='failed'?'后山 · 加载未完成 · 暂未开放':'后山 · 地形加载中 · 暂未开放';
+ if(summitStatus.textContent!==message)summitStatus.textContent=message;
+ summitStatus.dataset.status=s.status;
+}
 function showRegionalWeather(text:string){
  if(regionalWeatherStatus.textContent===text)return;
  regionalWeatherStatus.hidden=!text;
@@ -2996,10 +2985,9 @@ function landAtSelectedDestination() {
     announceActivity('星港坪暂未开放跨域交通，请从已认证入口进入。');
     return false;
   }
-  if (skyCityViewKind === 'summit') {
-    // 人在山域时选镇域目的地：先切回镇域，再按镇域落点落位。
-    skyCityViewKind = 'ground';
-    presence.setMountainDomain(false);
+  if (cloudRoute.active() || skyCityViewKind === 'summit') {
+    announceActivity('请沿已认证的后山返程路线离开，不能使用前往菜单跨域。');
+    return false;
   }
   const destination = points.get(selector.value);
   if (!destination || !settleTownLanding(destination[0], destination[1])) return false;
@@ -3950,7 +3938,8 @@ renderer.setAnimationLoop(now => {
   const frameSeconds = Math.max(0, now - previous) / 1000;
   const dt = Math.min(.25, frameSeconds);
   previous = now;
-  cloudRoute.update({ east: x, north: n, height: ground }, !!productionRidge?.transportReady && !sledRide.active());
+  cloudRoute.update({east:x,north:n,height:ground});
+  showSummitStatus(now);
   // The mountain branch returns before the ordinary town weather block.
   // Apply the same authoritative cycle here, before its scene is rendered.
   const summitSkyFrame=cloudRoute.active()?updateNightSky(dimLevelAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes)):undefined;
@@ -4504,6 +4493,7 @@ renderer.setAnimationLoop(now => {
         weatherCycle:southWeatherProfile(skyFrame,outdoorWeather,weather,regionalWeather?.weather),
         fogNear: weatherFog.near, fogFar: weatherFog.far, points: renderer.info.render.points,
         craterPerf:{exteriorCertified:craterExteriorCertified,undergroundVisible:undergroundRenderParent?.visible},
+        summitProduction:cloudRoute.state(),
         ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],heading:yaw,...(previewOptions.has('mRoadSurvey')?{roadGuide:productionRidge.baseToMiddleGuide,rearConnected:productionRidge.rearConnected,moveReject:ridgeMoveReject}:{}),surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities,cableInstances:productionRidge.facilities?.visibleInstances(),terraceMounted:!!productionRidge.terrace,cloudSeam:productionRidge.cloudSeam},
         ...(skylinePeak ? { summitSkyline: { draws: summitSkylineDraws, peakNdc: skylinePeak.toArray(),
           camera: camera.position.toArray(), far: camera.far } } : {}),
