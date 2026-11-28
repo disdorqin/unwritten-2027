@@ -4,6 +4,7 @@ import {createAR30RidgeOwnership} from './town-a-r30-ridge-ownership';
 import {buildFrontRidgeR30Field,frontRidgeR30Bounds,mountFrontRidgeR30} from './town-d-r30-front-ridge';
 import {buildMiddleEastRoadbed,middleEastNorthControls,middleSouthRoadControls,lowerEastServiceControls,lowerEastServiceTerminal} from './town-d-r30-upper-roadbed';
 import {auditRidgeRoadSurface} from './town-d-r30-roadbed';
+import {c2EastRoadHandoffs} from './town-night-c2-summit-road-handoff';
 import {buildRearRidgeConnector} from './town-d-r30-rear-connector';
 import {mountRidgeForest,ridgeForestRouteClearance} from './town-d-r30-forest';
 import {mountRidgeRoadFurniture} from './town-d-r30-road-furniture';
@@ -106,6 +107,11 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
   return d<1e-6||h1-h0<=.85*d+1e-5;
  }
  const staticRenderRoots=[model.group,forest.group,...furniture.map(f=>f.group),...banks.map(b=>b.group)];
+ const frontRoadHandoffs=c2EastRoadHandoffs.map(h=>{
+  const match=roads.find(r=>Math.hypot(r.route[0]!.east-h.from.east,r.route[0]!.north-h.from.north)<.01&&Math.hypot(r.route.at(-1)!.east-h.to.east,r.route.at(-1)!.north-h.to.north)<.01);
+  const surface=match?auditRidgeRoadSurface(field,match.route):undefined;
+  return {id:h.id,domain:h.domain,installed:!!match,fromHeight:match&&field.heightAt(h.from.east,h.from.north),toHeight:match&&field.heightAt(h.to.east,h.to.north),length:match?.route.at(-1)?.cum,surface};
+ });
  const baseRoute=roads.at(-1)?.route??[];
  const baseToMiddleGuide=rearConnected&&connector&&'road'in connector&&connector.road&&baseRoute.length?
   [...baseRoute,...connector.road.route.slice(1).map(p=>({...p,cum:p.cum+baseRoute.at(-1)!.cum}))]:baseRoute;
@@ -126,7 +132,7 @@ export function mountProductionRidge(owner:Object3D,grid:Grid,options:Options){
   return forest.blocked(e,n,h,r)||!!station?.blocked(e,n,h,r)||
    furniture.some(f=>f.blocked(e,n,h,r))||banks.some(b=>b.blocked(e,n,h,r));
  }
- return {field,ownership,ownsCell:patch.ownsCell,changedVertices:patch.changedVertices,roads,stationReady,model,forest,heightAt,allowsUphill,cableAudit,serviceExit,terrace,cloudSeam,rearConnected,baseToMiddleGuide,connectorAudit:connector&&'audit'in connector?connector.audit:undefined,staticRenderRoots,roadTerminalAction(e:number,n:number,h:number){
+ return {field,ownership,ownsCell:patch.ownsCell,changedVertices:patch.changedVertices,roads,stationReady,model,forest,heightAt,allowsUphill,cableAudit,serviceExit,terrace,cloudSeam,rearConnected,baseToMiddleGuide,frontRoadHandoffs,connectorAudit:connector&&'audit'in connector?connector.audit:undefined,staticRenderRoots,roadTerminalAction(e:number,n:number,h:number){
    const sign=furniture.map(f=>f.terminalSign).find(s=>s&&Math.hypot(e-s.east,n-s.north)<5.5&&Math.abs(h-s.height)<2);
    return sign?{title:sign.title,message:'前方道路尚未贯通，请沿已认证道路返回'+sign.returnTo+'。'}:undefined;
   },reserveRoad:(e:number,n:number,r:number)=>!clearance(e,n,r),

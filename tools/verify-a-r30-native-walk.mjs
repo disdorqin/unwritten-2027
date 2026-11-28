@@ -592,7 +592,7 @@ try{
   await picture(page,evidence,'a32-prefetch-start');
   await page.waitForFunction(()=>window.__za22Frame?.summitProduction?.publicTransportBound===true,null,{timeout:150000});
   const assembled=await state();
-  report.streaming={startup,terrainPreload:first.terrainPreload,cold:first.summitProduction,assembled:assembled.summitProduction,ridge:{roads:assembled.ridge.roads,transportReady:assembled.ridge.transportReady,cloudSeam:assembled.ridge.cloudSeam}};
+  report.streaming={startup,terrainPreload:first.terrainPreload,cold:first.summitProduction,assembled:assembled.summitProduction,ridge:{roads:assembled.ridge.roads,frontRoadHandoffs:assembled.ridge.frontRoadHandoffs,transportReady:assembled.ridge.transportReady,cloudSeam:assembled.ridge.cloudSeam}};
   assert.equal(assembled.summitProduction.status,'ready',JSON.stringify(report.streaming));
   assert.equal(assembled.summitProduction.ready,true);
   assert.equal(assembled.summitProduction.canonicalPreparation?.mode,'worker',JSON.stringify(assembled.summitProduction.canonicalPreparation));
@@ -602,6 +602,8 @@ try{
   assert.equal(assembled.summitProduction.cable.boardable,true,JSON.stringify(assembled.summitProduction.cable));
   assert.ok(assembled.summitProduction.frontAuditSlices?.count>1&&assembled.summitProduction.cable.slices?.count>1);
   assert.equal(assembled.summitProduction.southRoad.intervalComplete,true);
+  assert.deepEqual(assembled.summitProduction.southRoad.boundaryExits.map(r=>Math.round(r.length)),[36,55]);
+  assert.ok(assembled.ridge.frontRoadHandoffs.length===4&&assembled.ridge.frontRoadHandoffs.every(r=>r.domain==='front'&&r.installed&&r.surface.maxGrade<=.120001));
   assert.equal(assembled.summitProduction.southRoad.cutPreparation.mode,'worker');
   assert.ok(assembled.summitProduction.southRoad.cutPreparation.changed>0);
   assert.ok(assembled.summitProduction.warmup?.meshes>0&&assembled.summitProduction.warmup?.batches>0);

@@ -6,6 +6,8 @@ import {surveyA32SouthRoadJoint,surveyA32SouthBoundaryExit} from '../tools/voxel
 test('A32 replacement mounts on the real D2 canonical faces without a second terrain and has supported centreline',()=>{
  const host=createTownD2R30ProductionHost();
  try{
+  const domain=host.certifyRoadJoint();assert.equal(domain.handoffs,0);assert.equal(domain.excludedFront.length,4);assert.equal(domain.allJoined,false);
+  assert.throws(()=>host.surveyRoadConnector('lower-east-service'),/front ground/);
   const survey=surveyA32SouthRoadJoint(host.trail,host.surfaceAt);
   const exits=([834,2262] as const).map(i=>surveyA32SouthBoundaryExit(host.trail,host.surfaceAt,i));
   assert.equal(survey.originalFirst,1539);assert.equal(survey.originalLast,2262);
