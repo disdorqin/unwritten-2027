@@ -3,7 +3,8 @@ import { createMainSummitBlock, mainSummitLayout } from './main-summit-block';
 import { createMainSummitTrail, type MainSummitTrailPoint } from './main-summit-trail';
 import { createTownD2R30Assembly, type TownD2R30Assembly } from './town-d2-r30-assembly';
 import type { TownD2R30Collision } from './town-d2-r30-collision';
-import { sampleTownD2R30Height, sampleTownD2R30Normal } from './town-d2-r30-domain';
+import { sampleTownD2R30Height, sampleTownD2R30Normal, townD2R30CanonicalSpacing } from './town-d2-r30-domain';
+import { mainSummitBounds } from './main-summit-block';
 import { townD2SectorAt, townD2SectorContract } from './town-d2-r30-sector-audit';
 import { createTownD2R30CableTowers } from './town-d2-r30-cable-towers';
 import { createTownD2R30Ropeway } from './town-d2-r30-ropeway';
@@ -572,6 +573,32 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     return awake;
   }
 
+  /** D32-2: a full-domain hole scan. The visible massif, the collision grid and
+   * the canonical sampler must agree everywhere inside the bounds — a hole is
+   * "地形空洞" and must be a number, not a hope. */
+  function terrainIntegrity(step = townD2R30CanonicalSpacing) {
+    if (!Number.isFinite(step) || step < 4) throw new RangeError('Invalid terrain integrity spacing.');
+    let samples = 0, noCanonical = 0, noCollision = 0, worstCollisionDrift = 0;
+    for (let north = mainSummitBounds.south; north <= mainSummitBounds.north; north += step) {
+      for (let east = mainSummitBounds.west; east <= mainSummitBounds.east; east += step) {
+        samples++;
+        const canonical = heightAt(east, north);
+        const surface = collision.surfaceAt(east, north);
+        if (canonical === undefined) noCanonical++;
+        if (surface === undefined) noCollision++;
+        else if (canonical !== undefined) {
+          worstCollisionDrift = Math.max(worstCollisionDrift, Math.abs(surface - canonical));
+        }
+      }
+    }
+    return Object.freeze({
+      version: 'd2-terrain-integrity-1.0',
+      step, samples, noCanonical, noCollision, worstCollisionDrift,
+      /** Mid-cell collision interpolation is expected; a hole is not. */
+      intact: noCanonical === 0 && noCollision === 0,
+    });
+  }
+
   // ---- same-source wind resistance (D32-2) ---------------------------------
   // The movement system needs a wind load per metre of ground, not a second
   // weather generator. Exposure comes from the same canonical height and slope
@@ -801,6 +828,56 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     }
   }
 
+  /** D32-1 boarding/exiting certification on the real docks.
+   *
+   * A ride is only proposable when the operation is open, the foot really
+   * stands at a dock the operation accepts, and the exit dock is supported and
+   * clear. This is the D2 half of the pairing: it proves the rear line can be
+   * boarded and left at both stations without inventing a teleport.
+   */
+  function cableRidePlan(foot: CableFoot) {
+    if (!cable || cable.ready !== true) return Object.freeze({ ok: false as const, reason: 'no-line' as const });
+    if (!foot || ![foot.east, foot.north, foot.height].every(Number.isFinite)) {
+      throw new RangeError('cableRidePlan needs a finite foot position.');
+    }
+    const service = cable.service as unknown as {
+      physical?: boolean;
+      serviceOpen?(): boolean;
+      cabinStates?(): readonly { canBoardOrExit: boolean }[] | undefined;
+      board?(feet: CableFoot, cabin: 0 | 1): { cabinIndex: number } | undefined;
+      exit?(ride: { cabinIndex: number }): CableFoot | undefined;
+      ridePose?(ride: { cabinIndex: number }): (CableFoot & { station?: string | null; whiteout?: boolean }) | undefined;
+    } | undefined;
+    if (!service || service.physical !== true || service.board === undefined) {
+      return Object.freeze({ ok: false as const, reason: 'service-closed' as const });
+    }
+    const open = service.serviceOpen?.() === true;
+    for (const cabin of [0, 1] as const) {
+      const ride = service.board(foot, cabin);
+      if (!ride) continue;
+      const pose = service.ridePose?.(ride);
+      const station = pose?.station ?? null;
+      // Where this cabin can be left: the exit must be a real, clear dock.
+      const exitFoot = { cabinIndex: ride.cabinIndex };
+      const atExit = service.cabinStates?.()?.[ride.cabinIndex];
+      const canLeave = atExit?.canBoardOrExit === true;
+      const exitAt = canLeave ? service.exit?.(exitFoot) : undefined;
+      return Object.freeze({
+        ok: true as const,
+        cabinIndex: ride.cabinIndex,
+        serviceOpen: open,
+        station,
+        boardFeet: Object.freeze({ ...foot }),
+        exitReady: exitAt !== undefined,
+        exitFeet: exitAt === undefined ? undefined : Object.freeze({ ...exitAt }),
+        exitSupported: exitAt === undefined ? false
+          : supportAt(exitAt.east, exitAt.north) !== undefined &&
+            !blocked(exitAt.east, exitAt.north, exitAt.height),
+      });
+    }
+    return Object.freeze({ ok: false as const, reason: 'not-at-dock' as const, serviceOpen: open });
+  }
+
   /** The exact contract A reads (town-a31-cable-binding readA31UpperCable). */
   function cableState() {
     const certified = cable?.ready === true;
@@ -921,6 +998,7 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     setDetailFocus,
     windAt,
     setFrontWind,
+    terrainIntegrity,
     enterRear,
     exitRear,
     airlockState: () => airlock,
@@ -929,6 +1007,7 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     certifyRoadJoint: () => certifyRoadJoint({ trail, supportAt, blocked }),
     preparePublicCable,
     uninstallCable,
+    cableRidePlan,
     cableState,
     /** A's readA31UpperCable consumes this directly; undefined while closed. */
     get cableOperation() {

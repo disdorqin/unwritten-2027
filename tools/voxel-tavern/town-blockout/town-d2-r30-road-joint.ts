@@ -1,5 +1,6 @@
 import { c2EastRoadHandoffs, type RoadHandoff } from './town-night-c2-summit-road-handoff';
 import { townD2R30Spec } from './town-d2-r30-domain';
+import { townD2SectorAt } from './town-d2-r30-sector-audit';
 import type { MainSummitTrailPoint } from './main-summit-trail';
 
 /**
@@ -21,6 +22,9 @@ export type RoadJointReport = Readonly<{
   id: string;
   world: Readonly<{ east: number; north: number }>;
   local: Readonly<{ east: number; north: number }>;
+  /** Which sector owns the ground this endpoint needs, so the gap is assigned
+   * to a window instead of floating between all four. */
+  sector: 'A' | 'B' | 'C2' | 'D2' | 'overlap';
   /** Nearest canonical trail station and how far the handoff misses it. */
   station: number;
   gapMetres: number;
@@ -40,6 +44,8 @@ export type RoadJointSummary = Readonly<{
   handoffs: number;
   joined: readonly string[];
   open: readonly string[];
+  /** Handoffs the owner of `sector` still has to build to, per sector. */
+  bySector: Readonly<Record<string, readonly string[]>>;
   reports: readonly RoadJointReport[];
   /** True only when every C2 handoff lands on the canonical central spiral. */
   allJoined: boolean;
@@ -93,6 +99,7 @@ export function certifyRoadJoint(options: Readonly<{
       id: handoff.id,
       world: Object.freeze({ east: handoff.to.east, north: handoff.to.north }),
       local: Object.freeze(local),
+      sector: townD2SectorAt(local.east, local.north),
       station,
       gapMetres: gap,
       stationHeight: start.height,
@@ -106,11 +113,18 @@ export function certifyRoadJoint(options: Readonly<{
   });
 
   const joined = reports.filter(report => report.joined).map(report => report.id);
+  const bySector: Record<string, string[]> = {};
+  for (const report of reports) {
+    if (report.joined) continue;
+    (bySector[report.sector] ??= []).push(report.id);
+  }
   return Object.freeze({
     version: 'd2-road-joint-1.0',
     handoffs: reports.length,
     joined: Object.freeze(joined),
     open: Object.freeze(reports.filter(report => !report.joined).map(report => report.id)),
+    bySector: Object.freeze(Object.fromEntries(
+      Object.entries(bySector).map(([sector, ids]) => [sector, Object.freeze(ids)]))),
     reports: Object.freeze(reports),
     allJoined: joined.length === reports.length,
   });

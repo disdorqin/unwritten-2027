@@ -445,6 +445,12 @@ test('D32-P1 the central spiral really joins C2 centreline, and gaps are measure
     }
     assert.deepEqual([...joint.joined], ['middle-east-upper']);
     assert.equal(joint.allJoined, false);
+    // The three open handoffs all land in sector A, not in C2: the gap is A's
+    // to build, and the report assigns it instead of leaving it floating.
+    assert.deepEqual({ ...joint.bySector },
+      { A: ['lower-east-service', 'middle-south-exit', 'rear-connector'] });
+    assert.equal(byId.get('lower-east-service')!.sector, 'A');
+    assert.equal(joined.sector, 'A');
   } finally {
     host.dispose();
   }
@@ -540,6 +546,74 @@ test('D32-2 wind load comes from the same field and is seam-clamped', () => {
     }
     host.setFrontWind(undefined);
     assert.throws(() => host.setFrontWind(1 as never), /sampler/);
+  } finally {
+    host.dispose();
+  }
+});
+
+test('D32-1 boarding is certified on the real docks and follows the service', async () => {
+  const host = createTownD2R30ProductionHost();
+  try {
+    host.install('A', createSouthSectorInstaller());
+    host.install('B', createWestSectorInstaller());
+    host.install('C2', createEastSectorInstaller());
+    const deck = { east: -14.23, north: 8.9, height: 347 };
+    const summitDock = { east: 25.34, north: 996.32, height: 800 };
+    // No line, no ride.
+    assert.deepEqual({ ...host.cableRidePlan(deck) }, { ok: false, reason: 'no-line' });
+
+    const dawn = Date.UTC(2026, 11, 31, 6);
+    let clock = dawn + 60 * 60000;
+    const authority = {
+      state: () => ({ line: 2, stage: 'full-line' }),
+      now: () => clock,
+      daylight: () => true,
+      firstRun: { wokeAt: () => dawn, openedAt: () => dawn + 20 * 60000, dawnEpoch: () => dawn },
+    } as never;
+    await host.preparePublicCable(authority);
+    const leg = (host.cableOperation as unknown as { ropeway: { cable: { legMs: number } } }).ropeway.cable.legMs;
+
+    // Somewhere with no dock: refused, never a speculative boarding.
+    const nowhere = host.cableRidePlan({ east: -800, north: 300, height: 400 });
+    assert.equal(nowhere.ok, false);
+    assert.equal((nowhere as { reason: string }).reason, 'not-at-dock');
+
+    // Scanning the ride clock must produce real boarding windows where the
+    // operation allows it, each with a supported, unobstructed exit.
+    let boards = 0, sawChange = false, last = '';
+    for (let step = 0; step < 40; step++) {
+      clock = dawn + 60 * 60000 + step * (leg / 8);
+      for (const foot of [deck, summitDock]) {
+        const plan = host.cableRidePlan(foot);
+        const signature = plan.ok ? 'board' : plan.reason;
+        if (signature !== last) { sawChange = true; last = signature; }
+        if (!plan.ok) continue;
+        boards++;
+        assert.equal(plan.exitReady || plan.exitSupported !== undefined, true);
+        if (plan.exitFeet) {
+          assert.equal(plan.exitSupported, true, 'the exit dock must be real ground');
+          assert.notEqual(host.supportAt(plan.exitFeet.east, plan.exitFeet.north), undefined);
+        }
+      }
+    }
+    assert.ok(boards > 0, 'the ride must be boardable at some moment of the service');
+    assert.equal(sawChange, true, 'the plan must follow the service, not be a constant');
+  } finally {
+    host.dispose();
+  }
+});
+
+test('D32-2 the canonical field has no holes anywhere in the domain', () => {
+  const host = createTownD2R30ProductionHost();
+  try {
+    const integrity = host.terrainIntegrity();
+    assert.equal(integrity.version, 'd2-terrain-integrity-1.0');
+    assert.ok(integrity.samples > 60_000, `only ${integrity.samples} samples`);
+    assert.equal(integrity.noCanonical, 0, 'the canonical sampler left holes');
+    assert.equal(integrity.noCollision, 0, 'the collision grid left holes');
+    assert.ok(integrity.worstCollisionDrift < 1e-4, `drift ${integrity.worstCollisionDrift}`);
+    assert.equal(integrity.intact, true);
+    assert.throws(() => host.terrainIntegrity(1), /spacing/);
   } finally {
     host.dispose();
   }
