@@ -296,7 +296,7 @@ try{
   const save=async()=>{
     const progress={...result,observed:{checkpoints:evidence.checkpoints.length,poseSamples:evidence.poses.length,
       errors:report.pageErrors.length+report.consoleErrors.length+report.requestFailures.length+report.httpErrors.length,
-      lastAcceptedPose:evidence.poses.at(-1)}};
+      lastSentPose:evidence.poses.at(-1)}};
     const dst=join(output,'b-r30-progress.json'),tmp=dst+'.next';
     const body=JSON.stringify(progress,null,2);
     await writeFile(tmp,body);
