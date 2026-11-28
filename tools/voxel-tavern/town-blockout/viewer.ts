@@ -30,6 +30,7 @@ import { addTerrainMeshes } from './terrain-mesh';
 import {mountWestMountainGround,westMountainTrackProtection} from './town-night-a-summit-west-ground';
 import {westPresenceBounds} from '../../../src/shared/za22-west-domain';
 import {createSouthEntryHost} from './town-night-a-summit-entry-host';
+import {mountA33WestFoothillDressing} from './town-a33-west-foothill-dressing';
 import {mountWestMountainFootway} from './town-night-a-summit-west-footway';
 import {createA33ExactGroundCoverage} from './town-a33-pit-ridge-ground';
 import { createTerrainSupportContract } from './town-a-r30-terrain-contract';
@@ -912,7 +913,9 @@ if(westSurfacePort){
 }
 // One final west index includes both real rail and road arrays, after all
 // accepted surface geometry. No early or parallel stale index survives.
-westWalkGeometry=buildWestGeometry(ensureWestCraterRoad().group,railExtension.group);
+const westFoothillDressing=mountA33WestFoothillDressing(westGroundAt,westMountainTrackProtection([railExtension.samples,railExtension.narrowSamples,railExtension.sidingSamples]),[...readWalkGeometry(ensureWestCraterRoad().group).colliders,...readWalkGeometry(railExtension.group).colliders]);
+scene.add(westFoothillDressing.group);
+westWalkGeometry=buildWestGeometry(ensureWestCraterRoad().group,railExtension.group,westFoothillDressing.group);
 scene.add(buildShankouNodeScenery(grid).group);
 const trackViewRoot = railway.group.children.find(group => group.children.some(child => child.name.startsWith('tour-train-track-')));
 addTownRailWayfinding(scene, grid.heightAt);
@@ -1871,7 +1874,7 @@ for(const window of ensureWestCraterRoad().mouthWorks.supplyWindowControls)activ
   run:()=>{
     if(homeReturn||Math.hypot(x-window.useEast,n-window.useNorth)>.55||Math.abs(ground-window.useHeight)>.55)return;
     const open=window.toggle();
-    westWalkGeometry=buildWestGeometry(ensureWestCraterRoad().group,railExtension.group);
+    westWalkGeometry=buildWestGeometry(ensureWestCraterRoad().group,railExtension.group,westFoothillDressing.group);
     activityContext.face(window.east,window.north,window.height);
     announceActivity(open?'窗户已打开':'窗户已关闭');
   },

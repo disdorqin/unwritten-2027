@@ -6,6 +6,8 @@ import {buildCraterRailExtension} from '../tools/voxel-tavern/town-blockout/town
 import {buildTownRailRoute} from '../tools/voxel-tavern/town-blockout/town-railway';
 import {readWalkGeometry} from '../tools/voxel-tavern/town-blockout/landmark-kit';
 import {mountWestMountainGround,westMountainTrackProtection} from '../tools/voxel-tavern/town-blockout/town-night-a-summit-west-ground';
+import {Box3,Matrix4,Vector3,InstancedMesh} from 'three';
+import {mountA33WestFoothillDressing} from '../tools/voxel-tavern/town-blockout/town-a33-west-foothill-dressing';
 import {a33WestFoothillRoute} from '../tools/voxel-tavern/town-blockout/town-a33-west-foothill';
 import {mountWestMountainFootway,westMountainFootway} from '../tools/voxel-tavern/town-blockout/town-night-a-summit-west-footway';
 test('physical west detour has clear body envelope in both directions, including the original tree base',()=>{
@@ -14,7 +16,23 @@ test('physical west detour has clear body envelope in both directions, including
  const west=mountWestMountainGround(road.heightAt,{west:-240,east:0,south:336,north:worldBounds.depth},westMountainTrackProtection([rail.samples,rail.narrowSamples,rail.sidingSamples]));
  const ground=(e:number,n:number)=>west.heightAt(e,n)??road.heightAt(e,n);
  const foot=mountWestMountainFootway(ground);
- const boxes=[road.group,rail.group].flatMap(q=>{const g=readWalkGeometry(q);return [...g.colliders,...g.floors]}).filter(b=>b.max[0]!>-115&&b.min[0]!<-77&&b.min[2]!<-260&&b.max[2]!>-535);
+ const prior=[road.group,rail.group].flatMap(q=>{const g=readWalkGeometry(q);return [...g.colliders,...g.floors]});
+ const dressing=mountA33WestFoothillDressing(ground,westMountainTrackProtection([rail.samples,rail.narrowSamples,rail.sidingSamples]),prior);
+ assert.ok(dressing.stats.trees>=20&&dressing.stats.rocks>=20&&dressing.stats.rests>=2);
+ // Match every rendered instance to its actual registered world-space body.
+ const matrix=new Matrix4(),base=new Box3(new Vector3(-.5,-.5,-.5),new Vector3(.5,.5,.5));
+ const keys=new Set(dressing.solids.map(b=>[...b.min,...b.max].map(v=>Math.round(v*1000)).join(',')));
+ let index=0;
+ for(const node of dressing.group.children as InstancedMesh[])for(let i=0;i<node.count;i++){
+  node.getMatrixAt(i,matrix);const b=base.clone().applyMatrix4(matrix);
+  // Instance arrays are Float32. Compare the six exact bounds with a
+  // tolerance, not the order in which spatially batched parts were emitted.
+  assert.ok(dressing.solids.some(s=>s.min.every((v,j)=>Math.abs(v-b.min.getComponent(j))<.0001)&&s.max.every((v,j)=>Math.abs(v-b.max.getComponent(j))<.0001)));
+  index++;
+ }
+ assert.equal(index,dressing.solids.length);
+ assert.ok(keys.size>0);
+ const boxes=[...prior,...dressing.solids].filter(b=>b.max[0]!>-115&&b.min[0]!<-77&&b.min[2]!<-260&&b.max[2]!>-535);
  const all=[...westMountainFootway,...a33WestFoothillRoute.slice(1)];
  assert.ok(west.stats.changedFoothillVertices>8000&&west.stats.maxFoothillDelta>8);
  let min=Infinity,steps=0,grade=0;
@@ -36,6 +54,6 @@ test('physical west detour has clear body envelope in both directions, including
    }
   }
   assert.ok(grade<.85);assert.ok(foot.triangles>0);
-  console.log(JSON.stringify({steps,min,grade,triangles:foot.triangles,foothill:west.stats}));
- }finally{west.dispose();foot.dispose();}
+  console.log(JSON.stringify({steps,min,grade,triangles:foot.triangles,foothill:west.stats,dressing:dressing.stats}));
+ }finally{dressing.dispose();west.dispose();foot.dispose();}
 });
