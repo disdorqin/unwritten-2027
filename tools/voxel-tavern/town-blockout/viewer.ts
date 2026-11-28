@@ -39,6 +39,7 @@ import {createA31PublicSummitRoute} from './town-a31-public-summit';
 import {createNightBProductionController} from './town-night-b-production-controller';
 import {createA31CableInput} from './town-a31-cable-input';
 import {syncA31OutdoorRoom} from './town-a31-outdoor-presence';
+import {a31GateCrossing,a31GateEligible} from './town-a31-gate-handoff';
 import type {CableRideFrame} from './town-night-b-summit-ride-host';
 import { mountZa29GuardPost, type Za29GuardPostKind } from './town-za29-guard-scenes';
 import { createZa29GuardDuty, za29GuardDutyForPhase } from './town-za29-guard-duty';
@@ -3391,8 +3392,8 @@ function supportAt(
   return height;
 }
 
-function obstructed(east: number, north: number, feet: number, { colliders, floors } = geometryAt(east, north)) {
-  if (cloudRoute.active()) return cloudRoute.blocked(east, north, feet, bodyRadius, bodyHeight)||southEntryHost.blocked(east,north,feet,bodyRadius,bodyHeight);
+function obstructed(east: number, north: number, feet: number, { colliders, floors } = geometryAt(east, north), outdoors=false) {
+  if (!outdoors&&cloudRoute.active()) return cloudRoute.blocked(east, north, feet, bodyRadius, bodyHeight)||southEntryHost.blocked(east,north,feet,bodyRadius,bodyHeight);
   if (!homeReturn && east < 0) {
     if (!outdoorWalkable(east, north)) return true;
     if (ensureWestCraterRoad().fenceBlocks(east, north, feet, bodyRadius)) return true;
@@ -3419,7 +3420,7 @@ function dryTownLandingHeight(east: number, north: number, heightHint?: number, 
   const geometry = outdoors ? outdoorGeometryAt(east, north) : geometryAt(east, north);
   const base = heightHint ?? surface;
   const feet = supportAt(east, north, base + stepHeight, base + surfaceEpsilon, bodyRadius, surface, geometry);
-  if (Math.abs(feet - base) > stepHeight || obstructed(east, north, feet, geometry)) return undefined;
+  if (Math.abs(feet - base) > stepHeight || obstructed(east, north, feet, geometry,outdoors)) return undefined;
   return Number.isFinite(feet) ? feet : undefined;
 }
 
@@ -3478,8 +3479,31 @@ function stepJumpInMine(dt: number) {
   airHeight = next;
 }
 
+type A31GateFoot={east:number;north:number;height:number};
+let pendingGateStep:{from:A31GateFoot;to:A31GateFoot;entering:boolean}|undefined;
+function gateRouteCertified():boolean{return Boolean(productionRidge?.cloudSeam.domainReady)&&cloudRoute.state().ready;}
+function gateStepEligible(from:A31GateFoot,to:A31GateFoot){
+ return a31GateEligible(gateRouteCertified(),from,to,
+  (e,n,h)=>dryTownLandingHeight(e,n,h,true),
+  (e,n)=>{const h=cloudRoute.surveyedSupport(e,n,bodyRadius);return h!==undefined&&!cloudRoute.surveyedBlocked(e,n,h,bodyRadius,bodyHeight)?h:undefined;});
+}
+function commitGateStep(){
+ const p=pendingGateStep;pendingGateStep=undefined;
+ if(!p||!walking||homeReturn||airHeight!==undefined||sledRide.active()||cableController.riding()||x!==p.from.east||n!==p.from.north||ground!==p.from.height||cloudRoute.active()===p.entering)return;
+ const accept=()=>gateStepEligible(p.from,p.to);
+ const moved=p.entering?cloudRoute.enterAt(p.to,accept):cloudRoute.leaveAt(p.to,accept);
+ if(!moved)return;
+ x=p.to.east;n=p.to.north;ground=p.to.height;
+ stopTravel();landingFeedback.reset();airHeight=undefined;riseSpeed=0;
+ // Reparent and select the actual room before the first new pose.
+ // No menu jump or nearest legal spawn is used.
+ presence.setSummitDomain(p.entering,p.entering?cloudRoute.scene:undefined,p.entering?undefined:scene);
+ presence.sample(true,x,n,ground,playerBodyYaw());
+ storeWalkView(walkCurrent);walkPrevious.copy(walkCurrent);
+}
 let ridgeMoveReject:unknown;
 function tryMove(nextX: number, nextN: number) {
+  if(pendingGateStep)return false;
   if (dreamInMine()) return tryMoveInMine(nextX, nextN);
   if (cloudRoute.active() && !cloudRoute.acceptsStep(x, n, nextX, nextN, bodyRadius)) return false;
   if (!walkable(nextX, nextN)) {
@@ -3506,6 +3530,13 @@ function tryMove(nextX: number, nextN: number) {
   if (!homeReturn && currentGuardDuty()?.blocksStep(
     { east: x, north: n, height: feet }, { east: nextX, north: nextN, height: nextHeight },
   )) {if(profileTown&&previewOptions.has('mRoadSurvey'))ridgeMoveReject={reason:'guard',next:[nextX,nextN,floor]};return false;}
+  const gateFrom={east:x,north:n,height:ground},gateTo={east:nextX,north:nextN,height:nextHeight};
+  if(a31GateCrossing(cloudRoute.active(),gateFrom,gateTo)){
+    if(airHeight!==undefined||sledRide.active()||sledRide.recovering()||!gateStepEligible(gateFrom,gateTo))return false;
+    // Commit at the next frame boundary, so the old scene cannot run
+    // its remaining physics/render/presence work in the new room.
+    pendingGateStep={from:gateFrom,to:gateTo,entering:!cloudRoute.active()};return true;
+  }
   [x, n] = [nextX, nextN];
   if (airHeight === undefined) {
     if (ground - nextHeight > stepHeight) {
@@ -3970,6 +4001,7 @@ renderer.setAnimationLoop(now => {
   // The root entry awaits the real D2 staging behind the existing loading
   // screen. Do not render or accept movement into a half-built world.
   if(document.body.classList.contains('town-entry-pending'))return;
+  commitGateStep();
   cableInput.tick();cableFrame=cableController.tick(playerBodyYaw());
   cloudRoute.update(cableFrame?.feet??{east:x,north:n,height:ground});
   const summitWeatherState=presence.getTownOutdoorWeather();

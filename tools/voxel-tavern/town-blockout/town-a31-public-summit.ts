@@ -3,6 +3,7 @@ import type {createTownD2R30ProductionHost} from './town-d2-r30-production-host'
 import {retireA31LegacySectorOverlays} from './town-a31-summit-visual-ownership';
 import {summitAssemblyAnchor} from './main-summit-assembly';
 import type {SouthSnowVisualSample} from './town-night-a-summit-snow-appearance';
+import {a31GateFoot} from './town-a31-gate-handoff';
 
 type Foot=Readonly<{east:number;north:number;height:number}>;
 type Production=ReturnType<typeof createTownD2R30ProductionHost>;
@@ -88,7 +89,7 @@ export function createA31PublicSummitRoute(input:Input){
   // Only the surveyed high cloud apron, or a certified rear domain,
   // sees the complete production body. No overlapping town collisions.
   near=active||position.east>=286.5&&position.east<=352&&
-   position.north>=(near?631:635)&&position.north<666&&position.height>=(near?345:346);
+   position.north>=(near?631:635)&&position.north<=669&&position.height>=(near?345:346);
   production.group.visible=near;input.skyline.visible=!near&&!active;
   if(near)production.update(...local(position.east,position.north),input.now());
   else snowPending=0;
@@ -113,7 +114,7 @@ export function createA31PublicSummitRoute(input:Input){
   const [le,ln]=local(e,n);
   return production.blocked(le,ln,h,r,body)||!!production.assembly.northWall?.blocked(le,ln,h,r,body);
  }
- const gate=(p:Foot)=>Math.abs(p.east-summitAssemblyAnchor.east)<=2&&p.north>=667&&p.north<=680;
+ const gate=a31GateFoot;
  /** A caller may only hand off the SAME physically supported foot, and
   * must accept the real authority/room transition. No new transport clock,
   * no teleport destination, no call site until B/C2 certification. */
