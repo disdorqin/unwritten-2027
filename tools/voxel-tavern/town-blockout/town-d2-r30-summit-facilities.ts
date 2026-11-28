@@ -93,6 +93,8 @@ export type TownD2R30SummitFacilitiesOptions = Readonly<{
   heightAt?: (east: number, north: number, arrivalHeight?: number) => number | undefined;
   /** Include the hut interior + registration landmarks (default true). */
   includeHut?: boolean;
+  /** Reuse the host's exact P-3 survey instead of generating a duplicate block. */
+  trailPoints?:ReturnType<typeof createMainSummitTrail>['points'];
   /** B owns the operating workshop in production; legacy preview keeps this room. */
   includeLegacyMachineRoom?:boolean;
   /** Include the icefall and rock towers (default true). */
@@ -523,13 +525,12 @@ export function createTownD2R30SummitFacilities(
   // The canonical P-3 walkway is surveyed against the P-1 reference field.
   // Route props that hang off the walkway keep that survey, but every body
   // samples the R30 ground so nothing floats above the new massif.
-  const block = createMainSummitBlock(mainSummitLayout, arrivalHeight, 100);
-  let trailPoints: ReturnType<typeof createMainSummitTrail>['points'] = [];
-  try {
-    trailPoints = createMainSummitTrail(block.heightAt, arrivalHeight).points;
-  } finally {
-    block.dispose();
+  let trailPoints=options.trailPoints;
+  if(!trailPoints){
+    const block=createMainSummitBlock(mainSummitLayout,arrivalHeight,100);
+    try{trailPoints=createMainSummitTrail(block.heightAt,arrivalHeight).points;}finally{block.dispose();}
   }
+  if(trailPoints.length<2)throw Error('Missing summit trail survey');
 
   if (includeHut) {
     const landmarks = createMainSummitRegistrationLandmarks(arrivalHeight);

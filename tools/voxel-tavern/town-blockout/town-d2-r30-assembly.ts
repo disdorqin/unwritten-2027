@@ -261,7 +261,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
 
   if (includeSummitFacilities) {
     addDetail('summit-facilities', () => {
-      const facilities = createTownD2R30SummitFacilities({ heightAt, arrivalHeight,includeLegacyMachineRoom:options.includeLegacyMachineRoom });
+      const facilities = createTownD2R30SummitFacilities({ heightAt, arrivalHeight,trailPoints,includeLegacyMachineRoom:options.includeLegacyMachineRoom });
       children.push(facilities.group);
       disposers.push(() => facilities.dispose());
       // The canonical facility bodies carry no night response of their own,

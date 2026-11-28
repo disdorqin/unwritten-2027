@@ -569,11 +569,18 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
   const sleepers: { name: string; object: { visible: boolean }; west:number;east:number;south:number;north:number }[] = [];
 
   function collectSleepers() {
-    sleepers.length = 0;
-    group.updateWorldMatrix(true,true);
+    // Reuse conservative bounds of already mounted static detail roots.
+    // A root is staged only once, so do not traverse all prior meshes
+    // after each new factory. Removed roots are evicted below.
+    const previous=new Map(sleepers.map(s=>[s.object,s]));
+    sleepers.length=0;
+    group.updateWorldMatrix(true,false);
     const origin=group.getWorldPosition(new Vector3());
     const candidates=[...group.children.filter(child=>child!==assembly.group),...assembly.group.children.filter(child=>!/(massif|chunk|lod|-skirt|floor)/.test(child.name))];
     for(const child of candidates){
+      const existing=previous.get(child);
+      if(existing){sleepers.push(existing);continue;}
+      child.updateWorldMatrix(true,true);
       const box=new Box3().setFromObject(child);
       if(box.isEmpty())continue;
       sleepers.push({name:child.name,object:child,west:box.min.x-origin.x,east:box.max.x-origin.x,south:origin.z-box.max.z,north:origin.z-box.min.z});
