@@ -43,14 +43,14 @@ export function createA31PublicSummitRoute(input:Input){
    const started=performance.now();
    try{
     stage='import';
-    const [{createTownD2R30ProductionHost},{createSouthSectorInstaller,createWestSectorInstaller,createEastSectorInstaller}]=await Promise.all([
-     import('./town-d2-r30-production-host'),import('./town-d2-r30-sector-installers')]);
+    const [{createTownD2R30ProductionHost},{createWestSectorInstaller,createEastSectorInstaller},{createA32SouthSectorInstaller}]=await Promise.all([
+     import('./town-d2-r30-production-host'),import('./town-d2-r30-sector-installers'),import('./town-a32-south-installer')]);
     // Presence's slewed clock may have fractional milliseconds; the ropeway
     // construction contract requires an integer epoch. Live B authority still
     // reads the original continuously synchronized server clock.
     candidate=await stageRun('canonical',()=>createTownD2R30ProductionHost({epochMs:Math.floor(input.now()),includeRopeway:false}));
     const host=candidate;
-    await stageRun('south',()=>host.install('A',createSouthSectorInstaller()));
+    await stageRun('south',()=>host.install('A',createA32SouthSectorInstaller()));
     await stageRun('west',()=>host.install('B',createWestSectorInstaller()));
     await stageRun('east',()=>host.install('C2',createEastSectorInstaller()));
     host.setFrontSnow(input.frontSnow?(e,n)=>input.frontSnow!(e+summitAssemblyAnchor.east,n+summitAssemblyAnchor.north):undefined);
@@ -156,6 +156,7 @@ export function createA31PublicSummitRoute(input:Input){
    installed:production?.installed()??[],cutTiles:production?cutTiles:0,
    duplicates:production?duplicates:[],sectorSamples:audit?.sectors.map(s=>s.samples)??[],
    legacyPruned:visual?{roadTriangles:visual.removedTrailTriangles,forestInstances:visual.removedForestInstances}:undefined,
+   southRoad:production?.group.getObjectByName('night-a-south-sector')?.userData.a32Road,
    cable:production?.cableState()??{installed:false,boardable:false,certified:false},
    sceneOwner:production?.group.parent===input.town?'town':production?.group.parent===scene?'summit':undefined};
  }

@@ -8,7 +8,7 @@ test('public route owns the actual four sector mount and exclusive far/near disp
  try{
   const loading=route.prepare();assert.equal(route.prepare(),loading);assert.equal(await loading,true);
   const state=route.state();assert.equal(state.ready,true);assert.equal(state.sceneOwner,'town');
-  assert.deepEqual(state.installed,['A','B','C2']);assert.deepEqual(state.sectorSamples,[238,220,240,160]);assert.equal(state.cutTiles,6);
+  assert.deepEqual(state.installed,['A','B','C2']);assert.deepEqual(state.sectorSamples,[238,220,240,160]);assert.equal(state.cutTiles,9);assert.equal(state.southRoad.connected,false);assert.ok(state.southRoad.length>528);
   assert.deepEqual(state.duplicates,[]);assert.equal(state.cable.boardable,false);
   const root=town.getObjectByName('town-d2-r30-production') as Group;assert.ok(root);
   assert.deepEqual(root.position.toArray(),[300,0,-676]);assert.equal(root.visible,false);

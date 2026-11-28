@@ -1,4 +1,4 @@
-import type {BufferGeometry,Group,Mesh,Object3D} from 'three';
+import {BufferGeometry,Float32BufferAttribute,Group,type Mesh,type Object3D} from 'three';
 import type {MainSummitTrailPoint} from './main-summit-trail';
 import type {SouthGround,SouthProtection} from './town-night-a-summit-landform';
 import {mountSouthEarthworks} from './town-night-a-summit-road-earthworks';
@@ -14,6 +14,7 @@ type Input={
  /** C2's accepted profile and the exact A-owned interval, not a new EN alignment. */
  trail:readonly MainSummitTrailPoint[];
  first:number;last:number;
+ extension?:Readonly<{trail:readonly MainSummitTrailPoint[];first:number;last:number;cap:number}>;
  nearTiles:readonly Mesh[];
  legacySouthVegetationExcluded:boolean;
  legacyTreadExcluded:boolean;
@@ -22,6 +23,20 @@ type Input={
  cutTerrain:(source:BufferGeometry,tread:BufferGeometry)=>{geometry:BufferGeometry};
  createCutSurface:(geometry:BufferGeometry)=>CutSurface;
 };
+
+/** Both strips share one cut buffer and one sector. No second terrain owner. */
+function combineSouthRoads(a:ReturnType<typeof mountSouthEarthworks>,b:ReturnType<typeof mountSouthEarthworks>){
+ const group=new Group();group.name='night-a-south-road-combined';group.add(a.group,b.group);
+ const vertices:number[]=[],indices:number[]=[];
+ for(const leaf of [a,b]){
+  const pos=leaf.cutTread.getAttribute('position'),idx=leaf.cutTread.getIndex()!,offset=vertices.length/3;
+  for(let i=0;i<pos.count;i++)vertices.push(pos.getX(i),pos.getY(i),pos.getZ(i));
+  for(let i=0;i<idx.count;i++)indices.push(idx.getX(i)+offset);
+ }
+ const cutTread=new BufferGeometry();cutTread.setAttribute('position',new Float32BufferAttribute(vertices,3));cutTread.setIndex(indices);cutTread.computeVertexNormals();
+ const stats={length:a.stats.length+b.stats.length,maxGrade:Math.max(a.stats.maxGrade,b.stats.maxGrade),maxCut:Math.max(a.stats.maxCut,b.stats.maxCut),maxFill:Math.max(a.stats.maxFill,b.stats.maxFill),railMetres:a.stats.railMetres+b.stats.railMetres,railPosts:a.stats.railPosts+b.stats.railPosts,draws:a.stats.draws+b.stats.draws,treadTriangles:a.stats.treadTriangles+b.stats.treadTriangles,triangles:a.stats.triangles+b.stats.triangles};
+ return {group,cutTread,stats,supportAt(e:number,n:number){const x=a.supportAt(e,n),y=b.supportAt(e,n);return x===undefined?y:y===undefined?x:Math.max(x,y);},blocked(e:number,n:number,h:number,r=.27,body=1.8){return a.blocked(e,n,h,r,body)||b.blocked(e,n,h,r,body);},dispose(){a.dispose();b.dispose();cutTread.dispose();group.removeFromParent();group.clear();}};
+}
 
 /** Stage a single southern sector on real canonical terrain. Transfer road
  * ownership only after every tread vertex has a genuine near-ground tile.
@@ -41,7 +56,12 @@ export function mountSouthProduction(input:Input){
   }
   if(node!==input.owner)throw Error('Canonical near tile not owned by host');
  }
- const road=mountSouthEarthworks(input.trail,input.first,input.last,input.groundAt),cuts:Cut[]=[];
+ const base=mountSouthEarthworks(input.trail,input.first,input.last,input.groundAt),cuts:Cut[]=[];
+ let extra:ReturnType<typeof mountSouthEarthworks>|undefined;
+ try{if(input.extension)extra=mountSouthEarthworks(input.extension.trail,input.extension.first,input.extension.last,input.groundAt,input.extension.cap);}
+ catch(error){base.dispose();throw error;}
+ const road=extra?combineSouthRoads(base,extra):base;
+ const strips=[{trail:input.trail,first:input.first,last:input.last},...(input.extension?[input.extension]:[])];
  let sector:ReturnType<typeof mountSouthSector>|undefined;
  let disposed=false;
  const restore=()=>{for(const c of cuts){if(c.mesh.geometry===c.geometry)c.mesh.geometry=c.original;c.surface.dispose();c.geometry.dispose();}cuts.length=0;};
@@ -87,8 +107,8 @@ export function mountSouthProduction(input:Input){
   // A vertical retaining face may share the exact outer tread edge.
   // Check the actual clear walking band, including both shoulders,
   // rather than demanding the adjacent high wall disappear.
-  for(let i=input.first+1;i<=input.last;i++){
-   const a=input.trail[i-1]!,b=input.trail[i]!,prev=input.trail[i-2]!,next=input.trail[i+1]!;
+  for(const strip of strips)for(let i=strip.first+1;i<=strip.last;i++){
+   const a=strip.trail[i-1]!,b=strip.trail[i]!,prev=strip.trail[i-2]!,next=strip.trail[i+1]!;
    const side=(p:MainSummitTrailPoint,lo:MainSummitTrailPoint,hi:MainSummitTrailPoint,t:number)=>{
     const de=hi.east-lo.east,dn=hi.north-lo.north,l=Math.hypot(de,dn);
     return {e:p.east-dn/l*t,n:p.north+de/l*t};
