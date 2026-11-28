@@ -592,6 +592,11 @@ try{
   report.streaming={startup,terrainPreload:first.terrainPreload,cold:first.summitProduction,assembled:assembled.summitProduction,ridge:{roads:assembled.ridge.roads,transportReady:assembled.ridge.transportReady,cloudSeam:assembled.ridge.cloudSeam}};
   assert.equal(assembled.summitProduction.status,'ready',JSON.stringify(report.streaming));
   assert.equal(assembled.summitProduction.ready,true);
+  assert.equal(assembled.ridge.transportReady,true,JSON.stringify(assembled.summitProduction));
+  assert.equal(assembled.ridge.cloudSeam.domainReady,true,JSON.stringify(assembled.ridge.cloudSeam));
+  assert.equal(assembled.summitProduction.cable.boardable,true,JSON.stringify(assembled.summitProduction.cable));
+  assert.ok(assembled.summitProduction.frontAuditSlices?.count>1&&assembled.summitProduction.cable.slices?.count>1);
+  assert.equal(assembled.summitProduction.southRoad.intervalComplete,true);
   assert.equal(assembled.summitProduction.southRoad.cutPreparation.mode,'worker');
   assert.ok(assembled.summitProduction.southRoad.cutPreparation.changed>0);
   assert.ok(assembled.summitProduction.warmup?.meshes>0&&assembled.summitProduction.warmup?.batches>0);
