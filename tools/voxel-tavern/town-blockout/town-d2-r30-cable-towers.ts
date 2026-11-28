@@ -1,6 +1,6 @@
 import {
-  BoxGeometry, BufferGeometry, CylinderGeometry, Group, InstancedMesh, Matrix4, MeshLambertMaterial,
-  StaticDrawUsage,
+  BoxGeometry, BufferGeometry, Color, CylinderGeometry, Float32BufferAttribute, Group,
+  InstancedMesh, Matrix4, MeshLambertMaterial, StaticDrawUsage,
 } from 'three';
 import { createMainSummitCable } from './main-summit-cable';
 import { sampleTownD2R30Height } from './town-d2-r30-domain';
@@ -57,7 +57,7 @@ export function createTownD2R30CableTowers(options: TownD2R30CableTowersOptions 
   group.name = 'town-d2-r30-cable-towers';
   const geometries = new Set<BufferGeometry>();
   const materials = new Set<MeshLambertMaterial>();
-  const iron = new MeshLambertMaterial({ color: '#5a6268' });
+  const iron = new MeshLambertMaterial({ color: '#ffffff' });
   iron.name = 'town-d2-r30-cable-tower-iron';
   materials.add(iron);
 
@@ -69,6 +69,35 @@ export function createTownD2R30CableTowers(options: TownD2R30CableTowersOptions 
   geometries.add(mastShape);
   geometries.add(barShape);
   geometries.add(braceShape);
+
+  // R5: give the steel shapes a vertical vertex-colour gradient so each tower
+  // reads as real weathered steel instead of a flat single-colour fill. The
+  // gradient rides on the geometry, so it costs no extra draw calls and the
+  // shared `iron` material still multiplies it for the night tint.
+  const applySteelGradient = (geometry: BufferGeometry, topHex: string, bottomHex: string) => {
+    const position = geometry.getAttribute('position');
+    const colors = new Float32Array(position.count * 3);
+    const top = new Color(topHex), bottom = new Color(bottomHex);
+    let minY = Infinity, maxY = -Infinity;
+    for (let index = 0; index < position.count; index++) {
+      const y = position.getY(index);
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
+    const span = maxY - minY || 1;
+    for (let index = 0; index < position.count; index++) {
+      const t = (position.getY(index) - minY) / span;
+      const c = top.clone().lerp(bottom, t);
+      colors[index * 3] = c.r;
+      colors[index * 3 + 1] = c.g;
+      colors[index * 3 + 2] = c.b;
+    }
+    geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
+  };
+  applySteelGradient(mastShape, '#7a848c', '#3f474d');
+  applySteelGradient(barShape, '#6e7880', '#4a5258');
+  applySteelGradient(braceShape, '#667078', '#444c52');
+  iron.vertexColors = true;
 
   const rope = cable.ropes[0];
   const ropeLength = rope.totalMetres;
@@ -145,19 +174,39 @@ export function createTownD2R30CableTowers(options: TownD2R30CableTowersOptions 
     skipNearStation: skipped,
   });
   group.userData = {
-    owner: 'D2-R02', visualOnly: true, includesWorldCollision: false,
+    owner: 'D2-R02', visualOnly: false, includesWorldCollision: true,
     modifiesHeightAt: false, modifiesCable: false, stats,
     coordinateConvention: 'x=east,y=height,z=-north',
   };
 
+  // The mast is a real solid cylinder of radius .62 (the unit mast is scaled
+  // from .28 top to .62 base). Reject a player capsule whose horizontal
+  // distance to any mast is smaller than its body radius plus the mast
+  // radius, at any standing height along the mast. No geometry is changed:
+  // B owns the tower bodies, D2 only exposes their collision so the shared
+  // production host can stop a player walking through them.
+  const MAST_RADIUS = .62;
   let disposed = false;
+  const blocked = (east: number, north: number, feet: number, radius = .27, bodyHeight = 1.8) => {
+    if (disposed) throw new Error('The D2-R02 cable towers are disposed.');
+    if (![east, north, feet, radius, bodyHeight].every(Number.isFinite) || radius < 0 || bodyHeight < 0) {
+      throw new RangeError('D2-R02 tower collision inputs must be finite.');
+    }
+    return towers.some(tower =>
+      feet + bodyHeight > tower.ground && feet < tower.ground + tower.height &&
+      Math.hypot(east - tower.east, north - tower.north) < MAST_RADIUS + radius);
+  };
   return {
     group,
+    blocked,
     stats: () => stats,
     setNight(value: boolean) {
       if (disposed) throw new Error('The D2-R02 cable towers are disposed.');
       if (typeof value !== 'boolean') throw new TypeError('setNight expects a boolean.');
-      iron.color.set(value ? '#414951' : '#5a6268');
+      // Vertex colours carry the steel gradient; the material colour is a
+      // multiplier, so white leaves the gradient intact and a dark tint
+      // darkens it uniformly for night.
+      iron.color.set(value ? '#3a4248' : '#ffffff');
     },
     dispose() {
       if (disposed) return;
