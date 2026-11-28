@@ -32,9 +32,10 @@ export function prepareNightBPublicFrontCable(input:Input){
    for(let i=0;i<=6;i++)for(let j=0;j<=8;j++)if(input.blocked(feet.east+(i/3-1)*w,feet.north+(j/4-1)*d,feet.height,.025,top))return true;
    return false;
   },
+  repairProps:{anchors:input.repairAnchors,supportAt:surfaceAt,blocked:input.blocked},
   dockClear:(_station,p)=>clear(p),
-  certifyApproaches:(docks,facilities)=>input.certifyRoutes(docks,input.repairAnchors,p=>clear(p)&&!facilities.blocked(p.east,p.north,p.height,.27))});
+  certifyApproaches:(docks,facilities,anchors)=>input.certifyRoutes(docks,anchors??input.repairAnchors,p=>clear(p)&&!facilities.blocked(p.east,p.north,p.height,.27))});
  const meshAudit=scan.stats();
  if(!op.ready)return {ready:false as const,reason:op.reason,audit:op.audit,docks:op.docks,meshAudit};
- return {ready:true as const,facilities:op.facilities,frontOperation:op,frontRepair:{anchors:input.repairAnchors,surfaceAt,clear:(p:Foot)=>clear(p)&&!op.facilities.blocked(p.east,p.north,p.height,.27)},meshAudit};
+ return {ready:true as const,facilities:op.facilities,frontOperation:op,frontRepair:{anchors:op.repairProps?.anchors??input.repairAnchors,surfaceAt,clear:(p:Foot)=>clear(p)&&!op.facilities.blocked(p.east,p.north,p.height,.27)},meshAudit};
 }

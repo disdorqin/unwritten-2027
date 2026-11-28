@@ -71,9 +71,20 @@ if(scope==='rear'||scope==='rear-mount'||scope==='rear-routes'){
    const fix=process.env.B32_FRONT_FIX==='1';
    const allowsSupportedStep=(a,b)=>fix&&(a.height>grid.heightAt(a.east,a.north)+.04||b.height>grid.heightAt(b.east,b.north)+.04)&&ridge.allowsUphill(a,b)&&ridge.allowsUphill(b,a);
    if(fix)oldFacility.blocked=(...args)=>ridge.facilities.blocked(...args); // paired ephemeral equivalent of C2's active reference correction
-   const blocked=(e,n,h,r,b)=>ridge.blocked(e,n,h,r)||boxes.some(x=>h+.025<x.max[1]&&h+b-.025>x.min[1]&&overlaps(e,n,r,x));
+   const existingBlocked=(e,n,h,r,b)=>ridge.blocked(e,n,h,r)||boxes.some(x=>h+.025<x.max[1]&&h+b-.025>x.min[1]&&overlaps(e,n,r,x));
+   let props;
+   if(process.env.B32_FRONT_PROPS==='1'){
+    assert.ok(fix,'Props survey requires corrected host floor and active facility reference');
+    const {mountNightBFrontRepairProps}=await import('./voxel-tavern/town-blockout/town-night-b-front-repair-props.ts');
+    props=mountNightBFrontRepairProps({owner:ridge.facilities.group,cablePath:ridge.facilities.survey.path,anchors:ridge.frontRepair.anchors,supportAt,blocked:existingBlocked});
+    assert.ok(props.ready,JSON.stringify(props));
+    const propAudit=auditNightBFrontOpenFacilities(ridge.field,ridge.facilities,(p,w,d,top)=>{for(let i=0;i<=6;i++)for(let j=0;j<=8;j++)if(props.blocked(p.east+(i/3-1)*w,p.north+(j/4-1)*d,p.height,.025,top))return true;return false;});
+    console.log(JSON.stringify({scope:'actual C2 owner with B staged repair fixtures (not committed C2 integration)',paired:expected,sites:props.sites,propAudit}));
+    assert.ok(propAudit.candidateEnvelopeClear);
+   }
+   const blocked=(e,n,h,r,b)=>existingBlocked(e,n,h,r,b)||!!props?.blocked(e,n,h,r,b);
    const goals=station=>ridge.frontOperation.docks.filter(d=>d.station===station).flatMap(d=>['board','approach'].map(k=>({id:station+'-'+d.cabin+'-'+k,foot:d[k]})));
-   const repair=(key)=>{const a=ridge.frontRepair.anchors[key];return {id:key,foot:{...a,height:supportAt(a.east,a.north)},reach:2.2,accept:p=>fix?Math.abs((supportAt(p.east,p.north)??Infinity)-p.height)<=.08&&!blocked(p.east,p.north,p.height,.27,1.8):ridge.frontRepair.clear(p)};};
+   const repair=(key)=>{const a=(props?.anchors??ridge.frontRepair.anchors)[key];return {id:key,foot:{...a,height:supportAt(a.east,a.north)},reach:2.2,accept:p=>fix?Math.abs((supportAt(p.east,p.north)??Infinity)-p.height)<=.08&&!blocked(p.east,p.north,p.height,.27,1.8):ridge.frontRepair.clear(p)};};
    const lowRoad=ridge.roads.at(-1).route,midRoad=ridge.roads[0].route;
    const base=lowRoad[0],middle=midRoad[0],top={east:324,north:655,height:347};
    const wheel=repair('cableWheel'),wheelIndex=lowRoad.reduce((best,p,i)=>Math.hypot(p.east-wheel.foot.east,p.north-wheel.foot.north)<Math.hypot(lowRoad[best].east-wheel.foot.east,lowRoad[best].north-wheel.foot.north)?i:best,0),wheelStart=lowRoad[wheelIndex];
@@ -87,7 +98,8 @@ if(scope==='rear'||scope==='rear-mount'||scope==='rear-routes'){
    for(let i=0;i<wheelIndex&&!roadFailure;i++){const a=lowRoad[i],b=lowRoad[i+1],count=Math.max(1,Math.ceil(Math.hypot(b.east-a.east,b.north-a.north)/.25));for(let j=0;j<=count;j++){const t=j/count,e=a.east+(b.east-a.east)*t,n=a.north+(b.north-a.north)*t,h=supportAt(e,n);roadSamples++;if(!Number.isFinite(h)||Math.abs(h-(a.height+(b.height-a.height)*t))>.25||blocked(e,n,h,.27,1.8)){roadFailure={east:e,north:n,height:h};break;}}}
    const footDiagnosis=(p)=>{const {east:e,north:n}=p,h=supportAt(e,n);return {...p,support:h,grid:grid.heightAt(e,n),repairSurface:ridge.frontRepair.surfaceAt(e,n),repairClear:ridge.frontRepair.clear({...p,height:h}),facility:ridge.facilities.blocked(e,n,h,.27),terrace:ridge.terrace?.blocked(e,n,h,.27),external:ridge.externalObstacles(e,n,h,.27,1.8),boxes:boxes.filter(x=>h+.025<x.max[1]&&h+1.8-.025>x.min[1]&&overlaps(e,n,.27,x)),footprint:[[.27,0],[-.27,0],[0,.27],[0,-.27]].map(([x,z])=>supportAt(e+x,n+z))};};
    console.log(JSON.stringify({scope:'front failed target diagnosis',paired:expected,feet:[{east:527.55,north:354,height:26},{east:334.45,north:640,height:347},{east:524.6,north:326.6,height:26.14},{east:524.6,north:328,height:26.14},{east:524.6,north:324.9,height:26.14}].map(footDiagnosis)}));
-   console.log(JSON.stringify({scope:'stricter front terminal local paths, real C2 public host collision + station and rail boxes; not actual browser walk',paired:expected,ephemeralHostFix:fix,roadSamples,roadFailure,wheelStart,result:result.map(({routes,...a})=>({...a,routes:routes.map(({path,...r})=>({...r,points:path?.length}))}))}));
+   console.log(JSON.stringify({scope:'stricter front terminal local paths, real C2 public host collision + station and rail boxes; not actual browser walk',paired:expected,ephemeralHostFix:fix,repairProps:!!props?.ready,roadSamples,roadFailure,wheelStart,result:result.map(({routes,...a})=>({...a,routes:routes.map(({path,...r})=>({...r,points:path?.length}))}))}));
+   props?.dispose();
   }
   ridge.dispose();
  }else{

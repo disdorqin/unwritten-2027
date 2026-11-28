@@ -65,6 +65,7 @@ test('front production field and actual rail, station, forest, roads, banks and 
  const closed=ridge.facilities!,originalParent=closed.group.parent;
  const input={field,closed,authorized:false,externalBlocked,dockClear,certifyApproaches:()=>false,firstRun:{wokeAt:()=>undefined,openedAt:()=>undefined,dawnEpoch:()=>undefined},state:()=>undefined,now:()=>undefined,daylight:()=>undefined};
  const rejected=installNightBFrontOperation(input);assert.equal(rejected.ready,false);assert.equal(closed.group.parent,originalParent);
+ const badProps=installNightBFrontOperation({...input,authorized:true,repairProps:{anchors:{brake:{east:524.6,north:326.6},cableWheel:{east:483,north:424.5},weightTower:{east:436.8,north:523.2},weightFrame:{east:440.6,north:517.4}},supportAt:()=>undefined,blocked:()=>false}});assert.equal(badProps.ready,false);assert.equal(badProps.reason,'repair-fixture-site:brake');assert.equal(closed.group.parent,originalParent);
  const routeRejected=installNightBFrontOperation({...input,authorized:true});assert.equal(routeRejected.ready,false);assert.equal(routeRejected.reason,'walking-route-not-certified');assert.equal(closed.group.parent,originalParent);
  const epoch=Date.UTC(2026,0,1),authority=createZa36CableRepair(1);
  let now:number|undefined=epoch+1000,wokeAt:number|undefined,openedAt:number|undefined,reported=0,activity=-1;
