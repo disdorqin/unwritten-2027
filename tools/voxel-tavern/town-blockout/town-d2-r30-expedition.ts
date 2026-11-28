@@ -177,13 +177,6 @@ function canonicalNodes(arrivalHeight: number, heightAt: (east: number, north: n
       return Object.freeze({ ...definition, ground: undefined, delta: undefined,
         status: 'outside-terrain' }) as TownD2R30ExpeditionNode;
     }
-    // A node whose surveyed height is not finite has no authoritative standing
-    // height. Without this guard the NaN delta would fall through every
-    // comparison and be reported as grounded — a fabricated waypoint.
-    if (!Number.isFinite(definition.height)) {
-      return Object.freeze({ ...definition, ground, delta: undefined,
-        status: 'outside-terrain' }) as TownD2R30ExpeditionNode;
-    }
     const delta = definition.height - ground;
     const status = delta > HEIGHT_TOLERANCE ? 'floating'
       : delta < -HEIGHT_TOLERANCE ? 'buried' : 'grounded';
@@ -263,11 +256,6 @@ export function createTownD2R30Expedition(options: {
       if (!node) return false;
       if (position.area !== node.domain ||
           ![position.east, position.north, position.height].every(Number.isFinite)) return false;
-      // Fail closed: a waypoint that is floating, buried or outside the terrain
-      // has no standable authoritative surface, so no position — even one at
-      // the node's nominal height — can log a visit. Only a grounded node and
-      // the externally-audited cloud-deck stamp are visitable.
-      if (node.status !== 'grounded' && node.status !== 'external-domain') return false;
       const horizontal = Math.hypot(position.east - node.east, position.north - node.north);
       if (horizontal > node.radius || Math.abs(position.height - node.height) > HEIGHT_TOLERANCE) {
         record({ type: 'out-of-reach', node: id });
@@ -285,9 +273,6 @@ export function createTownD2R30Expedition(options: {
     /** Feed a sled movement step using the audited rules and R30 gates. */
     sledStep(point: { east: number; north: number }) {
       if (disposed) throw new Error('The D2-R30 expedition is disposed.');
-      if (!point || ![point.east, point.north].every(Number.isFinite)) {
-        throw new RangeError('A D2-R30 sled step needs a finite east/north position.');
-      }
       const result = sled.step(point, clock);
       if (result) record({ type: 'sled', node: 'summit-sled-line', detail: result.status });
       else record({ type: 'sled', node: 'summit-sled-line' });

@@ -1,6 +1,5 @@
 import {
-  BoxGeometry, BufferGeometry, Color, CylinderGeometry, Float32BufferAttribute, Group,
-  Mesh, MeshLambertMaterial,
+  BoxGeometry, BufferGeometry, CylinderGeometry, Group, Mesh, MeshLambertMaterial,
 } from 'three';
 import { cloudPavilionSites } from './main-summit-pavilion-site';
 import { sampleTownD2R30Height } from './town-d2-r30-domain';
@@ -53,30 +52,6 @@ export const townD2R30FacilityAnchors: readonly TownD2R30FacilityAnchor[] = Obje
 
 const DEFAULTS = Object.freeze({ groundedBand: 1.5, maxPedestalHeight: 120, stoneColor: '#7d7266' });
 
-/** R5: paint a vertical stone gradient onto a geometry so stone foundations
- *  read as real cut rock rather than a flat fill. Costs no extra draw calls;
- *  the material colour stays a multiplier for the night tint. */
-function applyStoneGradient(geometry: BufferGeometry, topHex: string, bottomHex: string) {
-  const position = geometry.getAttribute('position');
-  const colors = new Float32Array(position.count * 3);
-  const top = new Color(topHex), bottom = new Color(bottomHex);
-  let minY = Infinity, maxY = -Infinity;
-  for (let index = 0; index < position.count; index++) {
-    const y = position.getY(index);
-    if (y < minY) minY = y;
-    if (y > maxY) maxY = y;
-  }
-  const span = maxY - minY || 1;
-  for (let index = 0; index < position.count; index++) {
-    const t = (position.getY(index) - minY) / span;
-    const c = top.clone().lerp(bottom, t);
-    colors[index * 3] = c.r;
-    colors[index * 3 + 1] = c.g;
-    colors[index * 3 + 2] = c.b;
-  }
-  geometry.setAttribute('color', new Float32BufferAttribute(colors, 3));
-}
-
 export function createTownD2R30FacilityFoundations(options: {
   anchors?: readonly TownD2R30FacilityAnchor[];
   arrivalHeight?: number;
@@ -92,9 +67,8 @@ export function createTownD2R30FacilityFoundations(options: {
   group.name = 'town-d2-r30-facility-foundations';
   const geometries = new Set<BufferGeometry>();
   const materials = new Set<MeshLambertMaterial>();
-  const stone = new MeshLambertMaterial({ color: '#ffffff' });
+  const stone = new MeshLambertMaterial({ color: DEFAULTS.stoneColor });
   stone.name = 'town-d2-r30-facility-stone';
-  stone.vertexColors = true;
   materials.add(stone);
 
   const reports: TownD2R30FacilityReport[] = [];
@@ -121,19 +95,16 @@ export function createTownD2R30FacilityFoundations(options: {
     if (status === 'pedestal') {
       const pillar = new CylinderGeometry(anchor.radius, anchor.radius * 1.15, delta, 8);
       pillar.translate(0, ground + delta / 2, 0);
-      applyStoneGradient(pillar, '#8e8475', '#5a5247');
       geometries.add(pillar);
       tower.add(new Mesh(pillar, stone));
       const cap = new BoxGeometry(anchor.radius * 2.1, .4, anchor.radius * 2.1);
       cap.translate(0, anchor.height - .2, 0);
-      applyStoneGradient(cap, '#94897a', '#7d7266');
       geometries.add(cap);
       tower.add(new Mesh(cap, stone));
     } else {
       // Cut: a shallow collar that seats the floor into a raised terrain pad.
       const collar = new CylinderGeometry(anchor.radius * 1.2, anchor.radius * 1.35, .6, 8);
       collar.translate(0, anchor.height - .3, 0);
-      applyStoneGradient(collar, '#8e8475', '#6a6256');
       geometries.add(collar);
       tower.add(new Mesh(collar, stone));
     }
@@ -168,8 +139,7 @@ export function createTownD2R30FacilityFoundations(options: {
     setNight(value: boolean) {
       if (disposed) throw new Error('The D2-R03 facility foundations are disposed.');
       if (typeof value !== 'boolean') throw new TypeError('setNight expects a boolean.');
-      // Vertex colours carry the stone gradient; white leaves it intact at day.
-      stone.color.set(value ? '#3f3a33' : '#ffffff');
+      stone.color.set(value ? '#565049' : DEFAULTS.stoneColor);
     },
     dispose() {
       if (disposed) return;

@@ -223,31 +223,8 @@ export function createTownD2R30TrailSupport(options: TownD2R30TrailSupportOption
     }
     const tread = makeGeometry(treadOnly, treadIndices, 'town-d2-r30-trail-tread', DEFAULTS.treadColor);
     const earth = makeGeometry(earthOnly, earthIndices, 'town-d2-r30-trail-earthwork', '#ffffff', earthCol);
-    const piers = pierPos.length ? makeGeometry(pierPos, pierIdx, 'town-d2-r30-trail-piers', '#ffffff') : undefined;
+    const piers = pierPos.length ? makeGeometry(pierPos, pierIdx, 'town-d2-r30-trail-piers', DEFAULTS.bridgeColor) : undefined;
     if (piers) {
-      // R5: a vertical stone gradient on the piers and beams so the bridge
-      // supports read as real cut stone rather than a flat fill. The colour
-      // rides on the geometry; the material colour stays a multiplier so the
-      // existing night tint still works.
-      const pierPosition = piers.geometry.getAttribute('position');
-      const pierColors = new Float32Array(pierPosition.count * 3);
-      const stoneTop = new Color('#9a9388'), stoneBottom = new Color('#5e574d');
-      let pierMinY = Infinity, pierMaxY = -Infinity;
-      for (let index = 0; index < pierPosition.count; index++) {
-        const y = pierPosition.getY(index);
-        if (y < pierMinY) pierMinY = y;
-        if (y > pierMaxY) pierMaxY = y;
-      }
-      const pierSpan = pierMaxY - pierMinY || 1;
-      for (let index = 0; index < pierPosition.count; index++) {
-        const t = (pierPosition.getY(index) - pierMinY) / pierSpan;
-        const c = stoneTop.clone().lerp(stoneBottom, t);
-        pierColors[index * 3] = c.r;
-        pierColors[index * 3 + 1] = c.g;
-        pierColors[index * 3 + 2] = c.b;
-      }
-      piers.geometry.setAttribute('color', new Float32BufferAttribute(pierColors, 3));
-      piers.material.vertexColors = true;
       // Beam tops coincide with the canonical tread plane; bias the support
       // backwards in depth so the walking surface wins without a visible gap.
       piers.material.polygonOffset = true;
@@ -303,9 +280,7 @@ export function createTownD2R30TrailSupport(options: TownD2R30TrailSupportOption
         if (typeof value !== 'boolean') throw new TypeError('setNight expects a boolean.');
         (tread.material as MeshLambertMaterial).color.set(value ? '#7d8595' : DEFAULTS.treadColor);
         (earth.material as MeshLambertMaterial).color.set(value ? '#59626d' : '#ffffff');
-        // The piers carry a vertex-colour stone gradient; the material colour
-        // is a multiplier, so white leaves the gradient intact at day.
-        (piers?.material as MeshLambertMaterial | undefined)?.color.set(value ? '#5c6672' : '#ffffff');
+        (piers?.material as MeshLambertMaterial | undefined)?.color.set(value ? '#5c6672' : DEFAULTS.bridgeColor);
       },
       dispose() {
         if (disposed) return;
