@@ -64,7 +64,7 @@ export function createA31PublicSummitRoute(input:Input){
     host.setFrontWind(input.frontWind?(e,n)=>input.frontWind!(e+summitAssemblyAnchor.east,n+summitAssemblyAnchor.north):undefined);
     visual=await stageRun('ownership',()=>retireA31LegacySectorOverlays(host.group));
     if(input.cableAuthority){
-     try{await stageRun('cable',()=>host.preparePublicCable(input.cableAuthority!));}catch(error){cableFailure=error instanceof Error?error.message:String(error);}
+     try{await stageRun('cable',()=>host.preparePublicCable(input.cableAuthority!,{budgetMs:6,signal:stagingAbort.signal,yieldTask:yieldFrame}));}catch(error){cableFailure=error instanceof Error?error.message:String(error);}
     }
     audit=await stageRun('audit',()=>host.sectorLiveCheck());
     const mountStats=candidate.stats();cutTiles=mountStats.tiles.cut;duplicates=mountStats.duplicates;

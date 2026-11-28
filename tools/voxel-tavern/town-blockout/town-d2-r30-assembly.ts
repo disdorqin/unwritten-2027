@@ -45,6 +45,7 @@ export type TownD2R30AssemblyOptions = Readonly<{
   includeSledGateSupport?: boolean;
   /** D2-R07: include the summit facility bodies (hut, icefall, props, glide course) (default false). */
   includeSummitFacilities?: boolean;
+  includeLegacyMachineRoom?:boolean;
   /** D2-R08: include the summit night lights (trail lamps, window glow) (default false). */
   includeNightLights?: boolean;
   /** D2-R09: include the canonical ropeway, cabins and station buildings (default false). */
@@ -258,7 +259,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
 
   if (includeSummitFacilities) {
     addDetail('summit-facilities', () => {
-      const facilities = createTownD2R30SummitFacilities({ heightAt, arrivalHeight });
+      const facilities = createTownD2R30SummitFacilities({ heightAt, arrivalHeight,includeLegacyMachineRoom:options.includeLegacyMachineRoom });
       children.push(facilities.group);
       disposers.push(() => facilities.dispose());
       // The canonical facility bodies carry no night response of their own,
