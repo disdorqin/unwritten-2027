@@ -39,6 +39,7 @@ import {createA31PublicSummitRoute} from './town-a31-public-summit';
 import {createNightBProductionController,nightBProductionAuthority} from './town-night-b-production-controller';
 import {readA31FrontCable,type A31CableBindings} from './town-a31-cable-binding';
 import {a32SummitPrefetch} from './town-a32-stream-policy';
+import {createA32PassportInput} from './town-a32-passport-input';
 import {takeTownTerrain,townTerrainPreloadStats} from './town-a32-terrain-preload';
 import {warmA32SummitMeshes} from './town-a32-gpu-warmup';
 import {createNightBCablePresentation,createNightBCableAudio} from './town-night-b-cable-presentation';
@@ -1577,6 +1578,22 @@ regionalWeatherStatus.setAttribute('aria-live','off');
 regionalWeatherStatus.style.display='block';
 regionalWeatherStatus.style.color='#c6d3e5';
 element('position').after(regionalWeatherStatus);
+const summitPassportInput=createA32PassportInput({available:presence.summitPassportAvailable,request:presence.requestSummitPassport,notice:announceActivity});
+presence.onSummitPassport(summitPassportInput.receive);
+const summitPassportStatus=document.createElement('output');summitPassportStatus.id='town-summit-passport-status';
+element('town-advanced-controls').append(summitPassportStatus);
+function summitPassportAction(){
+ if(!walking||homeReturn||seated||boardingGround||airHeight!==undefined||sledRide.active()||cableController.riding()||houseDoorTravel||dreamInMine())return;
+ const rear=cloudRoute.active(),foot={east:x-(rear?300:0),north:n-(rear?676:0),height:ground};
+ const valid=()=>walking&&!homeReturn&&!seated&&!boardingGround&&airHeight===undefined&&!sledRide.active()&&!cableController.riding()&&!houseDoorTravel&&!dreamInMine()&&rear===cloudRoute.active()&&Math.hypot(x-(rear?300:0)-foot.east,n-(rear?676:0)-foot.north)<.15&&Math.abs(ground-foot.height)<.08;
+ return summitPassportInput.action(rear?'rear':'front',foot,stamp=>{
+  const root=rear?cloudRoute.scene:scene,name=stamp==='cloud-stamp'?'cloud-deck-registration-monument':'main-summit-hut-and-registration';
+  const model=root.getObjectByName(name);if(!model)return false;
+  for(let p:typeof model|null=model;p;p=p.parent)if(!p.visible)return false;
+  const h=rear?cloudRoute.surveyedSupport(x,n):dryTownLandingHeight(x,n,ground,true);
+  return h!==undefined&&Math.abs(h-ground)<=.08&&(!rear||!cloudRoute.surveyedBlocked(x,n,ground));
+ },valid);
+}
 const summitStatus=document.createElement('output');
 summitStatus.id='town-summit-status';summitStatus.setAttribute('aria-label','后山开放状态');
 summitStatus.style.display='block';summitStatus.style.color='#c6d3e5';
@@ -1585,6 +1602,10 @@ let nextSummitStatus=0;
 function showSummitStatus(now:number){
  if(now<nextSummitStatus)return;nextSummitStatus=now+250;
  const s=cloudRoute.state();
+ summitPassportInput.tick(cloudRoute.active()?'summit':n>=650?'mountain':x<0?'west':'town');
+ const progress=summitPassportInput.progress();
+ const passportText=progress?`主峰护照 ${Number(progress.cloudStamped)+Number(progress.summitStamped)}/2 · ${progress.summitRegistered?'已登记（雪翼领取资格）':'未登记'}`:'主峰护照 · 未连接权威';
+ if(summitPassportStatus.textContent!==passportText)summitPassportStatus.textContent=passportText;
  summitStatus.hidden=!!cableFrame?.whiteout;
  summitStatus.style.display=cableFrame?.whiteout?'none':'block';
  const message=s.status==='ready'?(s.cable.boardable?'后山 · 地形与索道已就绪 · 依现场权限通行':'后山 · 四区地形已就绪 · 交通检修中'):s.status==='failed'?'后山 · 加载未完成 · 暂未开放':s.status==='idle'?'后山 · 远景常驻 · 接近后加载':'后山 · 分区预加载中 · 暂未开放';
@@ -2908,7 +2929,7 @@ function currentAction() {
   if (airHeight !== undefined) return undefined;
   const guardAction = !homeReturn && currentGuardDuty()?.action({ east: x, north: n, height: ground });
   if (guardAction) return guardAction;
-  if(cloudRoute.active())return cableAction()??nearestTownActivity(summitSledRacks?.actions??[],x,n,ground);
+  if(cloudRoute.active())return cableAction()??summitPassportAction()??nearestTownActivity(summitSledRacks?.actions??[],x,n,ground);
   if (boardingGround) {
     if (railHorseCharm.visibleTo(camera)) return railHorseCharm.action;
     const stop = railway.currentStop;
@@ -2941,6 +2962,7 @@ function currentAction() {
     } };
   }
   const cable=cableAction();if(cable)return cable;
+  const summitStamp=summitPassportAction();if(summitStamp)return summitStamp;
   const terminalAction=!homeReturn&&productionRidge?.roadTerminalAction(x,n,ground);
   if(terminalAction)return {label:terminalAction.title,run(){announceActivity(terminalAction.message)}};
   const terraceAction=!homeReturn&&productionRidge?.terrace?.action({east:x,north:n,height:ground});
