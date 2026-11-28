@@ -33,7 +33,7 @@ export function prepareNightBPublicFrontCable(input:Input){
    return false;
   },
   dockClear:(_station,p)=>clear(p),
-  certifyApproaches:docks=>input.certifyRoutes(docks,input.repairAnchors,clear)});
+  certifyApproaches:(docks,facilities)=>input.certifyRoutes(docks,input.repairAnchors,p=>clear(p)&&!facilities.blocked(p.east,p.north,p.height,.27))});
  const meshAudit=scan.stats();
  if(!op.ready)return {ready:false as const,reason:op.reason,audit:op.audit,docks:op.docks,meshAudit};
  return {ready:true as const,facilities:op.facilities,frontOperation:op,frontRepair:{anchors:input.repairAnchors,surfaceAt,clear:(p:Foot)=>clear(p)&&!op.facilities.blocked(p.east,p.north,p.height,.27)},meshAudit};

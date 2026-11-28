@@ -17,7 +17,7 @@ type Inputs=Omit<FrontCableServiceInput,'survey'|'audit'|'dockClear'|'dispatch'|
  /** Support and external obstacle checks for each actual player foot. */
  dockClear:(station:Station,foot:Foot)=>boolean;
  /** Host's continuous route certification (not just isolated endpoints). */
- certifyApproaches:(docks:readonly Dock[])=>boolean;
+ certifyApproaches:(docks:readonly Dock[],facilities:Facility)=>boolean;
  firstRun:NonNullable<FrontCableServiceInput['firstRun']>;
 };
 /** Production ridge owner calls at mount time, after other actual scene
@@ -41,7 +41,7 @@ export function installNightBFrontOperation(input:Inputs){
    return {station:stations[i]!,cabin,board,approach:{...board,north:board.north-2.1}};
   }));
   if(docks.length!==6||!docks.every(d=>dockClear(d.station,d.board)&&dockClear(d.station,d.approach)))return reject('dock-support-or-obstruction',audit,docks);
-  if(input.certifyApproaches(docks)!==true)return reject('walking-route-not-certified',audit,docks);
+  if(input.certifyApproaches(docks,facilities)!==true)return reject('walking-route-not-certified',audit,docks);
   const service=createNightBFrontService({survey:facilities.survey,audit,firstRun:input.firstRun,state:input.state,now:input.now,daylight:input.daylight,dockClear});
   if(!service.physical)return reject('service-physical-gate',audit,docks);
   if(!facilities.presentOperational(service.present()))return reject('initial-cabin-presentation',audit,docks);
