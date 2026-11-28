@@ -20,8 +20,17 @@ import {
  * file; `userData.skylineMaterial` records the intended closed-mesh setting.
  */
 const deepRock = new Color('#414b53');
+/** Atmospheric haze for the far silhouette: distant lowlands fade toward this
+ * cool grey-blue while high peaks stay clear, matching the reference far/near
+ * join without creating a second height source. */
+const SKYLINE_HAZE = new Color('#9bacad');
 const SKYLINE_SOUTH = 600;
 const SKYLINE_ARRIVAL = 347;
+
+const smoothstep = (lower: number, upper: number, value: number) => {
+  const weight = Math.max(0, Math.min(1, (value - lower) / (upper - lower)));
+  return weight * weight * (3 - 2 * weight);
+};
 
 export const townD2R30SkylineContract = Object.freeze({
   south: SKYLINE_SOUTH,
@@ -55,6 +64,28 @@ export function buildR30TownSkyline() {
   const rows = northAxis.length;
   const vertexAt = (column: number, row: number) => row * columns + column;
 
+  // R4 two-zone atmospheric depth: the far southern lowlands fade toward the
+  // reference far silhouette (#9bacad) while the near northern peaks stay on
+  // the clear massif colour. Height haze dominates; a south-distance factor
+  // strengthens the far/near depth reading so the distant shell clearly sits
+  // behind the near massif without a second height source. Only the vertex
+  // colour changes; every top Y still samples the canonical height field
+  // exactly (sector-audit nearFarSameSource stays <1e-4).
+  const hazeTemp = new Color();
+  for (let index = 0; index < topCount; index++) {
+    const height = positions[index * 3 + 1]!;
+    const northPos = -positions[index * 3 + 2]!;
+    const heightHaze = 1 - smoothstep(townD2R30Spec.baseHeight, townD2R30Spec.summitHeight, height);
+    const depthHaze = 1 - smoothstep(south, north, northPos);
+    const hazeAmount = heightHaze * (.55 + .45 * depthHaze);
+    if (hazeAmount <= 0) continue;
+    hazeTemp.setRGB(colors[index * 3]!, colors[index * 3 + 1]!, colors[index * 3 + 2]!);
+    hazeTemp.lerp(SKYLINE_HAZE, hazeAmount);
+    colors[index * 3] = hazeTemp.r;
+    colors[index * 3 + 1] = hazeTemp.g;
+    colors[index * 3 + 2] = hazeTemp.b;
+  }
+
   // Perimeter in the same winding massifPerimeter uses: south face L→R,
   // east face S→N, north face R→L, west face N→S. One shared ring so the
   // skirt and the bottom cap have no T-junctions.
@@ -65,9 +96,14 @@ export function buildR30TownSkyline() {
   for (let row = rows - 2; row >= 1; row--) ring.push(vertexAt(0, row));
 
   // Vertical skirt: each foot keeps its top vertex's east/-north exactly and
-  // drops to the canonical floor, fading from the same-source top colour to
-  // deep rock. No x*1.22, no north+140, no -100 anywhere.
+  // drops to the canonical floor. R4 strata gradient: the foot colour blends
+  // the hazed top colour into deep rock with a weight that grows with skirt
+  // depth, so tall high-peak skirts read as deep rock and low ridge skirts
+  // stay close to the terrain colour. The skirt therefore reads as the same
+  // rock massif and joins the near massif seamlessly at the top edge. No
+  // x*1.22, no north+140, no -100 anywhere.
   const feet = new Map<number, number>();
+  const skirtTemp = new Color();
   for (const topIndex of ring) {
     if (feet.has(topIndex)) continue;
     const footIndex = positions.length / 3;
@@ -76,7 +112,12 @@ export function buildR30TownSkyline() {
       townD2R30Spec.floorHeight,
       positions[topIndex * 3 + 2]!,
     );
-    colors.push(deepRock.r, deepRock.g, deepRock.b);
+    const topHeight = positions[topIndex * 3 + 1]!;
+    const skirtDepth = topHeight - townD2R30Spec.floorHeight;
+    const rockWeight = .4 + .35 * Math.max(0, Math.min(1, skirtDepth / 400));
+    skirtTemp.setRGB(colors[topIndex * 3]!, colors[topIndex * 3 + 1]!, colors[topIndex * 3 + 2]!);
+    skirtTemp.lerp(deepRock, rockWeight);
+    colors.push(skirtTemp.r, skirtTemp.g, skirtTemp.b);
     feet.set(topIndex, footIndex);
   }
   for (let index = 0; index < ring.length; index++) {

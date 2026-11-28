@@ -154,16 +154,30 @@ export function sampleTownD2R30Height(east: number, north: number, arrivalHeight
 }
 
 export function sampleTownD2R30Normal(east: number, north: number, arrivalHeight = 347): readonly [number, number, number] {
+  if (!Number.isFinite(east) || !Number.isFinite(north) || !Number.isFinite(arrivalHeight) ||
+      outside(east, boundsWest, boundsEast) > 0 || outside(north, boundsSouth, boundsNorth) > 0) {
+    throw new RangeError('D2-R30 normal sampler rejects points outside the canonical domain.');
+  }
+  // Clamp sample offsets to the domain so boundary points use one-sided
+  // differences instead of sampling outside the frozen height field. The
+  // frozen sampler returns undefined outside the bounds, which would turn
+  // the normal into NaN at every edge.
   const step = 2;
-  const dx = (sampleTownD2R30Height(east + step, north, arrivalHeight)! -
-    sampleTownD2R30Height(east - step, north, arrivalHeight)!) / (step * 2);
-  const dn = (sampleTownD2R30Height(east, north + step, arrivalHeight)! -
-    sampleTownD2R30Height(east, north - step, arrivalHeight)!) / (step * 2);
+  const eastHigh = Math.min(boundsEast, east + step), eastLow = Math.max(boundsWest, east - step);
+  const northHigh = Math.min(boundsNorth, north + step), northLow = Math.max(boundsSouth, north - step);
+  const dx = (sampleTownD2R30Height(eastHigh, north, arrivalHeight)! -
+    sampleTownD2R30Height(eastLow, north, arrivalHeight)!) / (eastHigh - eastLow);
+  const dn = (sampleTownD2R30Height(east, northHigh, arrivalHeight)! -
+    sampleTownD2R30Height(east, northLow, arrivalHeight)!) / (northHigh - northLow);
   const length = Math.hypot(dx, 1, dn);
   return [-dx / length, 1 / length, dn / length] as const;
 }
 
 export function townD2R30SurfaceBand(east: number, north: number, arrivalHeight = 347): TownD2R30SurfaceBand {
+  if (!Number.isFinite(east) || !Number.isFinite(north) || !Number.isFinite(arrivalHeight) ||
+      outside(east, boundsWest, boundsEast) > 0 || outside(north, boundsSouth, boundsNorth) > 0) {
+    throw new RangeError('D2-R30 surface band rejects points outside the canonical domain.');
+  }
   const height = sampleTownD2R30Height(east, north, arrivalHeight)!;
   const normal = sampleTownD2R30Normal(east, north, arrivalHeight);
   const slope = 1 - normal[1];
