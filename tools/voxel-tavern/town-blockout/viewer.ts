@@ -38,7 +38,7 @@ import { buildR30TownSkyline } from './town-d2-r30-skyline';
 import {createA31PublicSummitRoute} from './town-a31-public-summit';
 import {createNightBProductionController,nightBProductionAuthority} from './town-night-b-production-controller';
 import {readA31FrontCable,type A31CableBindings} from './town-a31-cable-binding';
-import {a32YieldFrame,a32SummitPrefetch} from './town-a32-stream-policy';
+import {a32SummitPrefetch} from './town-a32-stream-policy';
 import {warmA32SummitMeshes} from './town-a32-gpu-warmup';
 import {createNightBCablePresentation,createNightBCableAudio} from './town-night-b-cable-presentation';
 import {createFriend3TravelAudio} from './town-friend3-travel-audio';
@@ -605,7 +605,7 @@ function preparePublicTransport(foot:{east:number;north:number;height:number}){
  publicTransportPreparing=true;
  void (async()=>{
   const ready=await cloudRoute.prepare();
-  await a32YieldFrame();
+  try{await cloudRoute.waitForQuiet();}catch{publicTransportPreparing=false;return;}
   const start=performance.now();
   try{
    if(productionRidge){

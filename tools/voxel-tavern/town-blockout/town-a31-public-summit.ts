@@ -5,7 +5,7 @@ import {summitAssemblyAnchor} from './main-summit-assembly';
 import type {SouthSnowVisualSample} from './town-night-a-summit-snow-appearance';
 import {a31GateFoot} from './town-a31-gate-handoff';
 import {readA31UpperCable,type A31CableAuthority} from './town-a31-cable-binding';
-import {a32SummitPrefetch,createA32StageMeter,a32YieldFrame} from './town-a32-stream-policy';
+import {a32SummitPrefetch,createA32StageMeter,createA32QuietGate,a32YieldFrame} from './town-a32-stream-policy';
 import type {A32WarmupStats} from './town-a32-gpu-warmup';
 
 type Foot=Readonly<{east:number;north:number;height:number}>;
@@ -31,9 +31,10 @@ export function createA31PublicSummitRoute(input:Input){
  let visual:ReturnType<typeof retireA31LegacySectorOverlays>|undefined;
  let assembly:Readonly<{group:Group;r30:Production['assembly'];summitSnowAt(e:number,n:number):number|undefined}>|undefined;
  let near=false,elapsedMs=0,cutTiles=0,draws=0,snowPending=0,duplicates:readonly string[]=[];
- const yieldFrame=input.yieldFrame??a32YieldFrame,meter=createA32StageMeter();
+ const yieldFrame=input.yieldFrame??a32YieldFrame,meter=createA32StageMeter(),quiet=createA32QuietGate();
  let warmup:A32WarmupStats|undefined,cableFailure:string|undefined,previousFoot:Foot|undefined,previousAt=0,detailEast=Infinity,detailNorth=Infinity,lastViewAt=0,lastViewEast=Infinity,lastViewNorth=Infinity;
- const stageRun=async<T,>(name:string,task:()=>T|Promise<T>)=>{await yieldFrame();if(status==='disposed')throw Error('Public summit disposed during staging');stage=name;return meter.run(name,task);};
+ const waitForQuiet=()=>quiet.wait(yieldFrame,()=>status==='disposed');
+ const stageRun=async<T,>(name:string,task:()=>T|Promise<T>)=>{stage='queued-'+name;await waitForQuiet();stage=name;return meter.run(name,task);};
  function prepare(){
   if(load)return load;
   if(status==='disposed')return Promise.resolve(false);
@@ -84,6 +85,7 @@ export function createA31PublicSummitRoute(input:Input){
  function update(position:Foot){
   draws=0;
   if(!finite(position)||status==='disposed')return;
+  quiet.observe(position);
   const now=performance.now(),dt=(now-previousAt)/1000;
   const velocity=previousFoot&&dt>.001&&dt<1&&Math.hypot(position.east-previousFoot.east,position.north-previousFoot.north)<40?{east:(position.east-previousFoot.east)/dt,north:(position.north-previousFoot.north)/dt}:undefined;
   previousFoot=position;previousAt=now;
@@ -160,7 +162,7 @@ export function createA31PublicSummitRoute(input:Input){
    cable:production?.cableState()??{installed:false,boardable:false,certified:false},
    sceneOwner:production?.group.parent===input.town?'town':production?.group.parent===scene?'summit':undefined};
  }
- return {scene,prepare,update,updateView(p:Foot){update(p);return '后山';},active:()=>active,
+ return {scene,prepare,waitForQuiet,update,updateView(p:Foot){update(p);return '后山';},active:()=>active,
   riding:()=>false,ridePoint:():Foot|undefined=>undefined,
   action(_p:Foot):Action|undefined{return;},surfaceAt,walkingSurfaceAt:surfaceAt,acceptsStep,
   blocked(e:number,n:number,h:number,r=.27,b=1.8){return active&&surveyedBlocked(e,n,h,r,b);},
