@@ -45,7 +45,10 @@ export function createA31PublicSummitRoute(input:Input){
     stage='import';
     const [{createTownD2R30ProductionHost},{createSouthSectorInstaller,createWestSectorInstaller,createEastSectorInstaller}]=await Promise.all([
      import('./town-d2-r30-production-host'),import('./town-d2-r30-sector-installers')]);
-    candidate=await stageRun('canonical',()=>createTownD2R30ProductionHost({epochMs:input.now(),includeRopeway:false}));
+    // Presence's slewed clock may have fractional milliseconds; the ropeway
+    // construction contract requires an integer epoch. Live B authority still
+    // reads the original continuously synchronized server clock.
+    candidate=await stageRun('canonical',()=>createTownD2R30ProductionHost({epochMs:Math.floor(input.now()),includeRopeway:false}));
     const host=candidate;
     await stageRun('south',()=>host.install('A',createSouthSectorInstaller()));
     await stageRun('west',()=>host.install('B',createWestSectorInstaller()));
