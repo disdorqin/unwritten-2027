@@ -24,6 +24,9 @@ const deepRock = new Color('#414b53');
  * cool grey-blue while high peaks stay clear, matching the reference far/near
  * join without creating a second height source. */
 const SKYLINE_HAZE = new Color('#9bacad');
+/** D33-1: at most 62% atmospheric fade, so ≥38% of the same-source rock/snow
+ * vertex colour survives on every far vertex — no flattened monochrome face. */
+export const TOWN_D2_R30_SKYLINE_MAX_HAZE = .62;
 const SKYLINE_SOUTH = 600;
 const SKYLINE_ARRIVAL = 347;
 
@@ -77,7 +80,11 @@ export function buildR30TownSkyline() {
     const northPos = -positions[index * 3 + 2]!;
     const heightHaze = 1 - smoothstep(townD2R30Spec.baseHeight, townD2R30Spec.summitHeight, height);
     const depthHaze = 1 - smoothstep(south, north, northPos);
-    const hazeAmount = heightHaze * (.55 + .45 * depthHaze);
+    // D33-1: cap the haze so distant lowlands keep a readable share of the
+    // canonical rock/snow vertex colour. A full lerp flattened whole ridges
+    // into one flat #9bacad plane — the exact "large monochrome face" the 3.2
+    // rework forbids. Height remains single-source; only colour is tempered.
+    const hazeAmount = TOWN_D2_R30_SKYLINE_MAX_HAZE * heightHaze * (.55 + .45 * depthHaze);
     if (hazeAmount <= 0) continue;
     hazeTemp.setRGB(colors[index * 3]!, colors[index * 3 + 1]!, colors[index * 3 + 2]!);
     hazeTemp.lerp(SKYLINE_HAZE, hazeAmount);

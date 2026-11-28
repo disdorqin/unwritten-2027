@@ -16,6 +16,7 @@ import type {NightBAuditSliceOptions} from './town-night-b-audit-slices';
 import { createTownD2R30SummitPlay, type TownD2R30SummitPlay } from './town-d2-r30-summit-play';
 import { certifyRoadJoint, surveyRoadConnector } from './town-d2-r30-road-joint';
 import { c2EastRoadHandoffs } from './town-night-c2-summit-road-handoff';
+import { createTownD2R30FarLod } from './town-d2-r30-far-lod';
 
 /**
  * D2's real production host for the 3.1 four-sector summit (D31-1).
@@ -1012,6 +1013,12 @@ export function createTownD2R30ProductionHost(options: TownD2ProductionHostOptio
     surfaceAt,
     supportAt,
     blocked,
+    /** D33-1: hand A/总控 the same-source far layer that replaces the R31
+     * faux apron. It is NOT auto-mounted: mounting it together with
+     * `town-r31-public-skyline` would double-draw the horizon. The returned
+     * group is already in local D2 coordinates and must be placed under the
+     * same world transform as this host's group. */
+    createFarLod: () => createTownD2R30FarLod(heightAt),
     update(east: number, north: number, nowMs?: number) {
       if (disposed) return;
       if (!Number.isFinite(east) || !Number.isFinite(north)) {
