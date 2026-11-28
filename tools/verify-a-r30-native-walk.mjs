@@ -573,7 +573,7 @@ try{
  }else if(segment==='a32-stream'){
   assert.ok(!bare);
   const state=()=>page.evaluate(()=>window.__za22Frame);
-  const first=await state();assert.equal(first.summitProduction.status,'idle');assert.equal(first.summitProduction.installed.length,0);assert.equal(first.summitProduction.farVisible,true);
+  const first=await state();assert.equal(first.terrainPreload?.mode,'worker',JSON.stringify(first.terrainPreload));assert.ok(first.terrainPreload.ms>0);assert.equal(first.summitProduction.status,'idle');assert.equal(first.summitProduction.installed.length,0);assert.equal(first.summitProduction.farVisible,true);
   await picture(page,evidence,'a32-cold-plaza');
   const startup=await page.evaluate(()=>({navigationMs:performance.now(),resources:performance.getEntriesByType('resource').filter(x=>/town-d2-r30-production-host|town-d2-r30-sector-installers/.test(x.name)).map(x=>x.name)}));
   assert.equal(startup.resources.length,0,'cold town must not download rear production chunks');
@@ -588,9 +588,11 @@ try{
   await picture(page,evidence,'a32-prefetch-start');
   await page.waitForFunction(()=>window.__za22Frame?.summitProduction?.publicTransportBound===true,null,{timeout:150000});
   const assembled=await state();
-  report.streaming={startup,cold:first.summitProduction,assembled:assembled.summitProduction,ridge:{roads:assembled.ridge.roads,transportReady:assembled.ridge.transportReady,cloudSeam:assembled.ridge.cloudSeam}};
+  report.streaming={startup,terrainPreload:first.terrainPreload,cold:first.summitProduction,assembled:assembled.summitProduction,ridge:{roads:assembled.ridge.roads,transportReady:assembled.ridge.transportReady,cloudSeam:assembled.ridge.cloudSeam}};
   assert.equal(assembled.summitProduction.status,'ready',JSON.stringify(report.streaming));
   assert.equal(assembled.summitProduction.ready,true);
+  assert.equal(assembled.summitProduction.southRoad.cutPreparation.mode,'worker');
+  assert.ok(assembled.summitProduction.southRoad.cutPreparation.changed>0);
   assert.ok(assembled.summitProduction.warmup?.meshes>0&&assembled.summitProduction.warmup?.batches>0);
   assert.equal(assembled.summitProduction.farVisible,true);
   await face(page,evidence,0);await picture(page,evidence,'a32-foothill-ready');

@@ -27,6 +27,7 @@ export function createA31PublicSummitRoute(input:Input){
  const sun=new DirectionalLight('#fff4df',1.7);sun.position.set(-80,120,50);scene.add(sun);
  let status:Status='idle',stage='idle',failure:string|undefined,night=false,active=false;
  let production:Production|undefined,load:Promise<boolean>|undefined;
+ const stagingAbort=new AbortController();
  let audit:ReturnType<Production['sectorLiveCheck']>|undefined;
  let visual:ReturnType<typeof retireA31LegacySectorOverlays>|undefined;
  let assembly:Readonly<{group:Group;r30:Production['assembly'];summitSnowAt(e:number,n:number):number|undefined}>|undefined;
@@ -40,18 +41,19 @@ export function createA31PublicSummitRoute(input:Input){
   if(status==='disposed')return Promise.resolve(false);
   status='loading';
   load=(async()=>{
-   let candidate:Production|undefined;
+   let candidate:Production|undefined,preparedSouth:{dispose():void}|undefined;
    const started=performance.now();
    try{
     stage='import';
-    const [{createTownD2R30ProductionHost},{createWestSectorInstaller,createEastSectorInstaller},{createA32SouthSectorInstaller}]=await Promise.all([
+    const [{createTownD2R30ProductionHost},{createWestSectorInstaller,createEastSectorInstaller},{prepareA32SouthSectorInstaller}]=await Promise.all([
      import('./town-d2-r30-production-host'),import('./town-d2-r30-sector-installers'),import('./town-a32-south-installer')]);
     // Presence's slewed clock may have fractional milliseconds; the ropeway
     // construction contract requires an integer epoch. Live B authority still
     // reads the original continuously synchronized server clock.
     candidate=await stageRun('canonical',()=>createTownD2R30ProductionHost({epochMs:Math.floor(input.now()),includeRopeway:false}));
     const host=candidate;
-    await stageRun('south',()=>host.install('A',createA32SouthSectorInstaller()));
+    const south=await stageRun('south-prepare',()=>prepareA32SouthSectorInstaller(host.port,stagingAbort.signal));preparedSouth=south;
+    await stageRun('south',()=>host.install('A',south.install));preparedSouth=undefined;
     await stageRun('west',()=>host.install('B',createWestSectorInstaller()));
     await stageRun('east',()=>host.install('C2',createEastSectorInstaller()));
     host.setFrontSnow(input.frontSnow?(e,n)=>input.frontSnow!(e+summitAssemblyAnchor.east,n+summitAssemblyAnchor.north):undefined);
@@ -75,7 +77,7 @@ export function createA31PublicSummitRoute(input:Input){
      summitSnowAt:(e,n)=>{const depth=host.snowAt(e,n);if(depth===undefined)return;const front=input.frontSnow?.(e+summitAssemblyAnchor.east,n+summitAssemblyAnchor.north);return front!==undefined&&Number.isFinite(front)&&n<=86?Math.max(0,Math.min(1,Math.max(front-.2,Math.min(front+.2,depth)))):depth;}};
     status='ready';stage='mounted';elapsedMs=performance.now()-started;return true;
    }catch(error){
-    candidate?.dispose();production=undefined;assembly=undefined;
+    preparedSouth?.dispose();candidate?.dispose();production=undefined;assembly=undefined;
     if((status as Status)!=='disposed'){status='failed';failure=error instanceof Error?error.message:String(error);}
     input.skyline.visible=true;return false;
    }
@@ -171,6 +173,6 @@ export function createA31PublicSummitRoute(input:Input){
   seamReady:()=>status==='ready'&&production?.certifySeamCrossing().open===true,
   windAt:(e:number,n:number)=>{const [le,ln]=local(e,n),wind=production?.windAt(le,ln),front=input.frontWind?.(e,n);return wind!==undefined&&front!==undefined&&Number.isFinite(front)&&ln<=86?Math.max(0,Math.min(1,Math.max(front-.2,Math.min(front+.2,wind)))):wind;},
   assembly:()=>active?assembly:undefined,
-  dispose(){if(status==='disposed')return;status='disposed';active=false;near=false;production?.dispose();production=undefined;assembly=undefined;input.skyline.visible=true;}
+  dispose(){if(status==='disposed')return;status='disposed';stagingAbort.abort();active=false;near=false;production?.dispose();production=undefined;assembly=undefined;input.skyline.visible=true;}
  };
 }

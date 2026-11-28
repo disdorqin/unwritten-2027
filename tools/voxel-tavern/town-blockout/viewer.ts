@@ -39,6 +39,7 @@ import {createA31PublicSummitRoute} from './town-a31-public-summit';
 import {createNightBProductionController,nightBProductionAuthority} from './town-night-b-production-controller';
 import {readA31FrontCable,type A31CableBindings} from './town-a31-cable-binding';
 import {a32SummitPrefetch} from './town-a32-stream-policy';
+import {takeTownTerrain,townTerrainPreloadStats} from './town-a32-terrain-preload';
 import {warmA32SummitMeshes} from './town-a32-gpu-warmup';
 import {createNightBCablePresentation,createNightBCableAudio} from './town-night-b-cable-presentation';
 import {createFriend3TravelAudio} from './town-friend3-travel-audio';
@@ -239,7 +240,7 @@ function currentCraterPlay(){
   return craterPlay;
 }
 const craterPlayInput=createAR30PlayInput(currentCraterPlay);
-const grid = createTerrainGrid();
+const grid = createTerrainGrid({samples:takeTownTerrain()});
 const townWater = createTownWater(grid);
 const snowCover = createTownSnowField(grid);
 let visualSnowCover = 0;
@@ -4602,6 +4603,7 @@ renderer.setAnimationLoop(now => {
         fogNear: weatherFog.near, fogFar: weatherFog.far, points: renderer.info.render.points,
         craterPerf:{exteriorCertified:craterExteriorCertified,undergroundVisible:undergroundRenderParent?.visible},
         summitProduction:{...cloudRoute.state(),farDraws:summitSkylineDraws,frontPreparationMs,frontPreparationError,publicTransportBound},
+      terrainPreload:townTerrainPreloadStats(),
         ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],heading:yaw,...(previewOptions.has('mRoadSurvey')?{roadGuide:productionRidge.baseToMiddleGuide,rearConnected:productionRidge.rearConnected,moveReject:ridgeMoveReject}:{}),surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities,cableInstances:productionRidge.facilities?.visibleInstances(),terraceMounted:!!productionRidge.terrace,cloudSeam:productionRidge.cloudSeam},
         ...(skylinePeak ? { summitSkyline: { draws: summitSkylineDraws, peakNdc: skylinePeak.toArray(),
           camera: camera.position.toArray(), far: camera.far } } : {}),
