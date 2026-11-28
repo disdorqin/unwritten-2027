@@ -2,9 +2,10 @@ import {Box3,Group,Vector3,type Object3D} from 'three';
 import {createTownD2R30Ropeway} from './town-d2-r30-ropeway';
 import {createTownD2R30CableTowers} from './town-d2-r30-cable-towers';
 import {mountMainSummitCableWorkshop,mainSummitR30CableWorkshopAnchor} from './main-summit-cable-workshop';
-import {installNightBUpperOperation} from './town-night-b-summit-upper-install';
-import {stageNightBCablePaintClearance} from './town-night-b-cable-paint-clearance';
-import {createNightBMountedClearance} from './town-night-b-mounted-clearance';
+import {finishNightBAudit,finishNightBAuditAsync,type NightBAuditSliceOptions} from './town-night-b-audit-slices';
+import {installNightBUpperOperation,upperOperationSteps} from './town-night-b-summit-upper-install';
+import {stageNightBCablePaintClearance,nightBCablePaintClearanceSteps} from './town-night-b-cable-paint-clearance';
+import {createNightBMountedClearance,nightBMountedClearanceSteps} from './town-night-b-mounted-clearance';
 import type {nightBProductionAuthority} from './town-night-b-production-controller';
 import {mountNightBUpperDispatcher} from './town-night-b-upper-dispatcher';
 import {applyTownD2R30NightTint} from './town-d2-r30-night-lights';
@@ -27,9 +28,10 @@ type Input={
  * On rejection no second rope, old hall, or partial operation remains.
  * On success expose this exact package through installCable/cableOperation;
  * update is deliberately absent: the public B controller is the sole writer. */
-export function mountNightBPublicRearCable(input:Input){
+const pendingOwners=new WeakSet<Group>();
+function* publicRearCableSteps(input:Input){
  const owner=input.owner,group=new Group();group.name='night-b-public-rear-cable';
- if(owner.getObjectByName(group.name))throw Error('Rear production cable already mounted');
+ if(pendingOwners.has(owner)||owner.getObjectByName(group.name))throw Error('Rear production cable already mounted');
  const existing=owner.getObjectByName('town-d2-r30-ropeway')||owner.getObjectByName('town-d2-r30-cable-towers')||owner.getObjectByName('main-summit-cable-machine-workshop')||owner.getObjectByName('main-summit-machine-room');
  if(existing)return {ready:false as const,reason:'existing-legacy-cable-or-machine-room:'+existing.name};
  const ropeway=createTownD2R30Ropeway({heightAt:input.groundAt,controlPointSupports:false});
@@ -40,23 +42,24 @@ export function mountNightBPublicRearCable(input:Input){
  let dispatcher:ReturnType<typeof mountNightBUpperDispatcher>|undefined;
  let disposed=false,accepted=false;
  function dispose(){if(disposed)return;disposed=true;op?.dispose();dispatcher?.dispose();workshop?.dispose();towers?.dispose();ropeway.dispose();paint?.restore();group.removeFromParent();group.clear();}
+ pendingOwners.add(owner);
  try{
-  paint=stageNightBCablePaintClearance(owner,ropeway,input.groundAt);
+  paint=yield* nightBCablePaintClearanceSteps(owner,ropeway,input.groundAt);
   // The original summit plume is atmospheric, not a solid body. Keep
   // its visible geometry and exclude only this precisely identified layer.
   const plume=owner.getObjectByName('main-summit-banner-cloud');
   const plumeMesh=plume?.getObjectByName('banner-cloud-segments') as (Object3D&{isInstancedMesh?:boolean;material?:{transparent?:boolean}})|undefined;
   const atmospheric=plume&&plumeMesh?.isInstancedMesh&&plumeMesh.material?.transparent===true&&plume.children.length===1&&!plume.userData.colliders?[plume]:[];
-  scan=createNightBMountedClearance(owner,[...input.groundMeshes,...atmospheric],corridor);
+  scan=yield* nightBMountedClearanceSteps(owner,[...input.groundMeshes,...atmospheric],corridor);
   towers=createTownD2R30CableTowers({heightAt:input.groundAt,cable:ropeway.cable});
-  group.add(ropeway.group,towers.group);owner.add(group);
+  group.add(ropeway.group,towers.group);group.visible=false;owner.add(group);
   workshop=mountMainSummitCableWorkshop(group,input.groundAt,mainSummitR30CableWorkshopAnchor);
   dispatcher=mountNightBUpperDispatcher(ropeway);
   const t=towers,w=workshop,d=dispatcher;
   const supportAt:Ground=(e,n)=>{const hs=[input.supportAt(e,n),ropeway.supportAt(e,n),w.surfaceAt(e,n)].filter((h):h is number=>h!==undefined&&Number.isFinite(h));return hs.length?Math.max(...hs):undefined;};
   const blocked:Input['blocked']=(e,n,h,r,b)=>input.blocked(e,n,h,r,b)||ropeway.blocked(e,n,h,r,b)||t.blocked(e,n,h,r,b)||w.blocked(e,n,h,r,b)||d.blocked(e,n,h,r,b);
   const dockClear=(_s:string,p:Foot)=>Math.abs((supportAt(p.east,p.north)??Infinity)-p.height)<=.08&&!blocked(p.east,p.north,p.height,.27,1.8);
-  op=installNightBUpperOperation({...input.authority,authorized:input.authorized,ropeway,towers:t,workshop:w,groundAt:input.groundAt,
+  op=yield* upperOperationSteps({...input.authority,authorized:input.authorized,ropeway,towers:t,workshop:w,groundAt:input.groundAt,
    externalBlocked:p=>{
     if(scan.blocked(p))return true;
     const c=Math.cos(p.heading),s=Math.sin(p.heading);
@@ -71,10 +74,12 @@ export function mountNightBPublicRearCable(input:Input){
   const operation=op;
   d.update(operation.service,input.authority.state(),input.authority.now()!==undefined);
   const cableOperation={...operation,dispatcher:d,update(){const states=operation.update();d.update(operation.service,input.authority.state(),input.authority.now()!==undefined);return states;}};
-  accepted=true;
+  group.visible=true;accepted=true;
   return {ready:true as const,certified:true,boardable:true,group,cableOperation,stations:op.docks,
    supportAt:(e:number,n:number,r=.27)=>{const a=ropeway.supportAt(e,n),b=w.surfaceAt(e,n,r);return a===undefined?b:b===undefined?a:Math.max(a,b);},
    blocked:(e:number,n:number,h:number,r=.27,b=1.8)=>ropeway.blocked(e,n,h,r,b)||t.blocked(e,n,h,r,b)||w.blocked(e,n,h,r,b)||d.blocked(e,n,h,r,b),
    setNight(night:boolean){ropeway.setNight(night);t.setNight(night);applyTownD2R30NightTint(w.group,night);},dispose,meshAudit:scan.stats(),paintTrianglesRemoved:paint.removed};
- }finally{if(!accepted)dispose();}
+ }finally{pendingOwners.delete(owner);if(!accepted)dispose();}
 }
+export function mountNightBPublicRearCable(input:Input){return finishNightBAudit(publicRearCableSteps(input));}
+export function mountNightBPublicRearCableAsync(input:Input,options?:NightBAuditSliceOptions){return finishNightBAuditAsync(publicRearCableSteps(input),options);}

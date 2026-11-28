@@ -5,7 +5,7 @@ import path from 'node:path';
 import {Box3,Group,Vector3} from 'three';
 import {auditNightBCableWalkRoutes} from './voxel-tavern/town-blockout/town-night-b-cable-walk-route.ts';
 import {auditNightBRearCableAccess} from './voxel-tavern/town-blockout/town-night-b-rear-cable-access.ts';
-import {mountNightBPublicRearCable} from './voxel-tavern/town-blockout/town-night-b-public-rear-cable.ts';
+import {mountNightBPublicRearCable,mountNightBPublicRearCableAsync} from './voxel-tavern/town-blockout/town-night-b-public-rear-cable.ts';
 import {mountNorthRidgeMiddleStation} from './voxel-tavern/town-blockout/north-ridge-middle-station.ts';
 import {createNightBMountedClearance} from './voxel-tavern/town-blockout/town-night-b-mounted-clearance.ts';
 import {createTownD2R30Ropeway} from './voxel-tavern/town-blockout/town-d2-r30-ropeway.ts';
@@ -28,7 +28,8 @@ if(scope==='rear'||scope==='rear-mount'||scope==='rear-routes'){
    const old=host.group.getObjectByName('main-summit-machine-room');assert.ok(old);const oldParent=old.parent;old.removeFromParent();
    const originalPaint=host.group.getObjectByName('main-summit-paint')?.geometry;
    let routeAudit;
-   const result=mountNightBPublicRearCable({owner:host.group,groundAt:host.surfaceAt,supportAt:host.supportAt,
+   const slices=[],asyncMode=process.env.B32_ASYNC==='1';
+   const input={owner:host.group,groundAt:host.surfaceAt,supportAt:host.supportAt,
     blocked:(e,n,h,r,b)=>host.blocked(e,n,h,r,b)||!!host.assembly.northWall?.blocked(e,n,h,r,b),
     groundMeshes:host.tiles,authorized:true,authority:{state:()=>undefined,now:()=>undefined,daylight:()=>undefined,firstRun:{wokeAt:()=>undefined,openedAt:()=>undefined,dawnEpoch:()=>undefined}},
     certifyRoutes:(docks,repair,supportAt,blocked,repairFootClear,dispatcherFoot)=>{
@@ -37,8 +38,9 @@ if(scope==='rear'||scope==='rear-mount'||scope==='rear-routes'){
      const compact=a=>({...a,routes:a.routes.map(({path,...p})=>({...p,points:path?.length,turns:path?.filter((x,i)=>i===0||i===path.length-1||i%20===0)}))});
      routeAudit={lower:compact(l),upper:compact(u)};
      return l.ready&&u.ready;
-    }});
-   console.log(JSON.stringify({scope:'actual four-sector host with paired B real mount; legacy room detached only in ephemeral object; no browser entry or live authority claim',paired:expected,routeAudit,result:result.ready?{ready:true,audit:result.cableOperation.audit,meshAudit:result.meshAudit}:result,paintRestored:host.group.getObjectByName('main-summit-paint')?.geometry===originalPaint,remainingCable:!!host.group.getObjectByName('night-b-public-rear-cable')}));
+    }};
+   const result=asyncMode?await mountNightBPublicRearCableAsync(input,{budgetMs:6,onSlice:ms=>slices.push(ms)}):mountNightBPublicRearCable(input);
+   console.log(JSON.stringify({scope:'actual four-sector host with paired B real mount; legacy room detached only in ephemeral object; no browser entry or live authority claim',paired:expected,asyncMode,sliceStats:slices.length?{count:slices.length,max:Math.max(...slices),median:[...slices].sort((a,b)=>a-b)[Math.floor(slices.length/2)]}:undefined,routeAudit,result:result.ready?{ready:true,audit:result.cableOperation.audit,meshAudit:result.meshAudit}:result,paintRestored:host.group.getObjectByName('main-summit-paint')?.geometry===originalPaint,remainingCable:!!host.group.getObjectByName('night-b-public-rear-cable')}));
    if(result.ready){result.dispose();assert.equal(host.group.getObjectByName('main-summit-paint')?.geometry,originalPaint);assert.equal(host.group.getObjectByName('night-b-public-rear-cable'),undefined);console.log('Accepted cable teardown restored original paint geometry and removed the sole cable group.');}oldParent.add(old);
   }else{
   const ropeway=createTownD2R30Ropeway({heightAt:host.surfaceAt,controlPointSupports:false});

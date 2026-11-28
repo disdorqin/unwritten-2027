@@ -15,8 +15,8 @@ import {buildRailwayStation} from '../tools/voxel-tavern/town-blockout/landmark-
 import {auditNightBFrontOpenFacilities} from '../tools/voxel-tavern/town-blockout/town-night-b-summit-front-sweep';
 import {createNightBProductionController,nightBProductionAuthority} from '../tools/voxel-tavern/town-blockout/town-night-b-production-controller';
 import {createZa36CableRepair,type Za36CableRepairEvent} from '../src/shared/za36-cable-repair';
-import {installNightBFrontOperation} from '../tools/voxel-tavern/town-blockout/town-night-b-summit-front-install';
-test('front production field and actual rail, station, forest, roads, banks and terrace audit',()=>{
+import {installNightBFrontOperation,installNightBFrontOperationAsync} from '../tools/voxel-tavern/town-blockout/town-night-b-summit-front-install';
+test('front production field and actual rail, station, forest, roads, banks and terrace audit',async()=>{
  const grid=createTerrainGrid(),root=new Group(),west=mountWestCraterRoad(worldBounds.depth,n=>grid.groundHeightAt(0,n));
  const rail=createTownRailway(grid,()=>0),branch=buildCraterRailExtension(grid,west,rail.route.points);
  const ridge=mountProductionRidge(root,grid,{loop:rail.route.points,branch:branch.samples});
@@ -66,6 +66,9 @@ test('front production field and actual rail, station, forest, roads, banks and 
  const input={field,closed,authorized:false,externalBlocked,dockClear,certifyApproaches:()=>false,firstRun:{wokeAt:()=>undefined,openedAt:()=>undefined,dawnEpoch:()=>undefined},state:()=>undefined,now:()=>undefined,daylight:()=>undefined};
  const rejected=installNightBFrontOperation(input);assert.equal(rejected.ready,false);assert.equal(closed.group.parent,originalParent);
  const badProps=installNightBFrontOperation({...input,authorized:true,repairProps:{anchors:{brake:{east:524.6,north:326.6},cableWheel:{east:483,north:424.5},weightTower:{east:436.8,north:523.2},weightFrame:{east:440.6,north:517.4}},supportAt:()=>undefined,blocked:()=>false}});assert.equal(badProps.ready,false);assert.equal(badProps.reason,'repair-fixture-site:brake');assert.equal(closed.group.parent,originalParent);
+ const abort=new AbortController();
+ await assert.rejects(installNightBFrontOperationAsync({...input,authorized:true},{budgetMs:.001,signal:abort.signal,yieldTask:async()=>abort.abort()}),/cancelled/);
+ assert.equal(closed.group.parent,originalParent);
  const routeRejected=installNightBFrontOperation({...input,authorized:true});assert.equal(routeRejected.ready,false);assert.equal(routeRejected.reason,'walking-route-not-certified');assert.equal(closed.group.parent,originalParent);
  const epoch=Date.UTC(2026,0,1),authority=createZa36CableRepair(1);
  let now:number|undefined=epoch+1000,wokeAt:number|undefined,openedAt:number|undefined,reported=0,activity=-1;
@@ -76,10 +79,13 @@ test('front production field and actual rail, station, forest, roads, banks and 
   sampleCableRide:()=>{reported++;return true;},setActivityPose:v=>{activity=v;},
   sendSummitCableRelease:()=>false,sendCableRepair:(line,event)=>{if(line!==1||now===undefined)return false;const result=authority.apply(event);if(result.accepted&&event.kind==='wake')wokeAt=now;if(result.opened)openedAt=now;return result.accepted;}
  };
- const accepted=installNightBFrontOperation({...input,...nightBProductionAuthority(presence,1),authorized:true,certifyApproaches:entries=>entries.every(d=>{
+ const slices:number[]=[];
+ const accepted=await installNightBFrontOperationAsync({...input,...nightBProductionAuthority(presence,1),authorized:true,certifyApproaches:entries=>entries.every(d=>{
   const gate=d.station==='base'?{east:d.approach.east,north:346,height:26}:d.station==='middle'?{east:d.approach.east,north:517,height:140}:{east:d.approach.east,north:636,height:347};
   return checkPath(gate,d.approach)&&checkPath(d.approach,d.board);
- })});
+ })},{budgetMs:6,onSlice:ms=>slices.push(ms)});
+ assert.ok(slices.length>1);if(accepted.ready)assert.deepEqual(accepted.audit,audit);
+ console.log(JSON.stringify({frontExactSliceCount:slices.length,maxSliceMs:Math.max(...slices),medianSliceMs:[...slices].sort((a,b)=>a-b)[Math.floor(slices.length/2)]}));
  assert.ok(accepted.ready,JSON.stringify(accepted.ready?{}:{reason:accepted.reason,docks:accepted.docks}));
  // Newly installed dormant cars must already be at the upper station
  // before the first viewer tick, and legacy frame writers cannot move them.

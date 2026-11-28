@@ -1,4 +1,5 @@
-import {auditNightBSummitCable,createNightBLine2Service,type NightBLine2ServiceInput,type SummitSweepProbe} from './town-night-b-summit-line2-service';
+import {finishNightBAudit,finishNightBAuditAsync,type NightBAuditSliceOptions} from './town-night-b-audit-slices';
+import {auditNightBSummitCable,nightBSummitSweepSteps,createNightBLine2Service,type NightBLine2ServiceInput,type SummitSweepProbe} from './town-night-b-summit-line2-service';
 import type {createTownD2R30CableTowers} from './town-d2-r30-cable-towers';
 import {mainSummitR30CableWorkshopAnchor,type mountMainSummitCableWorkshop} from './main-summit-cable-workshop';
 type Foot={east:number;north:number;height:number};
@@ -19,7 +20,7 @@ type Input=Omit<NightBLine2ServiceInput,'audit'|'dispatch'|'firstRun'|'dockClear
 /** Bind the already mounted production ropeway; never add another rope or
  * machine room. On every rejected gate the car stays parked with doors closed,
  * including when legacy assembly update(now) is still called. */
-export function installNightBUpperOperation(input:Input){
+export function* upperOperationSteps(input:Input){
  const r=input.ropeway,clock=r.claimOperationalClock();
  let disposed=false;
  const dispose=()=>{if(!disposed){disposed=true;clock.park();clock.release();}};
@@ -32,7 +33,7 @@ export function installNightBUpperOperation(input:Input){
   const a=input.workshop.anchor,expected=mainSummitR30CableWorkshopAnchor;
   if(a.east!==expected.east||a.north!==expected.north||a.floor!==expected.floor)return reject('legacy-workshop');
   const bodyBlocked=(e:number,n:number,h:number,radius:number,height:number)=>r.blocked(e,n,h,radius,height)||input.towers.blocked(e,n,h,radius,height)||input.workshop.blocked(e,n,h,radius,height);
-  const audit=auditNightBSummitCable(r,input.groundAt,p=>{
+  const audit=yield* nightBSummitSweepSteps(r,input.groundAt,p=>{
    if(input.externalBlocked(p))return true;
    for(let i=0;i<=6;i++)for(let j=0;j<=8;j++){
     const x=(i/3-1)*p.halfWidth,z=(j/4-1)*p.halfLength,e=p.feet.east+x*Math.cos(p.heading)+z*Math.sin(p.heading),n=p.feet.north-x*Math.sin(p.heading)+z*Math.cos(p.heading);
@@ -46,8 +47,11 @@ export function installNightBUpperOperation(input:Input){
   }));
   if(!docks.every(d=>dockClear(d.station,d.board)&&dockClear(d.station,d.approach)))return reject('dock-support-or-obstruction',audit,docks);
   if(input.certifyApproaches(docks)!==true)return reject('walking-route-not-certified',audit,docks);
+  if(!r.group.parent||!input.towers.group.parent||!input.workshop.group.parent)return reject('owner-changed-during-certification',audit,docks);
   const service=createNightBLine2Service({...input,audit,dockClear});
   if(!service.physical)return reject('service-physical-gate',audit,docks);
   return {ready:true as const,service,ropeway:r,workshop:input.workshop,audit,docks,update(){if(disposed)return;input.workshop.sync(input.state());return service.present();},dispose};
  }catch(e){dispose();throw e;}
 }
+export function installNightBUpperOperation(input:Input){return finishNightBAudit(upperOperationSteps(input));}
+export function installNightBUpperOperationAsync(input:Input,options?:NightBAuditSliceOptions){return finishNightBAuditAsync(upperOperationSteps(input),options);}

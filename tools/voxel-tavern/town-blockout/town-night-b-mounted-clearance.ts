@@ -1,4 +1,5 @@
 import {Box3,Matrix4,Triangle,Vector3,type Object3D,type BufferGeometry,type Mesh,type InstancedMesh} from 'three';
+import {finishNightBAudit,finishNightBAuditAsync,type NightBAuditSliceOptions} from './town-night-b-audit-slices';
 type Foot={east:number;north:number;height:number};
 type Envelope={feet:Foot;heading:number;halfWidth:number;halfLength:number;bodyTop:number};
 type Entry={name:string;object:Object3D;geometry:BufferGeometry;matrix:Matrix4;box:Box3;triangles?:Map<string,number[]>;wideTriangles?:number[]};
@@ -9,7 +10,7 @@ const step=32,key=(x:number,z:number)=>x+','+z;
  * terrain already sampled by groundAt and the obsolete closed facility.
  * Test transformed real triangles, not a giant union AABB. No renderer,
  * additional geometry or second collision authority is created. */
-export function createNightBMountedClearance(root:Object3D,excluded:readonly Object3D[]=[],corridor?:readonly Box3[]){
+export function* nightBMountedClearanceSteps(root:Object3D,excluded:readonly Object3D[]=[],corridor?:readonly Box3[]){
  root.updateWorldMatrix(true,true);
  const inv=root.matrixWorld.clone().invert(),skip=new Set(excluded);
  const cells=new Map<string,Entry[]>(),large:Entry[]=[];
@@ -27,7 +28,7 @@ export function createNightBMountedClearance(root:Object3D,excluded:readonly Obj
   if((x1-x0+1)*(z1-z0+1)>64){large.push(e);return;}
   for(let x=x0;x<=x1;x++)for(let z=z0;z<=z1;z++){const k=key(x,z),b=cells.get(k)??[];b.push(e);cells.set(k,b);}
  }
- function visit(o:Object3D){
+ function* visit(o:Object3D):Generator<void,void,unknown>{
   if(skip.has(o))return;
   const mesh=o as Mesh;
   if(mesh.isMesh){
@@ -35,12 +36,12 @@ export function createNightBMountedClearance(root:Object3D,excluded:readonly Obj
    matrix.multiplyMatrices(inv,o.matrixWorld);
    const inst=o as InstancedMesh;
    if(inst.isInstancedMesh){
-    for(let i=0;i<inst.count;i++){inst.getMatrixAt(i,m);const composed=matrix.clone().multiply(m);if(Math.abs(composed.determinant())<1e-12)continue;instances++;add(mesh,composed);}
-   }else{instances++;add(mesh,matrix);}
+    for(let i=0;i<inst.count;i++){inst.getMatrixAt(i,m);const composed=matrix.clone().multiply(m);if(Math.abs(composed.determinant())<1e-12)continue;instances++;add(mesh,composed);yield;}
+   }else{instances++;add(mesh,matrix);yield;}
   }
-  for(const child of o.children)visit(child);
+  for(const child of o.children)yield* visit(child);
  }
- visit(root);
+ yield* visit(root);
  const broad=new Box3(),cab=new Box3(),p0=new Vector3(),p1=new Vector3(),p2=new Vector3(),tri=new Triangle(p0,p1,p2),toCab=new Matrix4(),localMat=new Matrix4();
  const triBounds=new Box3();
  function triangleIds(a:Entry,b:Box3){
@@ -88,3 +89,5 @@ export function createNightBMountedClearance(root:Object3D,excluded:readonly Obj
  }
  return {firstHit,blocked:(e:Envelope)=>firstHit(e)!==undefined,stats:()=>({meshes,instances,invalid,queries,triangleChecks,hits:Object.fromEntries(hits)})};
 }
+export function createNightBMountedClearance(...args:Parameters<typeof nightBMountedClearanceSteps>){return finishNightBAudit(nightBMountedClearanceSteps(...args));}
+export function createNightBMountedClearanceAsync(root:Object3D,excluded:readonly Object3D[]=[],corridor?:readonly Box3[],options?:NightBAuditSliceOptions){return finishNightBAuditAsync(nightBMountedClearanceSteps(root,excluded,corridor),options);}
