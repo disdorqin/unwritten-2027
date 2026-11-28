@@ -27,6 +27,7 @@ import type {
   Za36CableRepairEvent, Za36CableRepairLine,
 } from '../shared/za36-cable-repair.js';
 import { isSummitPassportAction } from '../shared/summit-passport.js';
+import {summitGuestPassportPosition,type SummitPassportRoom,type createSummitPassportGuestAuthority} from './summit-passport-guest.js';
 import { snowWallBuildLayers } from '../shared/snow-stock.js';
 import {
   createSummitPassportAuthority, summitPassportUnavailable, type SummitPassportHost,
@@ -134,6 +135,8 @@ type Options = {
   ceremonyStartAt?: number;
   bellConfig?: Partial<BellConfig>;
   summitPassportHost?: SummitPassportHost;
+  /** Optional, explicitly approved location-gated guest passport, shared across outdoor rooms. */
+  summitPassportGuest?: {authority:ReturnType<typeof createSummitPassportGuestAuthority>;room:SummitPassportRoom};
   /** S2 结构化连接日志的注入点；默认 console.log。 */
   connectionLog?: PresenceConnectionLog;
 };
@@ -154,6 +157,8 @@ type Peer = {
   id: number;
   name?: string;
   record?: PresenceRecord;
+  recordAt?: number;
+  passportProfileKey?: string;
   version: number;
   visible: { id: number; version: number }[];
   joinTimer?: ReturnType<typeof setTimeout>;
@@ -524,7 +529,7 @@ export async function createPresenceServer(options: Options = {}) {
         return;
       }
     }
-    let body: { name?: unknown; state?: unknown; events?: unknown; presenceFrame?:unknown };
+    let body: { name?: unknown; state?: unknown; events?: unknown; presenceFrame?:unknown; passportCredential?:unknown };
     try { body = JSON.parse(await readBody(req) || '{}') as typeof body; }
     catch {
       if (req.url === POLL_JOIN_PATH) connLog('poll', '-', 'attempt', 'body');
@@ -541,7 +546,7 @@ export async function createPresenceServer(options: Options = {}) {
       connLog('poll', '-', 'attempt', 'accepted');
       const peer = createPeer('poll');
       connLog('poll', peer.id, 'session', 'ok');
-      receiveText(peer, Buffer.from(JSON.stringify({ type: 'join', name: body.name, presenceFrame:body.presenceFrame }), 'utf8'));
+      receiveText(peer, Buffer.from(JSON.stringify({ type: 'join', name: body.name, presenceFrame:body.presenceFrame,passportCredential:body.passportCredential }), 'utf8'));
       if (!peer.name || !peers.has(peer.id)) { reply(400, { error: 'name' }); return; }
       const session = randomBytes(16).toString('hex');
       peer.session = session;
@@ -1206,7 +1211,7 @@ export async function createPresenceServer(options: Options = {}) {
       return;
     }
     // Do not interpret compressed coordinates as old town game positions.
-    if(options.summitRoom&&peer.name&&!['leave','chat','clock','pose'].includes(String(message.type))&&!(message.type==='event'&&'kind' in message&&['cable-release-summit','cable-repair'].includes(String(message.kind))))return;
+    if(options.summitRoom&&peer.name&&!['leave','chat','clock','pose'].includes(String(message.type))&&!(message.type==='event'&&'kind' in message&&['cable-release-summit','cable-repair','summit-passport'].includes(String(message.kind))))return;
     if (message.type === 'event' && 'kind' in message && message.kind === 'fireworks' && peer.name) {
       if ('seed' in message && isFireworksSeed(message.seed) && 'theme' in message && isFireworksTheme(message.theme)) {
         requestFireworks(peer, message.seed, message.theme);
@@ -1277,6 +1282,10 @@ export async function createPresenceServer(options: Options = {}) {
       if (message.kind === 'summit-passport') {
         const action = 'action' in message ? message.action : undefined;
         if (allowEvent(peer, now()) && isSummitPassportAction(action)) {
+          const guest = options.summitPassportGuest;
+          if (guest) return guest.authority.request(peer.passportProfileKey,summitGuestPassportPosition(guest.room,peer.record,now()-(peer.recordAt??-Infinity),peer.pose),action).then(reply => {
+            if (peers.get(peer.id) === peer) send(peer, JSON.stringify(reply));
+          });
           if (summitPassport) return summitPassport.request(peer.id, action).then(reply => {
             if (peers.get(peer.id) === peer) send(peer, JSON.stringify(reply));
           });
@@ -1362,6 +1371,8 @@ export async function createPresenceServer(options: Options = {}) {
     if (!name) { peer.dropReason ??= 'invalid-name'; failPeer(peer); return; }
     clearTimeout(peer.joinTimer);
     peer.name = name;
+    const passportGuest=options.summitPassportGuest?.authority.bind('passportCredential' in message?message.passportCredential:undefined);
+    if(passportGuest)peer.passportProfileKey=passportGuest.profileKey;
     const joinedAt = wallNow();
     peer.joinedAt = joinedAt;
     if (joinedAt < ceremonyEndAt) ceremonyWaiting.add(peer);
@@ -1369,7 +1380,8 @@ export async function createPresenceServer(options: Options = {}) {
     connLog(peer.transport, peer.id, 'join', 'ok');
     send(peer, JSON.stringify({ type: 'join', id: peer.id, name, self: true, epochMs: joinedAt, tier: tierIndex, fireworks: true, plazaPhoto: true, bell: true, snowfight: true, freeSnowWalls: true, firecrackers: true, iceThrone: true, cableLine: true, icePalaceRites: true,
       ...(options.summitRoom?{presenceFrame:'summit-v1',fireworks:false,plazaPhoto:false,bell:false,snowfight:false,freeSnowWalls:false,firecrackers:false,iceThrone:false,icePalaceRites:false}:{}),
-      ...(summitPassport ? { summitPassport: true } : {}),
+      ...(summitPassport || passportGuest ? { summitPassport: true } : {}),
+      ...(passportGuest?{passportCredential:passportGuest.credential}:{}),
       townNightWindow: nightFeed?.snapshot(),
       undergroundWater: waterFeed?.snapshot(),
       townOutdoorWeather: weatherFeed?.snapshot(),
@@ -1433,6 +1445,7 @@ export async function createPresenceServer(options: Options = {}) {
     record.height = Math.min(heightLimit, record.height);
     if (peer.record?.seq === record.seq) return;
     peer.record = record;
+    peer.recordAt=time;
     peer.version++;
     if(!options.summitRoom)observeIceThrone(peer, time);
   }
@@ -1607,7 +1620,7 @@ export async function createPresenceServer(options: Options = {}) {
       }
       wss.close();
       stop = new Promise<void>((resolve, reject) => http.close(error => error ? reject(error) : resolve()))
-        .then(() => summitPassport?.flush());
+        .then(() => summitPassport?.flush()).then(()=>options.summitPassportGuest?.authority.flush());
       return stop;
     },
   };

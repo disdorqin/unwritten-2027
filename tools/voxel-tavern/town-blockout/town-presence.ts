@@ -114,6 +114,13 @@ export function createTownPresence(
   heightAt: (east: number, north: number) => number = () => 0,
 ) {
   const getName = presenceName();
+  // Private guest-passport capability only; never include it in chat or actor frames.
+  const passportKey='unwritten-summit-passport-v1';
+  const validPassport=(v:unknown):v is string=>typeof v==='string'&&/^v1\.[0-9a-f]{48}\.[0-9a-f]{64}$/.test(v);
+  let passportCredential:string|undefined;
+  let lastPassportPoseAt=-Infinity;
+  try{const v=localStorage.getItem(passportKey);if(validPassport(v))passportCredential=v;}catch{/* storage optional */}
+  const passportJoin=()=>passportCredential&&(domain==='town'||domain==='mountain'||domain==='summit')?{passportCredential}:{};
   const chat = createTownChat(sendChat, onChatFocus);
   const chatEvents: TownChatMessage[] = [];
   const status = document.getElementById('town-presence-status');
@@ -325,7 +332,7 @@ export function createTownPresence(
     try {
       const response = await fetch(presencePath(POLL_JOIN_URL), {
         method: 'POST', headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ name: getName(), ...(domain==='summit'?{presenceFrame:summitPresenceFrame}:{}) }),signal:AbortSignal.timeout(4000),
+        body: JSON.stringify({ name: getName(), ...passportJoin(), ...(domain==='summit'?{presenceFrame:summitPresenceFrame}:{}) }),signal:AbortSignal.timeout(4000),
       });
       if (!response.ok) return false;
       const data = await response.json() as { session?: unknown };
@@ -495,7 +502,7 @@ export function createTownPresence(
         kind?: string; message?: string; seed?: number; startAt?: number; pose?: unknown; plazaPhoto?: boolean; sentAt?: number; reason?: string;
         fireworks?: boolean; firecrackers?: boolean; bell?: boolean; theme?: FireworksTheme; from?: number; waitMs?: number; totalMs?: unknown; at?: unknown;
         nonce?: string; accepted?: boolean; iceThrone?: boolean; crowned?: boolean; summitPassport?: boolean;
-        cableLine?: boolean; line?: unknown; flags?: unknown; openedAt?: unknown; wokeAt?: unknown; presenceFrame?:unknown;
+        cableLine?: boolean; line?: unknown; flags?: unknown; openedAt?: unknown; wokeAt?: unknown; presenceFrame?:unknown; passportCredential?:unknown;
         icePalaceRites?: boolean; present?: unknown; requestId?: unknown;
         townNightWindow?: unknown; townOutdoorWeather?: unknown; townOutdoorWeatherDawnEpoch?: unknown; state?: unknown;
         undergroundWater?: unknown;
@@ -706,6 +713,8 @@ export function createTownPresence(
           firecrackersSupported = message.firecrackers === true;
           photoSupported = message.plazaPhoto === true;
           summitPassportSupported = message.summitPassport === true;
+          if(summitPassportSupported&&validPassport(message.passportCredential)){passportCredential=message.passportCredential;try{localStorage.setItem(passportKey,passportCredential);}catch{/* current tab retains it */}}
+          lastPassportPoseAt=-Infinity;
           joinedName = message.name;
           chat.setConnected(true);
           if (typeof message.epochMs === 'number' && Number.isFinite(message.epochMs)) {
@@ -824,7 +833,7 @@ export function createTownPresence(
       ws.onopen = () => {
         if (socket === ws) {
           link.socketOpened();
-          try { ws.send(JSON.stringify({ type: 'join', name: getName(), ...(domain==='summit'?{presenceFrame:summitPresenceFrame}:{}) })); }
+          try { ws.send(JSON.stringify({ type: 'join', name: getName(), ...passportJoin(), ...(domain==='summit'?{presenceFrame:summitPresenceFrame}:{}) })); }
           catch { connectionLost(); }
         }
       };
@@ -864,7 +873,9 @@ export function createTownPresence(
     const position = outgoing.getUint32(2, true);
     const heightYaw = outgoing.getUint32(6, true);
     const changed = position !== lastPosition || heightYaw !== lastHeightYaw;
-    if (!changed && !moving) return;
+    const passportHeartbeat=summitPassportSupported&&!!passportCredential&&performance.now()-lastPassportPoseAt>=750;
+    if (!changed && !moving && !passportHeartbeat) return;
+    lastPassportPoseAt=performance.now();
     // Send one terminal pose at the moving → stationary edge so peers stop extrapolating.
     if (poll) poll.pendingState = outgoing.buffer.slice(0);
     else {

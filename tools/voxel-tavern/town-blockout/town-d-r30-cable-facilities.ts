@@ -3,6 +3,7 @@ import type {FrontRidgeR30Field} from './town-d-r30-front-ridge';
 import {northRidgeCableAnchors} from './north-ridge-350-terrain';
 import {createNorthRidgeCableClock} from './north-ridge-cable-clock';
 import {STATION_BOARD_TEXTS} from './front-ridge-switchback-road';
+import {finishNightBAudit} from './town-night-b-audit-slices';
 
 type P={east:number;north:number;height:number};
 type Tower=P&{ground:number;station?:boolean};
@@ -62,7 +63,8 @@ export function surveyRidgeCableSpans(field:FrontRidgeR30Field,externalDock=fals
 /** Separate a docking contact from a collision during travel. This is a
  * measured candidate envelope, never a grant of operating authority.
  * External buildings/railway obstacles must be supplied by their owner. */
-export function auditRidgeCableSweep(field:FrontRidgeR30Field,survey:ReturnType<typeof surveyRidgeCableSpans>,obstacle?:(foot:P,halfWidth:number,halfDepth:number,top:number)=>boolean){
+export function* ridgeCableSweepSteps(field:FrontRidgeR30Field,survey:ReturnType<typeof surveyRidgeCableSpans>,obstacle?:(foot:P,halfWidth:number,halfDepth:number,top:number)=>boolean){
+ yield;
  let minMoving=Infinity,minDock=Infinity,groundHits=0,obstacleHits=0,samples=0;
  let firstGround:P|undefined,firstObstacle:P|undefined;
  const stops=survey.towers.filter(p=>p.station);
@@ -82,11 +84,13 @@ export function auditRidgeCableSweep(field:FrontRidgeR30Field,survey:ReturnType<
    if(dock)minDock=Math.min(minDock,margin);else minMoving=Math.min(minMoving,margin);
    if(margin<-.001){groundHits++;firstGround??=foot}
    if(obstacle?.(foot,1.12,1.475,2.78)){obstacleHits++;firstObstacle??=foot}
+   yield;
   }
  }
  return {samples,minMoving,minDock,groundHits,obstacleHits,firstGround,firstObstacle,externalSurveyed:!!obstacle,
   candidateEnvelopeClear:!!obstacle&&groundHits===0&&obstacleHits===0&&minMoving>=.25,productionReady:false as const};
 }
+export function auditRidgeCableSweep(...args:Parameters<typeof ridgeCableSweepSteps>){return finishNightBAudit(ridgeCableSweepSteps(...args));}
 type Part={m:MeshLambertMaterial;matrix:import('three').Matrix4};
 type Solid={e:number;n:number;bottom:number;top:number;w:number;d:number;yaw:number};
 export function mountRidgeCableFacilities(owner:Object3D,field:FrontRidgeR30Field,externalDock=false,closed=false,serviceExit=false){
