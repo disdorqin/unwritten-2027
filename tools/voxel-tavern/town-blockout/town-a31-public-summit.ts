@@ -50,21 +50,25 @@ export function createA31PublicSummitRoute(input:Input){
     // Presence's slewed clock may have fractional milliseconds; the ropeway
     // construction contract requires an integer epoch. Live B authority still
     // reads the original continuously synchronized server clock.
-    candidate=await stageRun('canonical',()=>createTownD2R30ProductionHost({epochMs:Math.floor(input.now()),includeRopeway:false}));
+    candidate=await stageRun('canonical',()=>createTownD2R30ProductionHost({epochMs:Math.floor(input.now()),includeRopeway:false,deferDetails:true}));
     const host=candidate;
+    // No partially dressed terrain is traversable: mount each real package
+    // in an independently measured frame before sector/cable certification.
+    host.setNight(night);
+    for(const name of host.pendingDetails())await stageRun('detail-'+name,()=>host.mountDetails(name));
     const south=await stageRun('south-prepare',()=>prepareA32SouthSectorInstaller(host.port,stagingAbort.signal));preparedSouth=south;
     await stageRun('south',()=>host.install('A',south.install));preparedSouth=undefined;
     await stageRun('west',()=>host.install('B',createWestSectorInstaller()));
     await stageRun('east',()=>host.install('C2',createEastSectorInstaller()));
     host.setFrontSnow(input.frontSnow?(e,n)=>input.frontSnow!(e+summitAssemblyAnchor.east,n+summitAssemblyAnchor.north):undefined);
     host.setFrontWind(input.frontWind?(e,n)=>input.frontWind!(e+summitAssemblyAnchor.east,n+summitAssemblyAnchor.north):undefined);
+    visual=await stageRun('ownership',()=>retireA31LegacySectorOverlays(host.group));
     if(input.cableAuthority){
      try{await stageRun('cable',()=>host.preparePublicCable(input.cableAuthority!));}catch(error){cableFailure=error instanceof Error?error.message:String(error);}
     }
     audit=await stageRun('audit',()=>host.sectorLiveCheck());
     const mountStats=candidate.stats();cutTiles=mountStats.tiles.cut;duplicates=mountStats.duplicates;
     if(!audit.ready||duplicates.length||candidate.cableState().boardable&&!readA31UpperCable(candidate))throw Error('Four-sector public mount refused');
-    visual=await stageRun('ownership',()=>retireA31LegacySectorOverlays(host.group));
     if(input.warm)warmup=await stageRun('gpu-warmup',()=>input.warm!(host.group,yieldFrame,()=>status==='disposed'));
     candidate.group.position.set(summitAssemblyAnchor.east,0,-summitAssemblyAnchor.north);
     candidate.group.visible=false;

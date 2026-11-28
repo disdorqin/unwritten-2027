@@ -59,10 +59,17 @@ export type TownD2R30AssemblyOptions = Readonly<{
     points: readonly MainSummitTrailPoint[];
     metrics: ReturnType<typeof createMainSummitTrail>['metrics'];
   }>;
+  /** Mount the coarse ground now and the heavy detail packages later through
+   * mountDetails(). The ground, the collision grid and the walking surface are
+   * complete either way — only the dressing waits. */
+  deferDetails?: boolean;
 }>;
 
 export type TownD2R30Assembly = Readonly<{
   group: Group;
+  /** Mount pending detail packages (all, or one by name) and report each cost. */
+  mountDetails(only?: string): { name: string; ms: number }[];
+  pendingDetails(): readonly string[];
   heightAt(east: number, north: number): number | undefined;
   /** Canonical near TOP tiles (identity transform, summit-local frame), so a
    * sector installer can replace their geometry in place. Empty in streaming
@@ -173,102 +180,162 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
     disposers.push(() => lod.dispose());
   }
 
+  // ---- detail packages, mountable now or later ------------------------------
+  // Each entry is self-contained: it creates its package, adds it to the
+  // assembly, registers its disposer and its night hook. Running them all
+  // immediately is the old behaviour; `deferDetails` keeps them pending so a
+  // caller can paint the mountain first and let the dressing arrive after.
+  const pending: { name: string; mount: () => void }[] = [];
+  const addDetail = (name: string, mount: () => void) => pending.push({ name, mount });
+
   if (includeStrata) {
-    const strata = createTownD2R30Strata({ heightAt, arrivalHeight });
-    children.push(strata.group);
-    disposers.push(() => strata.dispose());
-    nightHooks.push(value => strata.setNight(value));
+    addDetail('strata', () => {
+      const strata = createTownD2R30Strata({ heightAt, arrivalHeight });
+      children.push(strata.group);
+      disposers.push(() => strata.dispose());
+      nightHooks.push(value => strata.setNight(value));
+    });
   }
 
   if (includeSnowRock) {
-    const snowRock = createTownD2R30SnowRockHost({ heightAt, arrivalHeight });
-    children.push(snowRock.group);
-    disposers.push(() => snowRock.dispose());
-    nightHooks.push(value => snowRock.setNight(value));
+    addDetail('snow-rock', () => {
+      const snowRock = createTownD2R30SnowRockHost({ heightAt, arrivalHeight });
+      children.push(snowRock.group);
+      disposers.push(() => snowRock.dispose());
+      nightHooks.push(value => snowRock.setNight(value));
+    });
   }
 
   if (includeCloudTerrace) {
-    const cloud = createTownD2R30CloudTerraceHost({
-      heightAt,
-      arrivalHeight,
-      trailPoints: trailPoints!,
+    addDetail('cloud-terrace', () => {
+      const cloud = createTownD2R30CloudTerraceHost({
+        heightAt,
+        arrivalHeight,
+        trailPoints: trailPoints!,
+      });
+      children.push(cloud.group);
+      disposers.push(() => cloud.dispose());
+      nightHooks.push(value => cloud.setNight(value));
     });
-    children.push(cloud.group);
-    disposers.push(() => cloud.dispose());
-    nightHooks.push(value => cloud.setNight(value));
   }
 
   if (includeTrailSupport) {
-    const support = createTownD2R30TrailSupport({ heightAt, arrivalHeight });
-    children.push(support.group);
-    disposers.push(() => support.dispose());
-    nightHooks.push(value => support.setNight(value));
+    addDetail('trail-support', () => {
+      const support = createTownD2R30TrailSupport({ heightAt, arrivalHeight });
+      children.push(support.group);
+      disposers.push(() => support.dispose());
+      nightHooks.push(value => support.setNight(value));
+    });
   }
 
   if (includeCableTowers) {
-    const towers = createTownD2R30CableTowers({ heightAt, arrivalHeight });
-    cableTowers = towers;
-    children.push(towers.group);
-    disposers.push(() => towers.dispose());
-    nightHooks.push(value => towers.setNight(value));
+    addDetail('cable-towers', () => {
+      const towers = createTownD2R30CableTowers({ heightAt, arrivalHeight });
+      cableTowers = towers;
+      children.push(towers.group);
+      disposers.push(() => towers.dispose());
+      nightHooks.push(value => towers.setNight(value));
+    });
   }
 
   if (includeFacilityFoundations) {
-    const foundations = createTownD2R30FacilityFoundations({ heightAt, arrivalHeight });
-    children.push(foundations.group);
-    disposers.push(() => foundations.dispose());
-    nightHooks.push(value => foundations.setNight(value));
+    addDetail('facility-foundations', () => {
+      const foundations = createTownD2R30FacilityFoundations({ heightAt, arrivalHeight });
+      children.push(foundations.group);
+      disposers.push(() => foundations.dispose());
+      nightHooks.push(value => foundations.setNight(value));
+    });
   }
 
   if (includeSledGateSupport) {
-    const sled = createTownD2R30SledGateSupport({ heightAt, arrivalHeight });
-    children.push(sled.group);
-    disposers.push(() => sled.dispose());
-    nightHooks.push(value => sled.setNight(value));
+    addDetail('sled-gate-support', () => {
+      const sled = createTownD2R30SledGateSupport({ heightAt, arrivalHeight });
+      children.push(sled.group);
+      disposers.push(() => sled.dispose());
+      nightHooks.push(value => sled.setNight(value));
+    });
   }
 
   if (includeSummitFacilities) {
-    const facilities = createTownD2R30SummitFacilities({ heightAt, arrivalHeight });
-    children.push(facilities.group);
-    disposers.push(() => facilities.dispose());
-    // The canonical facility bodies carry no night response of their own,
-    // so the R07 package owns the darkening of every lit surface it mounts.
-    nightHooks.push(value => facilities.setNight(value));
-    nightLightsHost = facilities.group;
+    addDetail('summit-facilities', () => {
+      const facilities = createTownD2R30SummitFacilities({ heightAt, arrivalHeight });
+      children.push(facilities.group);
+      disposers.push(() => facilities.dispose());
+      // The canonical facility bodies carry no night response of their own,
+      // so the R07 package owns the darkening of every lit surface it mounts.
+      nightHooks.push(value => facilities.setNight(value));
+      nightLightsHost = facilities.group;
+    });
   }
 
   if (includeNightLights) {
-    // The lamp chain follows the same canonical walkway survey used by the
-    // cloud/forest exclusions, and the lamps stand on the D2-R02 roadbed.
-    const lights = createTownD2R30NightLights({
-      hostGroup: nightLightsHost,
-      trailPoints: trailPoints!,
+    addDetail('night-lights', () => {
+      // The lamp chain follows the same canonical walkway survey used by the
+      // cloud/forest exclusions, and the lamps stand on the D2-R02 roadbed.
+      const lights = createTownD2R30NightLights({
+        hostGroup: nightLightsHost,
+        trailPoints: trailPoints!,
+      });
+      children.push(lights.group);
+      disposers.push(() => lights.dispose());
+      nightHooks.push(value => lights.setNight(value));
     });
-    children.push(lights.group);
-    disposers.push(() => lights.dispose());
-    nightHooks.push(value => lights.setNight(value));
   }
 
   if (includeRopeway) {
-    // D2-R09: the rope, the cabins and the station buildings, rebuilt on
-    // the R30 massif so the line has a deck to land on.
-    const nextRopeway = createTownD2R30Ropeway({ heightAt, arrivalHeight, epochMs: ropewayEpochMs });
-    ropeway = nextRopeway;
-    children.push(nextRopeway.group);
-    disposers.push(() => nextRopeway.dispose());
-    nightHooks.push(value => nextRopeway.setNight(value));
-    updateRopeway = nowMs => nextRopeway.update(nowMs);
+    addDetail('ropeway', () => {
+      // D2-R09: the rope, the cabins and the station buildings, rebuilt on
+      // the R30 massif so the line has a deck to land on.
+      const nextRopeway = createTownD2R30Ropeway({ heightAt, arrivalHeight, epochMs: ropewayEpochMs });
+      ropeway = nextRopeway;
+      children.push(nextRopeway.group);
+      disposers.push(() => nextRopeway.dispose());
+      nightHooks.push(value => nextRopeway.setNight(value));
+      updateRopeway = nowMs => nextRopeway.update(nowMs);
+    });
   }
 
   if (includeNorthWall) {
-    // D2-R2: the central-sector climb + four summit landmarks, on the same
-    // height field as the massif; canonical hut/icefall/glide are the R07
-    // package's job and are deliberately not duplicated here.
-    const wall = createTownD2R30NorthWall({ heightAt, arrivalHeight });
-    northWall = wall;
-    children.push(wall.group);
-    disposers.push(() => wall.dispose());
-    nightHooks.push(value => wall.setNight(value));
+    addDetail('north-wall', () => {
+      // D2-R2: the central-sector climb + four summit landmarks, on the same
+      // height field as the massif; canonical hut/icefall/glide are the R07
+      // package's job and are deliberately not duplicated here.
+      const wall = createTownD2R30NorthWall({ heightAt, arrivalHeight });
+      northWall = wall;
+      children.push(wall.group);
+      disposers.push(() => wall.dispose());
+      nightHooks.push(value => wall.setNight(value));
+    });
+  }
+
+  const deferDetails = options.deferDetails === true;
+  const mounted = new Set<string>();
+  let night = false;
+
+  /** Mount the pending detail packages (all, or one by name). Returns the real
+   * cost of each so a streaming caller can budget a frame. */
+  function mountDetails(only?: string): { name: string; ms: number }[] {
+    const timings: { name: string; ms: number }[] = [];
+    for (const entry of [...pending]) {
+      if (only !== undefined && entry.name !== only) continue;
+      const index = pending.indexOf(entry);
+      if (index >= 0) pending.splice(index, 1);
+      const started = performance.now();
+      entry.mount();
+      timings.push({ name: entry.name, ms: performance.now() - started });
+      mounted.add(entry.name);
+      // A package that arrives after dusk must not sit at full daylight.
+      if (night) {
+        const last = nightHooks[nightHooks.length - 1];
+        last?.(true);
+      }
+      group.userData.subPackages = Object.freeze(children.map(child => child.name));
+    }
+    if (timings.length > 0) {
+      for (const child of children) if (child.parent !== group) group.add(child);
+      recomputeBudget();
+    }
+    return timings;
   }
 
   for (const child of children) group.add(child);
@@ -291,9 +358,17 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
     return { meshes: meshCount, triangles: Math.round(triangleCount) };
   };
 
-  const packageSizes = children.map(child => ({ package: child.name, ...measure(child) }));
-  const meshes = packageSizes.reduce((sum, size) => sum + size.meshes, 0);
-  const triangles = packageSizes.reduce((sum, size) => sum + size.triangles, 0);
+  let packageSizes: { package: string; meshes: number; triangles: number }[] = [];
+  let meshes = 0, triangles = 0;
+  function recomputeBudget() {
+    packageSizes = children.map(child => ({ package: child.name, ...measure(child) }));
+    meshes = packageSizes.reduce((sum, size) => sum + size.meshes, 0);
+    triangles = packageSizes.reduce((sum, size) => sum + size.triangles, 0);
+  }
+
+  // Immediate mode mounts every detail package now that the budget helper and
+  // the drawing measure exist; deferred mode leaves them in `pending`.
+  if (!deferDetails) mountDetails();
 
   const collision = createTownD2R30Collision({
     heightAt: (east, north) => heightAt(east, north),
@@ -312,15 +387,16 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
   };
 
   let disposed = false;
-  let night = false;
   return {
     group,
     tiles,
     heightAt,
     collision,
-    ropeway,
-    northWall,
-    cableTowers,
+    get ropeway(){return ropeway;},
+    get northWall(){return northWall;},
+    get cableTowers(){return cableTowers;},
+    mountDetails,
+    pendingDetails: () => Object.freeze(pending.map(entry => entry.name)),
     update(east: number, north: number, nowMs?: number) {
       if (disposed) return;
       if (!Number.isFinite(east) || !Number.isFinite(north)) {
@@ -342,6 +418,7 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
       group.userData.night = night;
     },
     stats() {
+      recomputeBudget();
       return Object.freeze({
         terrainMode,
         arrivalHeight,
@@ -357,6 +434,8 @@ export function createTownD2R30Assembly(options: TownD2R30AssemblyOptions = {}):
         collision: collision.stats(),
         worldAnchor: { ...townD2R30Spec.worldAnchor },
         night,
+        pendingDetails: Object.freeze(pending.map(entry => entry.name)),
+        mountedDetails: Object.freeze([...mounted]),
         disposed,
       });
     },
