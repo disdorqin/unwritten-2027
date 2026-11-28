@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile, appendFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { chromium } from '@playwright/test';
 import { WebSocket } from 'ws';
+import {fromSummitPresencePose} from '../src/shared/za22-summit-presence-domain.ts';
 
 const [origin, output, segment = 'all'] = process.argv.slice(2);
 assert.ok(origin && output, 'Use the production-preview loopback URL and an evidence directory');
@@ -70,6 +71,7 @@ async function openTown(name) {
   page.on('websocket', socket => {
     const socketPath = new URL(socket.url()).pathname;
     if (!socketPath.startsWith('/presence')) return;
+    const summit = socketPath.startsWith('/presence-summit');
     const mountain = socketPath.startsWith('/presence-mountain');
     const west = socketPath.startsWith('/presence-west');
     evidence.sockets.push(socket.url());
@@ -91,12 +93,13 @@ async function openTown(name) {
     }
     socket.on('framesent', ({ payload }) => {
       if (!Buffer.isBuffer(payload) || payload.byteLength !== 12 || payload.readUInt16LE(0) !== 0) return;
+      const raw={east:payload.readUInt16LE(2)/100,north:payload.readUInt16LE(4)/100,height:payload.readUInt16LE(6)/100};
+      const world=summit?fromSummitPresencePose(raw):{east:raw.east-(west?240:0),north:raw.north+(mountain?540:0),height:raw.height-(west?64:0)};
+      assert.ok(world,'rear pose outside its actual wire frame');
       evidence.poses.push({
         ms: Date.now(),
-        east: payload.readUInt16LE(2) / 100 - (west ? 240 : 0),
-        north: payload.readUInt16LE(4) / 100 + (mountain ? 540 : 0),
-        area: mountain ? 'mountain' : west ? 'west' : 'town',
-        height: payload.readUInt16LE(6) / 100 - (west ? 64 : 0),
+        ...world,
+        area: summit?'summit':mountain ? 'mountain' : west ? 'west' : 'town',
         yaw: payload.readUInt16LE(8) * tau / 65536,
         seq: payload.readUInt16LE(10),
       });
