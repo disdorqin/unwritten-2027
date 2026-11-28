@@ -37,7 +37,11 @@ import { mainSummitLayout, mainSummitSpec } from './main-summit-block';
 import { buildR30TownSkyline } from './town-d2-r30-skyline';
 import {createA31PublicSummitRoute} from './town-a31-public-summit';
 import {createNightBProductionController,nightBProductionAuthority} from './town-night-b-production-controller';
-import {readA31FrontCable,type A31CableBindings,type A31FrontCableOwner} from './town-a31-cable-binding';
+import {readA31FrontCable,type A31CableBindings} from './town-a31-cable-binding';
+import {a32YieldFrame,a32SummitPrefetch} from './town-a32-stream-policy';
+import {warmA32SummitMeshes} from './town-a32-gpu-warmup';
+import {createNightBCablePresentation,createNightBCableAudio} from './town-night-b-cable-presentation';
+import {createFriend3TravelAudio} from './town-friend3-travel-audio';
 import {createA31CableInput} from './town-a31-cable-input';
 import {syncA31OutdoorRoom} from './town-a31-outdoor-presence';
 import {a31GateCrossing,a31GateEligible} from './town-a31-gate-handoff';
@@ -589,29 +593,39 @@ function exitSkyCity() { skyCityViewKind = 'ground'; }
 void enterSkyCity; void exitSkyCity; void skyCityHost;
 // A31 public world: one real four-sector owner and the existing far LOD.
 // Old ZA22 moving cabins and their independent mountain are review-only.
-const cloudRoute = createA31PublicSummitRoute({town:scene,skyline:summitSkyline,now:presence.serverNow,profile:previewOptions.has('profile'),cableAuthority:nightBProductionAuthority(presence,2)});
+const cloudRoute = createA31PublicSummitRoute({town:scene,skyline:summitSkyline,now:presence.serverNow,profile:previewOptions.has('profile'),cableAuthority:nightBProductionAuthority(presence,2),
+ frontSnow:(e,n)=>{const w=presence.getTownOutdoorWeather();return w?sampleSouthRegionalWeather(w,e,n,347,false).weather.targetCover:undefined;},
+ frontWind:(e,n)=>{const w=presence.getTownOutdoorWeather();return w?Math.max(0,Math.min(1,sampleSouthRegionalWeather(w,e,n,347,false).exposure)):undefined;},
+ warm:(root,yieldFrame,cancelled)=>warmA32SummitMeshes(renderer,root,yieldFrame,cancelled)});
 window.addEventListener('pagehide',event=>{if(!event.persisted)cloudRoute.dispose();});
-let publicTransportBound=false;
-export const preparePublicSummit=async()=>{
- const ready=await cloudRoute.prepare();
- if(!publicTransportBound&&document.body.classList.contains('town-entry-pending')){
-  const frontOwner:A31FrontCableOwner|undefined=productionRidge;
-  if(frontOwner?.preparePublicFrontCable)await frontOwner.preparePublicFrontCable(nightBProductionAuthority(presence,1));
-  const front=readA31FrontCable(frontOwner),upper=ready?cloudRoute.upperOperation():undefined;
-  // C2 may have atomically replaced the parked facilities; the real
-  // collision index must reference the accepted replacement, not old boxes.
+let publicTransportBound=false,publicTransportPreparing=false,frontPreparationMs=0,frontPreparationError:string|undefined;
+export const preparePublicSummit=()=>{/* Town entry is independent of the rear massif. */};
+function preparePublicTransport(foot:{east:number;north:number;height:number}){
+ if(publicTransportBound||publicTransportPreparing||!a32SummitPrefetch(foot))return;
+ publicTransportPreparing=true;
+ void (async()=>{
+  const ready=await cloudRoute.prepare();
+  await a32YieldFrame();
+  const start=performance.now();
+  try{
+   if(productionRidge){
+    const accepted=await productionRidge.preparePublicFrontCable(nightBProductionAuthority(presence,1));
+    if(!accepted)frontPreparationError=productionRidge.frontCablePrepareResult??'front-owner-refused';
+   }
+  }catch(error){frontPreparationError=error instanceof Error?error.message:String(error);}
+  frontPreparationMs=performance.now()-start;
+  const front=readA31FrontCable(productionRidge),upper=ready?cloudRoute.upperOperation():undefined;
   if(front.front)walkGeometry=geometry();
   if(front.front||upper)cableController=makePublicCableController({...front,upper});
-  publicTransportBound=true;
- }
- return ready;
-};
+  publicTransportBound=true;publicTransportPreparing=false;
+ })();
+}
 const southEntryHost=createSouthEntryHost();
 // B's one production controller. The current C2/D2 candidate has no
 // certified continuous dock approaches, so neither ready installer is supplied.
 function makePublicCableController(assets:A31CableBindings={}){return createNightBProductionController({
  ...assets,presence,upperOrigin:{east:300,north:676},
- domain:()=>!walking||homeReturn?undefined:cloudRoute.active()?'summit':x<0?undefined:'town',
+ domain:()=>!walking||homeReturn?undefined:cloudRoute.active()?'summit':x<0?undefined:n>=650?'mountain':'town',
  acceptLanding:(line,foot)=>{
   if(line===2)return cloudRoute.active()&&Math.abs((cloudRoute.surveyedSupport(foot.east,foot.north)??Infinity)-foot.height)<=.08&&!cloudRoute.surveyedBlocked(foot.east,foot.north,foot.height);
   return !cloudRoute.active()&&Math.abs((dryTownLandingHeight(foot.east,foot.north,foot.height,true)??Infinity)-foot.height)<=.08;
@@ -626,6 +640,8 @@ function currentCableAction(){
 function runCableAction(id:string){
  const result=cableController.action(id,{east:x,north:n,height:ground});
  if(!result.accepted)return false;
+ if(result.notice)announceActivity(result.notice);
+ cableAudio.repair(id,result.accepted,weatherAudioToggle.checked&&!document.hidden);
  if(id.startsWith('board-')){
   resetMovement();airHeight=undefined;riseSpeed=0;
   if(!cloudRoute.active())presence.setFrontCableRideDomain(scene);
@@ -1534,6 +1550,10 @@ const tavernDrinkEffects = createTavernDrinkEffects();
 tavernDrinkEffects.mountSettings(element('town-advanced-controls'));
 const townBgm = createTownBgm(festival.getAudioContext);
 const regionalAudio=createSouthWeatherAudioHost(festival.getAudioContext);
+const cablePresentation=createNightBCablePresentation(),cableTravelAudio=createFriend3TravelAudio({getContext:festival.getAudioContext}),cableAudio=createNightBCableAudio(cableTravelAudio);
+window.addEventListener('pointerdown',event=>{if(event.isTrusted)cableAudio.gesture();});
+window.addEventListener('keydown',event=>{if(event.isTrusted)cableAudio.gesture();});
+window.addEventListener('pagehide',()=>{cableAudio.dispose();cablePresentation.dispose();cableTravelAudio.dispose();});
 const weatherAudioControls=document.createElement('label');
 const weatherAudioToggle=document.createElement('input');
 weatherAudioToggle.type='checkbox';weatherAudioToggle.id='town-weather-audio';weatherAudioToggle.checked=regionalAudio.settings().enabled;
@@ -1543,7 +1563,7 @@ weatherVolume.type='range';weatherVolume.min='0';weatherVolume.max='100';weather
 weatherVolumeControls.append('风雪音量',weatherVolume);
 element('town-advanced-controls').append(weatherAudioControls,weatherVolumeControls);
 weatherAudioToggle.addEventListener('change',()=>regionalAudio.setEnabled(weatherAudioToggle.checked));
-weatherVolume.addEventListener('input',()=>regionalAudio.setVolume(Number(weatherVolume.value)));
+weatherVolume.addEventListener('input',()=>{regionalAudio.setVolume(Number(weatherVolume.value));cableTravelAudio.setVolume(Number(weatherVolume.value));});
 window.addEventListener('pointerdown',event=>{if(event.isTrusted)regionalAudio.gesture();});
 window.addEventListener('keydown',event=>{if(event.isTrusted)regionalAudio.gesture();});
 document.addEventListener('visibilitychange',()=>regionalAudio.setSuspended(document.hidden));
@@ -1564,7 +1584,9 @@ let nextSummitStatus=0;
 function showSummitStatus(now:number){
  if(now<nextSummitStatus)return;nextSummitStatus=now+250;
  const s=cloudRoute.state();
- const message=s.status==='ready'?'后山 · 四区地形已就绪 · 交通检修中':s.status==='failed'?'后山 · 加载未完成 · 暂未开放':'后山 · 地形加载中 · 暂未开放';
+ summitStatus.hidden=!!cableFrame?.whiteout;
+ summitStatus.style.display=cableFrame?.whiteout?'none':'block';
+ const message=s.status==='ready'?(s.cable.boardable?'后山 · 地形与索道已就绪 · 依现场权限通行':'后山 · 四区地形已就绪 · 交通检修中'):s.status==='failed'?'后山 · 加载未完成 · 暂未开放':s.status==='idle'?'后山 · 远景常驻 · 接近后加载':'后山 · 分区预加载中 · 暂未开放';
  if(summitStatus.textContent!==message)summitStatus.textContent=message;
  summitStatus.dataset.status=s.status;
 }
@@ -3497,7 +3519,7 @@ function stepJumpInMine(dt: number) {
 
 type A31GateFoot={east:number;north:number;height:number};
 let pendingGateStep:{from:A31GateFoot;to:A31GateFoot;entering:boolean}|undefined;
-function gateRouteCertified():boolean{return Boolean(productionRidge?.cloudSeam.domainReady)&&cloudRoute.state().ready;}
+function gateRouteCertified():boolean{return Boolean(productionRidge?.cloudSeam.domainReady)&&cloudRoute.seamReady();}
 function gateStepEligible(from:A31GateFoot,to:A31GateFoot){
  return a31GateEligible(gateRouteCertified(),from,to,
   (e,n,h)=>dryTownLandingHeight(e,n,h,true),
@@ -3932,7 +3954,7 @@ function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame
   if (cabin) {
     cloudRoute.updateView(cabin);
     faceFrom(cabin.east, cabin.north, cabin.height + eye, yaw, pitch);
-    element('position').textContent = '缆车二线 · 主峰';
+    element('position').textContent = cableFrame?.whiteout?'':'缆车二线 · 主峰';
   } else {
     summitSledRacks ??= createSledRacks('summit');
     const { forward, right, sprint } = walkingAxes();
@@ -3945,7 +3967,9 @@ function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame
         if (sledRide.active()) stepMountedSled(forward, right);
         else {
           const roof=southEntryHost.sheltered(x,n,ground);
-          const windScale=airHeight===undefined?southWeatherWalkingScale(weatherState,x,n,east,north,true,ceremonyState.phase==='ordinary',roof):1;
+          const baseWindScale=airHeight===undefined?southWeatherWalkingScale(weatherState,x,n,east,north,true,ceremonyState.phase==='ordinary',roof):1;
+          const localWind=cloudRoute.windAt(x,n);
+          const windScale=localWind===undefined?baseWindScale:1+(baseWindScale-1)*Math.max(0,Math.min(1,localWind));
           const frostScale=airHeight===undefined?ceremonyFrost.walkingScale():1;
           const nextX = x + east * windScale * frostScale * townPhysicsDelta, nextN = n + north * windScale * frostScale * townPhysicsDelta;
           if ((east || north) && !tryMove(nextX, nextN) && !tryMove(nextX, n)) tryMove(x, nextN);
@@ -3997,8 +4021,9 @@ function renderCloudRoute(frameSeconds: number,skyFrame:TownNightWeatherSkyFrame
   ceremonyFrost.update(summitDt);
   const fog=cloudRoute.scene.fog as Fog;
   applySouthWeatherPresentation(cloudRoute.scene,fog,weather,skyFrame,particleDensityScale(),local?.weather);
-  regionalAudio.sync(local?.weather,roof,!!cabin,ceremonyState.phase==='ordinary',performance.now());
-  showRegionalWeather(southWeatherStatus(skyFrame,weatherState,local?.weather,ceremonyState.phase!=='ordinary',!!cabin,roof));
+  regionalAudio.sync(local?.weather,roof,!!cabin,ceremonyState.phase==='ordinary'&&!cableFrame?.whiteout,performance.now());
+  showRegionalWeather(cableFrame?.whiteout?'':southWeatherStatus(skyFrame,weatherState,local?.weather,ceremonyState.phase!=='ordinary',!!cabin,roof));
+  cablePresentation.apply(cloudRoute.scene,cableFrame);
   renderer.render(cloudRoute.scene, camera);
   if (profileTown) {
     renderer.domElement.dispatchEvent(new CustomEvent('town-frame-profile', { detail: {
@@ -4018,8 +4043,11 @@ renderer.setAnimationLoop(now => {
   // screen. Do not render or accept movement into a half-built world.
   if(document.body.classList.contains('town-entry-pending'))return;
   commitGateStep();
+  cablePresentation.beginFrame();
   cableInput.tick();cableFrame=cableController.tick(playerBodyYaw());
-  cloudRoute.update(cableFrame?.feet??{east:x,north:n,height:ground});
+  const currentFoot=cableFrame?.feet??{east:x,north:n,height:ground};
+  cloudRoute.update(currentFoot);preparePublicTransport(currentFoot);
+  cableAudio.sync(cableFrame,weatherAudioToggle.checked&&!document.hidden);
   const summitWeatherState=presence.getTownOutdoorWeather();
   const summitCeremony=ceremonyStateAt(ceremonyClock.now(),ceremonyClock.utcOffsetMinutes);
   cloudRoute.updateSnow(dt,(e,n,h)=>summitWeatherState&&summitCeremony.phase==='ordinary'
@@ -4573,7 +4601,7 @@ renderer.setAnimationLoop(now => {
         weatherCycle:southWeatherProfile(skyFrame,outdoorWeather,weather,regionalWeather?.weather),
         fogNear: weatherFog.near, fogFar: weatherFog.far, points: renderer.info.render.points,
         craterPerf:{exteriorCertified:craterExteriorCertified,undergroundVisible:undergroundRenderParent?.visible},
-        summitProduction:{...cloudRoute.state(),farDraws:summitSkylineDraws},
+        summitProduction:{...cloudRoute.state(),farDraws:summitSkylineDraws,frontPreparationMs,frontPreparationError,publicTransportBound},
         ridge:productionRidge&&{changed:productionRidge.changedVertices,roads:productionRidge.roads.length,lod:productionRidge.model.detailCounts(),stationReady:productionRidge.stationReady,transportReady:productionRidge.transportReady,foot:[x,n,ground],heading:yaw,...(previewOptions.has('mRoadSurvey')?{roadGuide:productionRidge.baseToMiddleGuide,rearConnected:productionRidge.rearConnected,moveReject:ridgeMoveReject}:{}),surface:outdoorSurfaceAt(x,n),support:supportAt(x,n,ground+stepHeight,ground+surfaceEpsilon),cableMounted:!!productionRidge.facilities,cableInstances:productionRidge.facilities?.visibleInstances(),terraceMounted:!!productionRidge.terrace,cloudSeam:productionRidge.cloudSeam},
         ...(skylinePeak ? { summitSkyline: { draws: summitSkylineDraws, peakNdc: skylinePeak.toArray(),
           camera: camera.position.toArray(), far: camera.far } } : {}),

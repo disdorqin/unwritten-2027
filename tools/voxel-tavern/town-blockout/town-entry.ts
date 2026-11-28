@@ -61,10 +61,8 @@ if (typeof document !== 'undefined') {
   const enter = createTownEntry(embedded, async () => {
     await import('./town-panel');
     const viewer=await import('./viewer');
-    loading.textContent='正在装配后山四区…';
-    // A rear candidate refusal is contained by its host; the established
-    // town remains available, with a closed rear status in the menu.
-    await viewer.preparePublicSummit();
+    // Rear construction is triggered by the viewer's real approach.
+    viewer.preparePublicSummit();
   }, state => {
     guide.hidden = state !== 'guide';
     loading.hidden = state !== 'loading';

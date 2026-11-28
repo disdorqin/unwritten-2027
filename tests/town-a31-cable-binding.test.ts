@@ -18,7 +18,8 @@ test('only the installed owner can publish its exact accepted front operation',(
 });
 test('rear owner must have certified slot and both real mounted asset identities',()=>{
  const root=new Group(),ropeway=new Group(),workshop=new Group();root.add(ropeway,workshop);
- const op={ready:true,service:{physical:true},ropeway:{group:ropeway},workshop:{group:workshop}} as NonNullable<A31RearCableOwner['cableOperation']>;
+ const r={group:ropeway};
+ const op={ready:true,service:{physical:true,ropeway:r,present(){},board(){},exit(){},ridePose(){}},ropeway:r,workshop:{group:workshop,repairActions(){}},docks:[],audit:{candidateEnvelopeClear:true},update(){},dispose(){}};
  const state={installed:true,certified:true,boardable:true};
  const owner={group:root,cableState:()=>state,cableOperation:op};
  assert.equal(readA31UpperCable(owner),op);

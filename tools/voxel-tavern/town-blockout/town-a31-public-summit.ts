@@ -4,13 +4,15 @@ import {retireA31LegacySectorOverlays} from './town-a31-summit-visual-ownership'
 import {summitAssemblyAnchor} from './main-summit-assembly';
 import type {SouthSnowVisualSample} from './town-night-a-summit-snow-appearance';
 import {a31GateFoot} from './town-a31-gate-handoff';
-import {readA31UpperCable,type A31RearCableOwner,type A31CableAuthority} from './town-a31-cable-binding';
+import {readA31UpperCable,type A31CableAuthority} from './town-a31-cable-binding';
+import {a32SummitPrefetch,createA32StageMeter,a32YieldFrame} from './town-a32-stream-policy';
+import type {A32WarmupStats} from './town-a32-gpu-warmup';
 
 type Foot=Readonly<{east:number;north:number;height:number}>;
 type Production=ReturnType<typeof createTownD2R30ProductionHost>;
 type Status='idle'|'loading'|'ready'|'failed'|'disposed';
 type Action={label:string;run():void};
-type Input={town:Scene;skyline:Group;now():number;yieldFrame?:()=>Promise<void>;profile?:boolean;cableAuthority?:A31CableAuthority};
+type Input={town:Scene;skyline:Group;now():number;yieldFrame?:()=>Promise<void>;profile?:boolean;cableAuthority?:A31CableAuthority;frontSnow?:(e:number,n:number)=>number|undefined;frontWind?:(e:number,n:number)=>number|undefined;warm?:(root:Group,yieldFrame:()=>Promise<void>,cancelled:()=>boolean)=>Promise<A32WarmupStats>};
 const finite=(p:Foot)=>[p.east,p.north,p.height].every(Number.isFinite);
 const local=(e:number,n:number)=>[e-summitAssemblyAnchor.east,n-summitAssemblyAnchor.north] as const;
 
@@ -29,14 +31,9 @@ export function createA31PublicSummitRoute(input:Input){
  let visual:ReturnType<typeof retireA31LegacySectorOverlays>|undefined;
  let assembly:Readonly<{group:Group;r30:Production['assembly'];summitSnowAt(e:number,n:number):number|undefined}>|undefined;
  let near=false,elapsedMs=0,cutTiles=0,draws=0,snowPending=0,duplicates:readonly string[]=[];
- const yieldFrame=input.yieldFrame??(()=>new Promise<void>(resolve=>{
-  // The ordinary entry screen owns the expensive initial mesh build.
-  // Yield between sectors so that the loading UI can repaint, without
-  // relying on idle periods from a busy WebGL animation loop.
-  if(typeof document!=='undefined'&&document.body.classList.contains('town-entry-pending'))setTimeout(resolve,0);
-  else if(typeof requestIdleCallback==='function')requestIdleCallback(()=>resolve(),{timeout:1500});
-  else setTimeout(resolve,0);
- }));
+ const yieldFrame=input.yieldFrame??a32YieldFrame,meter=createA32StageMeter();
+ let warmup:A32WarmupStats|undefined,cableFailure:string|undefined,previousFoot:Foot|undefined,previousAt=0,detailEast=Infinity,detailNorth=Infinity,lastViewAt=0,lastViewEast=Infinity,lastViewNorth=Infinity;
+ const stageRun=async<T,>(name:string,task:()=>T|Promise<T>)=>{await yieldFrame();if(status==='disposed')throw Error('Public summit disposed during staging');stage=name;return meter.run(name,task);};
  function prepare(){
   if(load)return load;
   if(status==='disposed')return Promise.resolve(false);
@@ -48,22 +45,21 @@ export function createA31PublicSummitRoute(input:Input){
     stage='import';
     const [{createTownD2R30ProductionHost},{createSouthSectorInstaller,createWestSectorInstaller,createEastSectorInstaller}]=await Promise.all([
      import('./town-d2-r30-production-host'),import('./town-d2-r30-sector-installers')]);
-    const check=()=>{if(status==='disposed')throw Error('Public summit disposed during staging');};
-    await yieldFrame();check();stage='canonical';
-    candidate=createTownD2R30ProductionHost({epochMs:input.now(),includeRopeway:false});
-    await yieldFrame();check();stage='south';candidate.install('A',createSouthSectorInstaller());
-    await yieldFrame();check();stage='west';candidate.install('B',createWestSectorInstaller());
-    await yieldFrame();check();stage='east';candidate.install('C2',createEastSectorInstaller());
-    // Only the D2-owned hook may mount a real B cable package.
-    const cableOwner:A31RearCableOwner=candidate;
-    if(input.cableAuthority&&cableOwner.preparePublicCable){
-     await yieldFrame();check();stage='cable';await cableOwner.preparePublicCable(input.cableAuthority);check();
+    candidate=await stageRun('canonical',()=>createTownD2R30ProductionHost({epochMs:input.now(),includeRopeway:false}));
+    const host=candidate;
+    await stageRun('south',()=>host.install('A',createSouthSectorInstaller()));
+    await stageRun('west',()=>host.install('B',createWestSectorInstaller()));
+    await stageRun('east',()=>host.install('C2',createEastSectorInstaller()));
+    host.setFrontSnow(input.frontSnow?(e,n)=>input.frontSnow!(e+summitAssemblyAnchor.east,n+summitAssemblyAnchor.north):undefined);
+    host.setFrontWind(input.frontWind?(e,n)=>input.frontWind!(e+summitAssemblyAnchor.east,n+summitAssemblyAnchor.north):undefined);
+    if(input.cableAuthority){
+     try{await stageRun('cable',()=>host.preparePublicCable(input.cableAuthority!));}catch(error){cableFailure=error instanceof Error?error.message:String(error);}
     }
-    await yieldFrame();check();stage='audit';
-    audit=candidate.sectorLiveCheck();
+    audit=await stageRun('audit',()=>host.sectorLiveCheck());
     const mountStats=candidate.stats();cutTiles=mountStats.tiles.cut;duplicates=mountStats.duplicates;
     if(!audit.ready||duplicates.length||candidate.cableState().boardable&&!readA31UpperCable(candidate))throw Error('Four-sector public mount refused');
-    visual=retireA31LegacySectorOverlays(candidate.group);
+    visual=await stageRun('ownership',()=>retireA31LegacySectorOverlays(host.group));
+    if(input.warm)warmup=await stageRun('gpu-warmup',()=>input.warm!(host.group,yieldFrame,()=>status==='disposed'));
     candidate.group.position.set(summitAssemblyAnchor.east,0,-summitAssemblyAnchor.north);
     candidate.group.visible=false;
     if(input.profile)candidate.group.traverse(node=>{
@@ -72,9 +68,7 @@ export function createA31PublicSummitRoute(input:Input){
     // Retain one group identity for the future certified domain handoff.
     input.town.add(candidate.group);candidate.setNight(night);if(night)visual.afterNightChange();
     production=candidate;assembly={group:candidate.group,r30:candidate.assembly,
-     // No legacy block-derived depth on the new terrain. Ground snow depth
-     // remains unmeasured until its real canonical field is delivered.
-     summitSnowAt:()=>undefined};
+     summitSnowAt:(e,n)=>{const depth=host.snowAt(e,n);if(depth===undefined)return;const front=input.frontSnow?.(e+summitAssemblyAnchor.east,n+summitAssemblyAnchor.north);return front!==undefined&&Number.isFinite(front)&&n<=86?Math.max(0,Math.min(1,Math.max(front-.2,Math.min(front+.2,depth)))):depth;}};
     status='ready';stage='mounted';elapsedMs=performance.now()-started;return true;
    }catch(error){
     candidate?.dispose();production=undefined;assembly=undefined;
@@ -87,7 +81,10 @@ export function createA31PublicSummitRoute(input:Input){
  function update(position:Foot){
   draws=0;
   if(!finite(position)||status==='disposed')return;
-  if(status==='idle')void prepare();
+  const now=performance.now(),dt=(now-previousAt)/1000;
+  const velocity=previousFoot&&dt>.001&&dt<1&&Math.hypot(position.east-previousFoot.east,position.north-previousFoot.north)<40?{east:(position.east-previousFoot.east)/dt,north:(position.north-previousFoot.north)/dt}:undefined;
+  previousFoot=position;previousAt=now;
+  if(status==='idle'&&a32SummitPrefetch(position,velocity))void prepare();
   if(!production)return;
   // From the low front ridge the complete massif's vertical south
   // closure is an inappropriate near view (it would show a cliff wall).
@@ -97,8 +94,11 @@ export function createA31PublicSummitRoute(input:Input){
   near=active||position.east>=286.5&&position.east<=352&&
    position.north>=(near?631:635)&&position.north<=669&&position.height>=(near?345:346);
   production.group.visible=near;input.skyline.visible=!near&&!active;
-  if(near)production.update(...local(position.east,position.north),input.now());
-  else snowPending=0;
+  if(near){
+   const [e,n]=local(position.east,position.north);
+   if(Math.hypot(e-detailEast,n-detailNorth)>32){production.setDetailFocus(e,n,1550);detailEast=e;detailNorth=n;}
+   if(now-lastViewAt>=150||Math.hypot(e-lastViewEast,n-lastViewNorth)>=8){production.update(e,n,input.now());lastViewAt=now;lastViewEast=e;lastViewNorth=n;}
+  }else{snowPending=0;detailEast=detailNorth=lastViewEast=lastViewNorth=Infinity;}
  }
  function updateSnow(dt:number,sample:SouthSnowVisualSample){
   if(!production||!near||!Number.isFinite(dt)||dt<=0)return;
@@ -128,12 +128,15 @@ export function createA31PublicSummitRoute(input:Input){
   if(active||status!=='ready'||!production||!finite(p)||!gate(p))return false;
   const h=surveyedSupport(p.east,p.north);
   if(h===undefined||Math.abs(h-p.height)>.08||surveyedBlocked(p.east,p.north,h)||!accept())return false;
+  const transfer=production.enterRear(p);if(!transfer.ok)return false;
   active=true;scene.add(production.group);production.group.visible=true;input.skyline.visible=false;return true;
  }
  function leaveAt(p:Foot,accept:()=>boolean){
   if(!active||!production||!finite(p)||!gate(p))return false;
   const h=surveyedSupport(p.east,p.north);
   if(h===undefined||Math.abs(h-p.height)>.08||surveyedBlocked(p.east,p.north,h)||!accept())return false;
+  const transfer=production.exitRear();if(!transfer.ok)return false;
+  // D2 reports a fixed return anchor; preserve the validated walking foot.
   active=false;input.town.add(production.group);near=false;update(p);return true;
  }
  function surfaceAt(e:number,n:number,r=.27){return active?surveyedSupport(e,n,r):undefined;}
@@ -146,7 +149,7 @@ export function createA31PublicSummitRoute(input:Input){
   if(night===value)return;night=value;production?.setNight(value);visual?.afterNightChange();
  }
  function state(){
-  return {status,stage,failure,active,near,farVisible:input.skyline.visible,draws,elapsedMs,ready:audit?.ready===true&&status==='ready',
+  return {status,stage,failure,cableFailure,stages:meter.records(),warmup,active,near,farVisible:input.skyline.visible,draws,elapsedMs,ready:audit?.ready===true&&status==='ready',
    installed:production?.installed()??[],cutTiles:production?cutTiles:0,
    duplicates:production?duplicates:[],sectorSamples:audit?.sectors.map(s=>s.samples)??[],
    legacyPruned:visual?{roadTriangles:visual.removedTrailTriangles,forestInstances:visual.removedForestInstances}:undefined,
@@ -159,6 +162,8 @@ export function createA31PublicSummitRoute(input:Input){
   blocked(e:number,n:number,h:number,r=.27,b=1.8){return active&&surveyedBlocked(e,n,h,r,b);},
   surveyedSupport,surveyedBlocked,enterAt,leaveAt,setNight,state,updateSnow,
   upperOperation:()=>status==='ready'?readA31UpperCable(production):undefined,
+  seamReady:()=>status==='ready'&&production?.certifySeamCrossing().open===true,
+  windAt:(e:number,n:number)=>{const [le,ln]=local(e,n),wind=production?.windAt(le,ln),front=input.frontWind?.(e,n);return wind!==undefined&&front!==undefined&&Number.isFinite(front)&&ln<=86?Math.max(0,Math.min(1,Math.max(front-.2,Math.min(front+.2,wind)))):wind;},
   assembly:()=>active?assembly:undefined,
   dispose(){if(status==='disposed')return;status='disposed';active=false;near=false;production?.dispose();production=undefined;assembly=undefined;input.skyline.visible=true;}
  };
