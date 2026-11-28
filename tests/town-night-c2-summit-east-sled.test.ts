@@ -64,7 +64,7 @@ test('deck masonry is buried, not stilted, at every sampled cell', () => {
   }
 });
 
-test('visible instances use authored bottoms and colliders cover the same bodies', () => {
+test('visible instances use authored bottoms; only upright bodies block the rider', () => {
   const asset = mountC2EastSled(heightAt);
   try {
     assert.equal(asset.mesh.count, asset.pieces.length);
@@ -75,8 +75,22 @@ test('visible instances use authored bottoms and colliders cover the same bodies
       assert.ok(Math.abs(m[o + 13] - (p.y + p.h / 2)) < 1e-4, 'bottom semantics');
       assert.ok(Math.abs(m[o + 14] + p.north) < 1e-4);
     });
-    const deck = asset.pieces.find(p => p.family === 'deck')!;
-    assert.equal(asset.blocked(deck.east, deck.north, deck.y + .5, .01, .05), true);
+    const upright = new Set(['rail', 'pole', 'rune', 'sock']);
+    const solid = asset.pieces.filter(p => upright.has(p.family) && p.h >= 1);
+    assert.equal(asset.colliders.length, solid.length);
+    asset.colliders.forEach((c, i) => {
+      assert.ok(Math.abs(c.bottom - solid[i]!.y) < 1e-9);
+      assert.ok(Math.abs(c.top - (solid[i]!.y + solid[i]!.h)) < 1e-9);
+    });
+    // Packed snow and the launch deck are floor, not walls. The old all-piece
+    // collider set marked 170/179 ride stations as blocked.
+    for (const family of ['chute', 'deck'] as const) {
+      const floor = asset.pieces.find(p => p.family === family)!;
+      assert.equal(asset.blocked(floor.east, floor.north, floor.y + .05, .27, 1.8), false,
+        `${family} is the riding surface, not a blocker`);
+    }
+    const post = solid.find(p => p.family === 'rail')!;
+    assert.equal(asset.blocked(post.east, post.north, post.y + Math.min(.05, post.h / 2), .01, .05), true);
     assert.equal(asset.blocked(0, 0, 0), false);
   } finally { asset.dispose(); }
 });

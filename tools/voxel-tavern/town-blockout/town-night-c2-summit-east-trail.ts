@@ -145,6 +145,10 @@ export function planC2EastTrail(heightAt: EastTrailHeightAt, trail: readonly Tra
       const east = station.east + normalEast * spec.halfWidth * side;
       const north = station.north + normalNorth * spec.halfWidth * side;
       if (boundaryWeight(east, north) < .999) continue;
+      // At a hairpin the 1.5 m offset can land on the adjacent leg. Three
+      // posts occupied a walking station in C33-3; reject any post that
+      // crowds another real station, not just its own.
+      if (stations.some(s => Math.hypot(s.east - east, s.north - north) < .9)) continue;
       const edge = heightAt(east, north) ?? ground;
       out.push({
         family: 'post', east, north, y: edge, w: .12, h: 1.0, d: .12, yaw, shade: rails++ % spec.palette.length,
@@ -155,10 +159,18 @@ export function planC2EastTrail(heightAt: EastTrailHeightAt, trail: readonly Tra
     }
 
     if (i > 0 && distance >= (out.filter(piece => piece.family === 'marker').length + 1) * spec.markerEvery) {
-      out.push({
-        family: 'marker', east: station.east, north: station.north, y: ground,
-        w: .3, h: .8, d: .3, yaw, shade: 0,
-      });
+      // C33-3: a milestone standing on the centreline blocked 14 of the 1692
+      // walking stations. Keep the same 100 m cadence and visibility, but
+      // seat it outside the 1.5 m half-width on the uphill side.
+      const side = drop > 0 ? -1 : 1;
+      const east = station.east + normalEast * (spec.halfWidth + .7) * side;
+      const north = station.north + normalNorth * (spec.halfWidth + .7) * side;
+      if (boundaryWeight(east, north) >= .999) {
+        out.push({
+          family: 'marker', east, north, y: heightAt(east, north) ?? ground,
+          w: .3, h: .8, d: .3, yaw, shade: 0,
+        });
+      }
     }
   }
   return {

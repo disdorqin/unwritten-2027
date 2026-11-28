@@ -231,7 +231,13 @@ export function mountC2EastSled(heightAt: SledHeightAt, pieces: readonly SledPie
   mesh.computeBoundingSphere();
   group.add(mesh);
 
-  const colliders = pieces.map(p => ({
+  // C33-3: only upright bodies a rider can hit are colliders. The packed
+  // snow chute, the launch deck and its buried stone courses are the floor
+  // under the rider; treating a 28 m-long chute slab as a square wall made
+  // 170 of 179 ride stations falsely "blocked". Visible instances are
+  // unchanged and still share the same authored bottoms.
+  const solidFamilies = new Set(['rail', 'pole', 'rune', 'sock']);
+  const colliders = pieces.filter(p => solidFamilies.has(p.family) && p.h >= 1).map(p => ({
     west: p.east - Math.max(p.w, p.d) / 2, east: p.east + Math.max(p.w, p.d) / 2,
     south: p.north - Math.max(p.w, p.d) / 2, north: p.north + Math.max(p.w, p.d) / 2,
     bottom: p.y, top: p.y + p.h,
