@@ -25,6 +25,8 @@ type Input={
  domain:()=>Domain;
  acceptLanding:(line:1|2,feet:Foot,station:string)=>boolean;
  inputNow?:()=>number;
+ /** Rear visual work sleeps outside the rendered massif; authority remains live. */
+ upperVisible?:()=>boolean;
 };
 export function nightBProductionAuthority(p:Presence,line:1|2){
  return {state:()=>p.getCableLineState(line),now:p.cableServerNow,
@@ -48,7 +50,9 @@ export function createNightBProductionController(input:Input){
  let boardStatus:Parameters<ReturnType<typeof createNightBFrontBoardPresenter>>[0]|undefined;
  const local=(f:Foot)=>({...f,east:f.east-input.upperOrigin.east,north:f.north-input.upperOrigin.north});
  function tick(yaw:number):CableRideFrame|undefined{
-  if(upper)upper.update();
+  // present() derives the current pose from the shared authoritative clock,
+  // not accumulated visual ticks. Resume immediately when visible or riding.
+  if(upper&&(ride.riding()||input.upperVisible?.()!==false))upper.update();
   ride.updateVisuals(!!upper);
   const s=p.getCableLineState(1);if(s)repair?.sync(s);front?.repairProps?.sync(s);
   if(front&&boards){const status=!s||p.cableServerNow()===undefined?'offline':s.stage==='dormant'?'dormant':s.stage==='one-station'||front.service.firstRun()?.phase==='reposition'?'repair':front.service.serviceOpen()?'running':'parked';if(status!==boardStatus){boards(status);boardStatus=status;}}

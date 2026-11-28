@@ -634,6 +634,9 @@ const southEntryHost=createSouthEntryHost();
 // certified continuous dock approaches, so neither ready installer is supplied.
 function makePublicCableController(assets:A31CableBindings={}){return createNightBProductionController({
  ...assets,presence,upperOrigin:{east:300,north:676},
+ // A31 shows the complete massif only on the high cloud apron or in the
+ // rear scene. Use a conservative larger band to wake its visuals early.
+ upperVisible:()=>cloudRoute.active()||(x>=280&&x<=360&&n>=625&&n<=680&&ground>=340),
  domain:()=>!walking||homeReturn?undefined:cloudRoute.active()?'summit':x<0?undefined:n>=650?'mountain':'town',
  acceptLanding:(line,foot)=>{
   if(line===2)return cloudRoute.active()&&Math.abs((cloudRoute.surveyedSupport(foot.east,foot.north)??Infinity)-foot.height)<=.08&&!cloudRoute.surveyedBlocked(foot.east,foot.north,foot.height);
