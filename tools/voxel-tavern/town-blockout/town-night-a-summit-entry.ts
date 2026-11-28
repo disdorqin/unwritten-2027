@@ -9,7 +9,8 @@ export function mountSouthEntry(heightAt:SouthGround){
  const floor=heightAt(0,0);
  if(floor===undefined||!Number.isFinite(floor)||Math.abs(floor-347)>.05)throw Error('Uncertified arrival datum');
  const group=new Group();group.name='night-a-south-entry';
- const stone=new MeshLambertMaterial({color:'#707b7d'}),ash=new MeshLambertMaterial({color:'#505d63'}),wood=new MeshLambertMaterial({color:'#554334'}),warm=new MeshLambertMaterial({color:'#917250'}),snow=new MeshLambertMaterial({color:'#dce6eb'}),bronze=new MeshLambertMaterial({color:'#a48a58'});
+ group.userData={owner:'A33-2-south-entry',revision:2,bounds:{west:-30,east:30,south:-10,north:40},static:true};
+ const stone=new MeshLambertMaterial({color:'#8a8378'}),ash=new MeshLambertMaterial({color:'#5c5851'}),wood=new MeshLambertMaterial({color:'#5d4630'}),warm=new MeshLambertMaterial({color:'#a98a56'}),snow=new MeshLambertMaterial({color:'#dce6eb'}),bronze=new MeshLambertMaterial({color:'#a48a58'});
  const lamp=new MeshStandardMaterial({color:'#f2ca88',emissive:'#ffad43',emissiveIntensity:.10});
  const batches=new Map<Material,BufferGeometry[]>(),solids:Box[]=[],floors:Box[]=[];
  const add=(m:Material,g:BufferGeometry)=>{const arr=batches.get(m)??[];arr.push(g);batches.set(m,arr);};
@@ -140,6 +141,17 @@ export function mountSouthEntry(heightAt:SouthGround){
  // narrow real offset so no coplanar fighting or fake walking surface.
  for(let n=13;n<39;n+=1.6)for(let e=-5.6;e<5.7;e+=1.4)
   box((Math.round(n*10+e*10)%3===0)?ash:stone,e,n,-.025,1.36,1.56,.045);
+ // Snow-covered coping with exposed brown stone courses: physical
+ // refinements remain inside the already existing gate posts and plaza strips.
+ for(const side of [-1,1])for(const n of [-8.75,-6.25,-3.75,-1.25]){
+  box(warm,side*3.57,n,4.84,.18,.48,.16);
+  box(ash,side*3.58,n,4.99,.20,.54,.11);
+ }
+ for(const side of [-1,1])for(let i=0;i<12;i++){
+  const n=19.4+i*1.6,e=side*24;
+  box(warm,e,n,.04,.49,1.38,.045);
+  box(ash,e,n,.12,.49,1.38,.035);
+ }
  mountAR30StaticBatches(group,batches,'night-a-entry');
  group.userData.colliders=solids;group.userData.floors=floors;
  let disposed=false;

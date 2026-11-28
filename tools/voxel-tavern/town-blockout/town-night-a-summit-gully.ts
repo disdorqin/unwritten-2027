@@ -1,4 +1,5 @@
 import {BufferGeometry,Color,Float32BufferAttribute,Group,Mesh,MeshLambertMaterial} from 'three';
+import {makeFrontRidgePixelTexture} from './town-front-ridge-surface';
 import {finishNightBAudit} from './town-night-b-audit-slices';
 import {southGullyNorth,type SouthGround,type SouthProtection} from './town-night-a-summit-landform';
 import {createSouthSnowAppearance,type SouthSnowVisualSample} from './town-night-a-summit-snow-appearance';
@@ -10,7 +11,8 @@ const distance=(p:Point)=>Math.abs(p.n-southGullyNorth(p.e))-width(p.e);
  * no artificial flat water plane, jagged full-cell teeth or support layer. */
 export function* southGullySteps(heightAt:SouthGround,protectedAt:SouthProtection){
  const group=new Group();group.name='night-a-south-frozen-gully';
- const mat=new MeshLambertMaterial({vertexColors:true});
+ const texture=makeFrontRidgePixelTexture(),mat=new MeshLambertMaterial({vertexColors:true,map:texture});
+ group.userData={owner:'A33-2-frozen-gully',revision:2,bounds:{west:-620,east:124,south:182,north:446},static:true};
  const bins=new Map<number,{p:number[];c:number[]}>();
  const snowAppearance:ReturnType<typeof createSouthSnowAppearance>[]=[];
  const ice=new Color('#7897aa'),shale=new Color('#576970'),snow=new Color('#bbcbd1'),tint=new Color(),deepIce=new Color('#486b83'),frost=new Color('#dce7eb');
@@ -89,7 +91,7 @@ export function* southGullySteps(heightAt:SouthGround,protectedAt:SouthProtectio
  }
  for(const [k,{p,c}] of bins){if(!p.length)continue;
   yield;
-  const geo=new BufferGeometry();geo.setAttribute('position',new Float32BufferAttribute(p,3));geo.setAttribute('color',new Float32BufferAttribute(c,3));geo.computeVertexNormals();geo.computeBoundingSphere();
+  const geo=new BufferGeometry();geo.setAttribute('position',new Float32BufferAttribute(p,3));geo.setAttribute('color',new Float32BufferAttribute(c,3));const uv:number[]=[];for(let i=0;i<p.length;i+=3)uv.push((p[i]!+p[i+1]!*.11)/2,(-p[i+2]!*.72+p[i+1]!*.69)/2);geo.setAttribute('uv',new Float32BufferAttribute(uv,2));geo.computeVertexNormals();geo.computeBoundingSphere();
   const m=new Mesh(geo,mat);m.name='south-gully-bed:'+k;group.add(m);
   const rgb=geo.getAttribute('color'),pos=geo.getAttribute('position');
   const dry=new Color('#718994'),base=new Color();
@@ -106,7 +108,7 @@ export function* southGullySteps(heightAt:SouthGround,protectedAt:SouthProtectio
  }
  accepted=true;
  let disposed=false;
- return {group,triangles,shelfCount,updateSnow(dt:number,sample:SouthSnowVisualSample){if(!disposed)for(const appearance of snowAppearance)appearance.update(dt,sample);},dispose(){if(disposed)return;disposed=true;group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});mat.dispose();snowAppearance.length=0;group.clear();}};
- }finally{if(!accepted){group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});mat.dispose();snowAppearance.length=0;group.clear();}}
+ return {group,triangles,shelfCount,updateSnow(dt:number,sample:SouthSnowVisualSample){if(!disposed)for(const appearance of snowAppearance)appearance.update(dt,sample);},dispose(){if(disposed)return;disposed=true;group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});mat.dispose();texture.dispose();snowAppearance.length=0;group.clear();}};
+ }finally{if(!accepted){group.removeFromParent();group.traverse(o=>{if(o instanceof Mesh)o.geometry.dispose();});mat.dispose();texture.dispose();snowAppearance.length=0;group.clear();}}
 }
 export function mountSouthGully(heightAt:SouthGround,protectedAt:SouthProtection){return finishNightBAudit(southGullySteps(heightAt,protectedAt));}

@@ -16,7 +16,8 @@ export function* southForestSteps(heightAt:SouthGround,reserved:SouthProtection)
  const cell=(e:number,n:number)=>{const k=key(e,n);let c=cells.get(k);if(!c){c={items:[],bodies:[],east:(Math.floor(e/size)+.5)*size,north:(Math.floor(n/size)+.5)*size};cells.set(k,c);}return c;};
  const add=(c:Cell,e:number,n:number,y:number,w:number,h:number,d:number,yaw:number,color:string,snow=false)=>c.items.push({e,n,y,w,h,d,yaw,color,snow});
  const push=(c:Cell,b:Body)=>{c.bodies.push(b);bodies.push(b);};
- const palette=['#29483d','#375b48','#496952','#3d5546'],snow=['#c4d3dc','#e0e7e9','#d2dfe5'];
+ root.userData={owner:'A33-2-south-forest',revision:2,bounds:{west:-1100,east:1100,south:-10,north:448},static:true};
+ const palette=['#344638','#44503c','#52634a','#3d5546'],snow=['#c4d3dc','#e0e7e9','#d2dfe5'];
  let trees=0,rocks=0,excluded=0,probes=0,accepted=false;
  try{
  for(let n=30;n<440;n+=12)for(let e=-1060;e<1060;e+=12){
@@ -51,7 +52,12 @@ export function* southForestSteps(heightAt:SouthGround,reserved:SouthProtection)
     const thick=tierHeight+.22,angle=yaw+tier*.15;
     const lean=(hash(e,n,30+tier)-.5)*r*.24,shift=(hash(e,n,40+tier)-.5)*r*.24;
     const width=r*(1.76+.24*hash(e,n,50+tier)),depth=r*(1.68+.30*hash(e,n,60+tier));
-    add(c,x+lean,z+shift,cy+thick*.5,width,thick,depth,angle,palette[Math.floor(hash(e,n,7+tier)*4)]!);
+    const green=palette[Math.floor(hash(e,n,7+tier)*4)]!;
+    // Three staggered solid bough shelves form a stepped, tapered
+    // silhouette; all remain inside the old surveyed canopy envelope.
+    add(c,x+lean,z+shift,cy+thick*.27,width,thick*.54,depth*.78,angle,green);
+    add(c,x+lean,z+shift,cy+thick*.27,width*.78,thick*.54,depth,angle,green);
+    add(c,x+lean,z+shift,cy+thick*.77,width*.77,thick*.46,depth*.77,angle,green);
     const sx=(hash(e,n,70+tier)-.5)*width*.14,sz=(hash(e,n,80+tier)-.5)*depth*.14;
     add(c,x+lean+sx,z+shift+sz,cy+thick-.02,width*.76,.19,depth*.73,angle,snow[Math.floor(hash(e,n,12+tier)*3)]!,true);
    }
@@ -59,8 +65,13 @@ export function* southForestSteps(heightAt:SouthGround,reserved:SouthProtection)
   }else if(q<.23&&slope<.82){
    const c=cell(x,z),w=1.2+hash(e,n,16)*2.2,tall=.6+hash(e,n,17)*1.15;
    const base=Math.min(h,...hs.map(v=>v!))-.12;
-   add(c,x,z,(h+tall+base)*.5,w,h+tall-base,w*.8,yaw,'#717b7b');
-   add(c,x,z,h+tall-.05,w*.83,.25,w*.7,yaw,'#c9d7df',true);
+   const rise=h+tall-base;
+   // Broken layered rock: keep the original physical footprint, and
+   // stagger three bands inside it instead of one featureless cuboid.
+   add(c,x,z,base+rise*.22,w,rise*.44,w*.8,yaw,'#635b51');
+   add(c,x,z,base+rise*.59,w*.94,rise*.30,w*.76,yaw,'#93806a');
+   add(c,x,z,base+rise*.87,w*.86,rise*.26,w*.72,yaw,'#737b79');
+   add(c,x,z,h+tall-.05,w*.80,.25,w*.66,yaw,'#c9d7df',true);
    push(c,{east:x,north:z,bottom:base,top:h+tall+.08,radius:w*.65,kind:'rock'});rocks++;
   }
  }
